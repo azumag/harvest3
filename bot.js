@@ -117,7 +117,7 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
         await sleep(1000); // 1秒待機
       }
     } catch (error) {
-        const errorMessage = `エラーが発生しました (${symbol}): ${error.message}`;
+        const errorMessage = `エラーが発生しました (${symbol}): ${error.message} : ${exchange.name}`;
         console.error(errorMessage, error);
         await postToDiscord(errorMessage);
         await sleep(1000); // 1秒待機
@@ -137,7 +137,7 @@ async function startBot() {
       await Promise.all(symbols.map(symbol => scalpingBot(symbol, exchange, spreadHistory)));
     }));
   } catch (error) {
-    const errorMessage = `エラーが発生しました: ${error.message}`;
+    const errorMessage = `エラーが発生しました: ${error.message} : ${exchange.name}`;
     console.error(errorMessage, error);
     await postToDiscord(errorMessage);
   }
