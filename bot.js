@@ -131,7 +131,7 @@ async function startBot() {
     await Promise.all(exchanges.map(async (exchange) => { // 並列に実行
       const spreadHistory = {};
       const markets = await exchange.loadMarkets();
-      const symbols = Object.keys(markets);
+      const symbols = Object.keys(markets).filter(symbol => symbol.endsWith('/JPY')); // JPYの通貨ペアのみをフィルタリング
 
       // すべての通貨ペアに対して並列でscalpingBotを実行
       await Promise.all(symbols.map(symbol => scalpingBot(symbol, exchange, spreadHistory)));
