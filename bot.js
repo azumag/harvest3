@@ -11,7 +11,8 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
-const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL; // Discord Webhook URL
+const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
+const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
 
 const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
@@ -22,11 +23,6 @@ const exchangeBF = new ccxt.bitflyer({
     apiKey: BFApiKey,
     secret: BFApiSecret,
 });
-
-const amount = 0.0001;  // 注文するBTCの量
-const profitMargin = 0.0015;  // 目標利益率（取引手数料を考慮）
-
-const maxHistoryLength = 100;  // スプレッド履歴の最大長
 
 const bitflyerMinTradeAmounts = {
   'BTC/JPY': 0.001,
@@ -39,10 +35,27 @@ const bitflyerMinTradeAmounts = {
   'MONA/JPY': 0.1,
 };
 
-async function postToDiscord(message) {
-  if (discordWebhookUrl) {
+const amount = 0.0001;  // 注文するBTCの量
+const profitMargin = 0.0015;  // 目標利益率（取引��数料を考慮）
+const maxHistoryLength = 100;  // スプレッド履歴の最大長
+const tradePercentage = 0.01;  // 資金の1%で取引
+
+async function postErrorToDiscord(message) {
+  if (discordErrorWebhookUrl) {
     try {
-      await axios.post(discordWebhookUrl, { content: message });
+      await axios.post(discordErrorWebhookUrl, { content: message });
+    } catch (error) {
+      console.error('Discordへの通知に失敗しました: ', error);
+    }
+  } else {
+    console.error('Discord Webhook URLが設定されていません');
+  }
+}
+
+async function postOrderToDiscord(message) {
+  if (discordOrderWebhookUrl) {
+    try {
+      await axios.post(discordOrderWebhookUrl, { content: message });
     } catch (error) {
       console.error('Discordへの通知に失敗しました: ', error);
     }
@@ -56,11 +69,12 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
   const market = exchange.markets[symbol];
   const minTradeAmount = (exchange.id === 'bitflyer' ? bitflyerMinTradeAmounts[symbol] : market.limits.amount.min) || 0.01; // bitflyerの場合は最小取引単位を設定
   const pricePrecision = market.precision.price; // 価格の精度を取得
+  const amountPrecision = market.precision.amount; // 取引量の精度を取得
 
   if (!minTradeAmount) {
     const errorMessage = `最小取引単位が取得できませんでした: ${symbol} ${exchange.name}`;
     console.error(errorMessage);
-    await postToDiscord(errorMessage);
+    await postErrorToDiscord(errorMessage);
     return;
   } else {
     console.log(`最小取引単位: ${symbol}: ${minTradeAmount}: ${exchange.name}`);
@@ -99,15 +113,39 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
         const buyPrice = parseFloat((bid + currentSpread / 2).toFixed(pricePrecision));  // 価格を精度に基づいて丸める
         const sellPrice = parseFloat((buyPrice * (1 + profitMargin)).toFixed(pricePrecision));  // 目標利益率で売却価格を設定
 
-        console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${minTradeAmount}`);
+        // 利用可能な資金を取得
+        const balance = await exchange.fetchBalance();
+        const baseCurrency = symbol.split('/')[0];
+        const quoteCurrency = symbol.split('/')[1];
+        const availableFunds = balance.free[quoteCurrency];
+        const availableBaseCurrency = balance.free[baseCurrency];
+
+        // 購入に必要な資金を計算
+        const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
+        const buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
 
         // 購入注文を送信
-        const buyOrder = await exchange.createLimitBuyOrder(symbol, minTradeAmount, buyPrice); // 最小取引単位を使用
-        console.log('購入注文が送信されました: ', buyOrder);
+        if (availableFunds >= buyPrice * buyAmount) {
+          console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
+          const buyOrder = await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice); // 購入量を使用
+          console.log('購入注文が送信されました: ', buyOrder);
+          await postOrderToDiscord(`購入注文が送信されました: ${exchange.name}: ${symbol}: ${buyPrice}: ${buyAmount}`);
+        } else {
+          console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}`);
+        }
+
+        // 売却に必要な資産を計算
+        const maxSellAmount = availableBaseCurrency * tradePercentage;
+        const sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
 
         // 売却注文を送信
-        const sellOrder = await exchange.createLimitSellOrder(symbol, minTradeAmount, sellPrice); // 最小取引単位を使用
-        console.log('売却注文が送信されました: ', sellOrder);
+        if (availableBaseCurrency >= sellAmount) {
+          const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice); // 売却量を使用
+          console.log('売却注文が送信されました: ', sellOrder);
+          await postOrderToDiscord(`売却注文が送信されました: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
+        } else {
+          console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}`);
+        }
 
         // 注文が完了するまで待つ
         await sleep(60000);  // 1分間待機
@@ -119,7 +157,7 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
     } catch (error) {
         const errorMessage = `エラーが発生しました (${symbol}): ${error.message} : ${exchange.name}`;
         console.error(errorMessage, error);
-        await postToDiscord(errorMessage);
+        await postErrorToDiscord(errorMessage);
         await sleep(1000); // 1秒待機
     }
   }
@@ -137,9 +175,9 @@ async function startBot() {
       await Promise.all(symbols.map(symbol => scalpingBot(symbol, exchange, spreadHistory)));
     }));
   } catch (error) {
-    const errorMessage = `エラーが発生しました: ${error.message} : ${exchange.name}`;
+    const errorMessage = `エラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
-    await postToDiscord(errorMessage);
+    await postErrorToDiscord(errorMessage);
   }
 }
 
