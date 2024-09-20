@@ -1,0 +1,9 @@
+version: '3'
+services:
+  bot:
+    build: .
+    container_name: scalping_bot
+    restart: always
+    volumes:
+      - .:/usr/src/app
+    command: npm start
