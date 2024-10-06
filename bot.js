@@ -4,7 +4,7 @@ const axios = require('axios');
 dotenv.config(); // .envファイルから環境変数を読み込む
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// APIキーとシークレットを設定（bitbankのAPI）
+// APIキーとシークレットを設定
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
 
@@ -40,6 +40,7 @@ const amount = 0.0001;  // 注文するBTCの量
 const profitMargin = 0.003;  // 目標利益率（取引料を考慮）
 const maxHistoryLength = 100;  // スプレッド履歴の最大長
 const tradePercentage = 0.02;  // 資金の%で取引
+const sellPercentage = 0.1; // 売却可能量の%で取引
 const tradeCost = 0.0012; // 手数料暫定（bitbank)
 const cancelOrderThreshold = 30; // 一銘柄ごとの注文限度数
 
@@ -200,7 +201,7 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
       // 価格差（スプレッド）が基準スプレッドより広い場合のみ取引を行う
       // console.log(`${symbol}: ${exchange.name} スプレッド: ${currentSpread}, 平均スプレッド: ${averageSpread}, 想定利益率: ${ask/bid}, 加重売平均 ${ask}, 加重買平均 ${bid}`);
       console.log(`${symbol}: ${exchange.name} 想定利益率: ${ask/bid}`);
-      
+
       if ((ask/bid) > (1 + adjustedProfitMargin)) {
         const ticker = await exchange.fetchTicker(symbol);
         const lastPrice = ticker.last;
@@ -210,16 +211,17 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
 
         // 利用可能な資金を取得
         const balance = await exchange.fetchBalance();
-        const baseCurrency = symbol.split('/')[0];
-        const quoteCurrency = symbol.split('/')[1];
-        const availableFunds = balance.free[quoteCurrency];
-        const availableBaseCurrency = balance.free[baseCurrency];
+        const quoteCurrency = symbol.split('/')[0];
+        const baseCurrency = symbol.split('/')[1];
+        const availableFunds = balance.free[baseCurrency];
+        const availableQuoteCurrency = balance.free[quoteCurrency];
 
         // 購入に必要な資金を計算
         const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
+        const maxSellAmount = availableQuoteCurrency * sellPercentage;
         const buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
         // 売却に必要な資産を計算
-        const sellAmount = buyAmount;
+        const sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
 
         const buyCost = buyAmount * buyPrice * tradeCost;
         const sellCost = sellAmount * sellPrice * tradeCost;
@@ -237,14 +239,14 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
         }
 
         // 売却注文を送信
-        if (availableBaseCurrency >= sellAmount) {
+        if (availableQuoteCurrency >= sellAmount) {
           await orderCheckCancel(exchange, symbol);
           postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
           const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
           postOrderToDiscord(`== & 売却注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
         } else {
-          console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableBaseCurrency}, 売却量: ${sellAmount}`);
-          postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableBaseCurrency}, 売却量: ${sellAmount}`);
+          console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
+          postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
         }
 
         // 注文が完了するまで待つ
@@ -318,23 +320,23 @@ async function fetchTotal(exchange, symbol) {
 }
 
 async function postReport(exchange) {
-  const markets = await exchange.loadMarkets();
-  const symbols = Object.keys(markets).filter(symbol => 
-    symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELFを除外
-  ); // JPYの通貨ペアのみをフィルタリング
+  // const markets = await exchange.loadMarkets();
+  // const symbols = Object.keys(markets).filter(symbol => 
+  //   symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELFを除外
+  // ); // JPYの通貨ペアのみをフィルタリング
 
-  const totalPromises = symbols.map(symbol => fetchTotal(exchange, symbol)); // 各通貨ペアの損益を取得するPromiseの配列を作成
+  // const totalPromises = symbols.map(symbol => fetchTotal(exchange, symbol)); // 各通貨ペアの損益を取得するPromiseの配列を作成
 
-  Promise.all(totalPromises)
-    .then(totals => {
-      const exchangeTitle = `--- ${exchange.id}`;
-      const totalMessage = totals.map((total, index) => `${symbols[index]}: *${total.toFixed(5)} JPY*`).join('\n'); // メッセージを作成
-      const total = totals.reduce((accumulator, currentValue) => accumulator + currentValue, 0); // totalsの合計を計算
-      return postResultToDiscord(exchangeTitle + `: ${total} JPY --- \n` + totalMessage); // Discordに一度だけ投稿
-    })
-    .catch(error => {
-      console.error('損益の取得中にエラーが発生しました:', error);
-    });
+  // Promise.all(totalPromises)
+  //   .then(totals => {
+  //     const exchangeTitle = `--- ${exchange.id}`;
+  //     const totalMessage = totals.map((total, index) => `${symbols[index]}: *${total.toFixed(5)} JPY*`).join('\n'); // メッセージを作成
+  //     const total = totals.reduce((accumulator, currentValue) => accumulator + currentValue, 0); // totalsの合計を計算
+  //     return postResultToDiscord(exchangeTitle + `: ${total} JPY --- \n` + totalMessage); // Discordに一度だけ投稿
+  //   })
+  //   .catch(error => {
+  //     console.error('損益の取得中にエラーが発生しました:', error);
+  //   });
 
   const totalJPYValue = await calculateTotalJPYValue(exchange);
   postResultToDiscord(`=== TOTAL: ${exchange.id} ${totalJPYValue} ===`);
