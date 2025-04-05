@@ -4,6 +4,9 @@ const axios = require('axios');
 dotenv.config(); // .envファイルから環境変数を読み込む
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// 戦略モジュールをインポート
+const strategies = require('./strategies');
+
 // APIキーとシークレットを設定
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
@@ -36,14 +39,75 @@ const bitflyerMinTradeAmounts = {
   'MONA/JPY': 0.1,
 };
 
-const amount = 0.0001;  // 注文するBTCの量
-const profitMargin = 0.003;  // 目標利益率（取引料を考慮）
-const maxHistoryLength = 100;  // スプレッド履歴の最大長
-const tradePercentage = 0.02;  // 資金の%で取引
-const sellPercentage = 0.1; // 売却可能量の%で取引
-const tradeCost = 0.0012; // 手数料暫定（bitbank)
-const cancelOrderThreshold = 30; // 一銘柄ごとの注文限度数
-const safetyJPYAmount = 2000; // JPY残高がこの額を下回ったら購入しない
+// 設定パラメータ
+const config = {
+  // 共通設定
+  amount: 0.0001,  // 注文するBTCの量
+  profitMargin: 0.003,  // 目標利益率（取引料を考慮）
+  maxHistoryLength: 100,  // スプレッド履歴の最大長
+  tradePercentage: 0.02,  // 資金の%で取引
+  sellPercentage: 0.1, // 売却可能量の%で取引
+  tradeCost: 0.0012, // 手数料暫定（bitbank)
+  cancelOrderThreshold: 30, // 一銘柄ごとの注文限度数
+  safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない
+  
+  // 戦略固有の設定
+  strategies: {
+    // トレンドフォロー戦略
+    MA: {
+      enabled: true,
+      shortPeriod: 5,
+      longPeriod: 20
+    },
+    MACD: {
+      enabled: true,
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9
+    },
+    RSI: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70
+    },
+    BOLLINGER_BANDS: {
+      enabled: true,
+      period: 20,
+      stdDev: 2
+    },
+    
+    // 逆張り戦略
+    MEAN_REVERSION: {
+      enabled: true,
+      period: 20,
+      deviationThreshold: 3
+    },
+    OSCILLATOR: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80
+    },
+    
+    // アービトラージ戦略
+    INTER_EXCHANGE_ARBITRAGE: {
+      enabled: true,
+      minProfitPercent: 1.0
+    },
+    
+    // 高頻度取引戦略
+    HFT: {
+      enabled: false, // デフォルトでは無効（リソース消費が大きいため）
+      interval: 1000,
+      priceThreshold: 0.05,
+      maxOrdersPerMinute: 10
+    },
+    SCALPING: {
+      enabled: true
+    }
+  }
+};
 
 async function postErrorToDiscord(message) {
   if (discordErrorWebhookUrl) {
@@ -84,204 +148,6 @@ async function postResultToDiscord(message) {
 function weightedAverage(prices, amounts) {
   const totalAmount = amounts.reduce((acc, val) => acc + val, 0);
   return prices.reduce((acc, price, index) => acc + (price * amounts[index]), 0) / totalAmount;
-}
-
-async function scalpingBot(symbol, exchange, spreadHistory) {
-  spreadHistory[symbol] = spreadHistory[symbol] || [];
-  const market = exchange.markets[symbol];
-
-  if (!market) {
-    const errorMessage = `マーケットデータが取得できませんでした: ${symbol} ${exchange.name}`;
-    console.error(errorMessage);
-    await postErrorToDiscord(errorMessage);
-    return;
-  }
-
-  // 手数料を取得 (取引所によって異なるため分岐)
-  // let takerFee = 0;
-  // if (exchange.has['fetchTradingFees']) {
-  //   try {
-  //     const fees = await exchange.fetchTradingFees();
-  //     takerFee = fees[symbol]?.taker || 0; // taker手数料を取得、なければ0
-  //   } catch (error) {
-  //     console.error(`手数料の取得に失敗しました: ${symbol} ${exchange.name}`, error);
-  //     await postErrorToDiscord(`手数料の取得に失敗しました: ${symbol} ${exchange.name}`);
-  //   }
-  // } else if (market.taker) {
-  //   takerFee = market.taker; // マーケットから手数料を取得
-  // }
-
-  const minTradeAmount = (exchange.id === 'bitflyer' ? bitflyerMinTradeAmounts[symbol] : market.limits.amount.min) || amount; // bitflyerの場合は最小取引単位を設定
-  let pricePrecision = market.precision ? market.precision.price : undefined; // 価格の精度を取得
-
-  if (!pricePrecision) {
-    try {
-      // tickerを取得して価格精度を計算
-      const ticker = await exchange.fetchTicker(symbol);
-      const lastPrice = ticker.last;
-
-      if (lastPrice) {
-        const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
-        pricePrecision = priceDecimals;
-      } else {
-        const errorMessage = `ティッカーのlast価格が取得できませんでした: ${symbol} ${exchange.name}`;
-        console.error(errorMessage);
-        await postErrorToDiscord(errorMessage);
-        return;
-      }
-    } catch (error) {
-      const errorMessage = `価格精度が取得できず、ティッカーの取得にも失敗しました: ${symbol} ${exchange.name}`;
-      console.error(errorMessage, error);
-      await postErrorToDiscord(errorMessage);
-      return;
-    }
-  }
-
-  // 手数料を考慮した目標利益率を設定
-  // const totalProfitMargin = profitMargin + takerFee * 2; // 買いと売りの手数料両方を加算
-  // console.log(`手数料を考慮した目標利益率: ${totalProfitMargin} (${symbol})`);
-
-  if (pricePrecision > 0 && pricePrecision < 1) {
-    const priceDecimals = (pricePrecision.toString().split('.')[1] || '').length;
-    console.log(` 価格精度変換: ${pricePrecision} -> ${priceDecimals}`);
-    pricePrecision = priceDecimals;
-  }
-
-  let amountPrecision = market.precision ? market.precision.amount : undefined; // 取引量の精度を取得
-
-  if (!minTradeAmount) {
-    const errorMessage = `最小取引単位が取得できませんでした: ${symbol} ${exchange.name}`;
-    console.error(errorMessage);
-    await postErrorToDiscord(errorMessage);
-    return;
-  } else {
-    // console.log(`最小取引単位: ${symbol}: ${minTradeAmount}: ${exchange.name}`);
-  }
-
-  if (!amountPrecision) {
-    const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
-    amountPrecision = minTradeAmountDecimals;
-  }
-
-  if (amountPrecision > 0 && amountPrecision < 1) {
-    const amountDecimals = (amountPrecision.toString().split('.')[1] || '').length;
-    console.log(` 量精度変換: ${amountPrecision} -> ${amountDecimals}`);
-    amountPrecision = amountDecimals;
-  }
-
-  // console.log({pricePrecision, amountPrecision});
-
-  while (true) {
-    try {
-      // オーダーブックを取得
-      const orderBook = await exchange.fetchOrderBook(symbol);
-      const bid = orderBook.bids.length ? orderBook.bids[0][0] : undefined;  // 買い注文の最高値
-      const ask = orderBook.asks.length ? orderBook.asks[0][0] : undefined;  // 売り注文の最安値
-      
-      if (!bid || !ask) {
-        console.log(`オーダーブックが空です: ${symbol}: ${exchange.name}`);
-        await sleep(1000); // 1秒待機
-        continue;
-      }
-
-      // スプレッドを計算
-      const currentSpread = ask - bid;
-   
-      // スプレッド履歴に追加
-      spreadHistory[symbol].push(currentSpread);
-      if (spreadHistory[symbol].length > maxHistoryLength) {
-        spreadHistory[symbol].shift();  // 履歴が最大長を超えたら古いデータを削除
-      }
-
-      // スプレッドの平均値を計算
-      const averageSpread = spreadHistory[symbol].reduce((a, b) => a + b, 0) / spreadHistory[symbol].length;
-
-      // BFは手数料が高いので高い利益率を設定しないと損をする
-      const adjustedProfitMargin = (exchange.id === 'bitflyer' ? profitMargin * 1.5 : profitMargin);
-
-      // 価格差（スプレッド）が基準スプレッドより広い場合のみ取引を行う
-      // console.log(`${symbol}: ${exchange.name} スプレッド: ${currentSpread}, 平均スプレッド: ${averageSpread}, 想定利益率: ${ask/bid}, 加重売平均 ${ask}, 加重買平均 ${bid}`);
-      console.log(`${symbol}: ${exchange.name} 想定利益率: ${ask/bid}`);
-
-      if ((ask/bid) > (1 + adjustedProfitMargin)) {
-        const ticker = await exchange.fetchTicker(symbol);
-        const lastPrice = ticker.last;
-        
-        const buyPrice = parseFloat(lastPrice - (lastPrice * (adjustedProfitMargin / 2))).toFixed(pricePrecision);  // 価格を精度に基づいて丸める
-        const sellPrice = parseFloat(lastPrice + (lastPrice * (adjustedProfitMargin / 2))).toFixed(pricePrecision);
-
-        // 利用可能な資金を取得
-        const balance = await exchange.fetchBalance();
-        const quoteCurrency = symbol.split('/')[0];
-        const baseCurrency = symbol.split('/')[1];
-        const availableFunds = balance.free[baseCurrency];
-        const availableQuoteCurrency = balance.free[quoteCurrency];
-
-        // 購入に必要な資金を計算
-        const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
-        const maxSellAmount = availableQuoteCurrency * sellPercentage;
-        const buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
-        // 売却に必要な資産を計算
-        const sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
-
-        const buyCost = buyAmount * buyPrice * tradeCost;
-        const sellCost = sellAmount * sellPrice * tradeCost;
-
-        // 購入注文を送信
-        // JPY残高が設定以下の場合、購入注文をスキップ
-        if (availableFunds <= safetyJPYAmount) {
-            console.log(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
-            postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
-        } else if (availableFunds >= buyPrice * buyAmount) {
-          await orderCheckCancel(exchange, symbol);
-          console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
-          postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
-          // const buyOrder = await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
-          exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
-          // postOrderToDiscord(`== * 購入注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
-        } else {
-          console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
-          postOrderToDiscord(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
-        }
-
-        // 売却注文を送信
-        if (availableQuoteCurrency >= sellAmount) {
-          await orderCheckCancel(exchange, symbol);
-          postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
-          // const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
-          exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
-          // postOrderToDiscord(`== & 売却注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
-        } else {
-          console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
-          postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
-        }
-
-        // 注文が完了するまで待つ
-        await sleep(60000);  // 1分間待機
-      } else {
-        console.log(`取引をスキップします: ${symbol}: ${exchange.name}`);
-        // await sleep(1000); // 1秒待機
-      }
-    } catch (error) {
-        const errorMessage = `エラーが発生しました (${symbol}): ${error.message} : ${exchange.name}`;
-        console.error(errorMessage, error);
-        await postErrorToDiscord(errorMessage);
-        await sleep(1000); // 1秒待機
-    }
-  }
-}
-
-async function orderCheckCancel(exchange, symbol) {
-  const orders = await exchange.fetchOpenOrders(symbol);
-
-  // 過去の注文が30以上ある場合、一番古い注文をキャンセル
-  if (orders.length >= cancelOrderThreshold) {
-    const oldestOrder = orders[0]; // 一番古い注文
-    await exchange.cancelOrder(oldestOrder.id, symbol);
-    await postOrderToDiscord(`古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
-  }
-
-  return;
 }
 
 async function fetchTotal(exchange, symbol) {
@@ -327,24 +193,6 @@ async function fetchTotal(exchange, symbol) {
 }
 
 async function postReport(exchange) {
-  // const markets = await exchange.loadMarkets();
-  // const symbols = Object.keys(markets).filter(symbol => 
-  //   symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELFを除外
-  // ); // JPYの通貨ペアのみをフィルタリング
-
-  // const totalPromises = symbols.map(symbol => fetchTotal(exchange, symbol)); // 各通貨ペアの損益を取得するPromiseの配列を作成
-
-  // Promise.all(totalPromises)
-  //   .then(totals => {
-  //     const exchangeTitle = `--- ${exchange.id}`;
-  //     const totalMessage = totals.map((total, index) => `${symbols[index]}: *${total.toFixed(5)} JPY*`).join('\n'); // メッセージを作成
-  //     const total = totals.reduce((accumulator, currentValue) => accumulator + currentValue, 0); // totalsの合計を計算
-  //     return postResultToDiscord(exchangeTitle + `: ${total} JPY --- \n` + totalMessage); // Discordに一度だけ投稿
-  //   })
-  //   .catch(error => {
-  //     console.error('損益の取得中にエラーが発生しました:', error);
-  //   });
-
   const totalJPYValue = await calculateTotalJPYValue(exchange);
   postResultToDiscord(`=== TOTAL: ${exchange.id} ${totalJPYValue} ===`);
 }
@@ -375,6 +223,201 @@ async function calculateTotalJPYValue(exchange) {
   return totalJPYValue; // 総JPY評価額を返す
 }
 
+/**
+ * 指定された戦略を実行する関数
+ * @param {String} strategyKey - 戦略のキー
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {Object} options - オプション
+ */
+async function runStrategy(strategyKey, exchange, symbol, options = {}) {
+  try {
+    const strategyConfig = config.strategies[strategyKey];
+    if (!strategyConfig || !strategyConfig.enabled) {
+      return null;
+    }
+    
+    // 戦略に応じたパラメータを設定
+    const params = [];
+    
+    switch (strategyKey) {
+      case 'MA':
+        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, options);
+        break;
+      case 'MACD':
+        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, options);
+        break;
+      case 'RSI':
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, options);
+        break;
+      case 'BOLLINGER_BANDS':
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, options);
+        break;
+      case 'MEAN_REVERSION':
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, options);
+        break;
+      case 'OSCILLATOR':
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, options);
+        break;
+      case 'INTER_EXCHANGE_ARBITRAGE':
+        // アービトラージは複数の取引所を必要とするため、別途処理
+        return null;
+      case 'HFT':
+        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, options);
+        break;
+      case 'SCALPING':
+        params.push(exchange, symbol, options.spreadHistory || {}, options);
+        break;
+      default:
+        console.log(`未知の戦略: ${strategyKey}`);
+        return null;
+    }
+    
+    // 戦略を実行
+    return await strategies.executeStrategy(strategyKey, params);
+  } catch (error) {
+    console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
+    if (options.postErrorToDiscord) {
+      await options.postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
+    }
+    return null;
+  }
+}
+
+/**
+ * アービトラージ戦略を実行する関数
+ * @param {Array} exchanges - 取引所オブジェクトの配列
+ * @param {String} symbol - 通貨ペア
+ * @param {Object} options - オプション
+ */
+async function runArbitrageStrategy(exchanges, symbol, options = {}) {
+  try {
+    const strategyConfig = config.strategies.INTER_EXCHANGE_ARBITRAGE;
+    if (!strategyConfig || !strategyConfig.enabled) {
+      return null;
+    }
+    
+    const params = [
+      exchanges,
+      symbol,
+      strategyConfig.minProfitPercent,
+      config.amount,
+      {
+        ...options,
+        bitflyerMinTradeAmounts
+      }
+    ];
+    
+    return await strategies.executeStrategy('INTER_EXCHANGE_ARBITRAGE', params);
+  } catch (error) {
+    console.error(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol}`, error);
+    if (options.postErrorToDiscord) {
+      await options.postErrorToDiscord(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol} - ${error.message}`);
+    }
+    return null;
+  }
+}
+
+/**
+ * 複数の戦略を実行する関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {Object} options - オプション
+ */
+async function runStrategies(exchange, symbol, options = {}) {
+  try {
+    const market = exchange.markets[symbol];
+    if (!market) {
+      console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
+      return;
+    }
+    
+    // 市場情報を取得
+    let pricePrecision = market.precision ? market.precision.price : undefined;
+    let amountPrecision = market.precision ? market.precision.amount : undefined;
+    
+    if (!pricePrecision) {
+      try {
+        const ticker = await exchange.fetchTicker(symbol);
+        const lastPrice = ticker.last;
+        
+        if (lastPrice) {
+          const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
+          pricePrecision = priceDecimals;
+        }
+      } catch (error) {
+        console.error(`価格精度の取得に失敗しました: ${symbol} ${exchange.id}`, error);
+      }
+    }
+    
+    const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts[symbol]) 
+      ? bitflyerMinTradeAmounts[symbol] 
+      : (market.limits?.amount?.min || config.amount);
+    
+    if (!amountPrecision && minTradeAmount) {
+      const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
+      amountPrecision = minTradeAmountDecimals;
+    }
+    
+    // 共通オプションを設定
+    const commonOptions = {
+      pricePrecision,
+      amountPrecision,
+      minTradeAmount,
+      postOrderToDiscord,
+      postErrorToDiscord,
+      spreadHistory: options.spreadHistory || {},
+      bitflyerMinTradeAmounts
+    };
+    
+    // 各戦略を実行
+    const results = [];
+    
+    // トレンドフォロー戦略
+    if (config.strategies.MA.enabled) {
+      const result = await runStrategy('MA', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    if (config.strategies.MACD.enabled) {
+      const result = await runStrategy('MACD', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    if (config.strategies.RSI.enabled) {
+      const result = await runStrategy('RSI', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    if (config.strategies.BOLLINGER_BANDS.enabled) {
+      const result = await runStrategy('BOLLINGER_BANDS', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    // 逆張り戦略
+    if (config.strategies.MEAN_REVERSION.enabled) {
+      const result = await runStrategy('MEAN_REVERSION', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    if (config.strategies.OSCILLATOR.enabled) {
+      const result = await runStrategy('OSCILLATOR', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    // 高頻度取引戦略
+    if (config.strategies.SCALPING.enabled) {
+      const result = await runStrategy('SCALPING', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    }
+    
+    return results;
+  } catch (error) {
+    console.error(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id}`, error);
+    await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id} - ${error.message}`);
+    return [];
+  }
+}
 
 // レポートを投稿するためのタイマー設定
 setInterval(() => {
@@ -388,17 +431,81 @@ setInterval(() => {
 async function startBot() {
   try {
     const exchanges = [exchangeBB, exchangeBF];
-
-    await Promise.all(exchanges.map(async (exchange) => { // 並列に実行
-      const spreadHistory = {};
-      const markets = await exchange.loadMarkets();
-      const symbols = Object.keys(markets).filter(symbol => 
-        symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
-      ); // JPYの通貨ペアのみをフィルタリング
-
-      // すべての通貨ペアに対して並列でscalpingBotを実行
-      await Promise.all(symbols.map(symbol => scalpingBot(symbol, exchange, spreadHistory)));
-    }));
+    
+    // 高頻度取引戦略（HFT）を実行
+    if (config.strategies.HFT.enabled) {
+      for (const exchange of exchanges) {
+        const markets = await exchange.loadMarkets();
+        const symbols = Object.keys(markets).filter(symbol => 
+          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
+        );
+        
+        for (const symbol of symbols) {
+          const market = exchange.markets[symbol];
+          if (!market) continue;
+          
+          const pricePrecision = market.precision?.price || 8;
+          const amountPrecision = market.precision?.amount || 8;
+          const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts[symbol]) 
+            ? bitflyerMinTradeAmounts[symbol] 
+            : (market.limits?.amount?.min || config.amount);
+          
+          // HFT戦略を別スレッドで実行
+          runStrategy('HFT', exchange, symbol, {
+            pricePrecision,
+            amountPrecision,
+            minTradeAmount,
+            postOrderToDiscord,
+            postErrorToDiscord,
+            bitflyerMinTradeAmounts,
+            interval: config.strategies.HFT.interval,
+            priceThreshold: config.strategies.HFT.priceThreshold,
+            maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute
+          });
+        }
+      }
+    }
+    
+    // アービトラージ戦略を実行
+    if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
+      // 共通の通貨ペアを見つける
+      const bbMarkets = await exchangeBB.loadMarkets();
+      const bfMarkets = await exchangeBF.loadMarkets();
+      
+      const bbSymbols = Object.keys(bbMarkets).filter(symbol => symbol.endsWith('/JPY'));
+      const bfSymbols = Object.keys(bfMarkets).filter(symbol => symbol.endsWith('/JPY'));
+      
+      // 両方の取引所に存在する通貨ペアを見つける
+      const commonSymbols = bbSymbols.filter(symbol => bfSymbols.includes(symbol));
+      
+      // 定期的にアービトラージ機会を確認
+      setInterval(async () => {
+        for (const symbol of commonSymbols) {
+          await runArbitrageStrategy(exchanges, symbol, {
+            postOrderToDiscord,
+            postErrorToDiscord,
+            bitflyerMinTradeAmounts
+          });
+        }
+      }, 10000); // 10秒ごとに確認
+    }
+    
+    // その他の戦略を実行
+    const spreadHistory = {};
+    
+    while (true) {
+      for (const exchange of exchanges) {
+        const markets = await exchange.loadMarkets();
+        const symbols = Object.keys(markets).filter(symbol => 
+          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
+        );
+        
+        for (const symbol of symbols) {
+          await runStrategies(exchange, symbol, { spreadHistory });
+          await sleep(1000); // 1秒待機
+        }
+      }
+    }
   } catch (error) {
     const errorMessage = `エラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
@@ -406,7 +513,13 @@ async function startBot() {
   }
 }
 
+// 初期レポートを投稿
 postReport(exchangeBB);
 postReport(exchangeBF);
 
+// 利用可能な戦略を表示
+console.log('利用可能な戦略:');
+console.log(strategies.getAvailableStrategies());
+
+// ボットを起動
 startBot();
