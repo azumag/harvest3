@@ -21,7 +21,7 @@ const strategies = require('./index');
 async function meanReversionStrategy(exchange, symbol, period = 20, deviationThreshold = 3, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord } = options;
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
     
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);

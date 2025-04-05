@@ -114,6 +114,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const availableFunds = balance.free[baseCurrency];
                   
                   // 利用可能な資金の割合に基づいて取引量を計算
+                  console.log({symbol, availableFunds, tradePercentage, midPrice});
                   const maxBuyAmount = availableFunds * tradePercentage / midPrice;
                   // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
                   const tradeAmount = Math.max(baseMinTradeAmount, maxBuyAmount);
