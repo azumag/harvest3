@@ -42,13 +42,13 @@ const bitflyerMinTradeAmounts = {
 // 設定パラメータ
 const config = {
   // 共通設定
-  amount: 0.0001,  // 注文するBTCの量
+  amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
   profitMargin: 0.003,  // 目標利益率（取引料を考慮）
   maxHistoryLength: 100,  // スプレッド履歴の最大長
-  tradePercentage: 0.02,  // 資金の%で取引
+  tradePercentage: 0.01,  // 資金の%で取引
   sellPercentage: 0.1, // 売却可能量の%で取引
   tradeCost: 0.0012, // 手数料暫定（bitbank)
-  cancelOrderThreshold: 30, // 一銘柄ごとの注文限度数
+  cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
   
   // 戦略固有の設定
@@ -108,6 +108,53 @@ const config = {
     }
   }
 };
+
+// 取引記録を保存するオブジェクト
+const tradeRecords = {
+  // 取引所ごとの記録
+  // 例: { 'bitbank': { 'BTC/JPY': { amount: 0.1, totalCost: 500000 } } }
+};
+
+/**
+ * 取引記録を更新する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {Number} amount - 取引量
+ * @param {Number} price - 取引価格
+ * @param {String} side - 取引方向（'buy'または'sell'）
+ */
+function updateTradeRecord(exchangeId, symbol, amount, price, side) {
+  // 取引所の記録がなければ初期化
+  if (!tradeRecords[exchangeId]) {
+    tradeRecords[exchangeId] = {};
+  }
+  
+  // 通貨ペアの記録がなければ初期化
+  if (!tradeRecords[exchangeId][symbol]) {
+    tradeRecords[exchangeId][symbol] = {
+      buyAmount: 0,
+      sellAmount: 0,
+      totalBuyCost: 0,
+      totalSellValue: 0
+    };
+  }
+  
+  const record = tradeRecords[exchangeId][symbol];
+  
+  // 買いの場合
+  if (side === 'buy') {
+    record.buyAmount += amount;
+    record.totalBuyCost += amount * price;
+  }
+  // 売りの場合
+  else if (side === 'sell') {
+    record.sellAmount += amount;
+    record.totalSellValue += amount * price;
+  }
+  
+  console.log(`取引記録更新: ${exchangeId} - ${symbol} - ${side} - 数量: ${amount}, 価格: ${price}`);
+  console.log(`現在の記録: `, record);
+}
 
 async function postErrorToDiscord(message) {
   if (discordErrorWebhookUrl) {
@@ -242,28 +289,28 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     
     switch (strategyKey) {
       case 'MA':
-        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'MACD':
-        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'RSI':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'BOLLINGER_BANDS':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'MEAN_REVERSION':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'OSCILLATOR':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'INTER_EXCHANGE_ARBITRAGE':
         // アービトラージは複数の取引所を必要とするため、別途処理
         return null;
       case 'HFT':
-        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, options);
+        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
         break;
       case 'SCALPING':
         params.push(exchange, symbol, options.spreadHistory || {}, options);
@@ -301,10 +348,12 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
       exchanges,
       symbol,
       strategyConfig.minProfitPercent,
-      config.amount,
+      config.amount, // 固定値（tradePercentageが優先される）
       {
         ...options,
-        bitflyerMinTradeAmounts
+        bitflyerMinTradeAmounts,
+        tradePercentage: config.tradePercentage,
+        updateTradeRecord
       }
     ];
     
@@ -462,7 +511,9 @@ async function startBot() {
             bitflyerMinTradeAmounts,
             interval: config.strategies.HFT.interval,
             priceThreshold: config.strategies.HFT.priceThreshold,
-            maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute
+            maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute,
+            tradePercentage: config.tradePercentage,
+            updateTradeRecord
           });
         }
       }
@@ -486,7 +537,9 @@ async function startBot() {
           await runArbitrageStrategy(exchanges, symbol, {
             postOrderToDiscord,
             postErrorToDiscord,
-            bitflyerMinTradeAmounts
+            bitflyerMinTradeAmounts,
+            tradePercentage: config.tradePercentage,
+            updateTradeRecord
           });
         }
       }, 10000); // 10秒ごとに確認

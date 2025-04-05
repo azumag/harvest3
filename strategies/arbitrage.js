@@ -15,7 +15,7 @@ const strategies = require('./index');
 async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { postOrderToDiscord, postErrorToDiscord } = options;
+    const { postOrderToDiscord, postErrorToDiscord, tradePercentage = 0.01, updateTradeRecord } = options;
     
     // 各取引所の価格情報を取得
     const exchangePrices = [];
@@ -113,6 +113,8 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
       lowestAsk.exchange.minTradeAmount,
       highestBid.exchange.minTradeAmount
     );
+    // 固定の取引量ではなく、利用可能な資金の割合に基づいて計算する
+    // ただし、最小取引量は確保する
     const tradeAmount = Math.max(maxMinTradeAmount, amount);
     
     // 精度に合わせて丸める
@@ -139,15 +141,31 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = buyBalance.free[baseCurrency];
       
-      if (availableFunds >= buyPrice * formattedAmount) {
+      // 利用可能な資金の割合に基づいて取引量を計算
+      const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
+      // 取引量を再計算（最小取引量と計算した最大取引量の大きい方を使用）
+      let adjustedAmount = Math.max(formattedAmount, maxBuyAmount);
+      // 精度を考慮して、最小精度以上の値を確保
+      adjustedAmount = parseFloat(adjustedAmount.toFixed(
+        Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
+      ));
+      // 最小精度（0.0001）を下回らないようにする
+      adjustedAmount = Math.max(adjustedAmount, 0.0001);
+      
+      if (availableFunds >= buyPrice * adjustedAmount) {
         try {
           // 買い注文を作成
           // 注文数をチェックし、必要に応じて古い注文をキャンセル
           await strategies.orderCheckCancel(buyExchange, symbol, 30, postOrderToDiscord);
           // 指値注文に変更
-          const buyOrder = await buyExchange.createLimitBuyOrder(symbol, formattedAmount, buyPrice);
+          const buyOrder = await buyExchange.createLimitBuyOrder(symbol, adjustedAmount, buyPrice);
           if (postOrderToDiscord) {
-            await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${lowestAsk.exchange.id} - ${symbol} - 価格: ${buyPrice}, 数量: ${formattedAmount}`);
+            await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${lowestAsk.exchange.id} - ${symbol} - 価格: ${buyPrice}, 数量: ${adjustedAmount}`);
+          }
+          
+          // 取引記録を更新
+          if (updateTradeRecord) {
+            updateTradeRecord(lowestAsk.exchange.id, symbol, adjustedAmount, buyPrice, 'buy');
           }
           
           // 売り注文を実行
@@ -159,19 +177,25 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           const quoteCurrency = symbol.split('/')[0];
           const availableAsset = sellBalance.free[quoteCurrency];
           
-          if (availableAsset >= formattedAmount) {
+          // 売却量を調整（買った量と同じにする）
+          if (availableAsset >= adjustedAmount) {
             try {
               // 売り注文を作成
               // 注文数をチェックし、必要に応じて古い注文をキャンセル
               await strategies.orderCheckCancel(sellExchange, symbol, 30, postOrderToDiscord);
               // 指値注文に変更
-              const sellOrder = await sellExchange.createLimitSellOrder(symbol, formattedAmount, sellPrice);
+              const sellOrder = await sellExchange.createLimitSellOrder(symbol, adjustedAmount, sellPrice);
               if (postOrderToDiscord) {
-                await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${formattedAmount}`);
+                await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${adjustedAmount}`);
+              }
+              
+              // 取引記録を更新
+              if (updateTradeRecord) {
+                updateTradeRecord(highestBid.exchange.id, symbol, adjustedAmount, sellPrice, 'sell');
               }
               
               // 取引結果を報告
-              const totalProfit = netProfit * formattedAmount;
+              const totalProfit = netProfit * adjustedAmount;
               if (postOrderToDiscord) {
                 await postOrderToDiscord(`[アービトラージ] 取引完了: ${symbol} - 純利益: ${totalProfit.toFixed(8)} ${baseCurrency} (${profitPercent.toFixed(2)}%)`);
               }
@@ -182,9 +206,9 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
               }
             }
           } else {
-            console.log(`資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+            console.log(`資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${adjustedAmount}, 利用可能: ${availableAsset}`);
             if (postOrderToDiscord) {
-              await postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+              await postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${adjustedAmount}, 利用可能: ${availableAsset}`);
             }
           }
         } catch (error) {
@@ -194,9 +218,9 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           }
         }
       } else {
-        console.log(`資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(`資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * adjustedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * adjustedAmount}, 利用可能: ${availableFunds}`);
         }
       }
       
@@ -208,7 +232,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         buyPrice: lowestAsk.price,
         sellPrice: highestBid.price,
         profitPercent,
-        amount: formattedAmount,
+        amount: adjustedAmount || formattedAmount,
         signal: 'execute'
       };
     } else {
