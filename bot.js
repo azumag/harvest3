@@ -46,7 +46,6 @@ const config = {
   profitMargin: 0.003,  // 目標利益率（取引料を考慮）
   maxHistoryLength: 100,  // スプレッド履歴の最大長
   tradePercentage: 0.01,  // 資金の%で取引
-  sellPercentage: 0.1, // 売却可能量の%で取引
   tradeCost: 0.0012, // 手数料暫定（bitbank)
   cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
@@ -289,31 +288,31 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     
     switch (strategyKey) {
       case 'MA':
-        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'MACD':
-        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'RSI':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'BOLLINGER_BANDS':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'MEAN_REVERSION':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'OSCILLATOR':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'INTER_EXCHANGE_ARBITRAGE':
         // アービトラージは複数の取引所を必要とするため、別途処理
         return null;
       case 'HFT':
-        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord });
+        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       case 'SCALPING':
-        params.push(exchange, symbol, options.spreadHistory || {}, options);
+        params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
         break;
       default:
         console.log(`未知の戦略: ${strategyKey}`);
@@ -353,7 +352,8 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
         ...options,
         bitflyerMinTradeAmounts,
         tradePercentage: config.tradePercentage,
-        updateTradeRecord
+        updateTradeRecord,
+        tradeRecords
       }
     ];
     
@@ -513,7 +513,8 @@ async function startBot() {
             priceThreshold: config.strategies.HFT.priceThreshold,
             maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute,
             tradePercentage: config.tradePercentage,
-            updateTradeRecord
+            updateTradeRecord,
+            tradeRecords // tradeRecords を追加
           });
         }
       }
@@ -539,7 +540,8 @@ async function startBot() {
             postErrorToDiscord,
             bitflyerMinTradeAmounts,
             tradePercentage: config.tradePercentage,
-            updateTradeRecord
+            updateTradeRecord,
+            tradeRecords // tradeRecords を追加
           });
         }
       }, 10000); // 10秒ごとに確認

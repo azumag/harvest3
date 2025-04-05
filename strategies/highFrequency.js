@@ -15,7 +15,7 @@
 async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThreshold = 0.05, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, postOrderToDiscord, maxOrdersPerMinute = 10, tradePercentage = 0.01, updateTradeRecord } = options;
+    const { pricePrecision, amountPrecision, postOrderToDiscord, maxOrdersPerMinute = 10, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options; // tradeRecords を追加
     
     // 取引履歴を保持する配列
     const tradeHistory = [];
@@ -166,8 +166,26 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const quoteCurrency = symbol.split('/')[0];
                   const availableAsset = balance.free[quoteCurrency];
                   
-                  // 利用可能な資産の割合に基づいて取引量を計算
-                  const sellAmount = Math.min(availableAsset * options.sellPercentage || 0.1, availableAsset);
+                  // 取引記録から買った量を取得
+                  let buyAmount = 0;
+                  // tradeRecords (optionsから渡されたもの) を使用
+                  const exchangeRecords = tradeRecords && tradeRecords[exchange.id];
+                  if (exchangeRecords && exchangeRecords[symbol]) {
+                      buyAmount = (exchangeRecords[symbol].buyAmount || 0) - (exchangeRecords[symbol].sellAmount || 0);
+                      if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+                  } // Corrected closing brace for the inner if
+
+                  // 売却量を計算（買った分だけを売却）
+                  let sellAmount = buyAmount;
+                  
+                  // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+                  if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
+                    sellAmount = baseMinTradeAmount;
+                  }
+                  
+                  // 利用可能な資産を超えないようにする
+                  sellAmount = Math.min(sellAmount, availableAsset);
+                  
                   // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
                   const tradeAmount = Math.max(baseMinTradeAmount, sellAmount);
                   // 精度を考慮して、最小精度以上の値を確保
@@ -256,7 +274,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
     const {
       profitMargin = 0.003,
       maxHistoryLength = 100,
-      tradePercentage = 0.02,
+      tradePercentage = 0.01,
       sellPercentage = 0.1,
       tradeCost = 0.0012,
       safetyJPYAmount = 2000,
@@ -264,7 +282,8 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       postOrderToDiscord,
       postErrorToDiscord,
       bitflyerMinTradeAmounts,
-      updateTradeRecord
+      updateTradeRecord,
+      tradeRecords // tradeRecords を追加
     } = options;
     
     spreadHistory[symbol] = spreadHistory[symbol] || [];
@@ -380,7 +399,25 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       
       // 購入に必要な資金を計算
       const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
-      const maxSellAmount = availableQuoteCurrency * sellPercentage;
+      // 取引記録から買った量を取得
+      let recordedBuyAmount = 0;
+      // tradeRecords (optionsから渡されたもの) を使用
+      const exchangeRecords = tradeRecords && tradeRecords[exchange.id];
+      if (exchangeRecords && exchangeRecords[symbol]) {
+          recordedBuyAmount = (exchangeRecords[symbol].buyAmount || 0) - (exchangeRecords[symbol].sellAmount || 0);
+          if (recordedBuyAmount < 0) recordedBuyAmount = 0; // 負の値にならないように
+      } // Corrected closing brace for the inner if
+
+      // 売却量を計算（買った分だけを売却）
+      let maxSellAmount = recordedBuyAmount;
+      
+      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
+        maxSellAmount = minTradeAmount;
+      }
+      
+      // 利用可能な資産を超えないようにする
+      maxSellAmount = Math.min(maxSellAmount, availableQuoteCurrency);
       // 購入に必要な資金を計算
       let buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
@@ -475,7 +512,7 @@ async function orderCheckCancel(exchange, symbol, cancelOrderThreshold = 30, pos
     // 通貨ペアの注文を取得
     const orders = await exchange.fetchOpenOrders(symbol);
     
-    // 通貨ごとに注文数が30を超えたら、最も古い注文をキャンセル
+    // 通貨ごとに注文数が10を超えたら、最も古い注文をキャンセル
     if (orders.length >= cancelOrderThreshold) {
       const oldestOrder = orders[0]; // 一番古い注文
       await exchange.cancelOrder(oldestOrder.id, symbol);

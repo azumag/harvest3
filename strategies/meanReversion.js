@@ -102,8 +102,28 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
       
-      // 利用可能な資産の割合に基づいて取引量を計算
-      const sellAmount = Math.min(availableAsset * options.sellPercentage || 0.1, availableAsset);
+      // 取引記録から買った量を取得
+      let buyAmount = 0;
+      if (updateTradeRecord) {
+        // tradeRecordsから該当する取引所とシンボルの買い量を取得
+        const exchangeRecords = tradeRecords[exchange.id];
+        if (exchangeRecords && exchangeRecords[symbol]) {
+          buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+        }
+      }
+      
+      // 売却量を計算（買った分だけを売却）
+      let sellAmount = buyAmount;
+      
+      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
+        sellAmount = minTradeAmount;
+      }
+      
+      // 利用可能な資産を超えないようにする
+      sellAmount = Math.min(sellAmount, availableAsset);
+      
       // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -250,8 +270,28 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
       
-      // 利用可能な資産の割合に基づいて取引量を計算
-      const sellAmount = Math.min(availableAsset * options.sellPercentage || 0.1, availableAsset);
+      // 取引記録から買った量を取得
+      let buyAmount = 0;
+      if (updateTradeRecord) {
+        // tradeRecordsから該当する取引所とシンボルの買い量を取得
+        const exchangeRecords = tradeRecords[exchange.id];
+        if (exchangeRecords && exchangeRecords[symbol]) {
+          buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+        }
+      }
+      
+      // 売却量を計算（買った分だけを売却）
+      let sellAmount = buyAmount;
+      
+      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
+        sellAmount = minTradeAmount;
+      }
+      
+      // 利用可能な資産を超えないようにする
+      sellAmount = Math.min(sellAmount, availableAsset);
+      
       // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
