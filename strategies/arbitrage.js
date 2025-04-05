@@ -118,8 +118,12 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
     const tradeAmount = Math.max(maxMinTradeAmount, amount);
     
     // 精度に合わせて丸める
+    // amountPrecisionのデフォルト値を設定
+    const lowestAskPrecision = lowestAsk.exchange.amountPrecision || 8;
+    const highestBidPrecision = highestBid.exchange.amountPrecision || 8;
+    
     let formattedAmount = parseFloat(tradeAmount.toFixed(
-      Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
+      Math.min(lowestAskPrecision, highestBidPrecision)
     ));
     
     // 最小精度（0.0001）を下回らないようにする
@@ -146,8 +150,12 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
       // 取引量を再計算（最小取引量と計算した最大取引量の大きい方を使用）
       let adjustedAmount = Math.max(formattedAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
+      // amountPrecisionのデフォルト値を設定
+      const lowestAskPrecision = lowestAsk.exchange.amountPrecision || 8;
+      const highestBidPrecision = highestBid.exchange.amountPrecision || 8;
+      
       adjustedAmount = parseFloat(adjustedAmount.toFixed(
-        Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
+        Math.min(lowestAskPrecision, highestBidPrecision)
       ));
       // 最小精度（0.0001）を下回らないようにする
       adjustedAmount = Math.max(adjustedAmount, 0.0001);

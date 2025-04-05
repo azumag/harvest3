@@ -114,14 +114,18 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const availableFunds = balance.free[baseCurrency];
                   
                   // 利用可能な資金の割合に基づいて取引量を計算
-                  console.log({symbol, availableFunds, tradePercentage, midPrice});
+                  // console.log({symbol, availableFunds, tradePercentage, midPrice});
                   const maxBuyAmount = availableFunds * tradePercentage / midPrice;
                   // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
                   const tradeAmount = Math.max(baseMinTradeAmount, maxBuyAmount);
                   // 精度を考慮して、最小精度以上の値を確保
-                  let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+                  // amountPrecisionのデフォルト値を設定
+                  const precisionToUse = amountPrecision || 8;
+                  let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
                   // 最小精度（0.0001）を下回らないようにする
                   formattedAmount = Math.max(formattedAmount, 0.0001);
+
+                  // console.log({symbol, maxBuyAmount, tradeAmount, formattedAmount});
                   
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
@@ -190,7 +194,9 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
                   const tradeAmount = Math.max(baseMinTradeAmount, sellAmount);
                   // 精度を考慮して、最小精度以上の値を確保
-                  let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+                  // amountPrecisionのデフォルト値を設定
+                  const precisionToUse = amountPrecision || 8;
+                  let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
                   // 最小精度（0.0001）を下回らないようにする
                   formattedAmount = Math.max(formattedAmount, 0.0001);
                   
@@ -420,12 +426,16 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       // 利用可能な資産を超えないようにする
       maxSellAmount = Math.min(maxSellAmount, availableQuoteCurrency);
       // 購入に必要な資金を計算
-      let buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
+      // amountPrecisionのデフォルト値を設定
+      const buyPrecisionToUse = amountPrecision || 8;
+      let buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(buyPrecisionToUse));
       // 最小精度（0.0001）を下回らないようにする
       buyAmount = Math.max(buyAmount, 0.0001);
       
       // 売却に必要な資産を計算
-      let sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
+      // amountPrecisionのデフォルト値を設定
+      const sellPrecisionToUse = amountPrecision || 8;
+      let sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(sellPrecisionToUse));
       // 最小精度（0.0001）を下回らないようにする
       sellAmount = Math.max(sellAmount, 0.0001);
       

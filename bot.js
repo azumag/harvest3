@@ -49,6 +49,7 @@ const config = {
   tradeCost: 0.0012, // 手数料暫定（bitbank)
   cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
+  amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
   
   // 戦略固有の設定
   strategies: {
@@ -403,9 +404,13 @@ async function runStrategies(exchange, symbol, options = {}) {
       ? bitflyerMinTradeAmounts[symbol] 
       : (market.limits?.amount?.min || config.amount);
     
-    if (!amountPrecision && minTradeAmount) {
-      const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
-      amountPrecision = minTradeAmountDecimals;
+    if (!amountPrecision) {
+      if (minTradeAmount) {
+        const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
+        amountPrecision = minTradeAmountDecimals;
+      } else {
+        amountPrecision = config.amountPrecision; // configからデフォルト値を使用
+      }
     }
     
     // 共通オプションを設定
