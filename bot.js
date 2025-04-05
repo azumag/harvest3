@@ -43,6 +43,7 @@ const tradePercentage = 0.02;  // 資金の%で取引
 const sellPercentage = 0.1; // 売却可能量の%で取引
 const tradeCost = 0.0012; // 手数料暫定（bitbank)
 const cancelOrderThreshold = 30; // 一銘柄ごとの注文限度数
+const safetyJPYAmount = 2000; // JPY残高がこの額を下回ったら購入しない
 
 async function postErrorToDiscord(message) {
   if (discordErrorWebhookUrl) {
@@ -227,7 +228,11 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
         const sellCost = sellAmount * sellPrice * tradeCost;
 
         // 購入注文を送信
-        if (availableFunds >= buyPrice * buyAmount) {
+        // JPY残高が設定以下の場合、購入注文をスキップ
+        if (availableFunds <= safetyJPYAmount) {
+            console.log(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
+            postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
+        } else if (availableFunds >= buyPrice * buyAmount) {
           await orderCheckCancel(exchange, symbol);
           console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
           postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
@@ -388,7 +393,7 @@ async function startBot() {
       const spreadHistory = {};
       const markets = await exchange.loadMarkets();
       const symbols = Object.keys(markets).filter(symbol => 
-        symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELFを除外
+        symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
       ); // JPYの通貨ペアのみをフィルタリング
 
       // すべての通貨ペアに対して並列でscalpingBotを実行
