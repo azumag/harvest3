@@ -104,7 +104,7 @@ const config = {
       maxOrdersPerMinute: 10
     },
     SCALPING: {
-      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'
+      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'false'
     }
   }
 };
@@ -271,6 +271,80 @@ async function calculateTotalJPYValue(exchange) {
 }
 
 /**
+ * マーケットパラメータを取得する共通関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @returns {Object|null} - マーケットパラメータまたはnull（エラー時）
+ */
+async function getMarketParameters(exchange, symbol) {
+  const market = exchange.markets[symbol];
+  if (!market) {
+    console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
+    return null;
+  }
+  
+  const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts && bitflyerMinTradeAmounts[symbol])
+    ? bitflyerMinTradeAmounts[symbol]
+    : (market.limits?.amount?.min || 0.0001);
+    
+  let pricePrecision = market.precision ? market.precision.price : undefined;
+  
+  if (!pricePrecision) {
+    try {
+      const ticker = await exchange.fetchTicker(symbol);
+      const lastPrice = ticker.last;
+      
+      if (lastPrice) {
+        const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
+        pricePrecision = priceDecimals;
+      } else {
+        const errorMessage = `ティッカーのlast価格が取得できませんでした: ${symbol} ${exchange.name}`;
+        console.error(errorMessage);
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(errorMessage);
+        }
+        return null;
+      }
+    } catch (error) {
+      const errorMessage = `価格精度が取得できず、ティッカーの取得にも失敗しました: ${symbol} ${exchange.name}`;
+      console.error(errorMessage, error);
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(errorMessage);
+      }
+      return null;
+    }
+  }
+  
+  if (pricePrecision > 0 && pricePrecision < 1) {
+    const priceDecimals = (pricePrecision.toString().split('.')[1] || '').length;
+    pricePrecision = priceDecimals;
+  }
+  
+  let amountPrecision = market.precision ? market.precision.amount : undefined;
+  
+  if (!minTradeAmount) {
+    const errorMessage = `最小取引単位が取得できませんでした: ${symbol} ${exchange.name}`;
+    console.error(errorMessage);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(errorMessage);
+    }
+    return null;
+  }
+  
+  if (!amountPrecision) {
+    const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
+    amountPrecision = minTradeAmountDecimals;
+  }
+  
+  if (amountPrecision > 0 && amountPrecision < 1) {
+    const amountDecimals = (amountPrecision.toString().split('.')[1] || '').length;
+    amountPrecision = amountDecimals;
+  }
+  
+  return { minTradeAmount, pricePrecision, amountPrecision };
+}
+
+/**
  * 指定された戦略を実行する関数
  * @param {String} strategyKey - 戦略のキー
  * @param {Object} exchange - 取引所オブジェクト
@@ -376,42 +450,11 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
  */
 async function runStrategies(exchange, symbol, options = {}) {
   try {
-    const market = exchange.markets[symbol];
-    if (!market) {
-      console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
-      return;
-    }
+    // マーケットパラメータを取得
+    const params = await getMarketParameters(exchange, symbol);
+    if (!params) return;
     
-    // 市場情報を取得
-    let pricePrecision = market.precision ? market.precision.price : undefined;
-    let amountPrecision = market.precision ? market.precision.amount : undefined;
-    
-    if (!pricePrecision) {
-      try {
-        const ticker = await exchange.fetchTicker(symbol);
-        const lastPrice = ticker.last;
-        
-        if (lastPrice) {
-          const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
-          pricePrecision = priceDecimals;
-        }
-      } catch (error) {
-        console.error(`価格精度の取得に失敗しました: ${symbol} ${exchange.id}`, error);
-      }
-    }
-    
-    const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts[symbol]) 
-      ? bitflyerMinTradeAmounts[symbol] 
-      : (market.limits?.amount?.min || config.amount);
-    
-    if (!amountPrecision) {
-      if (minTradeAmount) {
-        const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
-        amountPrecision = minTradeAmountDecimals;
-      } else {
-        amountPrecision = config.amountPrecision; // configからデフォルト値を使用
-      }
-    }
+    const { minTradeAmount, pricePrecision, amountPrecision } = params;
     
     // 共通オプションを設定
     const commonOptions = {
@@ -497,14 +540,11 @@ async function startBot() {
         );
         
         for (const symbol of symbols) {
-          const market = exchange.markets[symbol];
-          if (!market) continue;
+          // マーケットパラメータを取得
+          const params = await getMarketParameters(exchange, symbol);
+          if (!params) continue;
           
-          const pricePrecision = market.precision?.price || 8;
-          const amountPrecision = market.precision?.amount || 8;
-          const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts[symbol]) 
-            ? bitflyerMinTradeAmounts[symbol] 
-            : (market.limits?.amount?.min || config.amount);
+          const { minTradeAmount, pricePrecision, amountPrecision } = params;
           
           // HFT戦略を別スレッドで実行
           runStrategy('HFT', exchange, symbol, {
