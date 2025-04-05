@@ -38,7 +38,10 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
     
     // 取引量を計算
     const tradeAmount = Math.max(minAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 前回の価格を保存
     let previousPrice = null;
@@ -352,9 +355,15 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       // 購入に必要な資金を計算
       const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
       const maxSellAmount = availableQuoteCurrency * sellPercentage;
-      const buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
+      // 購入に必要な資金を計算
+      let buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      buyAmount = Math.max(buyAmount, 0.0001);
+      
       // 売却に必要な資産を計算
-      const sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
+      let sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      sellAmount = Math.max(sellAmount, 0.0001);
       
       const buyCost = buyAmount * buyPrice * tradeCost;
       const sellCost = sellAmount * sellPrice * tradeCost;

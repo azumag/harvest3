@@ -41,7 +41,10 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 買いシグナル: 価格が移動平均線から下に大きく乖離
     const buySignal = deviation <= -deviationThreshold;
@@ -157,7 +160,10 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 買いシグナル: RSIが極端に低い（売られすぎ）
     const buySignal = currentRSI <= oversoldThreshold;

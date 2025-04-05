@@ -115,9 +115,12 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
     const tradeAmount = Math.max(maxMinTradeAmount, amount);
     
     // 精度に合わせて丸める
-    const formattedAmount = parseFloat(tradeAmount.toFixed(
+    let formattedAmount = parseFloat(tradeAmount.toFixed(
       Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
     ));
+    
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 利益率が閾値を超えた場合に取引を実行
     if (profitPercent >= minProfitPercent) {

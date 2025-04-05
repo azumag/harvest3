@@ -46,7 +46,10 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // クロスを検出
     const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
@@ -163,7 +166,10 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // クロスを検出
     const crossUp = previousMACD < previousSignal && currentMACD > currentSignal;
@@ -278,7 +284,10 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 買いシグナル: RSIが閾値を下回り、前回のRSIが閾値以上
     const buySignal = currentRSI < oversoldThreshold && previousRSI >= oversoldThreshold;
@@ -394,7 +403,10 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     
     // 取引量を計算
     const tradeAmount = Math.max(minTradeAmount, amount);
-    const formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 精度を考慮して、最小精度以上の値を確保
+    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    // 最小精度（0.0001）を下回らないようにする
+    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;
