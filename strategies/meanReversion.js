@@ -1,11 +1,12 @@
 /**
  * 逆張り戦略
  */
-const { 
-  calculateSMA, 
-  calculateRSI, 
-  calculateBollingerBands 
+const {
+  calculateSMA,
+  calculateRSI,
+  calculateBollingerBands
 } = require('./indicators');
+const strategies = require('./index');
 
 /**
  * 平均回帰戦略
@@ -67,7 +68,10 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
-        await exchange.createMarketBuyOrder(symbol, formattedAmount);
+        // 注文数をチェックし、必要に応じて古い注文をキャンセル
+        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        // 指値注文に変更
+        await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -91,7 +95,10 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
-        await exchange.createMarketSellOrder(symbol, formattedAmount);
+        // 注文数をチェックし、必要に応じて古い注文をキャンセル
+        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        // 指値注文に変更
+        await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -186,7 +193,10 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
-        await exchange.createMarketBuyOrder(symbol, formattedAmount);
+        // 注文数をチェックし、必要に応じて古い注文をキャンセル
+        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        // 指値注文に変更
+        await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -210,7 +220,10 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
-        await exchange.createMarketSellOrder(symbol, formattedAmount);
+        // 注文数をチェックし、必要に応じて古い注文をキャンセル
+        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        // 指値注文に変更
+        await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }

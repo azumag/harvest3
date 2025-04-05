@@ -1,6 +1,7 @@
 /**
  * アービトラージ戦略
  */
+const strategies = require('./index');
 
 /**
  * 価格差取引（取引所間アービトラージ）
@@ -141,7 +142,10 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
       if (availableFunds >= buyPrice * formattedAmount) {
         try {
           // 買い注文を作成
-          const buyOrder = await buyExchange.createMarketBuyOrder(symbol, formattedAmount);
+          // 注文数をチェックし、必要に応じて古い注文をキャンセル
+          await strategies.orderCheckCancel(buyExchange, symbol, 30, postOrderToDiscord);
+          // 指値注文に変更
+          const buyOrder = await buyExchange.createLimitBuyOrder(symbol, formattedAmount, buyPrice);
           if (postOrderToDiscord) {
             await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${lowestAsk.exchange.id} - ${symbol} - 価格: ${buyPrice}, 数量: ${formattedAmount}`);
           }
@@ -158,7 +162,10 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           if (availableAsset >= formattedAmount) {
             try {
               // 売り注文を作成
-              const sellOrder = await sellExchange.createMarketSellOrder(symbol, formattedAmount);
+              // 注文数をチェックし、必要に応じて古い注文をキャンセル
+              await strategies.orderCheckCancel(sellExchange, symbol, 30, postOrderToDiscord);
+              // 指値注文に変更
+              const sellOrder = await sellExchange.createLimitSellOrder(symbol, formattedAmount, sellPrice);
               if (postOrderToDiscord) {
                 await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${formattedAmount}`);
               }

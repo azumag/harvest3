@@ -118,8 +118,8 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
-                      // 買い注文を作成
-                      const order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+                      // 買い注文を作成（指値注文）
+                      const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice);
                       console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
                         await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
@@ -157,8 +157,8 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   
                   if (availableAsset >= formattedAmount) {
                     try {
-                      // 売り注文を作成
-                      const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+                      // 売り注文を作成（指値注文）
+                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice);
                       console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
                         await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
@@ -431,22 +431,32 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
  * 古い注文をキャンセルする関数
  * @param {Object} exchange - ccxtの取引所オブジェクト
  * @param {String} symbol - 通貨ペア
- * @param {Number} cancelOrderThreshold - キャンセルする閾値
+ * @param {Number} cancelOrderThreshold - キャンセルする閾値（デフォルト30）
  * @param {Function} postOrderToDiscord - Discord通知関数
  */
-async function orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord) {
-  const orders = await exchange.fetchOpenOrders(symbol);
-  
-  // 過去の注文が閾値以上ある場合、一番古い注文をキャンセル
-  if (orders.length >= cancelOrderThreshold) {
-    const oldestOrder = orders[0]; // 一番古い注文
-    await exchange.cancelOrder(oldestOrder.id, symbol);
-    if (postOrderToDiscord) {
-      await postOrderToDiscord(`古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
+async function orderCheckCancel(exchange, symbol, cancelOrderThreshold = 30, postOrderToDiscord) {
+  try {
+    // 通貨ペアの注文を取得
+    const orders = await exchange.fetchOpenOrders(symbol);
+    
+    // 通貨ごとに注文数が30を超えたら、最も古い注文をキャンセル
+    if (orders.length >= cancelOrderThreshold) {
+      const oldestOrder = orders[0]; // 一番古い注文
+      await exchange.cancelOrder(oldestOrder.id, symbol);
+      if (postOrderToDiscord) {
+        await postOrderToDiscord(`注文数が${cancelOrderThreshold}を超えたため、最も古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
+      }
+      console.log(`注文数が${cancelOrderThreshold}を超えたため、最も古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
     }
+    
+    return orders.length;
+  } catch (error) {
+    console.error(`注文キャンセル処理でエラーが発生しました: ${symbol}`, error);
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(`[注文キャンセル] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    }
+    return 0;
   }
-  
-  return;
 }
 
 module.exports = {
