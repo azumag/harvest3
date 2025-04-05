@@ -15,7 +15,7 @@
 async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThreshold = 0.05, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, maxOrdersPerMinute = 10, tradePercentage = 0.02, addBuyRecord, getSellAmount } = options;
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, maxOrdersPerMinute = 10 } = options;
     
     // 取引履歴を保持する配列
     const tradeHistory = [];
@@ -116,25 +116,13 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const baseCurrency = symbol.split('/')[1];
                   const availableFunds = balance.free[baseCurrency];
                   
-                  // 取引量を計算（利用可能資金の割合）
-                  const maxBuyAmount = (availableFunds * tradePercentage) / midPrice;
-                  const tradeAmount = Math.max(minAmount, maxBuyAmount);
-                  // 精度を考慮して、最小精度以上の値を確保
-                  let buyFormattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-                  // 最小精度（0.0001）を下回らないようにする
-                  buyFormattedAmount = Math.max(buyFormattedAmount, 0.0001);
-                  
-                  if (availableFunds >= midPrice * buyFormattedAmount) {
+                  if (availableFunds >= midPrice * formattedAmount) {
                     try {
                       // 買い注文を作成（指値注文）
-                      const order = await exchange.createLimitBuyOrder(symbol, buyFormattedAmount, midPrice);
-                      console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${buyFormattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      // 購入記録を追加
-                      if (addBuyRecord) {
-                        addBuyRecord(buyFormattedAmount);
-                      }
+                      const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice);
+                      console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${buyFormattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       
                       // 取引履歴に追加
@@ -142,7 +130,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                         time: now,
                         type: 'buy',
                         price: midPrice,
-                        amount: buyFormattedAmount,
+                        amount: formattedAmount,
                         priceChange
                       });
                       
@@ -156,7 +144,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                       }
                     }
                   } else {
-                    console.log(`資金不足のため買い注文をスキップ: ${symbol} - 必要: ${midPrice * buyFormattedAmount}, 利用可能: ${availableFunds}`);
+                    console.log(`資金不足のため買い注文をスキップ: ${symbol} - 必要: ${midPrice * formattedAmount}, 利用可能: ${availableFunds}`);
                   }
                 }
               } else {
@@ -167,24 +155,13 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const quoteCurrency = symbol.split('/')[0];
                   const availableAsset = balance.free[quoteCurrency];
                   
-                  // 売却可能量を取得
-                  let sellAmount = availableAsset;
-                  if (getSellAmount) {
-                    sellAmount = getSellAmount(availableAsset);
-                  }
-                  
-                  // 精度を考慮して、最小精度以上の値を確保
-                  let sellFormattedAmount = parseFloat(Math.max(minAmount, sellAmount).toFixed(amountPrecision));
-                  // 最小精度（0.0001）を下回らないようにする
-                  sellFormattedAmount = Math.max(sellFormattedAmount, 0.0001);
-                  
-                  if (availableAsset >= sellFormattedAmount) {
+                  if (availableAsset >= formattedAmount) {
                     try {
                       // 売り注文を作成（指値注文）
-                      const order = await exchange.createLimitSellOrder(symbol, sellFormattedAmount, midPrice);
-                      console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${sellFormattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice);
+                      console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${sellFormattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       
                       // 取引履歴に追加
@@ -192,7 +169,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                         time: now,
                         type: 'sell',
                         price: midPrice,
-                        amount: sellFormattedAmount,
+                        amount: formattedAmount,
                         priceChange
                       });
                       
@@ -206,7 +183,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                       }
                     }
                   } else {
-                    console.log(`資産不足のため売り注文をスキップ: ${symbol} - 必要: ${sellFormattedAmount}, 利用可能: ${availableAsset}`);
+                    console.log(`資産不足のため売り注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
                   }
                 }
               }
@@ -261,9 +238,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       cancelOrderThreshold = 30,
       postOrderToDiscord,
       postErrorToDiscord,
-      bitflyerMinTradeAmounts,
-      addBuyRecord,
-      getSellAmount
+      bitflyerMinTradeAmounts
     } = options;
     
     spreadHistory[symbol] = spreadHistory[symbol] || [];
@@ -379,26 +354,19 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       
       // 購入に必要な資金を計算
       const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
+      const maxSellAmount = availableQuoteCurrency * sellPercentage;
       // 購入に必要な資金を計算
       let buyAmount = parseFloat(Math.max(minTradeAmount, maxBuyAmount).toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       buyAmount = Math.max(buyAmount, 0.0001);
       
-      // 売却可能量を取得
-      let sellAmount = availableQuoteCurrency;
-      if (getSellAmount) {
-        sellAmount = getSellAmount(availableQuoteCurrency);
-      } else {
-        sellAmount = availableQuoteCurrency * sellPercentage;
-      }
-      
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedSellAmount = parseFloat(Math.max(minTradeAmount, sellAmount).toFixed(amountPrecision));
+      // 売却に必要な資産を計算
+      let sellAmount = parseFloat(Math.max(minTradeAmount, maxSellAmount).toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
-      formattedSellAmount = Math.max(formattedSellAmount, 0.0001);
+      sellAmount = Math.max(sellAmount, 0.0001);
       
       const buyCost = buyAmount * buyPrice * tradeCost;
-      const sellCost = formattedSellAmount * sellPrice * tradeCost;
+      const sellCost = sellAmount * sellPrice * tradeCost;
       
       // JPY残高が設定以下の場合、購入注文をスキップ
       if (availableFunds <= safetyJPYAmount) {
@@ -413,10 +381,6 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
           await postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
         }
         await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
-        // 購入記録を追加
-        if (addBuyRecord) {
-          addBuyRecord(buyAmount);
-        }
       } else {
         console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
         if (postOrderToDiscord) {
@@ -425,16 +389,16 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       }
       
       // 売却注文を送信
-      if (availableQuoteCurrency >= formattedSellAmount) {
+      if (availableQuoteCurrency >= sellAmount) {
         await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${formattedSellAmount}`);
+          await postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
         }
-        await exchange.createLimitSellOrder(symbol, formattedSellAmount, sellPrice);
+        await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice);
       } else {
-        console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${formattedSellAmount}`);
+        console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${formattedSellAmount}`);
+          await postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
         }
       }
     } else {

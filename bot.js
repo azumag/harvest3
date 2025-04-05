@@ -39,52 +39,6 @@ const bitflyerMinTradeAmounts = {
   'MONA/JPY': 0.1,
 };
 
-// 取引記録を保持するグローバル変数
-// 構造: { exchangeId: { symbol: { strategy: { buyAmount: number, timestamp: number } } } }
-const tradeRecords = {};
-
-/**
- * 購入記録を追加する関数
- * @param {String} exchangeId - 取引所ID
- * @param {String} symbol - 通貨ペア
- * @param {String} strategy - 戦略名
- * @param {Number} amount - 購入量
- */
-function addBuyRecord(exchangeId, symbol, strategy, amount) {
-  if (!tradeRecords[exchangeId]) {
-    tradeRecords[exchangeId] = {};
-  }
-  if (!tradeRecords[exchangeId][symbol]) {
-    tradeRecords[exchangeId][symbol] = {};
-  }
-  tradeRecords[exchangeId][symbol][strategy] = {
-    buyAmount: amount,
-    timestamp: Date.now()
-  };
-  console.log(`購入記録を追加: ${exchangeId} - ${symbol} - ${strategy} - ${amount}`);
-}
-
-/**
- * 売却可能量を取得する関数
- * @param {String} exchangeId - 取引所ID
- * @param {String} symbol - 通貨ペア
- * @param {String} strategy - 戦略名
- * @param {Number} availableAmount - 利用可能な残高
- * @returns {Number} 売却可能量
- */
-function getSellAmount(exchangeId, symbol, strategy, availableAmount) {
-  if (
-    tradeRecords[exchangeId] &&
-    tradeRecords[exchangeId][symbol] &&
-    tradeRecords[exchangeId][symbol][strategy]
-  ) {
-    // 記録がある場合は、その量を返す（ただし利用可能量を超えないようにする）
-    return Math.min(tradeRecords[exchangeId][symbol][strategy].buyAmount, availableAmount);
-  }
-  // 記録がない場合でも、利用可能な残高があれば売ることができる
-  return availableAmount;
-}
-
 // 設定パラメータ
 const config = {
   // 共通設定
@@ -94,7 +48,7 @@ const config = {
   tradePercentage: 0.02,  // 資金の%で取引
   sellPercentage: 0.1, // 売却可能量の%で取引
   tradeCost: 0.0012, // 手数料暫定（bitbank)
-  cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
+  cancelOrderThreshold: 30, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
   
   // 戦略固有の設定
@@ -283,11 +237,6 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
       return null;
     }
     
-    // 取引記録関連の関数をオプションに追加
-    options.addBuyRecord = (amount) => addBuyRecord(exchange.id, symbol, strategyKey, amount);
-    options.getSellAmount = (availableAmount) => getSellAmount(exchange.id, symbol, strategyKey, availableAmount);
-    options.tradePercentage = config.tradePercentage;
-    
     // 戦略に応じたパラメータを設定
     const params = [];
     
@@ -348,21 +297,15 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
       return null;
     }
     
-    // 取引記録関連の関数をオプションに追加
-    const arbitrageOptions = {
-      ...options,
-      bitflyerMinTradeAmounts,
-      tradePercentage: config.tradePercentage,
-      addBuyRecord: (exchangeId, amount) => addBuyRecord(exchangeId, symbol, 'INTER_EXCHANGE_ARBITRAGE', amount),
-      getSellAmount: (exchangeId, availableAmount) => getSellAmount(exchangeId, symbol, 'INTER_EXCHANGE_ARBITRAGE', availableAmount)
-    };
-    
     const params = [
       exchanges,
       symbol,
       strategyConfig.minProfitPercent,
       config.amount,
-      arbitrageOptions
+      {
+        ...options,
+        bitflyerMinTradeAmounts
+      }
     ];
     
     return await strategies.executeStrategy('INTER_EXCHANGE_ARBITRAGE', params);

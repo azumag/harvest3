@@ -139,16 +139,6 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = buyBalance.free[baseCurrency];
       
-      // 取引量を計算（利用可能資金の割合）
-      const maxBuyAmount = (availableFunds * options.tradePercentage) / buyPrice;
-      const tradeAmount = Math.max(maxMinTradeAmount, Math.min(maxBuyAmount, amount));
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedAmount = parseFloat(tradeAmount.toFixed(
-        Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
-      ));
-      // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
-      
       if (availableFunds >= buyPrice * formattedAmount) {
         try {
           // 買い注文を作成
@@ -156,10 +146,6 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           await strategies.orderCheckCancel(buyExchange, symbol, 30, postOrderToDiscord);
           // 指値注文に変更
           const buyOrder = await buyExchange.createLimitBuyOrder(symbol, formattedAmount, buyPrice);
-          // 購入記録を追加
-          if (options.addBuyRecord) {
-            options.addBuyRecord(lowestAsk.exchange.id, formattedAmount);
-          }
           if (postOrderToDiscord) {
             await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${lowestAsk.exchange.id} - ${symbol} - 価格: ${buyPrice}, 数量: ${formattedAmount}`);
           }
@@ -173,28 +159,15 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           const quoteCurrency = symbol.split('/')[0];
           const availableAsset = sellBalance.free[quoteCurrency];
           
-          // 売却可能量を取得
-          let sellAmount = availableAsset;
-          if (options.getSellAmount) {
-            sellAmount = options.getSellAmount(highestBid.exchange.id, availableAsset);
-          }
-          
-          // 精度を考慮して、最小精度以上の値を確保
-          let sellFormattedAmount = parseFloat(Math.max(maxMinTradeAmount, sellAmount).toFixed(
-            Math.min(lowestAsk.exchange.amountPrecision, highestBid.exchange.amountPrecision)
-          ));
-          // 最小精度（0.0001）を下回らないようにする
-          sellFormattedAmount = Math.max(sellFormattedAmount, 0.0001);
-          
-          if (availableAsset >= sellFormattedAmount) {
+          if (availableAsset >= formattedAmount) {
             try {
               // 売り注文を作成
               // 注文数をチェックし、必要に応じて古い注文をキャンセル
               await strategies.orderCheckCancel(sellExchange, symbol, 30, postOrderToDiscord);
               // 指値注文に変更
-              const sellOrder = await sellExchange.createLimitSellOrder(symbol, sellFormattedAmount, sellPrice);
+              const sellOrder = await sellExchange.createLimitSellOrder(symbol, formattedAmount, sellPrice);
               if (postOrderToDiscord) {
-                await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${sellFormattedAmount}`);
+                await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${formattedAmount}`);
               }
               
               // 取引結果を報告
