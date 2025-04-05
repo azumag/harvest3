@@ -23,7 +23,15 @@ const strategies = require('./index');
 async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord } = options;
+    const {
+      pricePrecision,
+      amountPrecision,
+      minTradeAmount,
+      postOrderToDiscord,
+      tradePercentage = 0.02,
+      addBuyRecord,
+      getSellAmount
+    } = options;
     
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, longPeriod + 10);
@@ -45,13 +53,6 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
     
-    // 取引量を計算
-    const tradeAmount = Math.max(minTradeAmount, amount);
-    // 精度を考慮して、最小精度以上の値を確保
-    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-    // 最小精度（0.0001）を下回らないようにする
-    formattedAmount = Math.max(formattedAmount, 0.0001);
-    
     // クロスを検出
     const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
     const crossDown = previousShortMA > previousLongMA && currentShortMA < currentLongMA;
@@ -69,12 +70,24 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
       
+      // 取引量を計算（利用可能資金の割合）
+      const maxBuyAmount = (availableFunds * tradePercentage) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
+      
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
+        // 購入記録を追加
+        if (addBuyRecord) {
+          addBuyRecord(formattedAmount);
+        }
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[MA戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -95,6 +108,17 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
+      
+      // 売却可能量を取得
+      let sellAmount = availableAsset;
+      if (getSellAmount) {
+        sellAmount = getSellAmount(availableAsset);
+      }
+      
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(Math.max(minTradeAmount, sellAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
@@ -150,7 +174,15 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord } = options;
+    const {
+      pricePrecision,
+      amountPrecision,
+      minTradeAmount,
+      postOrderToDiscord,
+      tradePercentage = 0.02,
+      addBuyRecord,
+      getSellAmount
+    } = options;
     
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, slowPeriod + signalPeriod + 10);
@@ -171,13 +203,6 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
     
-    // 取引量を計算
-    const tradeAmount = Math.max(minTradeAmount, amount);
-    // 精度を考慮して、最小精度以上の値を確保
-    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-    // 最小精度（0.0001）を下回らないようにする
-    formattedAmount = Math.max(formattedAmount, 0.0001);
-    
     // クロスを検出
     const crossUp = previousMACD < previousSignal && currentMACD > currentSignal;
     const crossDown = previousMACD > previousSignal && currentMACD < currentSignal;
@@ -195,12 +220,24 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
       
+      // 取引量を計算（利用可能資金の割合）
+      const maxBuyAmount = (availableFunds * tradePercentage) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
+      
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
+        // 購入記録を追加
+        if (addBuyRecord) {
+          addBuyRecord(formattedAmount);
+        }
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[MACD戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -221,6 +258,17 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
+      
+      // 売却可能量を取得
+      let sellAmount = availableAsset;
+      if (getSellAmount) {
+        sellAmount = getSellAmount(availableAsset);
+      }
+      
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(Math.max(minTradeAmount, sellAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
@@ -276,7 +324,15 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord } = options;
+    const {
+      pricePrecision,
+      amountPrecision,
+      minTradeAmount,
+      postOrderToDiscord,
+      tradePercentage = 0.02,
+      addBuyRecord,
+      getSellAmount
+    } = options;
     
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
@@ -294,12 +350,6 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     // 現在の価格を取得
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
-    
-    // 取引量を計算
-    const tradeAmount = Math.max(minTradeAmount, amount);
-    // 精度を考慮して、最小精度以上の値を確保
-    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-    // 最小精度（0.0001）を下回らないようにする
     formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // 買いシグナル: RSIが閾値を下回り、前回のRSIが閾値以上
@@ -321,12 +371,24 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
       
+      // 取引量を計算（利用可能資金の割合）
+      const maxBuyAmount = (availableFunds * tradePercentage) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
+      
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
+        // 購入記録を追加
+        if (addBuyRecord) {
+          addBuyRecord(formattedAmount);
+        }
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[RSI戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -347,6 +409,17 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
+      
+      // 売却可能量を取得
+      let sellAmount = availableAsset;
+      if (getSellAmount) {
+        sellAmount = getSellAmount(availableAsset);
+      }
+      
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(Math.max(minTradeAmount, sellAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
@@ -400,7 +473,15 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord } = options;
+    const {
+      pricePrecision,
+      amountPrecision,
+      minTradeAmount,
+      postOrderToDiscord,
+      tradePercentage = 0.02,
+      addBuyRecord,
+      getSellAmount
+    } = options;
     
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
@@ -419,13 +500,6 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     // 現在の価格を取得
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
-    
-    // 取引量を計算
-    const tradeAmount = Math.max(minTradeAmount, amount);
-    // 精度を考慮して、最小精度以上の値を確保
-    let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-    // 最小精度（0.0001）を下回らないようにする
-    formattedAmount = Math.max(formattedAmount, 0.0001);
     
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;
@@ -449,12 +523,24 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
       
+      // 取引量を計算（利用可能資金の割合）
+      const maxBuyAmount = (availableFunds * tradePercentage) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
+      
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
+        // 購入記録を追加
+        if (addBuyRecord) {
+          addBuyRecord(formattedAmount);
+        }
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[BB戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -475,6 +561,17 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
+      
+      // 売却可能量を取得
+      let sellAmount = availableAsset;
+      if (getSellAmount) {
+        sellAmount = getSellAmount(availableAsset);
+      }
+      
+      // 精度を考慮して、最小精度以上の値を確保
+      let formattedAmount = parseFloat(Math.max(minTradeAmount, sellAmount).toFixed(amountPrecision));
+      // 最小精度（0.0001）を下回らないようにする
+      formattedAmount = Math.max(formattedAmount, 0.0001);
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
