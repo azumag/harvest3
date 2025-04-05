@@ -49,42 +49,42 @@ const config = {
   sellPercentage: 0.1, // 売却可能量の%で取引
   tradeCost: 0.0012, // 手数料暫定（bitbank)
   cancelOrderThreshold: 30, // 一銘柄ごとの注文限度数
-  safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない
+  safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
   
   // 戦略固有の設定
   strategies: {
     // トレンドフォロー戦略
     MA: {
-      enabled: true,
+      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
       shortPeriod: 5,
       longPeriod: 20
     },
     MACD: {
-      enabled: true,
+      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9
     },
     RSI: {
-      enabled: true,
+      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70
     },
     BOLLINGER_BANDS: {
-      enabled: true,
+      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
       period: 20,
       stdDev: 2
     },
     
     // 逆張り戦略
     MEAN_REVERSION: {
-      enabled: true,
+      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
       period: 20,
       deviationThreshold: 3
     },
     OSCILLATOR: {
-      enabled: true,
+      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
       period: 14,
       oversoldThreshold: 20,
       overboughtThreshold: 80
@@ -92,19 +92,19 @@ const config = {
     
     // アービトラージ戦略
     INTER_EXCHANGE_ARBITRAGE: {
-      enabled: true,
+      enabled: process.env.STRATEGY_ARBITRAGE_ENABLED === 'true',
       minProfitPercent: 1.0
     },
     
     // 高頻度取引戦略
     HFT: {
-      enabled: false, // デフォルトでは無効（リソース消費が大きいため）
+      enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
       interval: 1000,
       priceThreshold: 0.05,
       maxOrdersPerMinute: 10
     },
     SCALPING: {
-      enabled: true
+      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'
     }
   }
 };
@@ -372,6 +372,8 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // 各戦略を実行
     const results = [];
+    
+    // 戦略を実行
     
     // トレンドフォロー戦略
     if (config.strategies.MA.enabled) {
