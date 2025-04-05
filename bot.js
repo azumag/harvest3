@@ -231,8 +231,9 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
           await orderCheckCancel(exchange, symbol);
           console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
           postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
-          const buyOrder = await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
-          postOrderToDiscord(`== * 購入注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
+          // const buyOrder = await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
+          exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
+          // postOrderToDiscord(`== * 購入注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
         } else {
           console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
           postOrderToDiscord(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
@@ -242,8 +243,9 @@ async function scalpingBot(symbol, exchange, spreadHistory) {
         if (availableQuoteCurrency >= sellAmount) {
           await orderCheckCancel(exchange, symbol);
           postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
-          const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
-          postOrderToDiscord(`== & 売却注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
+          // const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
+          exchange.createLimitSellOrder(symbol, sellAmount, sellPrice)
+          // postOrderToDiscord(`== & 売却注文が受理されました: ${exchange.name}: ${symbol} 想定利益 ${(sellPrice*sellAmount-sellCost) - (buyPrice*buyAmount+buyCost).toFixed(4)} JPY`);
         } else {
           console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
           postOrderToDiscord(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
