@@ -92,7 +92,8 @@ async function startBot() {
         try {
           const markets = await exchange.loadMarkets();
           const symbols = Object.keys(markets).filter(symbol =>
-            symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
+            symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELF 除外
+              // && symbol !== 'BTC/JPY' // BTC/JPYを除外
           );
           
           // 一度に処理する通貨ペアの数を制限（最大5つ）
