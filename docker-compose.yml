@@ -6,3 +6,11 @@ services:
     volumes:
       - .:/usr/src/app
     command: npm start
+
+  hft:
+    build: .
+    container_name: hft_bot
+    restart: always
+    volumes:
+      - .:/usr/src/app
+    command: npm run start-hft

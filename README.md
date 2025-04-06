@@ -208,7 +208,10 @@ const config = {
 Dockerを使用して実行することもできます。
 
 ```bash
-docker-compose up -d
+docker compose up
+
+# hft だけ起動
+docker compose up hft
 ```
 
 ## 注意事項

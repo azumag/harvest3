@@ -14,38 +14,6 @@ async function startBot() {
   try {
     const exchanges = [exchangeBB, exchangeBF];
     
-    // 高頻度取引戦略（HFT）を実行
-    if (config.strategies.HFT.enabled) {
-      for (const exchange of exchanges) {
-        const markets = await exchange.loadMarkets();
-        const symbols = Object.keys(markets).filter(symbol => 
-          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
-        );
-        
-        for (const symbol of symbols) {
-          // マーケットパラメータを取得
-          const params = await getMarketParameters(exchange, symbol);
-          if (!params) continue;
-          
-          const { minTradeAmount, pricePrecision, amountPrecision } = params;
-          
-          // HFT戦略を別スレッドで実行
-          runStrategy('HFT', exchange, symbol, {
-            pricePrecision,
-            amountPrecision,
-            minTradeAmount,
-            postOrderToDiscord,
-            postErrorToDiscord,
-            bitflyerMinTradeAmounts,
-            interval: config.strategies.HFT.interval,
-            priceThreshold: config.strategies.HFT.priceThreshold,
-            maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute,
-            tradePercentage: config.tradePercentage
-          });
-        }
-      }
-    }
-    
     // アービトラージ戦略を実行
     if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
       // 共通の通貨ペアを見つける
