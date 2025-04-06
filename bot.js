@@ -283,29 +283,32 @@ async function postReport(exchange) {
 }
 
 async function calculateTotalJPYValue(exchange) {
-  const balance = await exchange.fetchBalance(); // 現在の資産を取得
-  const markets = await exchange.loadMarkets(); // マーケット情報を取得
+  // トレード履歴から損益を計算する
+  const exchangeId = exchange.id;
   let totalJPYValue = 0;
-
-  console.log({balance});
-
-  for (const currency in balance.total) {
-    const amount = balance.total[currency]; // 各通貨の量を取得
-    if (currency === 'JPY') {
-      totalJPYValue += amount;
-    } else {
-      if (amount > 0) {
-        const symbol = `${currency}/JPY`; // 通貨ペアを作成
-        if (markets[symbol]) {
-          const ticker = await exchange.fetchTicker(symbol); // 対日本円の価格を取得
-          const price = ticker.last; // 最後の価格を取得
-          totalJPYValue += amount * price; // 評価額を計算
-        }
+  
+  // JPY残高を取得
+  try {
+    const balance = await exchange.fetchBalance();
+    totalJPYValue = balance.total['JPY'] || 0;
+  } catch (error) {
+    console.error('JPY残高の取得に失敗しました:', error);
+    await postErrorToDiscord(`JPY残高の取得に失敗しました: ${error.message}`);
+  }
+  
+  // トレード記録から損益を計算
+  if (tradeRecords[exchangeId]) {
+    for (const symbol in tradeRecords[exchangeId]) {
+      for (const strategyKey in tradeRecords[exchangeId][symbol]) {
+        const record = tradeRecords[exchangeId][symbol][strategyKey];
+        // 実現損益のみを計算（評価額は計算しない）
+        const profit = record.totalSellValue - record.totalBuyCost;
+        totalJPYValue += profit;
       }
     }
   }
-
-  return totalJPYValue; // 総JPY評価額を返す
+  
+  return totalJPYValue; // トレード履歴から計算した総JPY評価額を返す
 }
 
 /**
@@ -599,20 +602,10 @@ async function calculateStrategyProfitReport(exchange) {
       const totalSell = record.totalSellValue;
       const profit = totalSell - totalBuy;
       
-      // 現在の保有量の評価額を計算
+      // 評価額の計算をスキップし、実現損益のみを使用
       let currentHoldingValue = 0;
-      if (record.netPosition > 0) {
-        try {
-          const ticker = await exchange.fetchTicker(symbol);
-          const currentPrice = ticker.last;
-          currentHoldingValue = record.netPosition * currentPrice;
-        } catch (error) {
-          console.error(`${symbol}の現在価格取得に失敗しました:`, error);
-        }
-      }
-      
-      // 総損益（実現損益 + 未実現損益）
-      const totalProfit = profit + currentHoldingValue;
+      // 実現損益のみを総損益とする
+      const totalProfit = profit;
       
       // 戦略名を取得
       let strategyName = strategyKey;
@@ -627,10 +620,10 @@ async function calculateStrategyProfitReport(exchange) {
         strategyTypeTotals[strategyType] += totalProfit;
       }
       
-      // レポートに追加
+      // レポートに追加（評価額の情報を表示しない）
       report += `  ${strategyName}: ${totalProfit.toFixed(2)} JPY`;
       if (record.netPosition > 0) {
-        report += ` (保有: ${record.netPosition} ${symbol.split('/')[0]}, 評価額: ${currentHoldingValue.toFixed(2)} JPY)`;
+        report += ` (保有: ${record.netPosition} ${symbol.split('/')[0]})`;
       }
       report += '\n';
       
