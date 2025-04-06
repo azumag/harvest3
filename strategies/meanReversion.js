@@ -9,6 +9,7 @@ const {
 } = require('./indicators');
 
 const { orderCheckCancel } = require('./highFrequency');
+const { config } = require('../src/config');
 
 /**
  * 平均回帰戦略
@@ -75,7 +76,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -131,7 +132,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -238,7 +239,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -300,7 +301,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
