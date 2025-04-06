@@ -122,8 +122,8 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // amountPrecisionのデフォルト値を設定
                   const precisionToUse = amountPrecision || 8;
                   let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
-                  // 最小精度（0.0001）を下回らないようにする
-                  formattedAmount = Math.max(formattedAmount, 0.0001);
+                  // 最小取引量を下回らないようにする
+                  formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
 
                   // console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
                   
@@ -197,8 +197,8 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // amountPrecisionのデフォルト値を設定
                   const precisionToUse = amountPrecision || 8;
                   let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
-                  // 最小精度（0.0001）を下回らないようにする
-                  formattedAmount = Math.max(formattedAmount, 0.0001);
+                  // 最小取引量を下回らないようにする
+                  formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
                   
                   if (availableAsset >= formattedAmount) {
                     try {

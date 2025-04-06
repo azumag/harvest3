@@ -1,5 +1,5 @@
 // モジュールのインポート
-const { exchangeBB, exchangeBF } = require('./config');
+const { exchangeBB, exchangeBF, bitflyerMinTradeAmounts } = require('./config');
 const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { postReport, postStrategyProfitReport } = require('./reports');
@@ -36,7 +36,7 @@ async function startBot() {
             minTradeAmount,
             postOrderToDiscord,
             postErrorToDiscord,
-            bitflyerMinTradeAmounts: config.bitflyerMinTradeAmounts,
+            bitflyerMinTradeAmounts,
             interval: config.strategies.HFT.interval,
             priceThreshold: config.strategies.HFT.priceThreshold,
             maxOrdersPerMinute: config.strategies.HFT.maxOrdersPerMinute,
