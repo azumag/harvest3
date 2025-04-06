@@ -131,6 +131,9 @@ module.exports = {
   // 戦略タイプ
   STRATEGY_TYPES,
   
+  // 戦略定義
+  STRATEGIES,
+  
   // 戦略関数
   executeStrategy,
   getAvailableStrategies,
