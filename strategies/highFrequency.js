@@ -125,7 +125,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // 最小精度（0.0001）を下回らないようにする
                   formattedAmount = Math.max(formattedAmount, 0.0001);
 
-                  console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
+                  // console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
                   
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
