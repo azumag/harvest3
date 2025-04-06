@@ -143,24 +143,40 @@ async function runStrategies(exchange, symbol, options = {}) {
     // 戦略を実行
     
     // トレンドフォロー戦略
-    if (config.strategies.MA.enabled) {
+    // 移動平均線戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.MA.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('MA', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.MA.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`移動平均線戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
     }
     
-    if (config.strategies.MACD.enabled) {
+    // MACD戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.MACD.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('MACD', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.MACD.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`MACD戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
     }
     
-    if (config.strategies.RSI.enabled) {
+    // RSI戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.RSI.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('RSI', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.RSI.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`RSI戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
     }
     
-    if (config.strategies.BOLLINGER_BANDS.enabled) {
+    // ボリンジャーバンド戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.BOLLINGER_BANDS.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('BOLLINGER_BANDS', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.BOLLINGER_BANDS.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`ボリンジャーバンド戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
     }
 
     // 逆張り戦略
