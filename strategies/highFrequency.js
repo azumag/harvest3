@@ -2,6 +2,8 @@
  * 高頻度取引（HFT）戦略
  */
 
+const strategies = require('./index');
+
 /**
  * 高頻度取引戦略
  * 短期間の小さな価格変動を利用して頻繁に取引を行う
@@ -449,7 +451,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
           await postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
         }
       } else if (availableFunds >= buyPrice * buyAmount) {
-        await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
+        await strategies.orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
@@ -469,7 +471,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       
       // 売却注文を送信
       if (availableQuoteCurrency >= sellAmount) {
-        await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
+        await strategies.orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
         }
