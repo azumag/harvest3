@@ -131,16 +131,16 @@ Docker Composeを使用している場合は、以下のコマンドでポジシ
 
 ```bash
 # ヘルプを表示
-docker-compose exec bot node src/closeAllPositions.js --help
+docker compose exec bot node src/closeAllPositions.js --help
 
 # すべての取引所のポジションを解消
-docker-compose exec bot node src/closeAllPositions.js
+docker compose exec bot node src/closeAllPositions.js
 
 # BitBankのポジションのみを解消
-docker-compose exec bot node src/closeAllPositions.js --bitbank
+docker compose exec bot node src/closeAllPositions.js --bitbank
 
 # BitFlyerのポジションのみを解消
-docker-compose exec bot node src/closeAllPositions.js --bitflyer
+docker compose exec bot node src/closeAllPositions.js --bitflyer
 ```
 
 または、コンテナ名を使用して直接実行することもできます：
