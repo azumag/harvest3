@@ -8,6 +8,7 @@ const {
   calculateRSI,
   calculateBollingerBands
 } = require('./indicators');
+
 const { orderCheckCancel } = require('./highFrequency');
 
 /**
@@ -585,7 +586,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -646,7 +647,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {

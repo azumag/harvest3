@@ -1,7 +1,8 @@
 /**
  * アービトラージ戦略
  */
-const strategies = require('./index');
+
+const { orderCheckCancel } = require('./highFrequency');
 
 /**
  * 価格差取引（取引所間アービトラージ）
@@ -187,7 +188,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         try {
           // 買い注文を作成
           // 注文数をチェックし、必要に応じて古い注文をキャンセル
-          await strategies.orderCheckCancel(buyExchange, symbol, 30, postOrderToDiscord);
+          await orderCheckCancel(buyExchange, symbol, 30, postOrderToDiscord);
           // 指値注文に変更
           const buyOrder = await buyExchange.createLimitBuyOrder(symbol, adjustedAmount, buyPrice);
           if (postOrderToDiscord) {
@@ -213,7 +214,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             try {
               // 売り注文を作成
               // 注文数をチェックし、必要に応じて古い注文をキャンセル
-              await strategies.orderCheckCancel(sellExchange, symbol, 30, postOrderToDiscord);
+              await orderCheckCancel(sellExchange, symbol, 30, postOrderToDiscord);
               // 指値注文に変更
               const sellOrder = await sellExchange.createLimitSellOrder(symbol, adjustedAmount, sellPrice);
               if (postOrderToDiscord) {
