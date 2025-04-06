@@ -172,27 +172,30 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const balance = await exchange.fetchBalance();
                   const quoteCurrency = symbol.split('/')[0];
                   const availableAsset = balance.free[quoteCurrency];
-                  
+
                   // 取引記録から買った量を取得
                   let buyAmount = 0;
-                  // tradeRecords (optionsから渡されたもの) を使用
-                  const exchangeRecords = tradeRecords && tradeRecords[exchange.id];
-                  if (exchangeRecords && exchangeRecords[symbol]) {
-                      buyAmount = (exchangeRecords[symbol].buyAmount || 0) - (exchangeRecords[symbol].sellAmount || 0);
+                  if (updateTradeRecord) {
+                    // tradeRecordsから該当する取引所とシンボルの買い量を取得
+                    const exchangeRecords = tradeRecords[exchange.id];
+                    if (exchangeRecords && exchangeRecords[symbol]) {
+                      buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+                      if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
                       if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
-                  } // Corrected closing brace for the inner if
+                    }
+                  }
 
                   // 売却量を計算（買った分だけを売却）
                   let sellAmount = buyAmount;
-                  
+
                   // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
                   if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
                     sellAmount = Math.max(baseMinTradeAmount, availableAsset * tradePercentage);
                   }
-                  
+
                   // 利用可能な資産を超えないようにする
                   sellAmount = Math.min(sellAmount, availableAsset);
-                  
+
                   // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
                   const tradeAmount = Math.max(baseMinTradeAmount, sellAmount);
                   // 精度を考慮して、最小精度以上の値を確保

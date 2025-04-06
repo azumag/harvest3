@@ -23,32 +23,32 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
   try {
     // オプションから値を取得
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
-    
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
-    
+
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
-    
+
     // 移動平均線を計算
     const sma = calculateSMA(closes, period);
     const currentSMA = sma[sma.length - 1];
-    
+
     // 現在の価格を取得
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
-    
+
     // 乖離率を計算（%）
     const deviation = ((currentPrice - currentSMA) / currentSMA) * 100;
-    
+
     // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
-    
+
     // 買いシグナル: 価格が移動平均線から下に大きく乖離
     const buySignal = deviation <= -deviationThreshold;
-    
+
     // 売りシグナル: 価格が移動平均線から上に大きく乖離
     const sellSignal = deviation >= deviationThreshold;
-    
+
     // 注文を作成
     if (buySignal) {
       // 買いシグナル
@@ -56,12 +56,12 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[平均回帰戦略] 買いシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviation.toFixed(2)}%`);
       }
-      
+
       // 利用可能な資金を確認
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
-      
+
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
@@ -70,7 +70,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
-      
+
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -80,7 +80,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
@@ -97,12 +97,12 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[平均回帰戦略] 売りシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviation.toFixed(2)}%`);
       }
-      
+
       // 利用可能な資産を確認
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -114,19 +114,18 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
-      
+
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
         sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
-      console.log({sellAmount, availableAsset, tradePercentage, buyAmount});
-      
+
       // 利用可能な資産を超えないようにする
       sellAmount = Math.min(sellAmount, availableAsset);
-      
+
       // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -135,7 +134,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       formattedAmount = Math.max(formattedAmount, minTradeAmount);
 
       // console.log({sellAmount, tradeAmount, minTradeAmount, formattedAmount, availableAsset});
-      
+
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -145,7 +144,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
@@ -159,7 +158,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     } else {
       console.log(`平均回帰シグナルなし: ${symbol} - 価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviation.toFixed(2)}%`);
     }
-    
+
     return {
       strategy: 'Mean Reversion',
       symbol,
@@ -195,32 +194,32 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThreshold = 20, overboughtThreshold = 80, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord } = options;
-    
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
-    
+
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
-    
+
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
-    
+
     // 最新のRSI値を取得
     const currentRSI = rsiValues[rsiValues.length - 1];
-    
+
     // 現在の価格を取得
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
-    
+
     // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
-    
+
     // 買いシグナル: RSIが極端に低い（売られすぎ）
     const buySignal = currentRSI <= oversoldThreshold;
-    
+
     // 売りシグナル: RSIが極端に高い（買われすぎ）
     const sellSignal = currentRSI >= overboughtThreshold;
-    
+
     // 注文を作成
     if (buySignal) {
       // 買いシグナル
@@ -228,12 +227,12 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[オシレーター戦略] 買いシグナル: ${exchange.id} - ${symbol} - RSI: ${currentRSI} (閾値: ${oversoldThreshold})`);
       }
-      
+
       // 利用可能な資金を確認
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
-      
+
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
@@ -242,7 +241,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
-      
+
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -252,7 +251,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
@@ -269,12 +268,12 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[オシレーター戦略] 売りシグナル: ${exchange.id} - ${symbol} - RSI: ${currentRSI} (閾値: ${overboughtThreshold})`);
       }
-      
+
       // 利用可能な資産を確認
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -282,28 +281,29 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
-      
+
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
         sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
-      
+
       // 利用可能な資産を超えないようにする
       sellAmount = Math.min(sellAmount, availableAsset);
-      
+
       // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
-      
+
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -313,7 +313,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
@@ -327,7 +327,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     } else {
       console.log(`オシレーターシグナルなし: ${symbol} - RSI: ${currentRSI}`);
     }
-    
+
     return {
       strategy: 'Oscillator',
       symbol,

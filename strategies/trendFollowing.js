@@ -105,7 +105,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -113,10 +113,11 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
@@ -274,7 +275,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -282,10 +283,11 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
@@ -443,7 +445,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -451,10 +453,11 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
@@ -614,7 +617,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
-      
+
       // 取引記録から買った量を取得
       let buyAmount = 0;
       if (updateTradeRecord) {
@@ -622,10 +625,11 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
-      
+
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
