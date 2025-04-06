@@ -196,9 +196,9 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   let sellAmount = buyAmount;
 
                   // 買った記録がなくても、利用可能な資産があれば最小単位を売却
-                  if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
-                    sellAmount = baseMinTradeAmount;
-                  }
+                  // if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
+                  //   sellAmount = baseMinTradeAmount;
+                  // }
 
                   // 利用可能な資産を超えないようにする
                   sellAmount = Math.min(sellAmount, availableAsset);
@@ -212,7 +212,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // 最小取引量を下回らないようにする
                   formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
                   
-                  if (availableAsset >= formattedAmount) {
+                  if (availableAsset >= formattedAmount && sellAmount > 0) {
                     try {
                       // 売り注文を作成（成行注文）
                       const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
@@ -442,9 +442,9 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       let maxSellAmount = recordedBuyAmount;
       
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
-        maxSellAmount = Math.max(minTradeAmount, availableQuoteCurrency * tradePercentage);
-      }
+      // if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
+      //   maxSellAmount = Math.max(minTradeAmount, availableQuoteCurrency * tradePercentage);
+      // }
       
       // 利用可能な資産を超えないようにする
       maxSellAmount = Math.min(maxSellAmount, availableQuoteCurrency);
@@ -466,7 +466,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       const sellCost = sellAmount * sellPrice * tradeCost;
       
       // JPY残高が設定以下の場合、購入注文をスキップ
-      if (availableFunds <= safetyJPYAmount) {
+      if (availableFunds <= safetyJPYAmount && sellAmount <= 0) {
         console.log(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
