@@ -183,9 +183,9 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // 売却量を計算（買った分だけを売却）
                   let sellAmount = buyAmount;
                   
-                  // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+                  // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
                   if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
-                    sellAmount = baseMinTradeAmount;
+                    sellAmount = Math.max(baseMinTradeAmount, availableAsset * tradePercentage);
                   }
                   
                   // 利用可能な資産を超えないようにする
@@ -418,9 +418,9 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       // 売却量を計算（買った分だけを売却）
       let maxSellAmount = recordedBuyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
-        maxSellAmount = minTradeAmount;
+        maxSellAmount = Math.max(minTradeAmount, availableQuoteCurrency * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする

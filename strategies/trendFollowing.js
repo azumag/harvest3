@@ -119,9 +119,9 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -288,9 +288,9 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -457,9 +457,9 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -628,9 +628,9 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする

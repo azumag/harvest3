@@ -123,7 +123,16 @@ const tradeRecords = {
  * @param {Number} price - 取引価格
  * @param {String} side - 取引方向（'buy'または'sell'）
  */
-function updateTradeRecord(exchangeId, symbol, amount, price, side) {
+/**
+ * 取引記録を更新する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {Number} amount - 取引量
+ * @param {Number} price - 取引価格
+ * @param {String} side - 取引方向（'buy'または'sell'）
+ * @param {String} strategyKey - 使用した戦略のキー（オプション）
+ */
+function updateTradeRecord(exchangeId, symbol, amount, price, side, strategyKey = 'unknown') {
   // 取引所の記録がなければ初期化
   if (!tradeRecords[exchangeId]) {
     tradeRecords[exchangeId] = {};
@@ -131,29 +140,58 @@ function updateTradeRecord(exchangeId, symbol, amount, price, side) {
   
   // 通貨ペアの記録がなければ初期化
   if (!tradeRecords[exchangeId][symbol]) {
-    tradeRecords[exchangeId][symbol] = {
+    tradeRecords[exchangeId][symbol] = {};
+  }
+  
+  // 戦略の記録がなければ初期化
+  if (!tradeRecords[exchangeId][symbol][strategyKey]) {
+    tradeRecords[exchangeId][symbol][strategyKey] = {
       buyAmount: 0,
       sellAmount: 0,
       totalBuyCost: 0,
-      totalSellValue: 0
+      totalSellValue: 0,
+      netPosition: 0, // 実際の保有量を表す新しいフィールド
+      trades: [] // 取引履歴を保存する配列
     };
   }
   
-  const record = tradeRecords[exchangeId][symbol];
+  const record = tradeRecords[exchangeId][symbol][strategyKey];
+  
+  // 取引情報を記録
+  const tradeInfo = {
+    timestamp: Date.now(),
+    side,
+    amount,
+    price,
+    value: amount * price
+  };
+  
+  record.trades.push(tradeInfo);
+  
+  // 最大100件の取引履歴を保持
+  if (record.trades.length > 100) {
+    record.trades.shift();
+  }
   
   // 買いの場合
   if (side === 'buy') {
     record.buyAmount += amount;
     record.totalBuyCost += amount * price;
+    record.netPosition += amount; // 保有量を増やす
   }
   // 売りの場合
   else if (side === 'sell') {
     record.sellAmount += amount;
     record.totalSellValue += amount * price;
+    
+    // 買った量から売った量を減らす（0未満にならないように）
+    const deductAmount = Math.min(record.buyAmount, amount);
+    record.buyAmount -= deductAmount;
+    record.netPosition -= amount; // 保有量を減らす
   }
   
-  console.log(`取引記録更新: ${exchangeId} - ${symbol} - ${side} - 数量: ${amount}, 価格: ${price}`);
-  console.log(`現在の記録: `, record);
+  console.log(`取引記録更新: ${exchangeId} - ${symbol} - ${strategyKey} - ${side} - 数量: ${amount}, 価格: ${price}`);
+  console.log(`現在の記録: 買い量: ${record.buyAmount}, 売り量: ${record.sellAmount}, 実際の保有量: ${record.netPosition}`);
 }
 
 async function postErrorToDiscord(message) {
@@ -361,33 +399,38 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     // 戦略に応じたパラメータを設定
     const params = [];
     
+    // updateTradeRecordに戦略キーを渡すラッパー関数
+    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side) => {
+      updateTradeRecord(exchangeId, symbol, amount, price, side, strategyKey);
+    };
+    
     switch (strategyKey) {
       case 'MA':
-        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'MACD':
-        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'RSI':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'BOLLINGER_BANDS':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'MEAN_REVERSION':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'OSCILLATOR':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'INTER_EXCHANGE_ARBITRAGE':
         // アービトラージは複数の取引所を必要とするため、別途処理
         return null;
       case 'HFT':
-        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       case 'SCALPING':
-        params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord, tradeRecords });
+        params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
       default:
         console.log(`未知の戦略: ${strategyKey}`);
@@ -418,6 +461,11 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
       return null;
     }
     
+    // updateTradeRecordに戦略キーを渡すラッパー関数
+    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side) => {
+      updateTradeRecord(exchangeId, symbol, amount, price, side, 'INTER_EXCHANGE_ARBITRAGE');
+    };
+    
     const params = [
       exchanges,
       symbol,
@@ -427,7 +475,7 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
         ...options,
         bitflyerMinTradeAmounts,
         tradePercentage: config.tradePercentage,
-        updateTradeRecord,
+        updateTradeRecord: updateTradeRecordWithStrategy,
         tradeRecords
       }
     ];
@@ -518,12 +566,125 @@ async function runStrategies(exchange, symbol, options = {}) {
   }
 }
 
+/**
+ * 戦略と銘柄ごとの損益レポートを計算する関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @returns {String} - レポート文字列
+ */
+async function calculateStrategyProfitReport(exchange) {
+  const exchangeId = exchange.id;
+  if (!tradeRecords[exchangeId]) {
+    return `${exchangeId}の取引記録がありません。`;
+  }
+  
+  let report = `=== ${exchangeId} 戦略・銘柄別損益レポート ===\n`;
+  
+  // 戦略タイプごとの集計
+  const strategyTypeTotals = {};
+  for (const type in strategies.STRATEGY_TYPES) {
+    strategyTypeTotals[strategies.STRATEGY_TYPES[type]] = 0;
+  }
+  
+  // 各銘柄ごとに処理
+  for (const symbol in tradeRecords[exchangeId]) {
+    report += `\n【${symbol}】\n`;
+    let symbolTotal = 0;
+    
+    // 各戦略ごとに処理
+    for (const strategyKey in tradeRecords[exchangeId][symbol]) {
+      const record = tradeRecords[exchangeId][symbol][strategyKey];
+      
+      // 損益計算
+      const totalBuy = record.totalBuyCost;
+      const totalSell = record.totalSellValue;
+      const profit = totalSell - totalBuy;
+      
+      // 現在の保有量の評価額を計算
+      let currentHoldingValue = 0;
+      if (record.netPosition > 0) {
+        try {
+          const ticker = await exchange.fetchTicker(symbol);
+          const currentPrice = ticker.last;
+          currentHoldingValue = record.netPosition * currentPrice;
+        } catch (error) {
+          console.error(`${symbol}の現在価格取得に失敗しました:`, error);
+        }
+      }
+      
+      // 総損益（実現損益 + 未実現損益）
+      const totalProfit = profit + currentHoldingValue;
+      
+      // 戦略名を取得
+      let strategyName = strategyKey;
+      let strategyType = 'unknown';
+      if (strategies.STRATEGIES && strategies.STRATEGIES[strategyKey]) {
+        strategyName = strategies.STRATEGIES[strategyKey].name;
+        strategyType = strategies.STRATEGIES[strategyKey].type;
+      }
+      
+      // 戦略タイプの合計に加算
+      if (strategyType && strategyTypeTotals[strategyType] !== undefined) {
+        strategyTypeTotals[strategyType] += totalProfit;
+      }
+      
+      // レポートに追加
+      report += `  ${strategyName}: ${totalProfit.toFixed(2)} JPY`;
+      if (record.netPosition > 0) {
+        report += ` (保有: ${record.netPosition} ${symbol.split('/')[0]}, 評価額: ${currentHoldingValue.toFixed(2)} JPY)`;
+      }
+      report += '\n';
+      
+      symbolTotal += totalProfit;
+    }
+    
+    report += `  銘柄合計: ${symbolTotal.toFixed(2)} JPY\n`;
+  }
+  
+  // 戦略タイプごとの合計を追加
+  report += '\n【戦略タイプ別合計】\n';
+  for (const type in strategyTypeTotals) {
+    // 戦略タイプの日本語名を取得
+    let typeName = type;
+    switch (type) {
+      case strategies.STRATEGY_TYPES.TREND_FOLLOWING:
+        typeName = 'トレンドフォロー';
+        break;
+      case strategies.STRATEGY_TYPES.MEAN_REVERSION:
+        typeName = '逆張り';
+        break;
+      case strategies.STRATEGY_TYPES.ARBITRAGE:
+        typeName = 'アービトラージ';
+        break;
+      case strategies.STRATEGY_TYPES.HIGH_FREQUENCY:
+        typeName = '高頻度取引';
+        break;
+    }
+    report += `  ${typeName}: ${strategyTypeTotals[type].toFixed(2)} JPY\n`;
+  }
+  
+  return report;
+}
+
+/**
+ * 戦略と銘柄ごとの損益レポートを投稿する関数
+ * @param {Object} exchange - 取引所オブジェクト
+ */
+async function postStrategyProfitReport(exchange) {
+  const report = await calculateStrategyProfitReport(exchange);
+  await postResultToDiscord(report);
+}
+
 // レポートを投稿するためのタイマー設定
 setInterval(() => {
   const now = new Date();
   if (now.getMinutes() === 0) { // 時間ごと
+    // 全体資産計算レポート
     postReport(exchangeBB);
     postReport(exchangeBF);
+    
+    // 戦略と銘柄ごとの損益レポート
+    postStrategyProfitReport(exchangeBB);
+    postStrategyProfitReport(exchangeBF);
   }
 }, 60000); // 1分ごとにチェック
 

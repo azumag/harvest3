@@ -116,9 +116,9 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -284,9 +284,9 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば最小精度分は売却可能
+      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = minTradeAmount;
+        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
       
       // 利用可能な資産を超えないようにする
