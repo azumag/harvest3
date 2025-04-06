@@ -162,11 +162,19 @@ async function runStrategies(exchange, symbol, options = {}) {
       const result = await runStrategy('BOLLINGER_BANDS', exchange, symbol, commonOptions);
       if (result) results.push(result);
     }
-    
+
     // 逆張り戦略
-    if (config.strategies.MEAN_REVERSION.enabled) {
+    // 平均回帰戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.MEAN_REVERSION.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('MEAN_REVERSION', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.MEAN_REVERSION.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`平均回帰戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
+      // 必要であればDiscord通知を追加
+      // if (postErrorToDiscord) {
+      //   await postErrorToDiscord(`[INFO] 平均回帰戦略はbitflyerではサポートされていないためスキップします: ${exchange.id} - ${symbol}`);
+      // }
     }
 
     // オシレーター戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない

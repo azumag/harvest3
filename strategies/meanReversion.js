@@ -110,6 +110,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
         const exchangeRecords = tradeRecords[exchange.id];
         if (exchangeRecords && exchangeRecords[symbol]) {
           buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+          if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
           if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
         }
       }
@@ -121,6 +122,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
         sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
       }
+      console.log({sellAmount, availableAsset, tradePercentage, buyAmount});
       
       // 利用可能な資産を超えないようにする
       sellAmount = Math.min(sellAmount, availableAsset);
@@ -130,7 +132,9 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       // 精度を考慮して、最小精度以上の値を確保
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
+      formattedAmount = Math.max(formattedAmount, minTradeAmount);
+
+      // console.log({sellAmount, tradeAmount, minTradeAmount, formattedAmount, availableAsset});
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
