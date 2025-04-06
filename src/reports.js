@@ -58,10 +58,12 @@ async function calculateStrategyProfitReport(exchange) {
   
   let report = `=== ${exchangeId} 戦略・銘柄別損益レポート ===\n`;
   
-  // 戦略タイプごとの集計
+  // 戦略タイプごとの集計 - 初期化を確認
   const strategyTypeTotals = {};
   for (const type in strategies.STRATEGY_TYPES) {
-    strategyTypeTotals[strategies.STRATEGY_TYPES[type]] = 0;
+    const typeValue = strategies.STRATEGY_TYPES[type];
+    strategyTypeTotals[typeValue] = 0;
+    console.log(`戦略タイプ初期化: ${type} => ${typeValue}`);
   }
   
   // 各銘柄ごとに処理
@@ -73,30 +75,42 @@ async function calculateStrategyProfitReport(exchange) {
     for (const strategyKey in tradeRecords[exchangeId][symbol]) {
       const record = tradeRecords[exchangeId][symbol][strategyKey];
       
+      // デバッグ情報を追加
+      console.log(`デバッグ: ${symbol} ${strategyKey}`, {
+        totalBuyCost: record.totalBuyCost,
+        totalSellValue: record.totalSellValue,
+        profit: record.totalSellValue - record.totalBuyCost
+      });
+      
       // 損益計算
       const totalBuy = record.totalBuyCost;
       const totalSell = record.totalSellValue;
       const profit = totalSell - totalBuy;
       
-      // 評価額の計算をスキップし、実現損益のみを使用
-      let currentHoldingValue = 0;
       // 実現損益のみを総損益とする
       const totalProfit = profit;
       
-      // 戦略名を取得
+      // 戦略名と戦略タイプを取得 - ここでのデバッグを強化
       let strategyName = strategyKey;
       let strategyType = 'unknown';
+      
       if (strategies.STRATEGIES && strategies.STRATEGIES[strategyKey]) {
-        strategyName = strategies.STRATEGIES[strategyKey].name;
-        strategyType = strategies.STRATEGIES[strategyKey].type;
+        strategyName = strategies.STRATEGIES[strategyKey].name || strategyKey;
+        strategyType = strategies.STRATEGIES[strategyKey].type || 'unknown';
+        console.log(`戦略情報: ${strategyKey} => 名前:${strategyName}, タイプ:${strategyType}`);
+      } else {
+        console.log(`警告: 戦略情報が見つかりません: ${strategyKey}`);
       }
       
-      // 戦略タイプの合計に加算
+      // 戦略タイプの合計に加算 - ここでのチェックを強化
       if (strategyType && strategyTypeTotals[strategyType] !== undefined) {
         strategyTypeTotals[strategyType] += totalProfit;
+        console.log(`戦略タイプ集計: ${strategyType} += ${totalProfit}`);
+      } else {
+        console.log(`警告: 戦略タイプが不明または未定義: ${strategyType}`);
       }
       
-      // レポートに追加（評価額の情報を表示しない）
+      // レポートに追加
       report += `  ${strategyName}: ${totalProfit.toFixed(2)} JPY`;
       if (record.netPosition > 0) {
         report += ` (保有: ${record.netPosition} ${symbol.split('/')[0]})`;
@@ -108,6 +122,9 @@ async function calculateStrategyProfitReport(exchange) {
     
     report += `  銘柄合計: ${symbolTotal.toFixed(2)} JPY\n`;
   }
+  
+  // 戦略タイプごとの合計をデバッグ表示
+  console.log('戦略タイプごとの集計結果:', strategyTypeTotals);
   
   // 戦略タイプごとの合計を追加
   report += '\n【戦略タイプ別合計】\n';
