@@ -471,7 +471,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       
       // 売却注文を送信
       if (availableQuoteCurrency >= sellAmount) {
-        await module.exports.orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`& 売却注文作成: ${exchange.name}: ${symbol}: ${sellPrice}: ${sellAmount}`);
         }
