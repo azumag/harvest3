@@ -451,7 +451,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
           await postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
         }
       } else if (availableFunds >= buyPrice * buyAmount) {
-        await module.exports.orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);

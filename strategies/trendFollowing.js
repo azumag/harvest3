@@ -8,7 +8,7 @@ const {
   calculateRSI,
   calculateBollingerBands
 } = require('./indicators');
-const strategies = require('./index');
+const { orderCheckCancel } = require('./highFrequency');
 
 /**
  * 移動平均線クロス戦略
@@ -76,7 +76,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -137,7 +137,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -245,7 +245,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -306,7 +306,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -414,7 +414,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
@@ -475,7 +475,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        await strategies.orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
+        await orderCheckCancel(exchange, symbol, 30, postOrderToDiscord);
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice);
         if (postOrderToDiscord) {
