@@ -5,6 +5,7 @@
 // モジュールのインポート
 const { exchangeBB, exchangeBF } = require('./config');
 const { updateTradeRecord, tradeRecords } = require('./tradeRecords');
+const { getMarketParameters, sleep } = require('./utils');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 
 /**
@@ -42,6 +43,11 @@ async function closeAllPositions(exchange) {
         console.log(`通貨ペア ${symbol} は利用できません。スキップします。`);
         continue;
       }
+
+      const params = await getMarketParameters(exchange, symbol);
+      if (!params) continue;
+      
+      const { minTradeAmount, pricePrecision, amountPrecision } = params;
       
       try {
         // マーケット情報を取得
@@ -57,7 +63,6 @@ async function closeAllPositions(exchange) {
         }
         
         // 精度を考慮して取引量を調整
-        const amountPrecision = market.precision ? market.precision.amount : 8;
         const formattedAmount = parseFloat(amount.toFixed(amountPrecision));
         
         console.log(`${symbol} を成行で売却します。数量: ${formattedAmount}`);
@@ -97,7 +102,7 @@ async function closeAllPositions(exchange) {
       }
       
       // APIレート制限を考慮して少し待機
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await sleep(1000);
     }
     
     if (soldCount === 0) {
@@ -133,7 +138,7 @@ async function closeAllPositionsOnAllExchanges() {
       totalSoldCount += soldCount;
       
       // 取引所間の処理の間に少し待機
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await sleep(2000);
     }
     
     if (totalSoldCount === 0) {
