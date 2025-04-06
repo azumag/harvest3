@@ -168,12 +168,20 @@ async function runStrategies(exchange, symbol, options = {}) {
       const result = await runStrategy('MEAN_REVERSION', exchange, symbol, commonOptions);
       if (result) results.push(result);
     }
-    
-    if (config.strategies.OSCILLATOR.enabled) {
+
+    // オシレーター戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.OSCILLATOR.enabled && exchange.id !== 'bitflyer') {
       const result = await runStrategy('OSCILLATOR', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    } else if (config.strategies.OSCILLATOR.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`オシレーター戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
+      // 必要であればDiscord通知を追加
+      // if (postErrorToDiscord) {
+      //   await postErrorToDiscord(`[INFO] オシレーター戦略はbitflyerではサポートされていないためスキップします: ${exchange.id} - ${symbol}`);
+      // }
     }
-    
+
     // 高頻度取引戦略
     if (config.strategies.SCALPING.enabled) {
       const result = await runStrategy('SCALPING', exchange, symbol, commonOptions);
