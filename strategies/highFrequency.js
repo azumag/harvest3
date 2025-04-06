@@ -115,11 +115,7 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const baseCurrency = symbol.split('/')[1];
                   const availableFunds = balance.free[baseCurrency];
                   
-                  // 利用可能な資金の割合に基づいて取引量を計算
-                  // console.log({symbol, availableFunds, tradePercentage, midPrice});
-                  const maxBuyAmount = availableFunds * tradePercentage / midPrice;
-                  // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
-                  const tradeAmount = Math.max(baseMinTradeAmount, maxBuyAmount);
+                  const tradeAmount = baseMinTradeAmount;
                   // 精度を考慮して、最小精度以上の値を確保
                   // amountPrecisionのデフォルト値を設定
                   const precisionToUse = amountPrecision || 8;
@@ -131,23 +127,34 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
-                      // 買い注文を作成（指値注文）
-                      const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice);
-                      console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      // 買い注文を作成（成行注文）
+                      const order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+                      
+                      // 約定情報を取得して実際の約定価格を取得
+                      let executedPrice;
+                      try {
+                        const orderDetails = await exchange.fetchOrder(order.id, symbol);
+                        executedPrice = orderDetails.price || orderDetails.average || midPrice; // 約定価格を取得、取得できない場合はmidPriceを使用
+                      } catch (fetchError) {
+                        console.error(`約定情報の取得に失敗しました: ${symbol}`, fetchError);
+                        executedPrice = midPrice; // 取得に失敗した場合はmidPriceを使用
+                      }
+                      
+                      console.log(`HFT買い注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       
-                      // 取引記録を更新
+                      // 取引記録を更新（実際の約定価格を使用）
                       if (updateTradeRecord) {
-                        updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'buy');
+                        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'buy');
                       }
                       
-                      // 取引履歴に追加
+                      // 取引履歴に追加（実際の約定価格を使用）
                       tradeHistory.push({
                         time: now,
                         type: 'buy',
-                        price: midPrice,
+                        price: executedPrice,
                         amount: formattedAmount,
                         priceChange
                       });
@@ -188,9 +195,9 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   // 売却量を計算（買った分だけを売却）
                   let sellAmount = buyAmount;
 
-                  // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
+                  // 買った記録がなくても、利用可能な資産があれば最小単位を売却
                   if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
-                    sellAmount = Math.max(baseMinTradeAmount, availableAsset * tradePercentage);
+                    sellAmount = baseMinTradeAmount;
                   }
 
                   // 利用可能な資産を超えないようにする
@@ -207,23 +214,34 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   
                   if (availableAsset >= formattedAmount) {
                     try {
-                      // 売り注文を作成（指値注文）
-                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice);
-                      console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      // 売り注文を作成（成行注文）
+                      const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+                      
+                      // 約定情報を取得して実際の約定価格を取得
+                      let executedPrice;
+                      try {
+                        const orderDetails = await exchange.fetchOrder(order.id, symbol);
+                        executedPrice = orderDetails.price || orderDetails.average || midPrice; // 約定価格を取得、取得できない場合はmidPriceを使用
+                      } catch (fetchError) {
+                        console.error(`約定情報の取得に失敗しました: ${symbol}`, fetchError);
+                        executedPrice = midPrice; // 取得に失敗した場合はmidPriceを使用
+                      }
+                      
+                      console.log(`HFT売り注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       
-                      // 取引記録を更新
+                      // 取引記録を更新（実際の約定価格を使用）
                       if (updateTradeRecord) {
-                        updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'sell');
+                        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell');
                       }
                       
-                      // 取引履歴に追加
+                      // 取引履歴に追加（実際の約定価格を使用）
                       tradeHistory.push({
                         time: now,
                         type: 'sell',
-                        price: midPrice,
+                        price: executedPrice,
                         amount: formattedAmount,
                         priceChange
                       });

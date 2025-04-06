@@ -88,6 +88,77 @@ npm start
 yarn start
 ```
 
+### ポジション解消コマンド
+
+ボットが作成したすべてのポジションを成行で売却し、ポジションを解消するコマンドが用意されています。
+
+```bash
+# すべての取引所のポジションを解消
+npm run close-all
+
+# BitBankのポジションのみを解消
+npm run close-bb
+
+# BitFlyerのポジションのみを解消
+npm run close-bf
+```
+
+または
+
+```bash
+# すべての取引所のポジションを解消
+yarn close-all
+
+# BitBankのポジションのみを解消
+yarn close-bb
+
+# BitFlyerのポジションのみを解消
+yarn close-bf
+```
+
+このコマンドは、以下の処理を行います：
+
+1. 指定された取引所の残高を取得
+2. JPY以外の通貨で残高がある場合、その通貨を成行注文で売却
+3. 売却結果をDiscordに通知
+4. 取引記録を更新
+
+注意：このコマンドは一度実行すると、すべてのポジションが解消されます。実行前に必ず確認してください。
+
+#### Dockerでの実行
+
+Docker Composeを使用している場合は、以下のコマンドでポジションを解消できます：
+
+```bash
+# ヘルプを表示
+docker-compose exec bot node src/closeAllPositions.js --help
+
+# すべての取引所のポジションを解消
+docker-compose exec bot node src/closeAllPositions.js
+
+# BitBankのポジションのみを解消
+docker-compose exec bot node src/closeAllPositions.js --bitbank
+
+# BitFlyerのポジションのみを解消
+docker-compose exec bot node src/closeAllPositions.js --bitflyer
+```
+
+または、コンテナ名を使用して直接実行することもできます：
+
+```bash
+# ヘルプを表示
+docker exec scalping_bot node src/closeAllPositions.js --help
+
+# すべての取引所のポジションを解消
+docker exec scalping_bot node src/closeAllPositions.js
+
+# BitBankのポジションのみを解消
+docker exec scalping_bot node src/closeAllPositions.js --bitbank
+
+# BitFlyerのポジションのみを解消
+docker exec scalping_bot node src/closeAllPositions.js --bitflyer
+```
+
 ## レポート機能
 
 このボットには以下の2種類のレポート機能が実装されています：

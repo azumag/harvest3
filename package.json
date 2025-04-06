@@ -4,7 +4,10 @@
   "description": "Bitcoin scalping bot using ccxt and Docker",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "close-all": "node src/closeAllPositions.js",
+    "close-bb": "node src/closeAllPositions.js --bitbank",
+    "close-bf": "node src/closeAllPositions.js --bitflyer"
   },
   "dependencies": {
     "axios": "^1.7.7",
