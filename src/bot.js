@@ -60,14 +60,28 @@ async function startBot() {
       
       // 定期的にアービトラージ機会を確認
       setInterval(async () => {
-        for (const symbol of commonSymbols) {
-          await runArbitrageStrategy(exchanges, symbol, {
-            postOrderToDiscord,
-            postErrorToDiscord,
-            tradePercentage: config.tradePercentage
-          });
+        // 一度に処理する通貨ペアの数を制限（最大3つ）
+        const symbolsToProcess = commonSymbols.slice(0, 3);
+        
+        // 各通貨ペアの処理の間に待機時間を入れる
+        for (const symbol of symbolsToProcess) {
+          try {
+            await runArbitrageStrategy(exchanges, symbol, {
+              postOrderToDiscord,
+              postErrorToDiscord,
+              tradePercentage: config.tradePercentage
+            });
+            // 各通貨ペアの処理の間に3秒待機
+            await sleep(3000);
+          } catch (error) {
+            console.error(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol}`, error);
+            await postErrorToDiscord(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol} - ${error.message}`);
+          }
         }
-      }, 10000); // 10秒ごとに確認
+        
+        // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
+        commonSymbols.push(commonSymbols.shift());
+      }, 30000); // 30秒ごとに確認（10秒から30秒に延長）
     }
     
     // その他の戦略を実行
@@ -75,14 +89,34 @@ async function startBot() {
     
     while (true) {
       for (const exchange of exchanges) {
-        const markets = await exchange.loadMarkets();
-        const symbols = Object.keys(markets).filter(symbol => 
-          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
-        );
-        
-        for (const symbol of symbols) {
-          await runStrategies(exchange, symbol, { spreadHistory });
-          await sleep(1000); // 1秒待機
+        try {
+          const markets = await exchange.loadMarkets();
+          const symbols = Object.keys(markets).filter(symbol =>
+            symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
+          );
+          
+          // 一度に処理する通貨ペアの数を制限（最大5つ）
+          const symbolsToProcess = symbols.slice(0, 5);
+          
+          for (const symbol of symbolsToProcess) {
+            try {
+              await runStrategies(exchange, symbol, { spreadHistory });
+              await sleep(2000); // 1秒から2秒に延長
+            } catch (error) {
+              console.error(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id}`, error);
+              await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id} - ${error.message}`);
+            }
+          }
+          
+          // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
+          symbols.push(symbols.shift());
+          
+          // 各取引所の処理の間に5秒待機
+          await sleep(5000);
+        } catch (error) {
+          console.error(`取引所の処理中にエラーが発生しました: ${exchange.id}`, error);
+          await postErrorToDiscord(`取引所の処理中にエラーが発生しました: ${exchange.id} - ${error.message}`);
+          await sleep(10000); // エラー発生時は10秒待機
         }
       }
     }

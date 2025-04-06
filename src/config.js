@@ -16,11 +16,18 @@ const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Disco
 const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
     secret: BBApiSecret,
+    enableRateLimit: true,
+    rateLimit: 1000, // 1リクエストあたり1000ミリ秒（1秒）の制限
+    options: {
+        'maxThrottleQueueSize': 2000 // スロットルキューの最大サイズを増やす
+    }
 });
 
 const exchangeBF = new ccxt.bitflyer({
     apiKey: BFApiKey,
     secret: BFApiSecret,
+    enableRateLimit: true,
+    rateLimit: 1000 // 1リクエストあたり1000ミリ秒（1秒）の制限
 });
 
 const bitflyerMinTradeAmounts = {
