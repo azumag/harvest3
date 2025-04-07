@@ -24,7 +24,7 @@ const { config } = require('../src/config');
 async function meanReversionStrategy(exchange, symbol, period = 20, deviationThreshold = 3, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
@@ -114,7 +114,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
 
       // 利用可能な資産を超えないようにする
@@ -188,7 +188,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThreshold = 20, overboughtThreshold = 80, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
@@ -285,7 +285,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
 
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
 
       // 利用可能な資産を超えないようにする

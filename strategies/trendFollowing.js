@@ -26,8 +26,8 @@ const { config } = require('../src/config');
 async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
-    
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, longPeriod + 10);
     
@@ -117,7 +117,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -189,8 +189,8 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
-    
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, slowPeriod + signalPeriod + 10);
     
@@ -287,7 +287,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -359,8 +359,8 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
-    
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
     
@@ -457,7 +457,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
       
       // 利用可能な資産を超えないようにする
@@ -527,8 +527,8 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options;
-    
+    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
+
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
     
@@ -629,7 +629,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       
       // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * tradePercentage);
+        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
       
       // 利用可能な資産を超えないようにする

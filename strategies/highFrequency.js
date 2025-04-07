@@ -441,10 +441,10 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       // 売却量を計算（買った分だけを売却）
       let maxSellAmount = recordedBuyAmount;
       
-      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      // if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
-      //   maxSellAmount = Math.max(minTradeAmount, availableQuoteCurrency * tradePercentage);
-      // }
+      // 買った記録がなくても、利用可能な資産があれば残高 * sellPercentageと最小単位の大きい方を売却
+      if (maxSellAmount <= 0 && availableQuoteCurrency >= minTradeAmount) {
+        maxSellAmount = Math.max(minTradeAmount, availableQuoteCurrency * sellPercentage);
+      }
       
       // 利用可能な資産を超えないようにする
       maxSellAmount = Math.min(maxSellAmount, availableQuoteCurrency);

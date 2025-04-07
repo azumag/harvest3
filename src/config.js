@@ -48,6 +48,7 @@ const config = {
   profitMargin: 0.003,  // 目標利益率（取引料を考慮）
   maxHistoryLength: 100,  // スプレッド履歴の最大長
   tradePercentage: 0.01,  // 資金の%で取引
+  sellPercentage: 0.1,   // 売却時の資金の%
   tradeCost: 0.0012, // 手数料暫定（bitbank)
   cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
