@@ -161,99 +161,188 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         await postOrderToDiscord(`[アービトラージ] 機会検出: ${symbol} - 買い: ${lowestAsk.exchange.id} (${lowestAsk.price}), 売り: ${highestBid.exchange.id} (${highestBid.price}), 利益率: ${profitPercent.toFixed(2)}%`);
       }
       
-      // 買い注文を実行
-      const buyExchange = lowestAsk.exchange.exchange;
-      const buyPrice = lowestAsk.price;
+      // 取引所A（最低売値）での注文実行
+      const exchangeA = lowestAsk.exchange.exchange;
+      const exchangeAId = lowestAsk.exchange.id;
+      const buyPriceA = lowestAsk.price;
+      const sellPriceA = highestBid.price;
       
-      // 利用可能な資金を確認
-      const buyBalance = await buyExchange.fetchBalance();
+      // 取引所B（最高買値）での注文実行
+      const exchangeB = highestBid.exchange.exchange;
+      const exchangeBId = highestBid.exchange.id;
+      const buyPriceB = lowestAsk.price;
+      const sellPriceB = highestBid.price;
+      
+      // 通貨情報を取得
       const baseCurrency = symbol.split('/')[1];
-      const availableFunds = buyBalance.free[baseCurrency];
+      const quoteCurrency = symbol.split('/')[0];
       
-      // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = availableFunds * tradePercentage / buyPrice;
-      // 取引量を再計算（最小取引量と計算した最大取引量の大きい方を使用）
-      let adjustedAmount = Math.max(formattedAmount, maxBuyAmount);
-      // 精度を考慮して、最小精度以上の値を確保
-      // amountPrecisionのデフォルト値を設定
+      // 精度情報を設定
       const lowestAskPrecision = lowestAsk.exchange.amountPrecision || 8;
       const highestBidPrecision = highestBid.exchange.amountPrecision || 8;
+      const amountPrecision = Math.min(lowestAskPrecision, highestBidPrecision);
       
-      adjustedAmount = parseFloat(adjustedAmount.toFixed(
-        Math.min(lowestAskPrecision, highestBidPrecision)
-      ));
-      // 最小精度（0.0001）を下回らないようにする
-      adjustedAmount = Math.max(adjustedAmount, 0.0001);
-      
-      if (availableFunds >= buyPrice * adjustedAmount) {
-        try {
-          // 買い注文を作成
-          // 注文数をチェックし、必要に応じて古い注文をキャンセル
-          await orderCheckCancel(buyExchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-          // 指値注文に変更
-          const buyOrder = await buyExchange.createLimitBuyOrder(symbol, adjustedAmount, buyPrice);
-          if (postOrderToDiscord) {
-            await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${lowestAsk.exchange.id} - ${symbol} - 価格: ${buyPrice}, 数量: ${adjustedAmount}`);
-          }
-          
-          // 取引記録を更新
-          if (updateTradeRecord) {
-            updateTradeRecord(lowestAsk.exchange.id, symbol, adjustedAmount, buyPrice, 'buy');
-          }
-          
-          // 売り注文を実行
-          const sellExchange = highestBid.exchange.exchange;
-          const sellPrice = highestBid.price;
-          
-          // 利用可能な資産を確認
-          const sellBalance = await sellExchange.fetchBalance();
-          const quoteCurrency = symbol.split('/')[0];
-          const availableAsset = sellBalance.free[quoteCurrency];
-          
-          // 売却量を調整（買った量と同じにする）
-          if (availableAsset >= adjustedAmount) {
-            try {
-              // 売り注文を作成
-              // 注文数をチェックし、必要に応じて古い注文をキャンセル
-              await orderCheckCancel(sellExchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-              // 指値注文に変更
-              const sellOrder = await sellExchange.createLimitSellOrder(symbol, adjustedAmount, sellPrice);
-              if (postOrderToDiscord) {
-                await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${highestBid.exchange.id} - ${symbol} - 価格: ${sellPrice}, 数量: ${adjustedAmount}`);
-              }
-              
-              // 取引記録を更新
-              if (updateTradeRecord) {
-                updateTradeRecord(highestBid.exchange.id, symbol, adjustedAmount, sellPrice, 'sell');
-              }
-              
-              // 取引結果を報告
-              const totalProfit = netProfit * adjustedAmount;
-              if (postOrderToDiscord) {
-                await postOrderToDiscord(`[アービトラージ] 取引完了: ${symbol} - 純利益: ${totalProfit.toFixed(8)} ${baseCurrency} (${profitPercent.toFixed(2)}%)`);
-              }
-            } catch (error) {
-              console.error(`売り注文の実行に失敗しました: ${highestBid.exchange.id} - ${symbol}`, error);
-              if (postErrorToDiscord) {
-                await postErrorToDiscord(`[アービトラージ] 売り注文の実行に失敗しました: ${highestBid.exchange.id} - ${symbol} - ${error.message}`);
-              }
-            }
-          } else {
-            console.log(`資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${adjustedAmount}, 利用可能: ${availableAsset}`);
+      // 取引所Aでの注文処理
+      try {
+        // 利用可能な資金を確認
+        const balanceA = await exchangeA.fetchBalance();
+        const availableFundsA = balanceA.free[baseCurrency];
+        const availableAssetA = balanceA.free[quoteCurrency];
+        
+        // 利用可能な資金の割合に基づいて取引量を計算
+        const maxBuyAmountA = availableFundsA * tradePercentage / buyPriceA;
+        let adjustedAmountA = Math.max(formattedAmount, maxBuyAmountA);
+        
+        // 精度を考慮して調整
+        adjustedAmountA = parseFloat(adjustedAmountA.toFixed(amountPrecision));
+        adjustedAmountA = Math.max(adjustedAmountA, 0.0001);
+        
+        // 取引所Aでの買い注文
+        if (availableFundsA >= buyPriceA * adjustedAmountA) {
+          try {
+            // 注文数をチェックし、必要に応じて古い注文をキャンセル
+            await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            
+            // 買い注文を作成
+            const buyOrderA = await exchangeA.createLimitBuyOrder(symbol, adjustedAmountA, buyPriceA);
             if (postOrderToDiscord) {
-              await postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${highestBid.exchange.id} - ${symbol} - 必要: ${adjustedAmount}, 利用可能: ${availableAsset}`);
+              await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeAId} - ${symbol} - 価格: ${buyPriceA}, 数量: ${adjustedAmountA}`);
+            }
+            
+            // 取引記録を更新
+            if (updateTradeRecord) {
+              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, buyPriceA, 'buy');
+            }
+          } catch (error) {
+            console.error(`買い注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
+            if (postErrorToDiscord) {
+              await postErrorToDiscord(`[アービトラージ] 買い注文の実行に失敗しました: ${exchangeAId} - ${symbol} - ${error.message}`);
             }
           }
-        } catch (error) {
-          console.error(`買い注文の実行に失敗しました: ${lowestAsk.exchange.id} - ${symbol}`, error);
-          if (postErrorToDiscord) {
-            await postErrorToDiscord(`[アービトラージ] 買い注文の実行に失敗しました: ${lowestAsk.exchange.id} - ${symbol} - ${error.message}`);
+        } else {
+          console.log(`資金不足のため買い注文をスキップ: ${exchangeAId} - ${symbol} - 必要: ${buyPriceA * adjustedAmountA}, 利用可能: ${availableFundsA}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${exchangeAId} - ${symbol} - 必要: ${buyPriceA * adjustedAmountA}, 利用可能: ${availableFundsA}`);
           }
         }
-      } else {
-        console.log(`資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * adjustedAmount}, 利用可能: ${availableFunds}`);
+        
+        // 取引所Aでの売り注文
+        if (availableAssetA >= adjustedAmountA) {
+          try {
+            // 注文数をチェックし、必要に応じて古い注文をキャンセル
+            await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            
+            // 売り注文を作成
+            const sellOrderA = await exchangeA.createLimitSellOrder(symbol, adjustedAmountA, sellPriceA);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${exchangeAId} - ${symbol} - 価格: ${sellPriceA}, 数量: ${adjustedAmountA}`);
+            }
+            
+            // 取引記録を更新
+            if (updateTradeRecord) {
+              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, sellPriceA, 'sell');
+            }
+          } catch (error) {
+            console.error(`売り注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
+            if (postErrorToDiscord) {
+              await postErrorToDiscord(`[アービトラージ] 売り注文の実行に失敗しました: ${exchangeAId} - ${symbol} - ${error.message}`);
+            }
+          }
+        } else {
+          console.log(`資産不足のため売り注文をスキップ: ${exchangeAId} - ${symbol} - 必要: ${adjustedAmountA}, 利用可能: ${availableAssetA}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${exchangeAId} - ${symbol} - 必要: ${adjustedAmountA}, 利用可能: ${availableAssetA}`);
+          }
+        }
+      } catch (error) {
+        console.error(`取引所Aでの注文処理に失敗しました: ${exchangeAId} - ${symbol}`, error);
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(`[アービトラージ] 取引所Aでの注文処理に失敗しました: ${exchangeAId} - ${symbol} - ${error.message}`);
+        }
+      }
+      
+      // 取引所Bでの注文処理
+      try {
+        // 利用可能な資金を確認
+        const balanceB = await exchangeB.fetchBalance();
+        const availableFundsB = balanceB.free[baseCurrency];
+        const availableAssetB = balanceB.free[quoteCurrency];
+        
+        // 利用可能な資金の割合に基づいて取引量を計算
+        const maxBuyAmountB = availableFundsB * tradePercentage / buyPriceB;
+        let adjustedAmountB = Math.max(formattedAmount, maxBuyAmountB);
+        
+        // 精度を考慮して調整
+        adjustedAmountB = parseFloat(adjustedAmountB.toFixed(amountPrecision));
+        adjustedAmountB = Math.max(adjustedAmountB, 0.0001);
+        
+        // 取引所Bでの買い注文
+        if (availableFundsB >= buyPriceB * adjustedAmountB) {
+          try {
+            // 注文数をチェックし、必要に応じて古い注文をキャンセル
+            await orderCheckCancel(exchangeB, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            
+            // 買い注文を作成
+            const buyOrderB = await exchangeB.createLimitBuyOrder(symbol, adjustedAmountB, buyPriceB);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeBId} - ${symbol} - 価格: ${buyPriceB}, 数量: ${adjustedAmountB}`);
+            }
+            
+            // 取引記録を更新
+            if (updateTradeRecord) {
+              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, buyPriceB, 'buy');
+            }
+          } catch (error) {
+            console.error(`買い注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
+            if (postErrorToDiscord) {
+              await postErrorToDiscord(`[アービトラージ] 買い注文の実行に失敗しました: ${exchangeBId} - ${symbol} - ${error.message}`);
+            }
+          }
+        } else {
+          console.log(`資金不足のため買い注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${buyPriceB * adjustedAmountB}, 利用可能: ${availableFundsB}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${buyPriceB * adjustedAmountB}, 利用可能: ${availableFundsB}`);
+          }
+        }
+        
+        // 取引所Bでの売り注文
+        if (availableAssetB >= adjustedAmountB) {
+          try {
+            // 注文数をチェックし、必要に応じて古い注文をキャンセル
+            await orderCheckCancel(exchangeB, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            
+            // 売り注文を作成
+            const sellOrderB = await exchangeB.createLimitSellOrder(symbol, adjustedAmountB, sellPriceB);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[アービトラージ] 売り注文実行: ${exchangeBId} - ${symbol} - 価格: ${sellPriceB}, 数量: ${adjustedAmountB}`);
+            }
+            
+            // 取引記録を更新
+            if (updateTradeRecord) {
+              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, sellPriceB, 'sell');
+            }
+          } catch (error) {
+            console.error(`売り注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
+            if (postErrorToDiscord) {
+              await postErrorToDiscord(`[アービトラージ] 売り注文の実行に失敗しました: ${exchangeBId} - ${symbol} - ${error.message}`);
+            }
+          }
+        } else {
+          console.log(`資産不足のため売り注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${adjustedAmountB}, 利用可能: ${availableAssetB}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${adjustedAmountB}, 利用可能: ${availableAssetB}`);
+          }
+        }
+        
+        // 取引結果を報告
+        const totalProfit = netProfit * Math.min(adjustedAmountA || 0, adjustedAmountB || 0);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${lowestAsk.exchange.id} - ${symbol} - 必要: ${buyPrice * adjustedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[アービトラージ] 取引完了: ${symbol} - 純利益: ${totalProfit.toFixed(8)} ${baseCurrency} (${profitPercent.toFixed(2)}%)`);
+        }
+      } catch (error) {
+        console.error(`取引所Bでの注文処理に失敗しました: ${exchangeBId} - ${symbol}`, error);
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(`[アービトラージ] 取引所Bでの注文処理に失敗しました: ${exchangeBId} - ${symbol} - ${error.message}`);
         }
       }
       
