@@ -51,9 +51,9 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
       case 'HFT':
         params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
-      case 'SCALPING':
-        params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
-        break;
+      // case 'SCALPING':
+      //   params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+      //   break;
       default:
         console.log(`未知の戦略: ${strategyKey}`);
         return null;
