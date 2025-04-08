@@ -8,13 +8,15 @@ const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = requir
 const { meanReversionStrategy, oscillatorStrategy } = require('./meanReversion');
 const { interExchangeArbitrage } = require('./arbitrage');
 const { highFrequencyTrading, scalpingStrategy, orderCheckCancel } = require('./highFrequency');
+const { passiveMarketMaking } = require('./marketMaking');
 
 // 戦略の種類を定義
 const STRATEGY_TYPES = {
   TREND_FOLLOWING: 'trend_following',
   MEAN_REVERSION: 'mean_reversion',
   ARBITRAGE: 'arbitrage',
-  HIGH_FREQUENCY: 'high_frequency'
+  HIGH_FREQUENCY: 'high_frequency',
+  MARKET_MAKING: 'market_making'
 };
 
 // 戦略の詳細を定義
@@ -79,6 +81,14 @@ const STRATEGIES = {
     name: 'スキャルピング',
     description: 'スプレッド（買値と売値の差）に基づいて取引を行う戦略',
     function: scalpingStrategy
+  },
+  
+  // マーケットメイキング戦略
+  MARKET_MAKING: {
+    type: STRATEGY_TYPES.MARKET_MAKING,
+    name: 'レンジ相場向け受動的マーケットメイキング',
+    description: 'レンジ相場において買い指値注文と売り指値注文を同時に発注し、約定時にメイカー手数料を得る戦略',
+    function: passiveMarketMaking
   }
 };
 
@@ -161,5 +171,8 @@ module.exports = {
   // 高頻度取引戦略
   highFrequencyTrading,
   scalpingStrategy,
-  orderCheckCancel
+  orderCheckCancel,
+  
+  // マーケットメイキング戦略
+  passiveMarketMaking
 };
