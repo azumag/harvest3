@@ -12,7 +12,7 @@ const strategies = require('../strategies');
  */
 async function startBot() {
   try {
-    const exchanges = [exchangeBB, exchangeBF];
+    const exchanges = [exchangeBB, exchangeBF]; // TODO: 取引所の配列だが、hftとmmでは別で定義されているので一元化したい
     
     // アービトラージ戦略を実行
     if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {

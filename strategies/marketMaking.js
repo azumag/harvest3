@@ -189,7 +189,8 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           currentPositions = Math.max(0, buyAmount - sellAmount);
           
           // 取引量を計算
-          const maxBuyAmount = availableFunds * tradePercentage / formattedBuyPrice;
+          //   const maxBuyAmount = availableFunds * tradePercentage / formattedBuyPrice;
+          const maxBuyAmount = baseMinTradeAmount;
           const amountPrecisionToUse = amountPrecision || 8;
           let formattedAmount = parseFloat(Math.max(baseMinTradeAmount, maxBuyAmount).toFixed(amountPrecisionToUse));
           formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
@@ -202,7 +203,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               
               console.log(`買い注文を発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
               if (postOrderToDiscord) {
-                await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
+                // await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
               }
               
               // 注文履歴に追加
@@ -231,7 +232,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               
               console.log(`売り注文を発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
               if (postOrderToDiscord) {
-                await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
+                // await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
               }
               
               // 注文履歴に追加
@@ -272,7 +273,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
             if (order.status === 'closed' || order.status === 'filled') {
               console.log(`注文が約定しました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
               if (postOrderToDiscord) {
-                await postOrderToDiscord(`[MM] 注文が約定しました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
+                // await postOrderToDiscord(`[MM] 注文が約定しました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
               }
               
               // 取引記録を更新

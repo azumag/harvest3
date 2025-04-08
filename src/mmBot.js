@@ -11,7 +11,8 @@ const { getMarketParameters, sleep } = require('./utils');
  */
 async function startMarketMakingBot() {
   try {
-    const exchanges = [exchangeBB, exchangeBF];
+    // const exchanges = [exchangeBB, exchangeBF];
+    const exchanges = [exchangeBB];
     
     // マーケットメイキング戦略を実行
     if (config.strategies.MARKET_MAKING.enabled) {
