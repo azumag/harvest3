@@ -9,6 +9,7 @@ const { meanReversionStrategy, oscillatorStrategy } = require('./meanReversion')
 const { interExchangeArbitrage } = require('./arbitrage');
 const { highFrequencyTrading, scalpingStrategy, orderCheckCancel } = require('./highFrequency');
 const { passiveMarketMaking } = require('./marketMaking');
+const { inyoStrategy } = require('./inyo');
 
 // 戦略の種類を定義
 const STRATEGY_TYPES = {
@@ -16,7 +17,8 @@ const STRATEGY_TYPES = {
   MEAN_REVERSION: 'mean_reversion',
   ARBITRAGE: 'arbitrage',
   HIGH_FREQUENCY: 'high_frequency',
-  MARKET_MAKING: 'market_making'
+  MARKET_MAKING: 'market_making',
+  CANDLESTICK_PATTERN: 'candlestick_pattern'
 };
 
 // 戦略の詳細を定義
@@ -89,6 +91,14 @@ const STRATEGIES = {
     name: 'レンジ相場向け受動的マーケットメイキング',
     description: 'レンジ相場において買い指値注文と売り指値注文を同時に発注し、約定時にメイカー手数料を得る戦略',
     function: passiveMarketMaking
+  },
+  
+  // ローソク足パターン戦略
+  INYO: {
+    type: STRATEGY_TYPES.CANDLESTICK_PATTERN,
+    name: '陰陽戦略',
+    description: '過去の１分足のローソク足をみて、陰線が２連続なら売り、陽線が2連続なら買いする戦略',
+    function: inyoStrategy
   }
 };
 
@@ -174,5 +184,8 @@ module.exports = {
   orderCheckCancel,
   
   // マーケットメイキング戦略
-  passiveMarketMaking
+  passiveMarketMaking,
+  
+  // ローソク足パターン戦略
+  inyoStrategy
 };
