@@ -5,7 +5,8 @@ const {
   calculateSMA,
   calculateRSI,
   calculateBollingerBands,
-  getBuyAmount
+  getBuyAmount,
+  getInyoBuyAmount
 } = require('./indicators');
 
 const { orderCheckCancel } = require('./highFrequency');
@@ -124,27 +125,55 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, minTradeAmount);
 
       // console.log({sellAmount, tradeAmount, minTradeAmount, formattedAmount, availableAsset});
 
-      // 売却後の残高をチェック（0.0001以上残るようにする）
+      // INYO戦略で買った額を取得
+      const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
+      
+      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
-      if (remainingAfterSell < 0.0001) {
-        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
-        if (postOrderToDiscord) {
-          await postOrderToDiscord(`[平均回帰戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+      const minRequired = Math.max(0.0001, inyoBuyAmount); // INYOで買った分と0.0001の大きい方
+      
+      if (remainingAfterSell < minRequired) {
+        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        if (availableAsset > minRequired) {
+          // INYOで買った分を残して売る
+          formattedAmount = parseFloat((availableAsset - minRequired).toFixed(amountPrecision));
+          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          if (formattedAmount < minTradeAmount) {
+            console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[平均回帰戦略] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchange.id} - ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+            }
+            return {
+              strategy: 'Mean Reversion',
+              symbol,
+              price: currentPrice,
+              sma: currentSMA,
+              deviation,
+              signal: 'none',
+              reason: 'adjusted amount below minimum trade amount'
+            };
+          }
+        } else {
+          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[平均回帰戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          }
+          return {
+            strategy: 'Mean Reversion',
+            symbol,
+            price: currentPrice,
+            sma: currentSMA,
+            deviation,
+            signal: 'none',
+            reason: 'insufficient remaining balance after sell'
+          };
         }
-        return {
-          strategy: 'Mean Reversion',
-          symbol,
-          price: currentPrice,
-          sma: currentSMA,
-          deviation,
-          signal: 'none',
-          reason: 'insufficient remaining balance after sell'
-        };
       }
       
       if (availableAsset >= formattedAmount) {
@@ -316,21 +345,47 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
 
-      // 売却後の残高をチェック（0.0001以上残るようにする）
+      // INYO戦略で買った額を取得
+      const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
+      
+      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
-      if (remainingAfterSell < 0.0001) {
-        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
-        if (postOrderToDiscord) {
-          await postOrderToDiscord(`[オシレーター戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+      const minRequired = Math.max(0.0001, inyoBuyAmount); // INYOで買った分と0.0001の大きい方
+      
+      if (remainingAfterSell < minRequired) {
+        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        if (availableAsset > minRequired) {
+          // INYOで買った分を残して売る
+          formattedAmount = parseFloat((availableAsset - minRequired).toFixed(amountPrecision));
+          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          if (formattedAmount < minTradeAmount) {
+            console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[オシレーター戦略] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchange.id} - ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+            }
+            return {
+              strategy: 'Oscillator',
+              symbol,
+              rsi: currentRSI,
+              currentPrice,
+              signal: 'none',
+              reason: 'adjusted amount below minimum trade amount'
+            };
+          }
+        } else {
+          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[オシレーター戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          }
+          return {
+            strategy: 'Oscillator',
+            symbol,
+            rsi: currentRSI,
+            currentPrice,
+            signal: 'none',
+            reason: 'insufficient remaining balance after sell'
+          };
         }
-        return {
-          strategy: 'Oscillator',
-          symbol,
-          rsi: currentRSI,
-          currentPrice,
-          signal: 'none',
-          reason: 'insufficient remaining balance after sell'
-        };
       }
       
       if (availableAsset >= formattedAmount) {

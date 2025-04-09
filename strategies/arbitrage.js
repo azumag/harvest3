@@ -3,6 +3,7 @@
  */
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
+const { getInyoBuyAmount } = require('./indicators');
 
 
 /**
@@ -227,7 +228,29 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         }
         
         // 取引所Aでの売り注文
-        if (availableAssetA >= adjustedAmountA) {
+        // INYO戦略で買った額を取得
+        const inyoBuyAmountA = getInyoBuyAmount(tradeRecords, exchangeA, symbol, updateTradeRecord);
+        
+        // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+        const remainingAfterSellA = availableAssetA - adjustedAmountA;
+        const minRequiredA = Math.max(0.0001, inyoBuyAmountA); // INYOで買った分と0.0001の大きい方
+        
+        if (remainingAfterSellA < minRequiredA && availableAssetA > minRequiredA) {
+          // INYOで買った分を残して売る
+          const originalAmountA = adjustedAmountA;
+          adjustedAmountA = parseFloat((availableAssetA - minRequiredA).toFixed(amountPrecision));
+          console.log(`売却量を調整しました: ${exchangeAId} - ${symbol} - INYO買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeAId} - ${symbol} - INYO買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
+          }
+        }
+        
+        if (adjustedAmountA < 0.0001) {
+          console.log(`調整後の売却量が最小取引量より小さいため、売り注文はスキップします: ${exchangeAId} - ${symbol} - 調整後: ${adjustedAmountA}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchangeAId} - ${symbol} - 調整後: ${adjustedAmountA}`);
+          }
+        } else if (availableAssetA >= adjustedAmountA) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
@@ -306,7 +329,29 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         }
         
         // 取引所Bでの売り注文
-        if (availableAssetB >= adjustedAmountB) {
+        // INYO戦略で買った額を取得
+        const inyoBuyAmountB = getInyoBuyAmount(tradeRecords, exchangeB, symbol, updateTradeRecord);
+        
+        // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+        const remainingAfterSellB = availableAssetB - adjustedAmountB;
+        const minRequiredB = Math.max(0.0001, inyoBuyAmountB); // INYOで買った分と0.0001の大きい方
+        
+        if (remainingAfterSellB < minRequiredB && availableAssetB > minRequiredB) {
+          // INYOで買った分を残して売る
+          const originalAmountB = adjustedAmountB;
+          adjustedAmountB = parseFloat((availableAssetB - minRequiredB).toFixed(amountPrecision));
+          console.log(`売却量を調整しました: ${exchangeBId} - ${symbol} - INYO買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeBId} - ${symbol} - INYO買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);
+          }
+        }
+        
+        if (adjustedAmountB < 0.0001) {
+          console.log(`調整後の売却量が最小取引量より小さいため、売り注文はスキップします: ${exchangeBId} - ${symbol} - 調整後: ${adjustedAmountB}`);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(`[アービトラージ] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchangeBId} - ${symbol} - 調整後: ${adjustedAmountB}`);
+          }
+        } else if (availableAssetB >= adjustedAmountB) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             await orderCheckCancel(exchangeB, symbol, config.cancelOrderThreshold, postOrderToDiscord);

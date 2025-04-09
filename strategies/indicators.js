@@ -212,20 +212,40 @@ function calculateBollingerBands(prices, period = 20, multiplier = 2) {
  * @param {Object} tradeRecords - 取引記録
  * @param {Object} exchange - 取引所
  * @param {string} symbol - シンボル
+ * @param {Function} updateTradeRecord - 取引記録更新関数
+ * @param {string} strategyKey - 戦略キー（オプション）
  * @returns {number} - 買い量
  */
-function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
+function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, strategyKey = null) {
   let buyAmount = 0;
   if (updateTradeRecord) {
     // tradeRecordsから該当する取引所とシンボルの買い量を取得
     const exchangeRecords = tradeRecords[exchange.id];
     if (exchangeRecords && exchangeRecords[symbol]) {
-      buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+      if (strategyKey && exchangeRecords[symbol][strategyKey]) {
+        // 特定の戦略の買い量を取得（INYOなど）
+        buyAmount = exchangeRecords[symbol][strategyKey].netPosition || 0;
+      } else {
+        // 通常の買い量を取得（全戦略の合計）
+        buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
+      }
       if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
       if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
     }
   }
   return buyAmount;
+}
+
+/**
+ * INYOで買った量を取得する便利関数
+ * @param {Object} tradeRecords - 取引記録
+ * @param {Object} exchange - 取引所
+ * @param {string} symbol - シンボル
+ * @param {Function} updateTradeRecord - 取引記録更新関数
+ * @returns {number} - INYOで買った量
+ */
+function getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
+  return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'INYO');
 }
 
 module.exports = {
@@ -234,5 +254,6 @@ module.exports = {
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
-  getBuyAmount
+  getBuyAmount,
+  getInyoBuyAmount
 };

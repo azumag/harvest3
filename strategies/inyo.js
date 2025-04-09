@@ -117,7 +117,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-      // 0.0001 単位で取引
+      // 0.0001 単位を下回らない
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
       if (availableFunds >= currentPrice * formattedAmount) {
