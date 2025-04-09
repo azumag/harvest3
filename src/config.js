@@ -119,7 +119,11 @@ const config = {
       reorderInterval: 60000, // 再発注間隔（ミリ秒）: 1分
       maxPositionCount: 4, // 最大ポジション数
       adjustmentValue: 0 // 微調整値
-    }
+    },
+
+    INYO: {
+      enabled: process.env.STRATEGY_INYO_ENABLED === 'true'
+    },
   }
 };
 
