@@ -97,7 +97,7 @@ const STRATEGIES = {
   INYO: {
     type: STRATEGY_TYPES.CANDLESTICK_PATTERN,
     name: '陰陽戦略',
-    description: '過去の１分足のローソク足をみて、陰線が２連続なら売り、陽線が2連続なら買いする戦略',
+    description: '過去の１分足のローソク足をみて陰線なら売り、陽線なら買いする戦略',
     function: inyoStrategy
   }
 };

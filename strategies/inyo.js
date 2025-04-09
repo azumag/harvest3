@@ -75,8 +75,10 @@ async function inyoStrategy(exchange, symbol, options = {}) {
     const currentPrice = ticker.last;
 
     // シグナルを判定
-    const buySignal = isGreen1 && isGreen2;  // 2連続の陽線
-    const sellSignal = isRed1 && isRed2;    // 2連続の陰線
+    // const buySignal = isGreen1 && isGreen2;  // 2連続の陽線
+    // const sellSignal = isRed1 && isRed2;    // 2連続の陰線
+    const buySignal = isGreen1;  // 陽線
+    const sellSignal = isRed1;    // 陰線
 
     // 戦略キー
     const strategyKey = 'INYO';
@@ -101,9 +103,9 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       }
 
       // 買いシグナル
-      console.log(`陰陽戦略 買いシグナル: ${symbol} - 2連続の陽線を検出`);
+      console.log(`陰陽戦略 買いシグナル: ${symbol} - 陽線を検出`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[陰陽戦略] 買いシグナル: ${exchange.id} - ${symbol} - 2連続の陽線を検出`);
+        await postOrderToDiscord(`[陰陽戦略] 買いシグナル: ${exchange.id} - ${symbol} - 陽線を検出`);
       }
       
       // 利用可能な資金を確認
@@ -160,9 +162,9 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       }
 
       // 売りシグナル
-      console.log(`陰陽戦略 売りシグナル: ${symbol} - 2連続の陰線を検出`);
+      console.log(`陰陽戦略 売りシグナル: ${symbol} - 陰線を検出`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[陰陽戦略] 売りシグナル: ${exchange.id} - ${symbol} - 2連続の陰線を検出`);
+        await postOrderToDiscord(`[陰陽戦略] 売りシグナル: ${exchange.id} - ${symbol} - 陰線を検出`);
       }
       
       // 利用可能な資産を確認
