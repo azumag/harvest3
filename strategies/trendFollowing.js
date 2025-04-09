@@ -130,6 +130,24 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
+      // 売却後の残高をチェック（0.0001以上残るようにする）
+      const remainingAfterSell = availableAsset - formattedAmount;
+      if (remainingAfterSell < 0.0001) {
+        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[MA戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        }
+        return {
+          strategy: 'MA Cross',
+          symbol,
+          shortMA: currentShortMA,
+          longMA: currentLongMA,
+          currentPrice,
+          signal: 'none',
+          reason: 'insufficient remaining balance after sell'
+        };
+      }
+      
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -300,6 +318,24 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
+      // 売却後の残高をチェック（0.0001以上残るようにする）
+      const remainingAfterSell = availableAsset - formattedAmount;
+      if (remainingAfterSell < 0.0001) {
+        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[MACD戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        }
+        return {
+          strategy: 'MACD',
+          symbol,
+          macd: currentMACD,
+          signal: currentSignal,
+          currentPrice,
+          signal: 'none',
+          reason: 'insufficient remaining balance after sell'
+        };
+      }
+      
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -469,6 +505,23 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
+      
+      // 売却後の残高をチェック（0.0001以上残るようにする）
+      const remainingAfterSell = availableAsset - formattedAmount;
+      if (remainingAfterSell < 0.0001) {
+        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[RSI戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        }
+        return {
+          strategy: 'RSI',
+          symbol,
+          rsi: currentRSI,
+          currentPrice,
+          signal: 'none',
+          reason: 'insufficient remaining balance after sell'
+        };
+      }
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
@@ -641,6 +694,26 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
+      
+      // 売却後の残高をチェック（0.0001以上残るようにする）
+      const remainingAfterSell = availableAsset - formattedAmount;
+      if (remainingAfterSell < 0.0001) {
+        console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[BB戦略] 売却後の残高が0.0001以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+        }
+        return {
+          strategy: 'Bollinger Bands',
+          symbol,
+          upper: currentUpper,
+          middle: currentMiddle,
+          lower: currentLower,
+          bandWidth,
+          currentPrice,
+          signal: 'none',
+          reason: 'insufficient remaining balance after sell'
+        };
+      }
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
