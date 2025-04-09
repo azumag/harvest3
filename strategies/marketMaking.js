@@ -156,30 +156,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           const formattedBuyPrice = parseFloat(buyPrice.toFixed(precisionToUse));
           const formattedSellPrice = parseFloat(sellPrice.toFixed(precisionToUse));
           
-          // 既存の注文をキャンセル
-          // try {
-          //   // アクティブな注文を取得
-          //   const openOrders = await exchange.fetchOpenOrders(symbol);
-            
-          //   // 既存の注文をキャンセル
-          //   for (const order of openOrders) {
-          //     await exchange.cancelOrder(order.id, symbol);
-          //     console.log(`注文をキャンセルしました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
-          //     if (postOrderToDiscord) {
-          //       await postOrderToDiscord(`[MM] 注文をキャンセルしました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
-          //     }
-          //   }
-            
-          //   // アクティブな注文をリセット
-          //   activeOrders.buy = null;
-          //   activeOrders.sell = null;
-          // } catch (error) {
-          //   console.error(`注文のキャンセル中にエラーが発生しました: ${symbol}`, error);
-          //   if (postErrorToDiscord) {
-          //     await postErrorToDiscord(`[MM] 注文のキャンセル中にエラーが発生しました: ${exchange.id} - ${symbol} - ${error.message}`);
-          //   }
-          // }
-          
           // 利用可能な資金と資産を確認
           const balance = await exchange.fetchBalance();
           const baseCurrency = symbol.split('/')[1]; // 例: BTC/JPY の JPY
@@ -199,38 +175,26 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           currentPositions = Math.max(0, buyAmount - sellAmount);
           
           // 取引量を計算
-          //   const maxBuyAmount = availableFunds * tradePercentage / formattedBuyPrice;
           const maxBuyAmount = baseMinTradeAmount;
           const amountPrecisionToUse = amountPrecision || 8;
           let formattedAmount = parseFloat(Math.max(baseMinTradeAmount, maxBuyAmount).toFixed(amountPrecisionToUse));
           formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
           
           // 注文ペアの管理
-          // 1. 各パターンに応じた注文ロジック
-          // 2. 買った分だけ売れるようにする
-          // 3. 買いと売りをペアとして管理する
-          
-          // 既存の注文ペアの状態を分析
           const pendingPairs = orderPairs.filter(pair =>
             (pair.buyOrder && !pair.buyFilled) || (pair.sellOrder && !pair.sellFilled)
           );
           
-          // 注文状態のパターンを確認
           const hasBuyWithSellFilled = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && pair.sellFilled);
           const hasBothPending = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && !pair.sellFilled);
           const hasSellWithBuyFilled = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && pair.buyOrder && pair.buyFilled);
           const hasSellOnly = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && (!pair.buyOrder || pair.buyFilled));
           const hasBuyOnly = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && (!pair.sellOrder || pair.sellFilled));
 
-          // 何もしないパターン
           const shouldDoNothing = hasBuyWithSellFilled || hasBothPending || hasSellWithBuyFilled;
-          
-          // 買いだけを入れるパターン
           const shouldPlaceBuyOnly = hasSellOnly &&
                                      currentPositions < maxPositionCount &&
                                      availableFunds >= formattedBuyPrice * formattedAmount;
-          
-          // 売りだけを入れるパターン
           const shouldPlaceSellOnly = hasBuyOnly &&
                                       availableAsset >= formattedAmount;
 
@@ -241,18 +205,15 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
             if (hasSellWithBuyFilled) console.log(`- 以前の売りが残っていて買いが決まっています`);
           } else if (shouldPlaceBuyOnly) {
             try {
-              // 残高チェックと注文量調整
               let adjustedAmount = formattedAmount;
               const buyPrice = formattedBuyPrice * formattedAmount;
               const remainingAfterBuy = availableFunds - buyPrice;
               
-              // 買った後の残高が0.0001しか残らない場合、0.0002買うよう調整
               if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
                 adjustedAmount = formattedAmount + 0.0001;
                 console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
               }
               
-              // 新しい注文ペアを作成
               const newPair = {
                 id: Date.now().toString(),
                 buyOrder: null,
@@ -262,7 +223,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 amount: adjustedAmount
               };
 
-              // 買い注文のみを発注
               const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
               activeOrders.buy = buyOrder;
               newPair.buyOrder = buyOrder;
@@ -272,7 +232,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 // await postOrderToDiscord(`[MM] 買い注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
               }
 
-              // 注文履歴に追加
               orderHistory.push({
                 time: now,
                 type: 'buy',
@@ -282,7 +241,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 pairId: newPair.id
               });
 
-              // 注文ペアを配列に追加
               orderPairs.push(newPair);
 
             } catch (buyError) {
@@ -292,15 +250,13 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               }
             }
           } else if (shouldPlaceSellOnly) {
-            // 売却後の残高をチェック（0.0001以上残るようにする）
             const remainingAfterSell = availableAsset - formattedAmount;
             if (remainingAfterSell < 0.0001) {
               console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
-              continue; // このループをスキップ
+              continue;
             }
 
             try {
-              // 新しい注文ペアを作成
               const newPair = {
                 id: Date.now().toString(),
                 buyOrder: null,
@@ -310,7 +266,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 amount: formattedAmount
               };
 
-              // 売り注文のみを発注
               const sellOrder = await exchange.createLimitSellOrder(symbol, formattedAmount, formattedSellPrice);
               activeOrders.sell = sellOrder;
               newPair.sellOrder = sellOrder;
@@ -320,7 +275,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 // await postOrderToDiscord(`[MM] 売り注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
               }
 
-              // 注文履歴に追加
               orderHistory.push({
                 time: now,
                 type: 'sell',
@@ -330,7 +284,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 pairId: newPair.id
               });
 
-              // 注文ペアを配列に追加
               orderPairs.push(newPair);
 
             } catch (sellError) {
@@ -340,20 +293,16 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               }
             }
           } else if (pendingPairs.length === 0 && currentPositions < maxPositionCount && availableFunds >= formattedBuyPrice * formattedAmount && availableAsset >= formattedAmount) {
-            // 両方を同時に出す（既存の注文ペアがない場合）
             try {
-              // 残高チェックと注文量調整
               let adjustedAmount = formattedAmount;
               const buyPrice = formattedBuyPrice * formattedAmount;
               const remainingAfterBuy = availableFunds - buyPrice;
               
-              // 買った後の残高が0.0001しか残らない場合、0.0011買うよう調整
               if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
                 adjustedAmount = formattedAmount + 0.0001;
                 console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
               }
               
-              // 新しい注文ペアを作成
               const newPair = {
                 id: Date.now().toString(),
                 buyOrder: null,
@@ -363,7 +312,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 amount: adjustedAmount
               };
 
-              // 買い注文を発注
               const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
               activeOrders.buy = buyOrder;
               newPair.buyOrder = buyOrder;
@@ -373,7 +321,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 // await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
               }
 
-              // 注文履歴に追加
               orderHistory.push({
                 time: now,
                 type: 'buy',
@@ -383,15 +330,11 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 pairId: newPair.id
               });
 
-              // 売却後の残高をチェック（0.0001以上残るようにする）
               const remainingAfterSell = availableAsset - adjustedAmount;
               if (remainingAfterSell < 0.0001) {
                 console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
                 console.log(`買い注文のみを維持します: ${symbol} - ペアID: ${newPair.id}`);
-                
-                // 買い注文は維持する（売り注文はなし）
               } else {
-                // 売り注文を発注
                 const sellOrder = await exchange.createLimitSellOrder(symbol, adjustedAmount, formattedSellPrice);
                 activeOrders.sell = sellOrder;
                 newPair.sellOrder = sellOrder;
@@ -401,7 +344,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                   // await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${adjustedAmount}`);
                 }
                 
-                // 注文履歴に追加
                 orderHistory.push({
                   time: now,
                   type: 'sell',
@@ -412,7 +354,6 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 });
               }
 
-              // 注文ペアを配列に追加（売り注文がある場合のみ）
               if (newPair.sellOrder) {
                 orderPairs.push(newPair);
               }
@@ -430,34 +371,38 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
             console.log(`- 利用可能資産: ${availableAsset}, 必要: ${formattedAmount}`);
           }
           
-          // 最後の注文時間を更新
           lastOrderTime = now;
         }
         
         // 約定した注文の確認と記録
         try {
           let completedOrders = [];
+          let canceledOrders = [];
           
           // 取引所が fetchClosedOrders をサポートしているか確認
           if (exchange.has && exchange.has['fetchClosedOrders']) {
             try {
               // 完了した注文を取得（過去24時間）
-              completedOrders = await exchange.fetchClosedOrders(symbol);
+              const closedOrders = await exchange.fetchClosedOrders(symbol);
+              
+              // 約定した注文とキャンセルされた注文を分離
+              for (const order of closedOrders) {
+                if (order.status === 'canceled') {
+                  canceledOrders.push(order);
+                } else if (order.status === 'closed' || order.status === 'filled') {
+                  completedOrders.push(order);
+                }
+              }
             } catch (fetchError) {
               console.log(`fetchClosedOrders がサポートされていないか、エラーが発生しました: ${symbol}`, fetchError);
-              // fetchMyTrades を試みる
               if (exchange.has && exchange.has['fetchMyTrades']) {
                 try {
                   const myTrades = await exchange.fetchMyTrades(symbol);
-                  // 取引履歴から注文情報を構築
                   for (const trade of myTrades) {
                     if (trade.order) {
-                      // 既に処理済みの注文はスキップ
                       if (orderHistory.some(historyOrder => historyOrder.orderId === trade.order && historyOrder.processed)) {
                         continue;
                       }
-                      
-                      // 注文情報を構築
                       completedOrders.push({
                         id: trade.order,
                         status: 'filled',
@@ -474,18 +419,13 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               }
             }
           } else if (exchange.has && exchange.has['fetchMyTrades']) {
-            // fetchClosedOrders がサポートされていない場合は fetchMyTrades を使用
             try {
               const myTrades = await exchange.fetchMyTrades(symbol);
-              // 取引履歴から注文情報を構築
               for (const trade of myTrades) {
                 if (trade.order) {
-                  // 既に処理済みの注文はスキップ
                   if (orderHistory.some(historyOrder => historyOrder.orderId === trade.order && historyOrder.processed)) {
                     continue;
                   }
-                  
-                  // 注文情報を構築
                   completedOrders.push({
                     id: trade.order,
                     status: 'filled',
@@ -503,32 +443,72 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
             console.log(`この取引所(${exchange.id})は約定した注文の取得をサポートしていません: ${symbol}`);
           }
           
-          // 新しく約定した注文を処理
+          // キャンセルされた注文の処理
+          for (const order of canceledOrders) {
+            if (orderHistory.some(historyOrder => historyOrder.orderId === order.id && historyOrder.processedCancel)) {
+              continue;
+            }
+            
+            console.log(`注文がキャンセルされました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
+            if (postOrderToDiscord) {
+              await postOrderToDiscord(`[MM] 注文がキャンセルされました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, タイプ: ${order.side}`);
+            }
+            
+            const historyOrderIndex = orderHistory.findIndex(historyOrder => historyOrder.orderId === order.id);
+            if (historyOrderIndex !== -1) {
+              orderHistory[historyOrderIndex].processedCancel = true;
+              const pairId = orderHistory[historyOrderIndex].pairId;
+              
+              if (pairId) {
+                const pairIndex = orderPairs.findIndex(pair => pair.id === pairId);
+                if (pairIndex !== -1) {
+                  if (order.side === 'buy') {
+                    console.log(`注文ペア(${pairId})の買い注文がキャンセルされました - ペアを削除します`);
+                    orderPairs.splice(pairIndex, 1);
+                  } else if (order.side === 'sell') {
+                    console.log(`注文ペア(${pairId})の売り注文がキャンセルされました`);
+                    orderPairs[pairIndex].sellOrder = null;
+                    
+                    if (orderPairs[pairIndex].buyFilled) {
+                      console.log(`買い注文が約定済みで売り注文がキャンセルされたため、次回の実行時に新しい売り注文を発注します`);
+                      orderPairs[pairIndex].sellOrder = null;
+                      orderPairs[pairIndex].sellFilled = false;
+                    } else {
+                      console.log(`注文ペア(${pairId})の売り注文がキャンセルされ、買い注文も未約定のためペアを削除します`);
+                      orderPairs.splice(pairIndex, 1);
+                    }
+                  }
+                }
+              }
+              
+              if (order.side === 'buy') {
+                activeOrders.buy = null;
+              } else if (order.side === 'sell') {
+                activeOrders.sell = null;
+              }
+            }
+          }
+          
           for (const order of completedOrders) {
-            // 既に処理済みの注文はスキップ
             if (orderHistory.some(historyOrder => historyOrder.orderId === order.id && historyOrder.processed)) {
               continue;
             }
             
-            // 約定した注文のみ処理
             if (order.status === 'closed' || order.status === 'filled') {
               console.log(`注文が約定しました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
               if (postOrderToDiscord) {
                 // await postOrderToDiscord(`[MM] 注文が約定しました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
               }
               
-              // 取引記録を更新
               if (updateTradeRecord) {
                 updateTradeRecord(exchange.id, symbol, order.amount, order.price, order.side);
               }
               
-              // 注文履歴を更新（処理済みとしてマーク）
               const historyOrderIndex = orderHistory.findIndex(historyOrder => historyOrder.orderId === order.id);
               if (historyOrderIndex !== -1) {
                 orderHistory[historyOrderIndex].processed = true;
                 const pairId = orderHistory[historyOrderIndex].pairId;
                 
-                // 対応する注文ペアを更新
                 if (pairId) {
                   const pairIndex = orderPairs.findIndex(pair => pair.id === pairId);
                   if (pairIndex !== -1) {
@@ -540,16 +520,13 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                       console.log(`注文ペア(${pairId})の売り注文が約定しました`);
                     }
                     
-                    // 両方の注文が約定した場合、ペアを完了としてマーク
                     if (orderPairs[pairIndex].buyFilled && orderPairs[pairIndex].sellFilled) {
                       console.log(`注文ペア(${pairId})が完了しました`);
-                      // 完了したペアは配列から削除するか、別の配列に移動することも可能
                     }
                   }
                 }
               }
               
-              // 約定した注文のタイプに応じてアクティブな注文を更新
               if (order.side === 'buy') {
                 activeOrders.buy = null;
                 currentPositions++;
@@ -566,14 +543,13 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           }
         }
         
-        // 次のループまで待機
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.error(`マーケットメイキング処理中にエラーが発生しました: ${symbol}`, error);
         if (postErrorToDiscord) {
           await postErrorToDiscord(`[MM] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 5000)); // エラー時は5秒待機
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }
   } catch (error) {

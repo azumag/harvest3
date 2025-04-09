@@ -16,6 +16,15 @@ const { getInyoBuyAmount } = require('./indicators');
  * @param {Object} options - その他のオプション
  */
 async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0, amount, options = {}) {
+  if (symbol === 'MONA/JPY') {
+    console.log(`MONA/JPY はアービトラージ戦略の対象外です`);
+    return {
+      strategy: 'Inter-Exchange Arbitrage',
+      symbol,
+      signal: 'none',
+      reason: 'MONA/JPY excluded'
+    };
+  }
   try {
     // オプションから値を取得
     const { postOrderToDiscord, postErrorToDiscord, tradePercentage = 0.01, updateTradeRecord } = options;
