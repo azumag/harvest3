@@ -204,38 +204,70 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
           
           // 注文ペアの管理
-          // 1. 売り注文が決まっていない場合は買い注文を出さない
+          // 1. 各パターンに応じた注文ロジック
           // 2. 買った分だけ売れるようにする
           // 3. 買いと売りをペアとして管理する
           
-          // 未約定の売り注文がない場合のみ新しい注文ペアを作成
-          const hasPendingSellOrder = orderPairs.some(pair => pair.sellOrder && !pair.sellFilled);
+          // 既存の注文ペアの状態を分析
+          const pendingPairs = orderPairs.filter(pair =>
+            (pair.buyOrder && !pair.buyFilled) || (pair.sellOrder && !pair.sellFilled)
+          );
           
-          // 買い注文を発注するかどうか
-          const shouldPlaceBuyOrder = !hasPendingSellOrder && // 未約定の売り注文がない
-                                    currentPositions < maxPositionCount && // ポジション上限未満
-                                    availableFunds >= formattedBuyPrice * formattedAmount; // 資金が十分
+          // 注文状態のパターンを確認
+          const hasBuyWithSellFilled = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && pair.sellFilled);
+          const hasBothPending = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && !pair.sellFilled);
+          const hasSellWithBuyFilled = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && pair.buyOrder && pair.buyFilled);
+          const hasSellOnly = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && (!pair.buyOrder || pair.buyFilled));
+          const hasBuyOnly = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && (!pair.sellOrder || pair.sellFilled));
 
-          if (shouldPlaceBuyOrder) {
+          // 何もしないパターン
+          const shouldDoNothing = hasBuyWithSellFilled || hasBothPending || hasSellWithBuyFilled;
+          
+          // 買いだけを入れるパターン
+          const shouldPlaceBuyOnly = hasSellOnly &&
+                                     currentPositions < maxPositionCount &&
+                                     availableFunds >= formattedBuyPrice * formattedAmount;
+          
+          // 売りだけを入れるパターン
+          const shouldPlaceSellOnly = hasBuyOnly &&
+                                      availableAsset >= formattedAmount;
+
+          if (shouldDoNothing) {
+            console.log(`次のパターンにより、新規注文を見送ります: ${symbol}`);
+            if (hasBuyWithSellFilled) console.log(`- 以前の買いが残っていて売りが決まっています`);
+            if (hasBothPending) console.log(`- 以前の買いも売りも残っています`);
+            if (hasSellWithBuyFilled) console.log(`- 以前の売りが残っていて買いが決まっています`);
+          } else if (shouldPlaceBuyOnly) {
             try {
-              // 新しい注文ペアを作成（売り注文は後で追加する可能性あり）
+              // 残高チェックと注文量調整
+              let adjustedAmount = formattedAmount;
+              const buyPrice = formattedBuyPrice * formattedAmount;
+              const remainingAfterBuy = availableFunds - buyPrice;
+              
+              // 買った後の残高が0.0001しか残らない場合、0.0002買うよう調整
+              if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
+                adjustedAmount = formattedAmount + 0.0001;
+                console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
+              }
+              
+              // 新しい注文ペアを作成
               const newPair = {
                 id: Date.now().toString(),
                 buyOrder: null,
                 sellOrder: null,
                 buyFilled: false,
                 sellFilled: false,
-                amount: formattedAmount
+                amount: adjustedAmount
               };
 
-              // 買い注文を発注
-              const buyOrder = await exchange.createLimitBuyOrder(symbol, formattedAmount, formattedBuyPrice);
+              // 買い注文のみを発注
+              const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
               activeOrders.buy = buyOrder;
               newPair.buyOrder = buyOrder;
 
-              console.log(`買い注文を発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}, ペアID: ${newPair.id}`);
+              console.log(`買い注文のみを発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}`);
               if (postOrderToDiscord) {
-                // await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
+                // await postOrderToDiscord(`[MM] 買い注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
               }
 
               // 注文履歴に追加
@@ -248,39 +280,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 pairId: newPair.id
               });
 
-              // 売り注文を発注するかどうか（資産がある場合のみ）
-              if (availableAsset >= formattedAmount) {
-                try {
-                  const sellOrder = await exchange.createLimitSellOrder(symbol, formattedAmount, formattedSellPrice);
-                  activeOrders.sell = sellOrder;
-                  newPair.sellOrder = sellOrder; // ペアに売り注文情報を追加
-
-                  console.log(`売り注文を発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}, ペアID: ${newPair.id}`);
-                  if (postOrderToDiscord) {
-                    // await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
-                  }
-
-                  // 注文履歴に追加
-                  orderHistory.push({
-                    time: now,
-                    type: 'sell',
-                    price: formattedSellPrice,
-                    amount: formattedAmount,
-                    orderId: sellOrder.id,
-                    pairId: newPair.id
-                  });
-                } catch (sellError) {
-                  console.error(`売り注文の発注中にエラーが発生しました: ${symbol}`, sellError);
-                  if (postErrorToDiscord) {
-                    await postErrorToDiscord(`[MM] 売り注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${sellError.message}`);
-                  }
-                  // 売り注文に失敗しても、買い注文は既に発注されている
-                }
-              } else {
-                console.log(`利用可能資産が不足しているため、売り注文は発注しません: ${symbol} - 利用可能資産: ${availableAsset}, 必要: ${formattedAmount}`);
-              }
-
-              // 注文ペアを配列に追加（買い注文のみ、または買い売り両方）
+              // 注文ペアを配列に追加
               orderPairs.push(newPair);
 
             } catch (buyError) {
@@ -289,15 +289,143 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 await postErrorToDiscord(`[MM] 買い注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${buyError.message}`);
               }
             }
-          } else {
-            // 買い注文を発注しない理由をログに出力
-            if (hasPendingSellOrder) {
-              console.log(`未約定の売り注文があるため、新しい買い注文を発注しません: ${symbol}`);
-            } else if (currentPositions >= maxPositionCount) {
-              console.log(`ポジション数が上限に達しているため、新しい買い注文を発注しません: ${symbol} - ポジション数: ${currentPositions}/${maxPositionCount}`);
-            } else if (availableFunds < formattedBuyPrice * formattedAmount) {
-              console.log(`利用可能資金が不足しているため、新しい買い注文を発注しません: ${symbol} - 利用可能資金: ${availableFunds}, 必要: ${formattedBuyPrice * formattedAmount}`);
+          } else if (shouldPlaceSellOnly) {
+            // 売却後の残高をチェック（0.0001以上残るようにする）
+            const remainingAfterSell = availableAsset - formattedAmount;
+            if (remainingAfterSell < 0.0001) {
+              console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+              continue; // このループをスキップ
             }
+
+            try {
+              // 新しい注文ペアを作成
+              const newPair = {
+                id: Date.now().toString(),
+                buyOrder: null,
+                sellOrder: null,
+                buyFilled: false,
+                sellFilled: false,
+                amount: formattedAmount
+              };
+
+              // 売り注文のみを発注
+              const sellOrder = await exchange.createLimitSellOrder(symbol, formattedAmount, formattedSellPrice);
+              activeOrders.sell = sellOrder;
+              newPair.sellOrder = sellOrder;
+
+              console.log(`売り注文のみを発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}, ペアID: ${newPair.id}, 売却後残高: ${remainingAfterSell}`);
+              if (postOrderToDiscord) {
+                // await postOrderToDiscord(`[MM] 売り注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
+              }
+
+              // 注文履歴に追加
+              orderHistory.push({
+                time: now,
+                type: 'sell',
+                price: formattedSellPrice,
+                amount: formattedAmount,
+                orderId: sellOrder.id,
+                pairId: newPair.id
+              });
+
+              // 注文ペアを配列に追加
+              orderPairs.push(newPair);
+
+            } catch (sellError) {
+              console.error(`売り注文の発注中にエラーが発生しました: ${symbol}`, sellError);
+              if (postErrorToDiscord) {
+                await postErrorToDiscord(`[MM] 売り注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${sellError.message}`);
+              }
+            }
+          } else if (pendingPairs.length === 0 && currentPositions < maxPositionCount && availableFunds >= formattedBuyPrice * formattedAmount && availableAsset >= formattedAmount) {
+            // 両方を同時に出す（既存の注文ペアがない場合）
+            try {
+              // 残高チェックと注文量調整
+              let adjustedAmount = formattedAmount;
+              const buyPrice = formattedBuyPrice * formattedAmount;
+              const remainingAfterBuy = availableFunds - buyPrice;
+              
+              // 買った後の残高が0.0001しか残らない場合、0.0002買うよう調整
+              if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
+                adjustedAmount = formattedAmount + 0.0001;
+                console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
+              }
+              
+              // 新しい注文ペアを作成
+              const newPair = {
+                id: Date.now().toString(),
+                buyOrder: null,
+                sellOrder: null,
+                buyFilled: false,
+                sellFilled: false,
+                amount: adjustedAmount
+              };
+
+              // 買い注文を発注
+              const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
+              activeOrders.buy = buyOrder;
+              newPair.buyOrder = buyOrder;
+
+              console.log(`買い注文を発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}`);
+              if (postOrderToDiscord) {
+                // await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
+              }
+
+              // 注文履歴に追加
+              orderHistory.push({
+                time: now,
+                type: 'buy',
+                price: formattedBuyPrice,
+                amount: adjustedAmount,
+                orderId: buyOrder.id,
+                pairId: newPair.id
+              });
+
+              // 売却後の残高をチェック（0.0001以上残るようにする）
+              const remainingAfterSell = availableAsset - adjustedAmount;
+              if (remainingAfterSell < 0.0001) {
+                console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+                console.log(`買い注文のみを維持します: ${symbol} - ペアID: ${newPair.id}`);
+                
+                // 買い注文は維持する（売り注文はなし）
+              } else {
+                // 売り注文を発注
+                const sellOrder = await exchange.createLimitSellOrder(symbol, adjustedAmount, formattedSellPrice);
+                activeOrders.sell = sellOrder;
+                newPair.sellOrder = sellOrder;
+
+                console.log(`売り注文を発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}, 売却後残高: ${remainingAfterSell}`);
+                if (postOrderToDiscord) {
+                  // await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${adjustedAmount}`);
+                }
+                
+                // 注文履歴に追加
+                orderHistory.push({
+                  time: now,
+                  type: 'sell',
+                  price: formattedSellPrice,
+                  amount: adjustedAmount,
+                  orderId: sellOrder.id,
+                  pairId: newPair.id
+                });
+              }
+
+              // 注文ペアを配列に追加（売り注文がある場合のみ）
+              if (newPair.sellOrder) {
+                orderPairs.push(newPair);
+              }
+
+            } catch (error) {
+              console.error(`注文の発注中にエラーが発生しました: ${symbol}`, error);
+              if (postErrorToDiscord) {
+                await postErrorToDiscord(`[MM] 注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${error.message}`);
+              }
+            }
+          } else {
+            console.log(`現在の状態に合致する注文パターンがないため、注文を見送ります: ${symbol}`);
+            console.log(`- 現在のポジション数: ${currentPositions}/${maxPositionCount}`);
+            console.log(`- 利用可能資金: ${availableFunds}, 必要: ${formattedBuyPrice * formattedAmount}`);
+            console.log(`- 利用可能資産: ${availableAsset}, 必要: ${formattedAmount}`);
           }
           
           // 最後の注文時間を更新
