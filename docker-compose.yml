@@ -23,3 +23,9 @@ services:
       - .:/usr/src/app
     command: npm run start-mm
 
+  test:
+    build: .
+    container_name: order_status_test
+    volumes:
+      - .:/usr/src/app
+    command: node test/checkOrderStatus.js

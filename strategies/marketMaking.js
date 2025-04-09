@@ -77,6 +77,11 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
     // 価格履歴の更新間隔（ミリ秒）
     const priceHistoryUpdateInterval = 10000; // 10秒ごとに更新
 
+    // 注文状態の直接確認間隔（ミリ秒）
+    const orderStatusCheckInterval = 30000; // 30秒ごとに確認
+    // 最後の注文状態確認時間
+    let lastOrderStatusCheck = 0;
+
     // マーケットメイキングループ
     while (true) {
       try {
@@ -124,6 +129,116 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           }
         } else {
           console.log(`価格履歴が不足しています: ${symbol} - ${priceHistory.length}件`);
+        }
+
+        // 注文ステータスの直接確認（定期的に実行）
+        if (now - lastOrderStatusCheck >= orderStatusCheckInterval) {
+          try {
+            // アクティブな注文リストを取得
+            const openOrders = await exchange.fetchOpenOrders(symbol);
+            const activeOrderIds = openOrders.map(order => order.id);
+            
+            console.log(`${symbol}の注文状態チェック - アクティブな注文数: ${openOrders.length}`);
+            
+            // 各注文ペアの状態を確認
+            for (let i = orderPairs.length - 1; i >= 0; i--) {
+              const pair = orderPairs[i];
+              
+              // 買い注文のステータスチェック
+              if (pair.buyOrder && !pair.buyFilled) {
+                // 買い注文がアクティブリストにない場合
+                if (!activeOrderIds.includes(pair.buyOrder.id)) {
+                  // 個別に注文状態を確認（サポートされている場合）
+                  try {
+                    if (exchange.has && exchange.has['fetchOrder']) {
+                      const orderStatus = await exchange.fetchOrder(pair.buyOrder.id, symbol);
+                      
+                      // 正常に約定した場合
+                      if (orderStatus.status === 'closed' || orderStatus.status === 'filled') {
+                        console.log(`買い注文(${pair.buyOrder.id})が約定しました - 個別確認`);
+                        pair.buyFilled = true;
+                        continue;
+                      }
+                    }
+                  } catch (orderCheckError) {
+                    // エラーが発生した場合も注文が存在しない可能性が高い
+                    console.log(`買い注文(${pair.buyOrder.id})のステータス確認中にエラー: ${orderCheckError.message}`);
+                  }
+                  
+                  // 注文がキャンセルされたか存在しない場合
+                  console.log(`買い注文(${pair.buyOrder.id})はアクティブではありません - キャンセルとして処理`);
+                  
+                  // 注文履歴を更新
+                  const historyOrderIndex = orderHistory.findIndex(
+                    historyOrder => historyOrder.orderId === pair.buyOrder.id
+                  );
+                  if (historyOrderIndex !== -1) {
+                    orderHistory[historyOrderIndex].processedCancel = true;
+                  }
+                  
+                  // ペアを削除せず、注文状態だけをリセット
+                  console.log(`買い注文がキャンセルされました。次回の実行時に新しい買い注文を発注します - ペア(${pair.id})`);
+                  pair.buyOrder = null;
+                  pair.buyFilled = false;
+                  activeOrders.buy = null;
+                }
+              }
+              
+              // 売り注文のステータスチェック
+              if (pair.sellOrder && !pair.sellFilled) {
+                // 売り注文がアクティブリストにない場合
+                if (!activeOrderIds.includes(pair.sellOrder.id)) {
+                  // 個別に注文状態を確認（サポートされている場合）
+                  try {
+                    if (exchange.has && exchange.has['fetchOrder']) {
+                      const orderStatus = await exchange.fetchOrder(pair.sellOrder.id, symbol);
+                      
+                      // 正常に約定した場合
+                      if (orderStatus.status === 'closed' || orderStatus.status === 'filled') {
+                        console.log(`売り注文(${pair.sellOrder.id})が約定しました - 個別確認`);
+                        pair.sellFilled = true;
+                        continue;
+                      }
+                    }
+                  } catch (orderCheckError) {
+                    // エラーが発生した場合も注文が存在しない可能性が高い
+                    console.log(`売り注文(${pair.sellOrder.id})のステータス確認中にエラー: ${orderCheckError.message}`);
+                  }
+                  
+                  // 注文がキャンセルされたか存在しない場合
+                  console.log(`売り注文(${pair.sellOrder.id})はアクティブではありません - キャンセルとして処理`);
+                  
+                  // 注文履歴を更新
+                  const historyOrderIndex = orderHistory.findIndex(
+                    historyOrder => historyOrder.orderId === pair.sellOrder.id
+                  );
+                  if (historyOrderIndex !== -1) {
+                    orderHistory[historyOrderIndex].processedCancel = true;
+                  }
+                  
+                  // 買い注文の状態に関わらず、売り注文状態だけをリセット
+                  if (pair.buyFilled) {
+                    console.log(`買い注文が約定済みで売り注文がキャンセルされました。次回の実行時に新しい売り注文を発注します - ペア(${pair.id})`);
+                  } else {
+                    console.log(`売り注文がキャンセルされました。買い注文も未約定ですが、ペアを維持します - ペア(${pair.id})`);
+                  }
+                  pair.sellOrder = null;
+                  pair.sellFilled = false;
+                  
+                  activeOrders.sell = null;
+                }
+              }
+              
+              // 両方の注文が約定している場合、完了としてログ記録
+              if (pair.buyFilled && pair.sellFilled) {
+                console.log(`注文ペア(${pair.id})が完了しました`);
+              }
+            }
+            
+            lastOrderStatusCheck = now;
+          } catch (statusCheckError) {
+            console.error(`注文状態の定期確認中にエラーが発生しました: ${symbol}`, statusCheckError);
+          }
         }
 
         // レンジ相場の場合、または最後の注文から一定時間経過した場合に注文を発注/更新
@@ -390,172 +505,13 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
           lastOrderTime = now;
         }
         
-        // 約定した注文の確認と記録
-        try {
-          let completedOrders = [];
-          let canceledOrders = [];
-          
-          // 取引所が fetchClosedOrders をサポートしているか確認
-          if (exchange.has && exchange.has['fetchClosedOrders']) {
-            try {
-              // 完了した注文を取得（過去24時間）
-              const closedOrders = await exchange.fetchClosedOrders(symbol);
-              
-              // 約定した注文とキャンセルされた注文を分離
-              for (const order of closedOrders) {
-                if (order.status === 'canceled') {
-                  canceledOrders.push(order);
-                } else if (order.status === 'closed' || order.status === 'filled') {
-                  completedOrders.push(order);
-                }
-              }
-            } catch (fetchError) {
-              console.log(`fetchClosedOrders がサポートされていないか、エラーが発生しました: ${symbol}`, fetchError);
-              if (exchange.has && exchange.has['fetchMyTrades']) {
-                try {
-                  const myTrades = await exchange.fetchMyTrades(symbol);
-                  for (const trade of myTrades) {
-                    if (trade.order) {
-                      if (orderHistory.some(historyOrder => historyOrder.orderId === trade.order && historyOrder.processed)) {
-                        continue;
-                      }
-                      completedOrders.push({
-                        id: trade.order,
-                        status: 'filled',
-                        price: trade.price,
-                        amount: trade.amount,
-                        side: trade.side,
-                        timestamp: trade.timestamp
-                      });
-                    }
-                  }
-                } catch (tradesError) {
-                  console.log(`fetchMyTrades もサポートされていないか、エラーが発生しました: ${symbol}`, tradesError);
-                }
-              }
-            }
-          } else if (exchange.has && exchange.has['fetchMyTrades']) {
-            try {
-              const myTrades = await exchange.fetchMyTrades(symbol);
-              for (const trade of myTrades) {
-                if (trade.order) {
-                  if (orderHistory.some(historyOrder => historyOrder.orderId === trade.order && historyOrder.processed)) {
-                    continue;
-                  }
-                  completedOrders.push({
-                    id: trade.order,
-                    status: 'filled',
-                    price: trade.price,
-                    amount: trade.amount,
-                    side: trade.side,
-                    timestamp: trade.timestamp
-                  });
-                }
-              }
-            } catch (tradesError) {
-              console.log(`fetchMyTrades もサポートされていないか、エラーが発生しました: ${symbol}`, tradesError);
-            }
-          } else {
-            console.log(`この取引所(${exchange.id})は約定した注文の取得をサポートしていません: ${symbol}`);
-          }
-          
-          // キャンセルされた注文の処理
-          for (const order of canceledOrders) {
-            if (orderHistory.some(historyOrder => historyOrder.orderId === order.id && historyOrder.processedCancel)) {
-              continue;
-            }
-            
-            // console.log(`注文がキャンセルされました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
-            if (postOrderToDiscord) {
-              // await postOrderToDiscord(`[MM] 注文がキャンセルされました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, タイプ: ${order.side}`);
-            }
-            
-            const historyOrderIndex = orderHistory.findIndex(historyOrder => historyOrder.orderId === order.id);
-            if (historyOrderIndex !== -1) {
-              orderHistory[historyOrderIndex].processedCancel = true;
-              const pairId = orderHistory[historyOrderIndex].pairId;
-              
-              if (pairId) {
-                const pairIndex = orderPairs.findIndex(pair => pair.id === pairId);
-                if (pairIndex !== -1) {
-                  if (order.side === 'buy') {
-                    console.log(`注文ペア(${pairId})の買い注文がキャンセルされました - ペアを削除します`);
-                    orderPairs.splice(pairIndex, 1);
-                  } else if (order.side === 'sell') {
-                    console.log(`注文ペア(${pairId})の売り注文がキャンセルされました`);
-                    orderPairs[pairIndex].sellOrder = null;
-                    
-                    if (orderPairs[pairIndex].buyFilled) {
-                      console.log(`買い注文が約定済みで売り注文がキャンセルされたため、次回の実行時に新しい売り注文を発注します`);
-                      orderPairs[pairIndex].sellOrder = null;
-                      orderPairs[pairIndex].sellFilled = false;
-                    } else {
-                      console.log(`注文ペア(${pairId})の売り注文がキャンセルされ、買い注文も未約定のためペアを削除します`);
-                      orderPairs.splice(pairIndex, 1);
-                    }
-                  }
-                }
-              }
-              
-              if (order.side === 'buy') {
-                activeOrders.buy = null;
-              } else if (order.side === 'sell') {
-                activeOrders.sell = null;
-              }
-            }
-          }
-          
-          for (const order of completedOrders) {
-            if (orderHistory.some(historyOrder => historyOrder.orderId === order.id && historyOrder.processed)) {
-              continue;
-            }
-            
-            if (order.status === 'closed' || order.status === 'filled') {
-              // console.log(`注文が約定しました: ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
-              if (postOrderToDiscord) {
-                // await postOrderToDiscord(`[MM] 注文が約定しました: ${exchange.id} - ${symbol} - 注文ID: ${order.id}, 価格: ${order.price}, 数量: ${order.amount}, タイプ: ${order.side}`);
-              }
-              
-              if (updateTradeRecord) {
-                // updateTradeRecord(exchange.id, symbol, order.amount, order.price, order.side);
-              }
-              
-              const historyOrderIndex = orderHistory.findIndex(historyOrder => historyOrder.orderId === order.id);
-              if (historyOrderIndex !== -1) {
-                orderHistory[historyOrderIndex].processed = true;
-                const pairId = orderHistory[historyOrderIndex].pairId;
-                
-                if (pairId) {
-                  const pairIndex = orderPairs.findIndex(pair => pair.id === pairId);
-                  if (pairIndex !== -1) {
-                    if (order.side === 'buy') {
-                      orderPairs[pairIndex].buyFilled = true;
-                      console.log(`注文ペア(${pairId})の買い注文が約定しました`);
-                    } else if (order.side === 'sell') {
-                      orderPairs[pairIndex].sellFilled = true;
-                      console.log(`注文ペア(${pairId})の売り注文が約定しました`);
-                    }
-                    
-                    if (orderPairs[pairIndex].buyFilled && orderPairs[pairIndex].sellFilled) {
-                      console.log(`注文ペア(${pairId})が完了しました`);
-                    }
-                  }
-                }
-              }
-              
-              if (order.side === 'buy') {
-                activeOrders.buy = null;
-                currentPositions++;
-              } else if (order.side === 'sell') {
-                activeOrders.sell = null;
-                currentPositions = Math.max(0, currentPositions - 1);
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`約定した注文の確認中にエラーが発生しました: ${symbol}`, error);
-          if (postErrorToDiscord) {
-            await postErrorToDiscord(`[MM] 約定した注文の確認中にエラーが発生しました: ${exchange.id} - ${symbol} - ${error.message}`);
+        // 完了した注文ペアのクリーンアップ
+        for (let i = orderPairs.length - 1; i >= 0; i--) {
+          const pair = orderPairs[i];
+          if (pair.buyFilled && pair.sellFilled) {
+            // 両方の注文が約定していれば、注文ペアを削除
+            console.log(`完了した注文ペア(${pair.id})をクリーンアップします`);
+            orderPairs.splice(i, 1);
           }
         }
         
