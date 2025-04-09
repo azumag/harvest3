@@ -345,7 +345,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
               const buyPrice = formattedBuyPrice * formattedAmount;
               const remainingAfterBuy = availableFunds - buyPrice;
               
-              // 買った後の残高が0.0001しか残らない場合、0.0002買うよう調整
+              // 買った後の残高が0.0001しか残らない場合、0.0011買うよう調整
               if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
                 adjustedAmount = formattedAmount + 0.0001;
                 console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
