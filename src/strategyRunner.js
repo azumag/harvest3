@@ -51,6 +51,24 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
       case 'HFT':
         params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, config.amount, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
         break;
+      case 'MARKET_MAKING':
+        params.push(exchange, symbol, strategyConfig.rangePeriod, strategyConfig.rangeThreshold, strategyConfig.spreadWidth, config.amount, {
+          ...options,
+          tradePercentage: config.tradePercentage,
+          updateTradeRecord: updateTradeRecordWithStrategy,
+          tradeRecords,
+          reorderInterval: strategyConfig.reorderInterval,
+          maxPositionCount: strategyConfig.maxPositionCount,
+          adjustmentValue: strategyConfig.adjustmentValue
+        });
+        break;
+      case 'INYO':
+        params.push(exchange, symbol, {
+          ...options,
+          updateTradeRecord: updateTradeRecordWithStrategy,
+          tradeRecords
+        });
+        break;
       // case 'SCALPING':
       //   params.push(exchange, symbol, options.spreadHistory || {}, { ...options, tradePercentage: config.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
       //   break;
@@ -210,6 +228,15 @@ async function runStrategies(exchange, symbol, options = {}) {
     if (config.strategies.SCALPING.enabled) {
       const result = await runStrategy('SCALPING', exchange, symbol, commonOptions);
       if (result) results.push(result);
+    }
+
+    // 陰陽戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
+    if (config.strategies.INYO.enabled && exchange.id !== 'bitflyer') {
+      const result = await runStrategy('INYO', exchange, symbol, commonOptions);
+      if (result) results.push(result);
+    } else if (config.strategies.INYO.enabled && exchange.id === 'bitflyer') {
+      // bitflyerの場合、戦略をスキップしログを出力
+      console.log(`陰陽戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
     }
     
     return results;

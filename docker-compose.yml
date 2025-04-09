@@ -14,3 +14,12 @@ services:
     volumes:
       - .:/usr/src/app
     command: npm run start-hft
+
+  mm:
+    build: .
+    container_name: market_making_bot
+    restart: always
+    volumes:
+      - .:/usr/src/app
+    command: npm run start-mm
+

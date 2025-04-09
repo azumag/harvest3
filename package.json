@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node bot.js",
     "start-hft": "node src/hftBot.js",
+    "start-mm": "node src/mmBot.js",
     "close-all": "node src/closeAllPositions.js",
     "close-bb": "node src/closeAllPositions.js --bitbank",
     "close-bf": "node src/closeAllPositions.js --bitflyer"

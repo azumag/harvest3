@@ -108,7 +108,22 @@ const config = {
     },
     SCALPING: {
       enabled: process.env.STRATEGY_SCALPING_ENABLED === 'false'
-    }
+    },
+    
+    // マーケットメイキング戦略
+    MARKET_MAKING: {
+      enabled: process.env.STRATEGY_MARKET_MAKING_ENABLED === 'true',
+      rangePeriod: 300000, // レンジ判定期間（ミリ秒）: 5分
+      rangeThreshold: 1.0, // レンジ判定閾値（%）: 1%
+      spreadWidth: 0.5, // スプレッド幅（%）: 0.5%
+      reorderInterval: 60000, // 再発注間隔（ミリ秒）: 1分
+      maxPositionCount: 4, // 最大ポジション数
+      adjustmentValue: 0 // 微調整値
+    },
+
+    INYO: {
+      enabled: process.env.STRATEGY_INYO_ENABLED === 'true'
+    },
   }
 };
 
