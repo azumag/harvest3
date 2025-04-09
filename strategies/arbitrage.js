@@ -233,12 +233,11 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 売却後の残高をチェック（INYOで買った分以上残るようにする）
         const remainingAfterSellA = availableAssetA - adjustedAmountA;
-        const minRequiredA = Math.max(0.0001, inyoBuyAmountA); // INYOで買った分と0.0001の大きい方
         
-        if (remainingAfterSellA < minRequiredA && availableAssetA > minRequiredA) {
+        if (remainingAfterSellA < inyoBuyAmountA && availableAssetA > inyoBuyAmountA) {
           // INYOで買った分を残して売る
           const originalAmountA = adjustedAmountA;
-          adjustedAmountA = parseFloat((availableAssetA - minRequiredA).toFixed(amountPrecision));
+          adjustedAmountA = parseFloat((availableAssetA - inyoBuyAmountA).toFixed(amountPrecision));
           console.log(`売却量を調整しました: ${exchangeAId} - ${symbol} - INYO買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
           if (postOrderToDiscord) {
             await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeAId} - ${symbol} - INYO買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
@@ -334,12 +333,11 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 売却後の残高をチェック（INYOで買った分以上残るようにする）
         const remainingAfterSellB = availableAssetB - adjustedAmountB;
-        const minRequiredB = Math.max(0.0001, inyoBuyAmountB); // INYOで買った分と0.0001の大きい方
         
-        if (remainingAfterSellB < minRequiredB && availableAssetB > minRequiredB) {
+        if (remainingAfterSellB < inyoBuyAmountB && availableAssetB > inyoBuyAmountB) {
           // INYOで買った分を残して売る
           const originalAmountB = adjustedAmountB;
-          adjustedAmountB = parseFloat((availableAssetB - minRequiredB).toFixed(amountPrecision));
+          adjustedAmountB = parseFloat((availableAssetB - inyoBuyAmountB).toFixed(amountPrecision));
           console.log(`売却量を調整しました: ${exchangeBId} - ${symbol} - INYO買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);
           if (postOrderToDiscord) {
             await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeBId} - ${symbol} - INYO買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);

@@ -59,8 +59,10 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
 
     // 設定を無視して、最小取引量を0.001に固定
     let baseMinTradeAmount = 0.001;
+
     if (symbol === 'BTC/JPY') {
       baseMinTradeAmount = 0.0001; // BTC/JPYの場合は最小取引量を0.0001に設定
+      return; // いったん BTC/JPYは除外
     }
 
     console.log(`レンジ相場向け受動的マーケットメイキング戦略を開始: ${symbol} - レンジ判定期間: ${rangePeriod}ms, 閾値: ${rangeThreshold}%, スプレッド幅: ${spreadWidth}%, 最小取引量: ${baseMinTradeAmount}`);
