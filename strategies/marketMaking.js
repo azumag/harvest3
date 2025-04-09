@@ -83,7 +83,7 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
     let lastOrderStatusCheck = 0;
 
     // 価格変動時に注文キャンセルする割合
-    const cancelThreshold = 0.03; // 3%の価格変動でキャンセル
+    const cancelThreshold = 0.02; // 3%の価格変動でキャンセル
 
     // マーケットメイキングループ
     while (true) {
@@ -191,29 +191,33 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 }
               } else if (pair.sellFilled) {
                 // 売りは約定済みで買いが残っている場合、価格差をチェック
-                const priceDifference = Math.abs(pair.buyOrder.price - currentPrice) / currentPrice;
-                if (priceDifference >= cancelThreshold) {
-                  try {
-                    console.log(`買い注文(${pair.buyOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
-                    await exchange.cancelOrder(pair.buyOrder.id, symbol);
-                    
-                    // 注文履歴を更新
-                    const historyOrderIndex = orderHistory.findIndex(
-                      historyOrder => historyOrder.orderId === pair.buyOrder.id
-                    );
-                    if (historyOrderIndex !== -1) {
-                      orderHistory[historyOrderIndex].processedCancel = true;
+                if (pair.buyOrder) { // 買い注文が存在するか確認
+                  const priceDifference = Math.abs(pair.buyOrder.price - currentPrice) / currentPrice;
+                  if (priceDifference >= cancelThreshold) {
+                    try {
+                      console.log(`買い注文(${pair.buyOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
+                      await exchange.cancelOrder(pair.buyOrder.id, symbol);
+                      
+                      // 注文履歴を更新
+                      const historyOrderIndex = orderHistory.findIndex(
+                        historyOrder => historyOrder.orderId === pair.buyOrder.id
+                      );
+                      if (historyOrderIndex !== -1) {
+                        orderHistory[historyOrderIndex].processedCancel = true;
+                      }
+                      
+                      // 注文状態をリセット
+                      pair.buyOrder = null;
+                      pair.buyFilled = false;
+                      activeOrders.buy = null;
+                    } catch (cancelError) {
+                      console.error(`買い注文(${pair.buyOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
                     }
-                    
-                    // 注文状態をリセット
-                    pair.buyOrder = null;
-                    pair.buyFilled = false;
-                    activeOrders.buy = null;
-                  } catch (cancelError) {
-                    console.error(`買い注文(${pair.buyOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
+                  } else {
+                    console.log(`買い注文(${pair.buyOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
                   }
                 } else {
-                  console.log(`買い注文(${pair.buyOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
+                  console.log(`買い注文が存在しませんが、売り注文は約定済みです - ペアID: ${pair.id}`);
                 }
               }
               
@@ -262,29 +266,33 @@ async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, range
                 }
               } else if (pair.buyFilled) {
                 // 買いは約定済みで売りが残っている場合、価格差をチェック
-                const priceDifference = Math.abs(pair.sellOrder.price - currentPrice) / currentPrice;
-                if (priceDifference >= cancelThreshold) {
-                  try {
-                    console.log(`売り注文(${pair.sellOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
-                    await exchange.cancelOrder(pair.sellOrder.id, symbol);
-                    
-                    // 注文履歴を更新
-                    const historyOrderIndex = orderHistory.findIndex(
-                      historyOrder => historyOrder.orderId === pair.sellOrder.id
-                    );
-                    if (historyOrderIndex !== -1) {
-                      orderHistory[historyOrderIndex].processedCancel = true;
+                if (pair.sellOrder) { // 売り注文が存在するか確認
+                  const priceDifference = Math.abs(pair.sellOrder.price - currentPrice) / currentPrice;
+                  if (priceDifference >= cancelThreshold) {
+                    try {
+                      console.log(`売り注文(${pair.sellOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
+                      await exchange.cancelOrder(pair.sellOrder.id, symbol);
+                      
+                      // 注文履歴を更新
+                      const historyOrderIndex = orderHistory.findIndex(
+                        historyOrder => historyOrder.orderId === pair.sellOrder.id
+                      );
+                      if (historyOrderIndex !== -1) {
+                        orderHistory[historyOrderIndex].processedCancel = true;
+                      }
+                      
+                      // 注文状態をリセット
+                      pair.sellOrder = null;
+                      pair.sellFilled = false;
+                      activeOrders.sell = null;
+                    } catch (cancelError) {
+                      console.error(`売り注文(${pair.sellOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
                     }
-                    
-                    // 注文状態をリセット
-                    pair.sellOrder = null;
-                    pair.sellFilled = false;
-                    activeOrders.sell = null;
-                  } catch (cancelError) {
-                    console.error(`売り注文(${pair.sellOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
+                  } else {
+                    console.log(`売り注文(${pair.sellOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
                   }
                 } else {
-                  console.log(`売り注文(${pair.sellOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
+                  console.log(`売り注文が存在しませんが、買い注文は約定済みです - ペアID: ${pair.id}`);
                 }
               }
               
