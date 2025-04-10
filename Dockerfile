@@ -36,7 +36,6 @@ COPY scripts/ ./scripts/
 COPY test/ ./test/
 COPY bot.js .
 COPY *.json ./
-COPY .env ./
 
 # コンテナが起動したらこのコマンドを実行
 CMD [ "npm", "start" ]

@@ -224,7 +224,7 @@ function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, strateg
     if (exchangeRecords && exchangeRecords[symbol]) {
       if (strategyKey && exchangeRecords[symbol][strategyKey]) {
         // 特定の戦略の買い量を取得（MMなど）
-        buyAmount = exchangeRecords[symbol][strategyKey].netPosition || 0;
+        buyAmount = exchangeRecords[symbol][strategyKey].buyAmount || 0;
       } else {
         // 通常の買い量を取得（全戦略の合計）
         buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;

@@ -12,6 +12,7 @@ services:
       - ./data:/usr/src/app/data  # データベースファイル用のボリューム
       - ./bot.js:/usr/src/app/bot.js
       - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
     command: npm start
 
   hft:
@@ -26,6 +27,7 @@ services:
       - ./data:/usr/src/app/data  # データベースファイル用のボリューム
       - ./bot.js:/usr/src/app/bot.js
       - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
     command: npm run start-hft
 
   mm:
@@ -40,6 +42,7 @@ services:
       - ./data:/usr/src/app/data  # データベースファイル用のボリューム
       - ./bot.js:/usr/src/app/bot.js
       - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
     command: npm run start-mm
 
   # test:
