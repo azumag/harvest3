@@ -98,7 +98,14 @@ const statements = {
     LIMIT 100
   `),
   getExchangeRecords: db.prepare('SELECT * FROM trade_records WHERE exchange_id = ?'),
-  getAllRecords: db.prepare('SELECT * FROM trade_records')
+  getAllRecords: db.prepare('SELECT * FROM trade_records'),
+  getLatestTradeAmount: db.prepare(`
+    SELECT th.amount FROM trade_history th
+    JOIN trade_records tr ON th.record_id = tr.id
+    WHERE tr.exchange_id = ? AND tr.symbol = ? AND tr.strategy_key = ?
+    ORDER BY th.timestamp DESC
+    LIMIT 1
+  `)
 };
 
 // トランザクション用関数 - 取引追加
@@ -166,9 +173,16 @@ function getTradeRecordsAsObject() {
   return result;
 }
 
+// 指定されたexchange、symbol、戦略の組で最新のtradeHistoryのamountを取得
+function getLatestTradeAmount(exchangeId, symbol, strategyKey) {
+  const result = statements.getLatestTradeAmount.get(exchangeId, symbol, strategyKey);
+  return result ? result.amount : 0;
+}
+
 module.exports = {
   db,
   statements,
   addTrade,
-  getTradeRecordsAsObject
+  getTradeRecordsAsObject,
+  getLatestTradeAmount
 };

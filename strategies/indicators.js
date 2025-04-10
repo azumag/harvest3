@@ -245,6 +245,16 @@ function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, strateg
  * @returns {number} - MMで買った量
  */
 function getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
+  // データベースからの最新の取引量を取得
+  const { getLatestTradeAmount } = require('../src/database');
+  const latestAmount = getLatestTradeAmount(exchange.id, symbol, 'MARKET_MAKING');
+  
+  // 最新の取引があれば、その量を返す
+  if (latestAmount > 0) {
+    return latestAmount;
+  }
+  
+  // なければ従来のロジックでtradeRecordsから取得
   return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'MARKET_MAKING');
 }
 
