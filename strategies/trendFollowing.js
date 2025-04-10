@@ -131,18 +131,18 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      // INYO戦略で買った額を取得
+      // MM戦略で買った額を取得
       const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
       
-      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+      // 売却後の残高をチェック（MMで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
       
       if (remainingAfterSell < inyoBuyAmount) {
-        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        // 残高がMM買い分以下になる場合は、売却量を調整する
         if (availableAsset > inyoBuyAmount) {
-          // INYOで買った分を残して売る
+          // MMで買った分を残して売る
           formattedAmount = parseFloat((availableAsset - inyoBuyAmount).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          console.log(`売却量を調整しました: ${symbol} - MM買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
           if (formattedAmount < minTradeAmount) {
             console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
             if (postOrderToDiscord) {
@@ -159,9 +159,9 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
             };
           }
         } else {
-          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          console.log(`売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           if (postOrderToDiscord) {
-            await postOrderToDiscord(`[MA戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+            await postOrderToDiscord(`[MA戦略] 売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           }
           return {
             strategy: 'MA Cross',
@@ -345,18 +345,18 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      // INYO戦略で買った額を取得
+      // MM戦略で買った額を取得
       const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
       
-      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+      // 売却後の残高をチェック（MMで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
       
       if (remainingAfterSell < inyoBuyAmount) {
-        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        // 残高がMM買い分以下になる場合は、売却量を調整する
         if (availableAsset > inyoBuyAmount) {
-          // INYOで買った分を残して売る
+          // MMで買った分を残して売る
           formattedAmount = parseFloat((availableAsset - inyoBuyAmount).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          console.log(`売却量を調整しました: ${symbol} - MM買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
           if (formattedAmount < minTradeAmount) {
             console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
             if (postOrderToDiscord) {
@@ -373,9 +373,9 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
             };
           }
         } else {
-          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          console.log(`売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           if (postOrderToDiscord) {
-            await postOrderToDiscord(`[MACD戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+            await postOrderToDiscord(`[MACD戦略] 売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           }
           return {
             strategy: 'MACD',
@@ -559,18 +559,18 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      // INYO戦略で買った額を取得
+      // MM戦略で買った額を取得
       const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
       
-      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+      // 売却後の残高をチェック（MMで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
       
       if (remainingAfterSell < inyoBuyAmount) {
-        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        // 残高がMM買い分以下になる場合は、売却量を調整する
         if (availableAsset > inyoBuyAmount) {
-          // INYOで買った分を残して売る
+          // MMで買った分を残して売る
           formattedAmount = parseFloat((availableAsset - inyoBuyAmount).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          console.log(`売却量を調整しました: ${symbol} - MM買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
           if (formattedAmount < minTradeAmount) {
             console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
             if (postOrderToDiscord) {
@@ -586,9 +586,9 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
             };
           }
         } else {
-          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          console.log(`売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           if (postOrderToDiscord) {
-            await postOrderToDiscord(`[RSI戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+            await postOrderToDiscord(`[RSI戦略] 売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           }
           return {
             strategy: 'RSI',
@@ -773,18 +773,18 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      // INYO戦略で買った額を取得
+      // MM戦略で買った額を取得
       const inyoBuyAmount = getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord);
       
-      // 売却後の残高をチェック（INYOで買った分以上残るようにする）
+      // 売却後の残高をチェック（MMで買った分以上残るようにする）
       const remainingAfterSell = availableAsset - formattedAmount;
       
       if (remainingAfterSell < inyoBuyAmount) {
-        // 残高がINYO買い分以下になる場合は、売却量を調整する
+        // 残高がMM買い分以下になる場合は、売却量を調整する
         if (availableAsset > inyoBuyAmount) {
-          // INYOで買った分を残して売る
+          // MMで買った分を残して売る
           formattedAmount = parseFloat((availableAsset - inyoBuyAmount).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${symbol} - INYO買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
+          console.log(`売却量を調整しました: ${symbol} - MM買い分: ${inyoBuyAmount}, 調整後の売却量: ${formattedAmount}`);
           if (formattedAmount < minTradeAmount) {
             console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
             if (postOrderToDiscord) {
@@ -803,9 +803,9 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
             };
           }
         } else {
-          console.log(`売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+          console.log(`売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           if (postOrderToDiscord) {
-            await postOrderToDiscord(`[BB戦略] 売却後の残高がINYO買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
+            await postOrderToDiscord(`[BB戦略] 売却後の残高がMM買い分(${inyoBuyAmount})以下になるため、売り注文をスキップ: ${exchange.id} - ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
           }
           return {
             strategy: 'Bollinger Bands',
