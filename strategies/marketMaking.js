@@ -1,609 +1,706 @@
-/**
- * レンジ相場向け受動的マーケットメイキング戦略
- */
+const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
 /**
- * レンジ相場向け受動的マーケットメイキング戦略
- * 価格が大きく変動していないレンジ相場において、買い指値注文と売り指値注文を同時に発注し、
- * 約定時にメイカー手数料を得ることを目的とした戦略
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} rangePeriod - レンジ判定期間（ミリ秒）
- * @param {Number} rangeThreshold - レンジ判定閾値（%）
- * @param {Number} spreadWidth - スプレッド幅（%）
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
+ * レンジ相場向け受動的マーケットメイキング戦略クラス
  */
-async function passiveMarketMaking(exchange, symbol, rangePeriod = 300000, rangeThreshold = 1.0, spreadWidth = 0.5, amount, options = {}) {
-  try {
-    // オプションから値を取得
-    const {
-      pricePrecision,
-      amountPrecision,
-      minTradeAmount,
-      postOrderToDiscord,
-      postErrorToDiscord,
-      bitflyerMinTradeAmounts,
-      reorderInterval = 60000, // 再発注間隔（ミリ秒）
-      maxPositionCount = 2, // 最大ポジション数
-      adjustmentValue = 0, // 微調整値
-      tradePercentage = 0.01, // 資金の何%を使用するか
-      updateTradeRecord,
-      tradeRecords
-    } = options;
+class MarketMakingStrategy {
+  /**
+   * コンストラクタ
+   * @param {Object} exchange - ccxtの取引所オブジェクト
+   * @param {String} symbol - 通貨ペア
+   * @param {Object} options - 戦略オプション
+   */
+  constructor(exchange, symbol, options = {}) {
+    this.exchange = exchange;
+    this.symbol = symbol;
+    this.market = this.exchange.markets[this.symbol];
+    if (!this.market) {
+      throw new Error(`マーケットデータが取得できませんでした: ${this.symbol}`);
+    }
 
-    // 注文履歴を保持する配列
-    const orderHistory = [];
-    // アクティブな注文を保持するオブジェクト
-    const activeOrders = {
-      buy: null,
-      sell: null
+    // オプションのデフォルト値とマージ
+    this.options = {
+      rangePeriod: 300000, // レンジ判定期間（ミリ秒）
+      rangeThreshold: 1.0, // レンジ判定閾値（%）
+      spreadWidth: 0.5, // スプレッド幅（%）
+      amount: undefined, // 取引量 (必須)
+      pricePrecision: this.market.precision?.price || 8,
+      amountPrecision: this.market.precision?.amount || 8,
+      postOrderToDiscord: null,
+      postErrorToDiscord: null,
+      reorderInterval: 60000, // 再発注間隔（ミリ秒）
+      maxPositionCount: 2, // 最大ポジション数
+      adjustmentValue: 0, // 微調整値
+      updateTradeRecord: null,
+      tradeRecords: {},
+      baseMinTradeAmount: this.market.limits?.amount?.min || 0.0001, // 取引所の最小取引量を使用
+      priceHistoryUpdateInterval: 10000, // 価格履歴の更新間隔（ミリ秒）
+      orderStatusCheckInterval: 30000, // 注文状態の直接確認間隔（ミリ秒）
+      cancelThreshold: 0.01, // 1%の価格変動でキャンセル
+      loopInterval: 1000, // メインループの間隔（ミリ秒）
+      errorRetryInterval: 5000, // エラー発生時のリトライ間隔（ミリ秒）
+      ...options,
     };
-    // 注文ペアを管理するための配列
-    const orderPairs = [];
-    // 最後の注文時間
-    let lastOrderTime = 0;
-    // ポジション管理
-    let currentPositions = 0;
 
-    // 現在の市場情報を取得
-    const market = exchange.markets[symbol];
-    if (!market) {
-      throw new Error(`マーケットデータが取得できませんでした: ${symbol}`);
+    // BTC/JPY 特有の最小取引量を設定 (必要であれば)
+    if (this.symbol === 'BTC/JPY') {
+      this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.0001);
+    } else {
+      // 他のは0.001をデフォルトに
+      this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.001);
     }
 
-    // 最小取引量を取得
-    // const baseMinTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts && bitflyerMinTradeAmounts[symbol])
-    //   ? bitflyerMinTradeAmounts[symbol]
-    //   : (market.limits?.amount?.min || minTradeAmount || 0.0001);
-
-    // 設定を無視して、最小取引量を0.001に固定
-    let baseMinTradeAmount = 0.001;
-
-    if (symbol === 'BTC/JPY') {
-      baseMinTradeAmount = 0.0001; // BTC/JPYの場合は最小取引量を0.0001に設定
-      // return; // いったん BTC/JPYは除外
+    if (this.options.amount === undefined) {
+      throw new Error('取引量(amount)オプションは必須です。');
     }
 
-    console.log(`レンジ相場向け受動的マーケットメイキング戦略を開始: ${symbol} - レンジ判定期間: ${rangePeriod}ms, 閾値: ${rangeThreshold}%, スプレッド幅: ${spreadWidth}%, 最小取引量: ${baseMinTradeAmount}`);
-    if (postOrderToDiscord) {
-      await postOrderToDiscord(`[MM] レンジ相場向け受動的マーケットメイキング戦略を開始: ${exchange.id} - ${symbol} - レンジ判定期間: ${rangePeriod}ms, 閾値: ${rangeThreshold}%, スプレッド幅: ${spreadWidth}%, 最小取引量: ${baseMinTradeAmount}`);
+    // 状態変数
+    this.orderHistory = [];
+    this.activeOrders = { buy: null, sell: null };
+    this.orderPairs = [];
+    this.priceHistory = [];
+    this.lastPriceHistoryUpdate = 0;
+    this.lastOrderStatusCheck = 0;
+    this.lastOrderTime = 0;
+    this.currentPositions = 0; // ポジション管理 (より正確な管理が必要な場合は別途実装)
+    this.isRunning = false;
+
+    this._validateOptions();
+  }
+
+  /**
+   * オプションのバリデーション
+   * @private
+   */
+  _validateOptions() {
+    if (typeof this.options.amount !== 'number' || this.options.amount <= 0) {
+      throw new Error('取引量(amount)は正の数値である必要があります。');
+    }
+    // 他のオプションのバリデーションもここに追加可能
+  }
+
+  /**
+   * Discordに注文情報を投稿する (オプション)
+   * @private
+   * @param {String} message - 投稿メッセージ
+   */
+  async _postOrder(message) {
+    if (this.options.postOrderToDiscord) {
+      try {
+        await this.options.postOrderToDiscord(`[MM] ${this.exchange.id} - ${this.symbol}: ${message}`);
+      } catch (error) {
+        console.error('Discordへの注文投稿中にエラー:', error);
+      }
+    }
+  }
+
+  /**
+   * Discordにエラー情報を投稿する (オプション)
+   * @private
+   * @param {String} message - 投稿メッセージ
+   * @param {Error} [error=null] - エラーオブジェクト
+   */
+  async _postError(message, error = null) {
+    const errorMessage = error ? `${message} - ${error.message}` : message;
+    console.error(`[MM Error] ${this.exchange.id} - ${this.symbol}: ${errorMessage}`, error || '');
+    if (this.options.postErrorToDiscord) {
+      try {
+        await this.options.postErrorToDiscord(`[MM Error] ${this.exchange.id} - ${this.symbol}: ${errorMessage}`);
+      } catch (discordError) {
+        console.error('Discordへのエラー投稿中にエラー:', discordError);
+      }
+    }
+  }
+
+  /**
+   * 取引記録を更新する (オプション)
+   * @private
+   * @param {String} side - 'buy' または 'sell'
+   * @param {Number} price - 価格
+   * @param {Number} amount - 量
+   */
+  _updateTradeRecord(side, price, amount) {
+    if (this.options.updateTradeRecord) {
+      try {
+        this.options.updateTradeRecord(this.exchange.id, this.symbol, amount, price, side);
+      } catch (error) {
+        console.error('取引記録の更新中にエラー:', error);
+      }
+    }
+    // ポジション数の簡易更新 (より正確な管理が必要な場合あり)
+    if (side === 'buy') {
+      this.currentPositions += amount;
+    } else if (side === 'sell') {
+      this.currentPositions -= amount;
+    }
+  }
+
+  /**
+   * 価格履歴を更新する
+   * @private
+   */
+  async _updatePriceHistory() {
+    const now = Date.now();
+    if (now - this.lastPriceHistoryUpdate >= this.options.priceHistoryUpdateInterval) {
+      try {
+        const ticker = await this.exchange.fetchTicker(this.symbol);
+        if (ticker && ticker.last) {
+          this.priceHistory.push({ time: now, price: ticker.last });
+          // 古い履歴を削除
+          while (this.priceHistory.length > 0 && now - this.priceHistory[0].time > this.options.rangePeriod) {
+            this.priceHistory.shift();
+          }
+          this.lastPriceHistoryUpdate = now;
+        }
+      } catch (error) {
+        await this._postError('価格履歴の更新中にエラーが発生しました', error);
+      }
+    }
+  }
+
+  /**
+   * レンジ相場かどうかを判定する
+   * @private
+   * @returns {Boolean} レンジ相場であればtrue
+   */
+  _isRangeMarket() {
+    if (this.priceHistory.length < 2) {
+      console.log(`価格履歴が不足しています: ${this.symbol} - ${this.priceHistory.length}件`);
+      return false; // 価格履歴が少ない場合はレンジとみなさない（または別の判断）
+    }
+    const prices = this.priceHistory.map(item => item.price);
+    const highPrice = Math.max(...prices);
+    const lowPrice = Math.min(...prices);
+    // ゼロ除算を避ける
+    if (lowPrice <= 0) return false;
+    const priceRange = ((highPrice - lowPrice) / lowPrice) * 100;
+    const isRange = priceRange <= this.options.rangeThreshold;
+
+    if (isRange) {
+      console.log(`レンジ相場を検出: ${this.symbol} - 価格変動: ${priceRange.toFixed(2)}% (閾値: ${this.options.rangeThreshold}%)`);
+    } else {
+      console.log(`レンジ相場ではありません: ${this.symbol} - 価格変動: ${priceRange.toFixed(2)}% (閾値: ${this.options.rangeThreshold}%)`);
+    }
+    return isRange;
+  }
+
+  /**
+   * 注文ステータスをチェックし、必要に応じて更新・キャンセルする
+   * @private
+   */
+  async _checkAndUpdateOrders() {
+    const now = Date.now();
+    if (now - this.lastOrderStatusCheck >= this.options.orderStatusCheckInterval) {
+      try {
+        const openOrders = await this.exchange.fetchOpenOrders(this.symbol);
+        const activeOrderIds = openOrders.map(order => order.id);
+        const ticker = await this.exchange.fetchTicker(this.symbol);
+        const currentPrice = ticker.last;
+
+        console.log(`${this.symbol}の注文状態チェック - アクティブな注文数: ${openOrders.length}, 現在価格: ${currentPrice}`);
+
+        for (let i = this.orderPairs.length - 1; i >= 0; i--) {
+          const pair = this.orderPairs[i];
+          await this._checkSingleOrderStatus(pair, 'buy', activeOrderIds, currentPrice);
+          await this._checkSingleOrderStatus(pair, 'sell', activeOrderIds, currentPrice);
+
+          if (pair.buyFilled && pair.sellFilled) {
+            console.log(`注文ペア(${pair.id})が完了しました - 次回のクリーンアップ時に削除されます`);
+          }
+        }
+        this.lastOrderStatusCheck = now;
+      } catch (error) {
+        await this._postError('注文状態の定期確認中にエラーが発生しました', error);
+      }
+    }
+  }
+
+  /**
+   * 個別の注文ステータスを確認・処理する
+   * @private
+   * @param {Object} pair - 注文ペアオブジェクト
+   * @param {String} side - 'buy' または 'sell'
+   * @param {Array<String>} activeOrderIds - 現在アクティブな注文IDのリスト
+   * @param {Number} currentPrice - 現在価格
+   */
+  async _checkSingleOrderStatus(pair, side, activeOrderIds, currentPrice) {
+    const isBuySide = side === 'buy';
+    const orderKey = isBuySide ? 'buyOrder' : 'sellOrder';
+    const filledKey = isBuySide ? 'buyFilled' : 'sellFilled';
+    const oppositeFilledKey = isBuySide ? 'sellFilled' : 'buyFilled';
+
+    if (!pair[orderKey] || pair[filledKey]) {
+      return; // 注文がないか、既に約定済み
     }
 
-    // 価格履歴を保持する配列
-    const priceHistory = [];
-    // 最後の価格履歴更新時間
-    let lastPriceHistoryUpdate = 0;
-    // 価格履歴の更新間隔（ミリ秒）
-    const priceHistoryUpdateInterval = 10000; // 10秒ごとに更新
+    const order = pair[orderKey];
 
-    // 注文状態の直接確認間隔（ミリ秒）
-    const orderStatusCheckInterval = 30000; // 30秒ごとに確認
-    // 最後の注文状態確認時間
-    let lastOrderStatusCheck = 0;
+    // 注文がアクティブリストにない場合 -> 約定 or キャンセル済み or 存在しない
+    if (!activeOrderIds.includes(order.id)) {
+      try {
+        // fetchOrderが利用可能か確認
+        if (this.exchange.has && this.exchange.has['fetchOrder']) {
+            const orderStatus = await this.exchange.fetchOrder(order.id, this.symbol);
+            if (orderStatus.status === 'closed' || orderStatus.status === 'filled') {
+                console.log(`${side}注文(${order.id})が約定しました (個別確認)`);
+                pair[filledKey] = true;
+                // 約定した場合、ポジション数を更新 (取引記録更新時に行われている場合は不要かも)
+                // this._updatePositionOnFill(side, order.amount);
+                return; // 約定したので以降の処理は不要
+            }
+            // closed/filled 以外 (canceledなど) の場合もアクティブではないのでリセットへ
+        } else {
+            // fetchOrder が使えない場合は、アクティブでない＝約定したとみなすか、エラーとするか要検討
+            // ここでは一旦、約定した可能性が高いとしてマークする（より堅牢な確認が必要）
+            // 約定扱いをやめ、下のキャンセル処理に進むように修正
+            console.warn(`fetchOrderが利用不可のため、${side}注文(${order.id})の状態を確定できません。キャンセル扱いとして処理します。`);
+            // pair[filledKey] = true; // 約定扱いはしない
+            // return; // return せずに下のキャンセル処理に進む
+        }
+      } catch (error) {
+        // fetchOrderでエラーが発生した場合 (例: 注文が存在しない)
+        // ネットワークエラー等の可能性もあるため、単純にキャンセル扱いにするのは危険かもしれない
+        // ここではログを出力し、キャンセル扱いとする
+        console.log(`${side}注文(${order.id})のステータス確認中にエラー、または注文が存在しません: ${error.message}`);
+      }
 
-    // 価格変動時に注文キャンセルする割合
-    const cancelThreshold = 0.02; // 3%の価格変動でキャンセル
+      // 約定していなかった場合 (キャンセルされたか、エラーで確認できなかった)
+      console.log(`${side}注文(${order.id})はアクティブではありません - キャンセルまたは不明として処理`);
+      this._updateOrderHistory(order.id, true); // 処理済みキャンセルとしてマーク
+      this._resetOrderState(pair, side);
+      return;
+    }
 
-    // マーケットメイキングループ
-    while (true) {
+    // 注文がアクティブリストにある場合
+    // 反対側の注文が約定済みかチェック
+    if (pair[oppositeFilledKey]) {
+      const priceDifference = Math.abs(order.price - currentPrice) / currentPrice;
+      if (priceDifference >= this.options.cancelThreshold) {
+        console.log(`${side}注文(${order.id})は価格差が大きいためキャンセルします - 注文価格: ${order.price}, 現在価格: ${currentPrice}, 差: ${(priceDifference * 100).toFixed(2)}%`);
+        try {
+          await this.exchange.cancelOrder(order.id, this.symbol);
+          this._updateOrderHistory(order.id, true); // キャンセル済みとしてマーク
+          this._resetOrderState(pair, side);
+        } catch (cancelError) {
+          // キャンセル失敗時の処理 (APIエラー、既に約定など)
+          // すでに約定していたケースを考慮し、再度ステータスを確認するなどの処理が必要な場合がある
+          await this._postError(`${side}注文(${order.id})のキャンセル中にエラーが発生しました`, cancelError);
+          // キャンセル失敗した場合でも、次のチェックで再度試行されるか、約定が確認される
+        }
+      } else {
+        console.log(`${side}注文(${order.id})は価格差が許容範囲内です - 注文価格: ${order.price}, 現在価格: ${currentPrice}, 差: ${(priceDifference * 100).toFixed(2)}%`);
+      }
+    }
+    // 両方の注文がアクティブな場合は何もしない
+  }
+
+
+  /**
+   * 注文履歴を更新する
+   * @private
+   * @param {String} orderId - 注文ID
+   * @param {Boolean} processedCancel - キャンセル処理済みフラグ
+   */
+  _updateOrderHistory(orderId, processedCancel = false) {
+    const index = this.orderHistory.findIndex(h => h.orderId === orderId);
+    if (index !== -1) {
+      this.orderHistory[index].processedCancel = processedCancel;
+    }
+  }
+
+  /**
+   * 注文ペアの状態をリセットする
+   * @private
+   * @param {Object} pair - 注文ペアオブジェクト
+   * @param {String} side - 'buy' または 'sell'
+   */
+  _resetOrderState(pair, side) {
+    if (side === 'buy') {
+      pair.buyOrder = null;
+      pair.buyFilled = false;
+      if (this.activeOrders.buy && pair.buyOrder && this.activeOrders.buy.id === pair.buyOrder.id) { // nullチェック追加
+        this.activeOrders.buy = null;
+      }
+    } else {
+      pair.sellOrder = null;
+      pair.sellFilled = false;
+      if (this.activeOrders.sell && pair.sellOrder && this.activeOrders.sell.id === pair.sellOrder.id) { // nullチェック追加
+        this.activeOrders.sell = null;
+      }
+    }
+  }
+
+  /**
+   * 完了した注文ペアをクリーンアップする
+   * @private
+   */
+  _cleanupCompletedPairs() {
+    let cleanedCount = 0;
+    for (let i = this.orderPairs.length - 1; i >= 0; i--) {
+      const pair = this.orderPairs[i];
+      if (pair.buyFilled && pair.sellFilled) {
+        console.log(`完了した注文ペア(${pair.id})をクリーンアップします`);
+        // 対応するアクティブ注文情報をクリア
+        if (this.activeOrders.buy && pair.buyOrder && this.activeOrders.buy.id === pair.buyOrder.id) {
+            this.activeOrders.buy = null;
+        }
+        if (this.activeOrders.sell && pair.sellOrder && this.activeOrders.sell.id === pair.sellOrder.id) {
+            this.activeOrders.sell = null;
+        }
+        this.orderPairs.splice(i, 1);
+        cleanedCount++;
+      }
+    }
+    if (cleanedCount > 0) {
+        console.log(`${cleanedCount}個の完了したペアをクリーンアップしました`);
+    }
+  }
+
+  /**
+   * 注文を発注または更新するメインロジック
+   * @private
+   */
+  async _placeOrUpdateOrders() {
+    try {
+      const orderBook = await this.exchange.fetchOrderBook(this.symbol);
+      const bestBid = orderBook.bids.length > 0 ? orderBook.bids[0][0] : null;
+      const bestAsk = orderBook.asks.length > 0 ? orderBook.asks[0][0] : null;
+
+      if (!bestBid || !bestAsk) {
+        console.log(`注文ブックが空、または不完全です: ${this.symbol}`);
+        return;
+      }
+
+      const midPrice = (bestBid + bestAsk) / 2;
+      const halfSpread = (this.options.spreadWidth / 100) / 2;
+      const buyPrice = midPrice * (1 - halfSpread) - this.options.adjustmentValue;
+      const sellPrice = midPrice * (1 + halfSpread) + this.options.adjustmentValue;
+
+      const formattedBuyPrice = parseFloat(buyPrice.toFixed(this.options.pricePrecision));
+      const formattedSellPrice = parseFloat(sellPrice.toFixed(this.options.pricePrecision));
+
+      // 取引量を決定 (固定量を使用)
+      let tradeAmount = parseFloat(this.options.amount.toFixed(this.options.amountPrecision));
+      tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount); // 最小取引量を下回らないように
+
+      const balance = await this.exchange.fetchBalance();
+      const baseCurrency = this.market.base; // 例: BTC
+      const quoteCurrency = this.market.quote; // 例: JPY
+      const availableFunds = balance.free[quoteCurrency] ?? 0; // 買い注文用資金
+      const availableAsset = balance.free[baseCurrency] ?? 0; // 売り注文用資産
+
+      // 現在のポジション数を更新 (fetchBalanceの結果を元に再計算する方が正確かも)
+      // this.currentPositions = availableAsset; // 例: 単純に利用可能資産をポジションとする場合
+
+      const now = Date.now();
+
+      // --- 注文ロジック ---
+      // 既存の注文ペアの状態を分析
+      const pendingBuy = this.orderPairs.some(p => p.buyOrder && !p.buyFilled);
+      const pendingSell = this.orderPairs.some(p => p.sellOrder && !p.sellFilled);
+      const noPendingOrders = !pendingBuy && !pendingSell; // 未注文状態
+      const hasCompletedPair = this.orderPairs.some(p => p.buyFilled && p.sellFilled); // クリーンアップ対象
+
+      // クリーンアップが必要な場合は新規注文を見送る (メインループで先に実行されるはずだが念のため)
+      if (hasCompletedPair) {
+          console.log("完了したペアが存在するため、クリーンアップを優先し新規注文を見送ります。");
+          // await this._cleanupCompletedPairs(); // メインループで実行されるのでここでは不要
+          return;
+      }
+
+      // 新規注文を発注する条件を判定
+      if (noPendingOrders) {
+          // 1. 未約定の注文が全くない場合: 両方の注文を試みる
+          console.log("未約定の注文がないため、新規の買い注文と売り注文を試みます。");
+          if (availableFunds >= formattedBuyPrice * tradeAmount) {
+              await this._executePlaceOrder('buy', formattedBuyPrice, tradeAmount, now);
+              this.lastOrderTime = now; // 注文試行時に更新
+          } else {
+              console.log(`新規Buyの条件未達(資金不足): 資金=${availableFunds}/${formattedBuyPrice * tradeAmount}`);
+          }
+          if (availableAsset >= tradeAmount) {
+              await this._executePlaceOrder('sell', formattedSellPrice, tradeAmount, now);
+              this.lastOrderTime = now; // 注文試行時に更新
+          } else {
+              console.log(`新規Sellの条件未達(資産不足): 資産=${availableAsset}/${tradeAmount}`);
+          }
+      } else if (!pendingBuy && pendingSell) {
+          // 2. 未約定の買い注文がなく、未約定の売り注文がある場合: 買い注文のみを試みる
+          console.log("未約定の買い注文がないため、新規の買い注文のみを試みます。");
+          if (availableFunds >= formattedBuyPrice * tradeAmount) {
+              await this._executePlaceOrder('buy', formattedBuyPrice, tradeAmount, now);
+              this.lastOrderTime = now;
+          } else {
+              console.log(`新規Buyの条件未達(資金不足): 資金=${availableFunds}/${formattedBuyPrice * tradeAmount}`);
+          }
+      } else if (pendingBuy && !pendingSell) {
+          // 3. 未約定の売り注文がなく、未約定の買い注文がある場合: 売り注文のみを試みる
+          console.log("未約定の売り注文がないため、新規の売り注文のみを試みます。");
+          if (availableAsset >= tradeAmount) {
+              await this._executePlaceOrder('sell', formattedSellPrice, tradeAmount, now);
+              this.lastOrderTime = now;
+          } else {
+              console.log(`新規Sellの条件未達(資産不足): 資産=${availableAsset}/${tradeAmount}`);
+          }
+      } else {
+          // 4. 両方の未約定注文が存在する場合: 何もしない
+          console.log("買い注文と売り注文が両方ペンディング中のため、新規注文は行いません。");
+      }
+
+    } catch (error) {
+      await this._postError('注文発注/更新処理中にエラーが発生しました', error);
+    }
+  }
+
+  /**
+   * 実際に注文を発注する内部メソッド
+   * @private
+   * @param {String} side - 'buy' または 'sell'
+   * @param {Number} price - 価格
+   * @param {Number} amount - 量
+   * @param {Number} timestamp - 発注時刻
+   */
+  async _executePlaceOrder(side, price, amount, timestamp) {
+    try {
+      let order;
+      const newPair = { // 新しいペアを作成（または既存のペアに追加）
+          id: Date.now().toString() + Math.random().toString(16).slice(2), // よりユニークなID
+          buyOrder: null,
+          sellOrder: null,
+          buyFilled: false,
+          sellFilled: false,
+          amount: amount // このペアでの取引量
+      };
+
+      if (side === 'buy') {
+        console.log(`-- 買い注文を発注します: ${this.symbol} - 価格: ${price}, 数量: ${amount}`);
+        order = await this.exchange.createLimitBuyOrder(this.symbol, amount, price);
+        this.activeOrders.buy = order;
+        newPair.buyOrder = order;
+        console.log(`-- 買い注文成功: ID ${order.id}, ペアID: ${newPair.id}`);
+      } else { // side === 'sell'
+        console.log(`-- 売り注文を発注します: ${this.symbol} - 価格: ${price}, 数量: ${amount}`);
+        order = await this.exchange.createLimitSellOrder(this.symbol, amount, price);
+        this.activeOrders.sell = order;
+        newPair.sellOrder = order;
+        console.log(`-- 売り注文成功: ID ${order.id}, ペアID: ${newPair.id}`);
+      }
+
+      this._updateTradeRecord(side, price, amount); // 取引記録更新
+      this.orderHistory.push({
+        time: timestamp,
+        type: side,
+        price: price,
+        amount: amount,
+        orderId: order.id,
+        pairId: newPair.id // どのペアに属するか記録
+      });
+
+      // 既存のペアを探し、片方の注文がすでにあればそこに追加、なければ新しいペアとして追加
+      let existingPair = null;
+      if (side === 'buy' && this.activeOrders.sell) {
+          existingPair = this.orderPairs.find(p => p.sellOrder && p.sellOrder.id === this.activeOrders.sell.id && !p.buyOrder);
+      } else if (side === 'sell' && this.activeOrders.buy) {
+          existingPair = this.orderPairs.find(p => p.buyOrder && p.buyOrder.id === this.activeOrders.buy.id && !p.sellOrder);
+      }
+
+      if (existingPair) {
+          console.log(`既存の注文ペア(${existingPair.id})に${side}注文(${order.id})を追加します。`);
+          if (side === 'buy') existingPair.buyOrder = order;
+          else existingPair.sellOrder = order;
+          existingPair.amount = amount; // 取引量を更新（ペアで統一する場合）
+      } else {
+          console.log(`新しい注文ペア(${newPair.id})を作成し、${side}注文(${order.id})を追加します。`);
+          this.orderPairs.push(newPair);
+      }
+
+
+      await this._postOrder(`${side}注文発注: 価格 ${price}, 量 ${amount}, ID ${order.id}`);
+
+    } catch (error) {
+      await this._postError(`${side}注文の発注中にエラーが発生しました`, error);
+      // エラー発生時に activeOrders をクリアすべきか検討
+      if (side === 'buy') this.activeOrders.buy = null;
+      else this.activeOrders.sell = null;
+    }
+  }
+
+
+  /**
+   * 戦略のメインループを開始する
+   */
+  async start() {
+    if (this.isRunning) {
+      console.log('戦略は既に実行中です。');
+      return;
+    }
+    this.isRunning = true;
+    console.log(`レンジ相場向け受動的マーケットメイキング戦略を開始: ${this.symbol}`);
+    await this._postOrder(`戦略開始 - レンジ期間: ${this.options.rangePeriod}ms, 閾値: ${this.options.rangeThreshold}%, スプレッド: ${this.options.spreadWidth}%, 取引量: ${this.options.amount}`);
+
+    while (this.isRunning) {
       try {
         const now = Date.now();
 
-        // 価格履歴を更新
-        if (now - lastPriceHistoryUpdate >= priceHistoryUpdateInterval) {
-          try {
-            const ticker = await exchange.fetchTicker(symbol);
-            if (ticker && ticker.last) {
-              priceHistory.push({
-                time: now,
-                price: ticker.last
-              });
-              
-              // レンジ判定期間を超える古い価格履歴を削除
-              while (priceHistory.length > 0 && now - priceHistory[0].time > rangePeriod) {
-                priceHistory.shift();
-              }
-              
-              lastPriceHistoryUpdate = now;
-            }
-          } catch (error) {
-            console.error(`価格履歴の更新中にエラーが発生しました: ${symbol}`, error);
-            if (postErrorToDiscord) {
-              await postErrorToDiscord(`[MM] 価格履歴の更新中にエラーが発生しました: ${exchange.id} - ${symbol} - ${error.message}`);
-            }
-          }
-        }
+        // 1. 価格履歴の更新
+        await this._updatePriceHistory();
 
-        // レンジ相場の判定
-        let isRangeMarket = false;
-        if (priceHistory.length >= 2) {
-          const prices = priceHistory.map(item => item.price);
-          const highPrice = Math.max(...prices);
-          const lowPrice = Math.min(...prices);
-          const priceRange = ((highPrice - lowPrice) / lowPrice) * 100;
-          
-          isRangeMarket = priceRange <= rangeThreshold;
-          
-          if (isRangeMarket) {
-            console.log(`レンジ相場を検出: ${symbol} - 価格変動: ${priceRange.toFixed(2)}% (閾値: ${rangeThreshold}%)`);
-          } else {
-            console.log(`レンジ相場ではありません: ${symbol} - 価格変動: ${priceRange.toFixed(2)}% (閾値: ${rangeThreshold}%)`);
-          }
+        // 2. レンジ相場の判定
+        const isRange = this._isRangeMarket();
+
+        // 3. 注文ステータスの確認と更新
+        await this._checkAndUpdateOrders();
+
+        // 4. 完了した注文ペアのクリーンアップ
+        await this._cleanupCompletedPairs(); // 注文発注前にクリーンアップ
+
+        // 5. 注文の発注/更新ロジック
+        // レンジ相場であるか、または最後の注文から一定時間経過した場合
+        if (isRange || (now - this.lastOrderTime >= this.options.reorderInterval)) {
+          await this._placeOrUpdateOrders();
         } else {
-          console.log(`価格履歴が不足しています: ${symbol} - ${priceHistory.length}件`);
+          console.log(`注文条件未達: レンジ相場(${isRange}), 最終注文からの経過時間(${now - this.lastOrderTime}ms / ${this.options.reorderInterval}ms)`);
         }
 
-        // 注文ステータスの直接確認（定期的に実行）
-        if (now - lastOrderStatusCheck >= orderStatusCheckInterval) {
-          try {
-            // アクティブな注文リストを取得
-            const openOrders = await exchange.fetchOpenOrders(symbol);
-            const activeOrderIds = openOrders.map(order => order.id);
-            
-            // 現在の価格を取得（キャンセル判断に使用）
-            const ticker = await exchange.fetchTicker(symbol);
-            const currentPrice = ticker.last;
-            
-            console.log(`${symbol}の注文状態チェック - アクティブな注文数: ${openOrders.length}, 現在価格: ${currentPrice}`);
-            
-            // 各注文ペアの状態を確認
-            for (let i = orderPairs.length - 1; i >= 0; i--) {
-              const pair = orderPairs[i];
-              
-              // 買い注文のステータスチェック
-              if (pair.buyOrder && !pair.buyFilled) {
-                // 買い注文がアクティブリストにない場合
-                if (!activeOrderIds.includes(pair.buyOrder.id)) {
-                  // 個別に注文状態を確認（サポートされている場合）
-                  try {
-                    if (exchange.has && exchange.has['fetchOrder']) {
-                      const orderStatus = await exchange.fetchOrder(pair.buyOrder.id, symbol);
-                      
-                      // 正常に約定した場合
-                      if (orderStatus.status === 'closed' || orderStatus.status === 'filled') {
-                        console.log(`買い注文(${pair.buyOrder.id})が約定しました - 個別確認`);
-                        pair.buyFilled = true;
-                        continue;
-                      }
-                    }
-                  } catch (orderCheckError) {
-                    // エラーが発生した場合も注文が存在しない可能性が高い
-                    console.log(`買い注文(${pair.buyOrder.id})のステータス確認中にエラー: ${orderCheckError.message}`);
-                  }
-                  
-                  // 注文がキャンセルされたか存在しない場合
-                  console.log(`買い注文(${pair.buyOrder.id})はアクティブではありません - キャンセルとして処理`);
-                  
-                  // 注文履歴を更新
-                  const historyOrderIndex = orderHistory.findIndex(
-                    historyOrder => historyOrder.orderId === pair.buyOrder.id
-                  );
-                  if (historyOrderIndex !== -1) {
-                    orderHistory[historyOrderIndex].processedCancel = true;
-                  }
-                  
-                  // ペアを削除せず、注文状態だけをリセット
-                  console.log(`買い注文がキャンセルされました。次回の実行時に新しい買い注文を発注します - ペア(${pair.id})`);
-                  pair.buyOrder = null;
-                  pair.buyFilled = false;
-                  activeOrders.buy = null;
-                }
-              } else if (pair.sellFilled) {
-                // 売りは約定済みで買いが残っている場合、価格差をチェック
-                if (pair.buyOrder) { // 買い注文が存在するか確認
-                  const priceDifference = Math.abs(pair.buyOrder.price - currentPrice) / currentPrice;
-                  if (priceDifference >= cancelThreshold) {
-                    try {
-                      console.log(`買い注文(${pair.buyOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
-                      await exchange.cancelOrder(pair.buyOrder.id, symbol);
-                      
-                      // 注文履歴を更新
-                      const historyOrderIndex = orderHistory.findIndex(
-                        historyOrder => historyOrder.orderId === pair.buyOrder.id
-                      );
-                      if (historyOrderIndex !== -1) {
-                        orderHistory[historyOrderIndex].processedCancel = true;
-                      }
-                      
-                      // 注文状態をリセット
-                      pair.buyOrder = null;
-                      pair.buyFilled = false;
-                      activeOrders.buy = null;
-                    } catch (cancelError) {
-                      console.error(`買い注文(${pair.buyOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
-                    }
-                  } else {
-                    console.log(`買い注文(${pair.buyOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.buyOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
-                  }
-                } else {
-                  console.log(`買い注文が存在しませんが、売り注文は約定済みです - ペアID: ${pair.id}`);
-                }
-              }
-              
-              // 売り注文のステータスチェック
-              if (pair.sellOrder && !pair.sellFilled) {
-                // 売り注文がアクティブリストにない場合
-                if (!activeOrderIds.includes(pair.sellOrder.id)) {
-                  // 個別に注文状態を確認（サポートされている場合）
-                  try {
-                    if (exchange.has && exchange.has['fetchOrder']) {
-                      const orderStatus = await exchange.fetchOrder(pair.sellOrder.id, symbol);
-                      
-                      // 正常に約定した場合
-                      if (orderStatus.status === 'closed' || orderStatus.status === 'filled') {
-                        console.log(`売り注文(${pair.sellOrder.id})が約定しました - 個別確認`);
-                        pair.sellFilled = true;
-                        continue;
-                      }
-                    }
-                  } catch (orderCheckError) {
-                    // エラーが発生した場合も注文が存在しない可能性が高い
-                    console.log(`売り注文(${pair.sellOrder.id})のステータス確認中にエラー: ${orderCheckError.message}`);
-                  }
-                  
-                  // 注文がキャンセルされたか存在しない場合
-                  console.log(`売り注文(${pair.sellOrder.id})はアクティブではありません - キャンセルとして処理`);
-                  
-                  // 注文履歴を更新
-                  const historyOrderIndex = orderHistory.findIndex(
-                    historyOrder => historyOrder.orderId === pair.sellOrder.id
-                  );
-                  if (historyOrderIndex !== -1) {
-                    orderHistory[historyOrderIndex].processedCancel = true;
-                  }
-                  
-                  // 買い注文の状態に関わらず、売り注文状態だけをリセット
-                  if (pair.buyFilled) {
-                    console.log(`買い注文が約定済みで売り注文がキャンセルされました。次回の実行時に新しい売り注文を発注します - ペア(${pair.id})`);
-                  } else {
-                    console.log(`売り注文がキャンセルされました。買い注文も未約定ですが、ペアを維持します - ペア(${pair.id})`);
-                  }
-                  pair.sellOrder = null;
-                  pair.sellFilled = false;
-                  
-                  activeOrders.sell = null;
-                }
-              } else if (pair.buyFilled) {
-                // 買いは約定済みで売りが残っている場合、価格差をチェック
-                if (pair.sellOrder) { // 売り注文が存在するか確認
-                  const priceDifference = Math.abs(pair.sellOrder.price - currentPrice) / currentPrice;
-                  if (priceDifference >= cancelThreshold) {
-                    try {
-                      console.log(`売り注文(${pair.sellOrder.id})は価格差が大きいためキャンセルします - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference}`);
-                      await exchange.cancelOrder(pair.sellOrder.id, symbol);
-                      
-                      // 注文履歴を更新
-                      const historyOrderIndex = orderHistory.findIndex(
-                        historyOrder => historyOrder.orderId === pair.sellOrder.id
-                      );
-                      if (historyOrderIndex !== -1) {
-                        orderHistory[historyOrderIndex].processedCancel = true;
-                      }
-                      
-                      // 注文状態をリセット
-                      pair.sellOrder = null;
-                      pair.sellFilled = false;
-                      activeOrders.sell = null;
-                    } catch (cancelError) {
-                      console.error(`売り注文(${pair.sellOrder.id})のキャンセル中にエラーが発生しました: ${cancelError.message}`);
-                    }
-                  } else {
-                    console.log(`売り注文(${pair.sellOrder.id})は価格差が許容範囲内です - 注文価格: ${pair.sellOrder.price}, 現在価格: ${currentPrice}, 差: ${priceDifference.toFixed(2)}%`);
-                  }
-                } else {
-                  console.log(`売り注文が存在しませんが、買い注文は約定済みです - ペアID: ${pair.id}`);
-                }
-              }
-              
-              // 両方の注文が約定している場合、完了としてログ記録
-              if (pair.buyFilled && pair.sellFilled) {
-                console.log(`注文ペア(${pair.id})が完了しました`);
-              }
-            }
-            
-            lastOrderStatusCheck = now;
-          } catch (statusCheckError) {
-            console.error(`注文状態の定期確認中にエラーが発生しました: ${symbol}`, statusCheckError);
-          }
-        }
+        // ループの待機
+        await new Promise(resolve => setTimeout(resolve, this.options.loopInterval));
 
-        // レンジ相場の場合、または最後の注文から一定時間経過した場合に注文を発注/更新
-        if (isRangeMarket || (now - lastOrderTime >= reorderInterval)) {
-          // 注文ブックを取得
-          const orderBook = await exchange.fetchOrderBook(symbol);
-          const bids = orderBook.bids; // 買い注文
-          const asks = orderBook.asks; // 売り注文
-          
-          // 現在の最良価格を取得
-          const bestBid = bids.length > 0 ? bids[0][0] : null;
-          const bestAsk = asks.length > 0 ? asks[0][0] : null;
-          
-          if (!bestBid || !bestAsk) {
-            console.log(`注文ブックが空です: ${symbol}`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
-          }
-          
-          // 現在の中間価格を計算（基準価格）
-          const midPrice = (bestBid + bestAsk) / 2;
-          
-          // 買い注文と売り注文の価格を計算
-          const halfSpread = (spreadWidth / 100) / 2;
-          const buyPrice = midPrice * (1 - halfSpread) - adjustmentValue;
-          const sellPrice = midPrice * (1 + halfSpread) + adjustmentValue;
-          
-          // 価格の精度を調整
-          const precisionToUse = pricePrecision || 8;
-          const formattedBuyPrice = parseFloat(buyPrice.toFixed(precisionToUse));
-          const formattedSellPrice = parseFloat(sellPrice.toFixed(precisionToUse));
-          
-          // 利用可能な資金と資産を確認
-          const balance = await exchange.fetchBalance();
-          const baseCurrency = symbol.split('/')[1]; // 例: BTC/JPY の JPY
-          const quoteCurrency = symbol.split('/')[0]; // 例: BTC/JPY の BTC
-          const availableFunds = balance.free[baseCurrency];
-          const availableAsset = balance.free[quoteCurrency];
-          
-          // 取引記録から買った量と売った量を取得
-          let buyAmount = 0;
-          let sellAmount = 0;
-          if (tradeRecords && tradeRecords[exchange.id] && tradeRecords[exchange.id][symbol]) {
-            buyAmount = tradeRecords[exchange.id][symbol].buyAmount || 0;
-            sellAmount = tradeRecords[exchange.id][symbol].sellAmount || 0;
-          }
-          
-          // 現在のポジション数を計算
-          currentPositions = Math.max(0, buyAmount - sellAmount);
-          
-          // 取引量を計算
-          const maxBuyAmount = baseMinTradeAmount;
-          const amountPrecisionToUse = amountPrecision || 8;
-          let formattedAmount = parseFloat(Math.max(baseMinTradeAmount, maxBuyAmount).toFixed(amountPrecisionToUse));
-          formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
-          
-          // 注文ペアの管理
-          const pendingPairs = orderPairs.filter(pair =>
-            (pair.buyOrder && !pair.buyFilled) || (pair.sellOrder && !pair.sellFilled)
-          );
-          
-          const hasBuyWithSellFilled = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && pair.sellFilled);
-          const hasBothPending = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && pair.sellOrder && !pair.sellFilled);
-          const hasSellWithBuyFilled = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && pair.buyOrder && pair.buyFilled);
-          const hasSellOnly = pendingPairs.some(pair => pair.sellOrder && !pair.sellFilled && (!pair.buyOrder || pair.buyFilled));
-          const hasBuyOnly = pendingPairs.some(pair => pair.buyOrder && !pair.buyFilled && (!pair.sellOrder || pair.sellFilled));
-
-          const shouldDoNothing = hasBuyWithSellFilled || hasBothPending || hasSellWithBuyFilled;
-          const shouldPlaceBuyOnly = hasSellOnly &&
-                                     currentPositions < maxPositionCount &&
-                                     availableFunds >= formattedBuyPrice * formattedAmount;
-          const shouldPlaceSellOnly = hasBuyOnly &&
-                                      availableAsset >= formattedAmount;
-
-          if (shouldDoNothing) {
-            console.log(`次のパターンにより、新規注文を見送ります: ${symbol}`);
-            if (hasBuyWithSellFilled) console.log(`- 以前の買いが残っていて売りが決まっています`);
-            if (hasBothPending) console.log(`- 以前の買いも売りも残っています`);
-            if (hasSellWithBuyFilled) console.log(`- 以前の売りが残っていて買いが決まっています`);
-          } else if (shouldPlaceBuyOnly) {
-            try {
-              let adjustedAmount = formattedAmount;
-              const buyPrice = formattedBuyPrice * formattedAmount;
-              const remainingAfterBuy = availableFunds - buyPrice;
-              
-              // if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
-              //   adjustedAmount = formattedAmount + 0.0001;
-              //   console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
-              // }
-              
-              const newPair = {
-                id: Date.now().toString(),
-                buyOrder: null,
-                sellOrder: null,
-                buyFilled: false,
-                sellFilled: false,
-                amount: adjustedAmount
-              };
-
-              const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
-              activeOrders.buy = buyOrder;
-              newPair.buyOrder = buyOrder;
-
-              console.log(`-- 買い注文のみを発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}`);
-              if (postOrderToDiscord) {
-                // await postOrderToDiscord(`[MM] 買い注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
-              }
-
-              if (updateTradeRecord) {
-                updateTradeRecord(exchange.id, symbol, adjustedAmount, formattedBuyPrice, 'buy');
-              }
-
-              orderHistory.push({
-                time: now,
-                type: 'buy',
-                price: formattedBuyPrice,
-                amount: formattedAmount,
-                orderId: buyOrder.id,
-                pairId: newPair.id
-              });
-
-              orderPairs.push(newPair);
-
-            } catch (buyError) {
-              console.error(`買い注文の発注中にエラーが発生しました: ${symbol}`, buyError);
-              if (postErrorToDiscord) {
-                await postErrorToDiscord(`[MM] 買い注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${buyError.message}`);
-              }
-            }
-          } else if (shouldPlaceSellOnly) {
-            const remainingAfterSell = availableAsset - formattedAmount;
-            // if (remainingAfterSell < 0.0001) {
-            //   console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
-            //   continue;
-            // }
-
-            try {
-              const newPair = {
-                id: Date.now().toString(),
-                buyOrder: null,
-                sellOrder: null,
-                buyFilled: false,
-                sellFilled: false,
-                amount: formattedAmount
-              };
-
-              const sellOrder = await exchange.createLimitSellOrder(symbol, formattedAmount, formattedSellPrice);
-              activeOrders.sell = sellOrder;
-              newPair.sellOrder = sellOrder;
-
-              console.log(`-- 売り注文のみを発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}, ペアID: ${newPair.id}, 売却後残高: ${remainingAfterSell}`);
-              if (postOrderToDiscord) {
-                // await postOrderToDiscord(`[MM] 売り注文のみを発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${formattedAmount}`);
-              }
-
-              if (updateTradeRecord) {
-                updateTradeRecord(exchange.id, symbol, formattedAmount, formattedSellPrice, 'sell');
-              }
-
-              orderHistory.push({
-                time: now,
-                type: 'sell',
-                price: formattedSellPrice,
-                amount: formattedAmount,
-                orderId: sellOrder.id,
-                pairId: newPair.id
-              });
-
-              orderPairs.push(newPair);
-
-            } catch (sellError) {
-              console.error(`売り注文の発注中にエラーが発生しました: ${symbol}`, sellError);
-              if (postErrorToDiscord) {
-                await postErrorToDiscord(`[MM] 売り注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${sellError.message}`);
-              }
-            }
-          } else if (pendingPairs.length === 0 && currentPositions < maxPositionCount && availableFunds >= formattedBuyPrice * formattedAmount) {
-            try {
-              let adjustedAmount = formattedAmount;
-              const buyPrice = formattedBuyPrice * formattedAmount;
-              const remainingAfterBuy = availableFunds - buyPrice;
-              
-              // if (Math.abs(remainingAfterBuy - 0.0001) < 0.00001) {
-              //   adjustedAmount = formattedAmount + 0.0001;
-              //   console.log(`買った後の残高が0.0001になるため、注文量を調整: ${formattedAmount} → ${adjustedAmount}`);
-              // }
-              
-              const newPair = {
-                id: Date.now().toString(),
-                buyOrder: null,
-                sellOrder: null,
-                buyFilled: false,
-                sellFilled: false,
-                amount: adjustedAmount
-              };
-
-              const buyOrder = await exchange.createLimitBuyOrder(symbol, adjustedAmount, formattedBuyPrice);
-              activeOrders.buy = buyOrder;
-              newPair.buyOrder = buyOrder;
-
-              console.log(`-- 買い注文を発注しました: ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}`);
-              if (postOrderToDiscord) {
-                // await postOrderToDiscord(`[MM] 買い注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedBuyPrice}, 数量: ${formattedAmount}`);
-              }
-
-              if (updateTradeRecord) {
-                updateTradeRecord(exchange.id, symbol, adjustedAmount, formattedBuyPrice, 'buy');
-              }
-
-              orderHistory.push({
-                time: now,
-                type: 'buy',
-                price: formattedBuyPrice,
-                amount: adjustedAmount,
-                orderId: buyOrder.id,
-                pairId: newPair.id
-              });
-
-              if (availableAsset >= adjustedAmount) {
-                const remainingAfterSell = availableAsset - adjustedAmount;
-                // if (remainingAfterSell < 0.0001) {
-                //   console.log(`売却後の残高が0.0001以下になるため、売り注文は発注しません: ${symbol} - 現在の残高: ${availableAsset}, 売却後: ${remainingAfterSell}`);
-                //   console.log(`買い注文のみを維持します: ${symbol} - ペアID: ${newPair.id}`);
-                // } else {
-                const sellOrder = await exchange.createLimitSellOrder(symbol, adjustedAmount, formattedSellPrice);
-                activeOrders.sell = sellOrder;
-                newPair.sellOrder = sellOrder;
-
-                console.log(`-- 売り注文を発注しました: ${symbol} - 価格: ${formattedSellPrice}, 数量: ${adjustedAmount}, ペアID: ${newPair.id}, 売却後残高: ${remainingAfterSell}`);
-                if (postOrderToDiscord) {
-                  // await postOrderToDiscord(`[MM] 売り注文を発注しました: ${exchange.id} - ${symbol} - 価格: ${formattedSellPrice}, 数量: ${adjustedAmount}`);
-                }
-                if (updateTradeRecord) {
-                  updateTradeRecord(exchange.id, symbol, adjustedAmount, formattedSellPrice, 'sell');
-                }
-                
-                orderHistory.push({
-                  time: now,
-                  type: 'sell',
-                  price: formattedSellPrice,
-                  amount: adjustedAmount,
-                  orderId: sellOrder.id,
-                  pairId: newPair.id
-                });
-                // }
-
-              }
-              orderPairs.push(newPair);
-
-            } catch (error) {
-              console.error(`注文の発注中にエラーが発生しました: ${symbol}`, error);
-              if (postErrorToDiscord) {
-                await postErrorToDiscord(`[MM] 注文の発注中にエラーが発生しました: ${exchange.id} - ${symbol} - ${error.message}`);
-              }
-            }
-          } else {
-            console.log(`現在の状態に合致する注文パターンがないため、注文を見送ります: ${symbol}`);
-            console.log(`- hasSellOnly: ${hasSellOnly} - hasBuyOnly: ${hasBuyOnly}`);
-            console.log(`- 現在のポジション数: ${currentPositions}/${maxPositionCount}`);
-            console.log(`- 利用可能資金: ${availableFunds}, 必要: ${formattedBuyPrice * formattedAmount}`);
-            console.log(`- 利用可能資産: ${availableAsset}, 必要: ${formattedAmount}`);
-          }
-          
-          lastOrderTime = now;
-        }
-        
-        // 完了した注文ペアのクリーンアップ
-        for (let i = orderPairs.length - 1; i >= 0; i--) {
-          const pair = orderPairs[i];
-          if (pair.buyFilled && pair.sellFilled) {
-            // 両方の注文が約定していれば、注文ペアを削除
-            console.log(`完了した注文ペア(${pair.id})をクリーンアップします`);
-            orderPairs.splice(i, 1);
-          }
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error(`マーケットメイキング処理中にエラーが発生しました: ${symbol}`, error);
-        if (postErrorToDiscord) {
-          await postErrorToDiscord(`[MM] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-        }
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await this._postError('メインループで予期せぬエラーが発生しました', error);
+        // エラー発生後、少し待ってからループを継続
+        await new Promise(resolve => setTimeout(resolve, this.options.errorRetryInterval));
       }
     }
+    console.log(`マーケットメイキング戦略が停止しました: ${this.symbol}`);
+  }
+
+  /**
+   * 戦略を停止する
+   */
+  stop() {
+    console.log(`マーケットメイキング戦略の停止を要求: ${this.symbol}`);
+    this.isRunning = false;
+    // 必要であれば、アクティブな注文をキャンセルする処理を追加
+    // await this.cancelAllOrders();
+  }
+
+  /**
+   * 全てのアクティブな注文をキャンセルする (オプション)
+   */
+  async cancelAllOrders() {
+      console.log(`全てのアクティブな注文をキャンセルします: ${this.symbol}`);
+      try {
+          const openOrders = await this.exchange.fetchOpenOrders(this.symbol);
+          if (openOrders.length > 0) {
+              console.log(`${openOrders.length}件の注文をキャンセル中...`);
+              await Promise.all(openOrders.map(order =>
+                  this.exchange.cancelOrder(order.id, this.symbol)
+                      .then(() => console.log(`注文 ${order.id} をキャンセルしました。`))
+                      .catch(err => this._postError(`注文 ${order.id} のキャンセルに失敗しました`, err))
+              ));
+              console.log("全ての注文キャンセル処理が完了しました。");
+          } else {
+              console.log("キャンセル対象のアクティブな注文はありません。");
+          }
+          // 内部状態もリセット
+          this.activeOrders = { buy: null, sell: null };
+          this.orderPairs = []; // ペアもクリア
+      } catch (error) {
+          await this._postError('全注文のキャンセル処理中にエラーが発生しました', error);
+      }
+  }
+
+}
+
+// --- 使用例 ---
+// このファイルが直接実行された場合のサンプルコード (通常は strategyRunner などから呼び出す)
+/*
+async function runExample() {
+  // ccxtのインスタンス化と設定 (APIキーなど)
+  const exchangeId = 'bybit'; // 例: bybit
+  const exchange = new ccxt[exchangeId]({
+    apiKey: 'YOUR_API_KEY',
+    secret: 'YOUR_SECRET',
+    // 必要に応じて他のオプション (testnetなど)
+    // 'options': { 'defaultType': 'spot' } // 現物取引の場合
+  });
+
+  // テストネットを使用する場合 (取引所がサポートしていれば)
+  // exchange.setSandboxMode(true);
+
+  const symbol = 'BTC/USDT'; // 取引するシンボル
+
+  const strategyOptions = {
+    amount: 0.001, // 1回の取引量
+    rangePeriod: 300000, // 5分
+    rangeThreshold: 0.5, // 0.5%
+    spreadWidth: 0.1, // 0.1%
+    reorderInterval: 60000, // 1分
+    // Discord通知関数 (ダミー)
+    postOrderToDiscord: async (msg) => console.log(`[Discord Order] ${msg}`),
+    postErrorToDiscord: async (msg) => console.error(`[Discord Error] ${msg}`),
+    // 取引記録関数 (ダミー)
+    updateTradeRecord: (exchangeId, symbol, amount, price, side) => {
+      console.log(`[Trade Record] ${exchangeId} ${symbol} ${side} ${amount} @ ${price}`);
+    },
+    tradeRecords: {} // 初期取引記録 (空)
+  };
+
+  try {
+    const strategy = new MarketMakingStrategy(exchange, symbol, strategyOptions);
+    await strategy.start(); // 戦略を開始
+
+    // Ctrl+Cなどで停止できるようにする
+    process.on('SIGINT', async () => {
+      console.log("SIGINT受信、戦略を停止します...");
+      strategy.stop();
+      // 必要であれば、全ての注文をキャンセル
+      // await strategy.cancelAllOrders();
+      process.exit(0);
+    });
+
   } catch (error) {
-    console.error(`レンジ相場向け受動的マーケットメイキング戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[MM] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'Passive Market Making',
-      symbol,
-      error: error.message
-    };
+    console.error("戦略の初期化または実行中にエラーが発生しました:", error);
+    process.exit(1);
   }
 }
 
+// このファイルが直接実行された場合に runExample を実行
+if (require.main === module) {
+  runExample();
+}
+*/
+
+// モジュールとしてエクスポート
 module.exports = {
-  passiveMarketMaking
+  MarketMakingStrategy,
+  // 元の関数も残す場合 (互換性のため)
+  passiveMarketMaking: async (exchange, symbol, rangePeriod, rangeThreshold, spreadWidth, amount, options) => {
+      const strategyOptions = {
+          ...options, // 元のoptionsを展開
+          rangePeriod,
+          rangeThreshold,
+          spreadWidth,
+          amount,
+      };
+      const strategy = new MarketMakingStrategy(exchange, symbol, strategyOptions);
+      // passiveMarketMakingは実行し続ける想定だったため、startを呼び出す
+      // エラーハンドリングや停止処理は呼び出し元で行う必要がある
+      try {
+          await strategy.start();
+          // 注意: start()は無限ループのため、この関数は通常戻らない
+          // 必要であれば、strategy.stop()を呼び出すメカニズムが必要
+      } catch (error) {
+          console.error(`passiveMarketMaking実行中にエラー: ${symbol}`, error);
+          if (strategyOptions.postErrorToDiscord) {
+              await strategyOptions.postErrorToDiscord(`[MM] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+          }
+          // エラーオブジェクトを返すか、例外を再スローするかは設計による
+          return {
+              strategy: 'Passive Market Making',
+              symbol,
+              error: error.message
+          };
+      }
+  }
 };

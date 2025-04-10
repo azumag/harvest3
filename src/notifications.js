@@ -18,18 +18,55 @@ async function postErrorToDiscord(message) {
 }
 
 /**
- * 注文情報をDiscordに投稿する関数
+ * 注文情報をDiscordに投稿する関数（レートリミット対応）
  * @param {String} message - 投稿するメッセージ
+ * @param {number} [maxRetries=3] - 最大リトライ回数
  */
-async function postOrderToDiscord(message) {
-  if (discordOrderWebhookUrl) {
+async function postOrderToDiscord(message, maxRetries = 3) {
+  if (!discordOrderWebhookUrl) {
+    console.error('Discord Webhook URLが設定されていません');
+    return;
+  }
+
+  let retries = 0;
+  while (retries <= maxRetries) {
     try {
       await axios.post(discordOrderWebhookUrl, { content: message });
+      return; // 成功したら終了
     } catch (error) {
-      console.error('Discordへの通知に失敗しました: ', error);
+      // Axiosエラーかつレートリミット(429)の場合のみリトライ
+      if (axios.isAxiosError(error) && error.response && error.response.status === 429) {
+        retries++;
+        if (retries > maxRetries) {
+          console.error(`Discordへの通知に失敗しました: ${maxRetries}回リトライしましたが、レートリミットが解消されません。`, error.response.data);
+          break; // リトライ上限に達したらループを抜ける
+        }
+
+        // retry_afterヘッダーまたはデータから待機時間を取得 (秒単位)
+        // エラーログから data.retry_after が小数で返ることを確認したので、そちらを優先
+        const retryAfterSeconds = error.response.data?.retry_after || parseInt(error.response.headers['retry-after'], 10) || 1; // デフォルト1秒
+        // ミリ秒に変換し、少し余裕を持たせる (最低1秒は待つ)
+        const waitTime = Math.max(Math.ceil(retryAfterSeconds * 1000) + 500, 1000);
+
+        console.warn(`Discordレートリミット: ${waitTime / 1000}秒待機してリトライします (${retries}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else {
+        // レートリミット以外のエラー、またはAxiosエラーでない場合
+        console.error('Discordへの通知に失敗しました: ', error.message || error);
+        if (error.response) {
+          // エラーレスポンスの詳細を出力
+          console.error('エラーレスポンス Status:', error.response.status);
+          console.error('エラーレスポンス Data:', error.response.data);
+        } else if (error.request) {
+          // リクエストは行われたがレスポンスがない場合
+          console.error('エラーリクエスト:', error.request);
+        } else {
+          // リクエスト設定時のエラー
+          console.error('設定エラー:', error.message);
+        }
+        break; // リトライせずにループを抜ける
+      }
     }
-  } else {
-    console.error('Discord Webhook URLが設定されていません');
   }
 }
 
