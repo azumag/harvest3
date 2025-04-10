@@ -237,15 +237,15 @@ function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, strateg
 }
 
 /**
- * INYOで買った量を取得する便利関数
+ * MMで買った量を取得する便利関数
  * @param {Object} tradeRecords - 取引記録
  * @param {Object} exchange - 取引所
  * @param {string} symbol - シンボル
  * @param {Function} updateTradeRecord - 取引記録更新関数
- * @returns {number} - INYOで買った量
+ * @returns {number} - MMで買った量
  */
 function getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
-  return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'INYO');
+  return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'MARKET_MAKING');
 }
 
 module.exports = {
