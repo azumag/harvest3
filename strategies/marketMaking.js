@@ -24,8 +24,9 @@ class MarketMakingStrategy {
       rangeThreshold: 1.0, // レンジ判定閾値（%）
       spreadWidth: 0.5, // スプレッド幅（%）
       amount: undefined, // 取引量 (必須)
+      targetQuote: 100, // 目標クォート価格 (JPY)
       pricePrecision: this.market.precision?.price || 8,
-      amountPrecision: this.market.precision?.amount || 8,
+      amountPrecision: this.market.precision?.amount || 4,
       postOrderToDiscord: null,
       postErrorToDiscord: null,
       reorderInterval: 60000, // 再発注間隔（ミリ秒）
@@ -43,12 +44,12 @@ class MarketMakingStrategy {
     };
 
     // BTC/JPY 特有の最小取引量を設定 (必要であれば)
-    if (this.symbol === 'BTC/JPY') {
-      this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.0001);
-    } else {
-      // 他のは0.001をデフォルトに
-      this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.001);
-    }
+    // if (this.symbol === 'BTC/JPY') {
+    //   this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.0001);
+    // } else {
+    //   // 他のは0.001をデフォルトに
+    //   this.options.baseMinTradeAmount = Math.max(this.options.baseMinTradeAmount, 0.001);
+    // }
 
     if (this.options.amount === undefined) {
       throw new Error('取引量(amount)オプションは必須です。');
@@ -255,7 +256,7 @@ class MarketMakingStrategy {
             // 約定扱いをやめ、下のキャンセル処理に進むように修正
             console.warn(`${this.symbol}: fetchOrderが利用不可のため、${side}注文(${order.id})の状態を確定できません。キャンセル扱いとして処理します。`);
             // pair[filledKey] = true; // 約定扱いはしない
-            // return; // return せずに下のキャンセル処理に進む
+            // return せずに下のキャンセル処理に進む
         }
       } catch (error) {
         // fetchOrderでエラーが発生した場合 (例: 注文が存在しない)
@@ -379,10 +380,6 @@ class MarketMakingStrategy {
       const formattedBuyPrice = parseFloat(buyPrice.toFixed(this.options.pricePrecision));
       const formattedSellPrice = parseFloat(sellPrice.toFixed(this.options.pricePrecision));
 
-      // 取引量を決定 (固定量を使用)
-      let tradeAmount = parseFloat(this.options.amount.toFixed(this.options.amountPrecision));
-      tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount); // 最小取引量を下回らないように
-
       const balance = await this.exchange.fetchBalance();
       const baseCurrency = this.market.base; // 例: BTC
       const quoteCurrency = this.market.quote; // 例: JPY
@@ -412,6 +409,16 @@ class MarketMakingStrategy {
       if (noPendingOrders) {
           // 1. 未約定の注文が全くない場合: 両方の注文を試みる
           console.log(`${this.symbol}: 未約定の注文がないため、新規の買い注文と売り注文を試みます。`);
+          // 現在価格から targetQuote 円分の量を推定し売買に使う。量が最低単位以下なら最低単位を使う
+          // 利用可能な資金の割合に基づいて取引量を計算
+          let amount = this.options.targetQuote / midPrice;
+          // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用kj
+          amount = Math.max(amount, this.options.baseMinTradeAmount)
+          // 精度を考慮して、最小精度以上の値を確保
+          let tradeAmount= parseFloat(amount.toFixed(this.options.amountPrecision));
+          // 最小精度を下回らないようにする
+          tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount);
+
           if (availableFunds >= formattedBuyPrice * tradeAmount) {
               await this._executePlaceOrder('buy', formattedBuyPrice, tradeAmount, now);
               this.lastOrderTime = now; // 注文試行時に更新
@@ -425,8 +432,15 @@ class MarketMakingStrategy {
               console.log(`${this.symbol}: 新規Sellの条件未達(資産不足): 資産=${availableAsset}/${tradeAmount}`);
           }
       } else if (!pendingBuy && pendingSell) {
-          // 2. 未約定の買い注文がなく、未約定の売り注文がある場合: 買い注文のみを試みる
-          console.log(`${this.symbol}: 未約定の買い注文がないため、新規の買い注文のみを試みます。`);
+          // 2. 買い注文がなく、未約定の売り注文がある場合: 買い注文のみを試みる
+          console.log(`${this.symbol}: 新規の買い注文を試みます。`);
+
+          // 買う時に売り注文が先に出ている場合、その売りの分だけ買う
+          let tradeAmount = 0;
+          const existingPair = this.orderPairs.find(p => p.sellOrder && !p.buyOrder);
+          tradeAmount = existingPair.amount;
+          console.log(`${this.symbol}: 先行する売り注文ペア(${existingPair.id})に基づいて買い注文量を調整: ${tradeAmount}`);
+
           if (availableFunds >= formattedBuyPrice * tradeAmount) {
               await this._executePlaceOrder('buy', formattedBuyPrice, tradeAmount, now);
               this.lastOrderTime = now;
@@ -434,8 +448,15 @@ class MarketMakingStrategy {
               console.log(`${this.symbol}: 新規Buyの条件未達(資金不足): 資金=${availableFunds}/${formattedBuyPrice * tradeAmount}`);
           }
       } else if (pendingBuy && !pendingSell) {
-          // 3. 未約定の売り注文がなく、未約定の買い注文がある場合: 売り注文のみを試みる
+          // 3. 売り注文がなく、未約定の買い注文がある場合: 売り注文のみを試みる
           console.log(`${this.symbol}: 未約定の売り注文がないため、新規の売り注文のみを試みます。`);
+
+          // 売る時に買い注文が先に出ている場合、その買いの分だけ売る
+          let tradeAmount = 0;
+          const existingPair = this.orderPairs.find(p => !p.sellOrder && p.buyOrder);
+          tradeAmount = existingPair.amount;
+          console.log(`${this.symbol}: 先行する買い注文ペア(${existingPair.id})に基づいて買い量を調整: ${tradeAmount}`);
+
           if (availableAsset >= tradeAmount) {
               await this._executePlaceOrder('sell', formattedSellPrice, tradeAmount, now);
               this.lastOrderTime = now;
