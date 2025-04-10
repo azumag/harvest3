@@ -5,6 +5,7 @@ services:
     restart: always
     volumes:
       - .:/usr/src/app
+      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
     command: npm start
 
   hft:
@@ -13,6 +14,7 @@ services:
     restart: always
     volumes:
       - .:/usr/src/app
+      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
     command: npm run start-hft
 
   mm:
@@ -21,6 +23,7 @@ services:
     restart: always
     volumes:
       - .:/usr/src/app
+      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
     command: npm run start-mm
 
   test:
@@ -28,4 +31,5 @@ services:
     container_name: order_status_test
     volumes:
       - .:/usr/src/app
+      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
     command: node test/checkOrderStatus.js
