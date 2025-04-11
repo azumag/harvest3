@@ -1,5 +1,5 @@
 # ベースイメージを指定
-FROM node:16-bullseye
+FROM node:20-bullseye
 
 # 必要なライブラリをインストール
 RUN apt-get update && apt-get install -y \
@@ -18,6 +18,7 @@ COPY package*.json ./
 # better-sqlite3はネイティブモジュールなので、ここでビルドが必要な場合がある
 # RUN npm install --build-from-source=better-sqlite3
 RUN npm install --production
+# localtunnelはpackage.jsonの依存関係に含まれているため、グローバルインストールは不要
 
 # アプリケーションのソースコードをコピー
 COPY src/ ./src/
