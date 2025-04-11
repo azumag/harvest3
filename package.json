@@ -7,6 +7,7 @@
     "start": "node bot.js",
     "start-hft": "node src/hftBot.js",
     "start-mm": "node src/mmBot.js",
+    "start-web": "node src/api/index.js",
     "close-all": "node src/closeAllPositions.js",
     "close-bb": "node src/closeAllPositions.js --bitbank",
     "close-bf": "node src/closeAllPositions.js --bitflyer",
@@ -18,6 +19,9 @@
     "axios": "^1.7.7",
     "better-sqlite3": "^11.9.1",
     "ccxt": "^3.0.0",
-    "dotenv": "^16.0.3"
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "morgan": "^1.10.0"
   }
 }

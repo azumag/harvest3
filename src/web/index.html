@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>取引データ閲覧 - ダッシュボード</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- カスタムCSS -->
+    <link href="css/style.css" rel="stylesheet">
+    <!-- データテーブル -->
+    <link href="https://cdn.datatables.net/1.13.1/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">取引データ閲覧</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.html">ダッシュボード</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="positions.html">ポジション</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="history.html">取引履歴</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="analysis.html">分析</a>
+                    </li>
+                </ul>
+            </div>
+            <div id="realtime-status" class="text-light">
+                <span class="badge bg-secondary">オフライン</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="container-fluid mt-4">
+        <!-- 期間選択 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">期間選択</h5>
+                        <div class="btn-group" role="group" aria-label="期間選択">
+                            <button type="button" class="btn btn-outline-primary period-btn" data-period="daily">日次</button>
+                            <button type="button" class="btn btn-outline-primary period-btn" data-period="weekly">週次</button>
+                            <button type="button" class="btn btn-outline-primary period-btn" data-period="monthly">月次</button>
+                            <button type="button" class="btn btn-outline-primary period-btn" data-period="yearly">年次</button>
+                            <button type="button" class="btn btn-primary period-btn" data-period="all">全期間</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- サマリー情報 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">累積損益グラフ</h5>
+                        <canvas id="profitChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">現在のポジション <a href="positions.html" class="btn btn-sm btn-outline-primary float-end">詳細を表示</a></h5>
+                        <div id="positions-container">
+                            <div class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">読み込み中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 取引所別/戦略別サマリー -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">取引所別サマリー</h5>
+                        <div id="exchange-summary-container">
+                            <div class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">読み込み中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">戦略別サマリー</h5>
+                        <div id="strategy-summary-container">
+                            <div class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">読み込み中...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最近の取引 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">最近の取引</h5>
+                        <div class="table-responsive">
+                            <table id="recent-trades-table" class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>日時</th>
+                                        <th>取引所</th>
+                                        <th>銘柄</th>
+                                        <th>戦略</th>
+                                        <th>取引方向</th>
+                                        <th>数量</th>
+                                        <th>価格</th>
+                                        <th>金額</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- APIから取得したデータがここに表示されます -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript ライブラリ -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/dataTables.bootstrap5.min.js"></script>
+
+    <!-- カスタムJavaScript -->
+    <script src="js/realtime.js"></script>
+    <script>
+      // Chart.jsが読み込まれたか確認
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof Chart !== 'undefined') {
+          console.log('Chart.jsが正常に読み込まれました');
+        } else {
+          console.error('Chart.jsの読み込みに失敗しました');
+        }
+      });
+    </script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

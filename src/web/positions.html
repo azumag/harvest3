@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>取引データ閲覧 - ポジション詳細</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- カスタムCSS -->
+    <link href="css/style.css" rel="stylesheet">
+    <!-- データテーブル -->
+    <link href="https://cdn.datatables.net/1.13.1/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">取引データ閲覧</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">ダッシュボード</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="positions.html">ポジション</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="history.html">取引履歴</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="analysis.html">分析</a>
+                    </li>
+                </ul>
+            </div>
+            <div id="realtime-status" class="text-light">
+                <span class="badge bg-secondary">オフライン</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="container-fluid mt-4">
+        <!-- フィルタリングオプション -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">フィルタリング</h5>
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <label for="exchange-filter" class="form-label">取引所</label>
+                                <select id="exchange-filter" class="form-select">
+                                    <option value="all" selected>すべて</option>
+                                    <!-- APIから取得したデータで動的に生成 -->
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label for="symbol-filter" class="form-label">銘柄</label>
+                                <select id="symbol-filter" class="form-select">
+                                    <option value="all" selected>すべて</option>
+                                    <!-- APIから取得したデータで動的に生成 -->
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label for="strategy-filter" class="form-label">戦略</label>
+                                <select id="strategy-filter" class="form-select">
+                                    <option value="all" selected>すべて</option>
+                                    <!-- APIから取得したデータで動的に生成 -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ポジション詳細 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            ポジション詳細
+                            <div class="float-end">
+                                <select id="page-size-selector" class="form-select form-select-sm d-inline-block" style="width: auto;">
+                                    <option value="5">5件/ページ</option>
+                                    <option value="10" selected>10件/ページ</option>
+                                    <option value="20">20件/ページ</option>
+                                    <option value="50">50件/ページ</option>
+                                </select>
+                            </div>
+                        </h5>
+                        <div id="positions-container">
+                            <div class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">読み込み中...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- ページネーション -->
+                        <div id="pagination-container" class="d-flex justify-content-center mt-4">
+                            <nav aria-label="ポジションページネーション">
+                                <ul class="pagination">
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#" id="prev-page">前へ</a>
+                                    </li>
+                                    <li class="page-item active">
+                                        <a class="page-link" href="#">1</a>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <a class="page-link" href="#" id="next-page">次へ</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript ライブラリ -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/dataTables.bootstrap5.min.js"></script>
+
+    <!-- カスタムJavaScript -->
+    <script src="js/realtime.js"></script>
+    <script>
+        // Chart.jsが読み込まれたか確認
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Chart !== 'undefined') {
+                console.log('Chart.jsが正常に読み込まれました');
+            } else {
+                console.error('Chart.jsの読み込みに失敗しました');
+            }
+        });
+    </script>
+    <script src="js/positions.js"></script>
+</body>
+</html>

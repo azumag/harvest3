@@ -1,0 +1,139 @@
+/* 共通スタイル */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* カード内のローディングスピナー表示用 */
+.card-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+/* データなし表示用 */
+.no-data-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* ポジションカード */
+.position-card {
+    border-radius: 10px;
+    margin-bottom: 15px;
+    border-left: 5px solid #0d6efd;
+}
+
+.position-card.positive {
+    border-left-color: #198754;
+}
+
+.position-card.negative {
+    border-left-color: #dc3545;
+}
+
+/* 取引履歴テーブル */
+.buy-trade {
+    color: #198754;
+    font-weight: bold;
+}
+
+.sell-trade {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* グラフコンテナ */
+.chart-container {
+    position: relative;
+    min-height: 250px;
+}
+
+/* リアルタイム更新インジケーター */
+#realtime-status .badge {
+    transition: background-color 0.3s ease;
+}
+
+.badge-pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* サマリーテーブル */
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.summary-table th, .summary-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.summary-table th {
+    text-align: left;
+    font-weight: 600;
+}
+
+.summary-table .profit {
+    color: #198754;
+}
+
+.summary-table .loss {
+    color: #dc3545;
+}
+
+/* フィルターフォーム */
+.filter-form-container {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+/* テーブルの行ホバー効果 */
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+    cursor: pointer;
+}
+
+/* プログレスバー */
+.progress {
+    height: 20px;
+    margin-bottom: 10px;
+}
+
+/* ページネーションコントロール */
+.pagination-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+/* レスポンシブ調整 */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 15px;
+    }
+    
+    .container-fluid {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
