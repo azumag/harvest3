@@ -88,9 +88,9 @@ const config = {
     },
     OSCILLATOR: {
       enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
-      period: 14,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80
+      period: 20,
+      oversoldThreshold: 80,
+      overboughtThreshold: 80 
     },
     
     // アービトラージ戦略
