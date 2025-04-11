@@ -35,6 +35,18 @@ const chartColors = {
 
 // ページロード完了時の処理
 document.addEventListener('DOMContentLoaded', () => {
+  // Chart.jsが読み込まれているか確認
+  if (typeof Chart === 'undefined') {
+    console.error('Chart.jsが読み込まれていません。ページを再読み込みしてください。');
+    // エラーメッセージを表示
+    document.querySelectorAll('.chart-container').forEach(container => {
+      container.innerHTML = '<div class="alert alert-danger">チャートの読み込みに失敗しました。ページを再読み込みしてください。</div>';
+    });
+    return; // Chart.jsが読み込まれていない場合は初期化をスキップ
+  }
+  
+  console.log('Chart.jsの読み込み状態: Chart.js読み込み済み');
+  
   // チャートを初期化
   initializeCharts();
   
@@ -84,7 +96,14 @@ function setActivePeriod(period) {
 function initializeCharts() {
   // 時系列チャート
   const timeSeriesCtx = document.getElementById('time-series-chart').getContext('2d');
-  charts.timeSeriesChart = new Chart(timeSeriesCtx, {
+  
+  if (typeof Chart === 'undefined') {
+    console.error('Chart.jsライブラリが読み込まれていません。');
+    return; // チャート初期化を中止
+  }
+  
+  try {
+    charts.timeSeriesChart = new Chart(timeSeriesCtx, {
     type: 'line',
     data: {
       datasets: []
@@ -265,6 +284,9 @@ function initializeCharts() {
       }
     }
   });
+  } catch (error) {
+    console.error('チャートの初期化中にエラーが発生しました:', error);
+  }
 }
 
 /**
@@ -333,6 +355,12 @@ function loadTimeSeriesData() {
  * @param {Array} tradeData - 取引履歴データ
  */
 function updateTimeSeriesChartData(tradeData) {
+  // チャートが初期化されていない場合は処理をスキップ
+  if (!charts.timeSeriesChart) {
+    console.warn('時系列チャートが初期化されていないため、データを更新できません。');
+    return;
+  }
+  
   // 買い取引と売り取引のデータポイントを準備
   const buyData = [];
   const sellData = [];
@@ -442,8 +470,12 @@ function updateTimeSeriesChart() {
  */
 function resetTimeSeriesChart() {
   if (charts.timeSeriesChart) {
-    charts.timeSeriesChart.data.datasets = [];
-    charts.timeSeriesChart.update();
+    try {
+      charts.timeSeriesChart.data.datasets = [];
+      charts.timeSeriesChart.update();
+    } catch (error) {
+      console.error('時系列チャートのリセット中にエラーが発生しました:', error);
+    }
   }
 }
 
