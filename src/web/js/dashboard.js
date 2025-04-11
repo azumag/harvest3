@@ -69,7 +69,7 @@ function loadDashboardData() {
 // ポジション表示に関するグローバル変数
 let allPositions = []; // すべてのポジションデータを保持
 let currentPositionPage = 1; // 現在のページ
-const positionsPerPage = 10; // 1ページあたりの表示件数
+const positionsPerPage = 7; // 1ページあたりの表示件数
 
 function loadPositions() {
   const container = document.getElementById('positions-container');
