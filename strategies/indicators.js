@@ -254,8 +254,9 @@ function getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
     return latestAmount;
   }
   
-  // なければ従来のロジックでtradeRecordsから取得
-  return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'MARKET_MAKING');
+  // なければ 0 を返す
+  return 0;
+  // return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'MARKET_MAKING');
 }
 
 module.exports = {

@@ -184,5 +184,19 @@ module.exports = {
   statements,
   addTrade,
   getTradeRecordsAsObject,
-  getLatestTradeAmount
+  getLatestTradeAmount,
+  
+  // チェックポイント実行関数
+  checkpoint: () => {
+    console.log('SQLite WALチェックポイントを実行中...');
+    try {
+      // チェックポイント操作を実行
+      const result = db.pragma('wal_checkpoint(FULL)');
+      console.log('チェックポイント結果:', result);
+      return true;
+    } catch (error) {
+      console.error('チェックポイント処理中にエラーが発生しました:', error);
+      return false;
+    }
+  }
 };

@@ -11,6 +11,8 @@ const { highFrequencyTrading, scalpingStrategy, orderCheckCancel } = require('./
 const { passiveMarketMaking } = require('./marketMaking');
 const { inyoStrategy } = require('./inyo');
 
+const database = require('../src/database');
+
 // 戦略の種類を定義
 const STRATEGY_TYPES = {
   TREND_FOLLOWING: 'trend_following',
@@ -113,6 +115,10 @@ async function executeStrategy(strategyKey, params) {
   if (!strategy) {
     throw new Error(`指定された戦略が見つかりません: ${strategyKey}`);
   }
+
+  // 別プロセスのDB読み取りのため、
+  // 戦略の実行前にDBチェックポイントを実行
+  database.checkpoint();
   
   return await strategy.function(...params);
 }
