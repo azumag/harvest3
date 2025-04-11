@@ -66,6 +66,11 @@ function loadDashboardData() {
 /**
  * ポジション情報を読み込んで表示
  */
+// ポジション表示に関するグローバル変数
+let allPositions = []; // すべてのポジションデータを保持
+let currentPositionPage = 1; // 現在のページ
+const positionsPerPage = 10; // 1ページあたりの表示件数
+
 function loadPositions() {
   const container = document.getElementById('positions-container');
   
@@ -91,28 +96,14 @@ function loadPositions() {
         return;
       }
       
-      // ポジションカードを表示
-      let html = '';
-      data.positions.forEach(position => {
-        const isPositive = position.realizedPnL > 0;
-        const cardClass = isPositive ? 'positive' : position.realizedPnL < 0 ? 'negative' : '';
-        
-        html += `
-          <div class="position-summary ${cardClass} mb-2 p-2 border rounded" id="position-summary-${position.exchangeId}-${position.symbol.replace('/', '-')}-${position.strategyKey}">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <strong>${position.symbol}</strong>
-                <small class="text-muted ms-2">${position.exchangeId} - ${position.strategyKey}</small>
-              </div>
-              <span class="badge ${isPositive ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
-                ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'} 円
-              </span>
-            </div>
-          </div>
-        `;
-      });
+      // 全ポジションデータをグローバル変数に保存
+      allPositions = data.positions;
       
-      container.innerHTML = html;
+      // 現在のページを1ページ目に戻す
+      currentPositionPage = 1;
+      
+      // ポジションの表示を更新
+      displayPositionsPage();
     })
     .catch(error => {
       console.error('ポジション情報の取得に失敗しました:', error);
@@ -122,6 +113,112 @@ function loadPositions() {
         </div>
       `;
     });
+}
+
+/**
+ * ポジションの特定ページを表示
+ */
+function displayPositionsPage() {
+  const container = document.getElementById('positions-container');
+  const paginationContainer = document.getElementById('positions-pagination');
+  
+  // 表示するポジションの範囲を計算
+  const startIndex = (currentPositionPage - 1) * positionsPerPage;
+  const endIndex = Math.min(startIndex + positionsPerPage, allPositions.length);
+  const currentPagePositions = allPositions.slice(startIndex, endIndex);
+  
+  // ポジションカードを表示
+  let html = '';
+  currentPagePositions.forEach(position => {
+    const isPositive = position.realizedPnL > 0;
+    const cardClass = isPositive ? 'positive' : position.realizedPnL < 0 ? 'negative' : '';
+    
+    html += `
+      <div class="position-summary ${cardClass} mb-2 p-2 border rounded" id="position-summary-${position.exchangeId}-${position.symbol.replace('/', '-')}-${position.strategyKey}">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <strong>${position.symbol}</strong>
+            <small class="text-muted ms-2">${position.exchangeId} - ${position.strategyKey}</small>
+          </div>
+          <span class="badge ${isPositive ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
+            ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'} 円
+          </span>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+  
+  // ページネーションを更新
+  updatePositionsPagination();
+}
+
+/**
+ * ポジションのページネーションを更新
+ */
+function updatePositionsPagination() {
+  const paginationContainer = document.getElementById('positions-pagination');
+  
+  // 総ページ数を計算
+  const totalPages = Math.ceil(allPositions.length / positionsPerPage);
+  
+  if (totalPages <= 1) {
+    // ページが1つしかない場合はページネーション非表示
+    paginationContainer.innerHTML = '';
+    return;
+  }
+  
+  let paginationHtml = `
+    <nav aria-label="ポジションページネーション">
+      <ul class="pagination pagination-sm justify-content-center mb-0">
+  `;
+  
+  // 前へボタン
+  paginationHtml += `
+    <li class="page-item ${currentPositionPage === 1 ? 'disabled' : ''}">
+      <a class="page-link" href="#" data-page="${currentPositionPage - 1}" aria-label="前へ">
+        <span aria-hidden="true">&laquo;</span>
+      </a>
+    </li>
+  `;
+  
+  // ページ番号
+  for (let i = 1; i <= totalPages; i++) {
+    paginationHtml += `
+      <li class="page-item ${i === currentPositionPage ? 'active' : ''}">
+        <a class="page-link" href="#" data-page="${i}">${i}</a>
+      </li>
+    `;
+  }
+  
+  // 次へボタン
+  paginationHtml += `
+    <li class="page-item ${currentPositionPage === totalPages ? 'disabled' : ''}">
+      <a class="page-link" href="#" data-page="${currentPositionPage + 1}" aria-label="次へ">
+        <span aria-hidden="true">&raquo;</span>
+      </a>
+    </li>
+  `;
+  
+  paginationHtml += `
+      </ul>
+    </nav>
+  `;
+  
+  paginationContainer.innerHTML = paginationHtml;
+  
+  // ページネーションのクリックイベントを設定
+  document.querySelectorAll('#positions-pagination .page-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = parseInt(e.target.getAttribute('data-page') || e.target.parentElement.getAttribute('data-page'));
+      if (!isNaN(page) && page > 0 && page <= totalPages) {
+        currentPositionPage = page;
+        displayPositionsPage();
+      }
+    });
+  });
 }
 
 /**
