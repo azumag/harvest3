@@ -177,6 +177,9 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   });
   
   await client.rPush(filledHistoryKey, filledData);
+
+  // オーダーIDをキーとしたインデックスを作成
+  await client.set(`filledOrder:details:${orderId}`, filledData); 
   
   // 時系列インデックスに追加
   await client.zAdd('trade:filledHistory:time', {
