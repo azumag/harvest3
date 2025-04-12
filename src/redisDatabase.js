@@ -75,26 +75,6 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
     value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
   });
   
-  // 約定履歴を追加（実際のシステムでは注文と約定は分かれるかもしれないが、ここでは簡略化）
-//   const filledHistoryKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
-//   const filledData = JSON.stringify({
-//     orderId: `order_${now}`,
-//     amount,
-//     side,
-//     price,
-//     orderType: 'market', // 仮定
-//     fee: value * 0.001, // 仮の手数料率
-//     filledAt: now
-//   });
-  
-//   await client.rPush(filledHistoryKey, filledData);
-  
-//   // 時系列インデックスに追加
-//   await client.zAdd('trade:filledHistory:time', {
-//     score: now,
-//     value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
-//   });
-  
   // 取引記録を更新
   if (side === 'buy') {
     // 買い注文の場合
@@ -113,26 +93,108 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
   // 更新日時を設定
   await client.hSet(recordKey, 'updatedAt', now);
   
-//   // トレードペアの作成（オプション - 実際のシステムに合わせて実装）
-//   if (side === 'buy') {
-//     // 買い注文の場合、新しいペアを作成
-//     const pairId = `pair_${now}`;
-//     const pairKey = `trade:pair:${exchangeId}:${symbol}:${strategyKey}:${pairId}`;
+  return true;
+}
+
+/**
+ * 約定記録を追加/更新する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @param {String} side - 取引方向（'buy'または'sell'）
+ * @param {Number} amount - 取引量
+ * @param {Number} price - 取引価格
+ * @param {Number} value - 取引価値（amount * price）
+ * @param {String} orderId - 注文ID
+ * @param {String} orderType - 注文タイプ（例: 'market', 'limit'）
+ * @param {Number} fee - 取引手数料
+ * @returns {Promise} 処理完了時に解決されるPromise
+ */
+async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType, fee = value * 0.001) {
+  const now = Date.now();
+  
+  // 約定記録サマリーキー
+  const summaryKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
+  
+  // インデックスセットに追加
+  await client.sAdd('exchanges', exchangeId);
+  await client.sAdd(`symbols:${exchangeId}`, symbol);
+  await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
+  
+  // 約定記録が存在するか確認
+  const exists = await client.exists(summaryKey);
+  
+  if (!exists) {
+    // 新しい約定サマリーを作成
+    await client.hSet(summaryKey, {
+      buyAmount: 0,
+      sellAmount: 0,
+      totalBuyCost: 0,
+      totalSellValue: 0,
+      netPosition: 0,
+      totalFee: 0,
+      realizedPnL: 0,
+      createdAt: now,
+      updatedAt: now
+    });
     
-//     await client.hSet(pairKey, {
-//       amount,
-//       side,
-//       price,
-//       createdAt: now,
-//       updatedAt: now
-//     });
+    // 時系列インデックスに追加
+    await client.zAdd('trade:filledSummary:time', {
+      score: now,
+      value: `${exchangeId}:${symbol}:${strategyKey}`
+    });
+  }
+  
+  // 約定履歴を追加
+  const filledHistoryKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
+  const filledData = JSON.stringify({
+    orderId,
+    amount,
+    side,
+    price,
+    orderType,
+    fee,
+    filledAt: now
+  });
+  
+  await client.rPush(filledHistoryKey, filledData);
+  
+  // 時系列インデックスに追加
+  await client.zAdd('trade:filledHistory:time', {
+    score: now,
+    value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
+  });
+  
+  // 約定サマリーを更新
+  if (side === 'buy') {
+    // 買い注文の場合
+    await client.hIncrByFloat(summaryKey, 'buyAmount', amount);
+    await client.hIncrByFloat(summaryKey, 'totalBuyCost', value);
+    await client.hIncrByFloat(summaryKey, 'netPosition', amount);
+  } else if (side === 'sell') {
+    // 売り注文の場合
+    await client.hIncrByFloat(summaryKey, 'sellAmount', amount);
+    await client.hIncrByFloat(summaryKey, 'totalSellValue', value);
+    await client.hIncrByFloat(summaryKey, 'netPosition', -amount);
     
-//     // ペアの時系列インデックスに追加
-//     await client.zAdd(`trade:pairs:time:${exchangeId}:${symbol}:${strategyKey}`, {
-//       score: now,
-//       value: pairId
-//     });
-//   }
+    // 実現損益を計算（売りの場合のみ更新）
+    // 単純化のため、売った分の平均購入コストを計算
+    const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
+    const currentBuyCost = parseFloat(await client.hGet(summaryKey, 'totalBuyCost') || 0);
+    
+    if (currentBuyAmount > 0) {
+      const avgBuyCost = currentBuyCost / currentBuyAmount;
+      const soldCost = amount * avgBuyCost;
+      const profit = value - soldCost;
+      await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
+    }
+  }
+  
+  // 手数料を加算
+  await client.hIncrByFloat(summaryKey, 'totalFee', fee);
+  
+  // 更新日時を設定
+  await client.hSet(summaryKey, 'updatedAt', now);
   
   return true;
 }
@@ -485,12 +547,46 @@ async function getTradeSummary(period = 'all') {
   };
 }
 
+/**
+ * 約定サマリーを取得する関数
+ * @param {Object} filters - フィルター条件（exchangeId, symbol, strategyKey）
+ * @returns {Promise<Object>} 約定サマリー情報
+ */
+async function getFilledSummary(filters = {}) {
+  const { exchangeId, symbol, strategyKey } = filters;
+  
+  // 全て指定されている場合は特定のサマリーを取得
+  if (exchangeId && symbol && strategyKey) {
+    const summaryKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
+    const summary = await client.hGetAll(summaryKey);
+    
+    if (Object.keys(summary).length > 0) {
+      return {
+        buyAmount: parseFloat(summary.buyAmount || 0),
+        sellAmount: parseFloat(summary.sellAmount || 0),
+        totalBuyCost: parseFloat(summary.totalBuyCost || 0),
+        totalSellValue: parseFloat(summary.totalSellValue || 0),
+        netPosition: parseFloat(summary.netPosition || 0),
+        totalFee: parseFloat(summary.totalFee || 0),
+        realizedPnL: parseFloat(summary.realizedPnL || 0),
+        createdAt: parseInt(summary.createdAt || 0),
+        updatedAt: parseInt(summary.updatedAt || 0)
+      };
+    }
+    return {};
+  }
+  
+  return {};
+}
+
 // モジュールのエクスポート
 module.exports = {
   initialize,
   addTrade,
+  addFilledTrade, // 新しい関数をエクスポート
   getTradeRecordsAsObject,
   getLatestTradeAmount,
   getTradeHistory,
-  getTradeSummary
+  getTradeSummary,
+  getFilledSummary // 新しい関数をエクスポート
 };

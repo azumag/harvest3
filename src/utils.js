@@ -1,6 +1,7 @@
 const { postErrorToDiscord } = require('./notifications');
 const { bitflyerMinTradeAmounts } = require('./config');
-
+const { getFilledSummary, addFilledTrade } = require('./redisDatabase');
+ 
 /**
  * 加重平均を計算する関数
  * @param {Array} prices - 価格の配列
@@ -134,6 +135,95 @@ async function getMarketParameters(exchange, symbol) {
   return { minTradeAmount, pricePrecision, amountPrecision };
 }
 
+/**
+ * 取引記録から買った量を取得
+ * @param {Object} tradeRecords - 取引記録
+ * @param {Object} exchange - 取引所
+ * @param {string} symbol - シンボル
+ * @param {string} strategyKey - 戦略キー
+ * @returns {number} - 買い量
+ */
+function getNetPosition(tradeRecords, exchange, symbol, strategyKey) {
+  let buyAmount = 0;
+  // tradeRecordsから該当する取引所とシンボルの買い量を取得
+  const exchangeRecords = tradeRecords[exchange.id];
+  if (exchangeRecords && exchangeRecords[symbol]) {
+    if (strategyKey && exchangeRecords[symbol][strategyKey]) {
+      // 特定の戦略の買い量を取得
+      buyAmount = exchangeRecords[symbol][strategyKey].netPosition || 0;
+    }
+    if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
+    if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+  }
+  return buyAmount;
+}
+
+async function getFilledCurrentPosition(tradeRecords, exchange, symbol, strategyKey) {
+  // 約定を更新
+  await updateFilledTrades(exchange, symbol, strategyKey);
+
+  const summary = await getFilledSummary({
+    exchangeId: exchange.id,
+    symbol,
+    strategyKey
+  });
+  
+  return summary.netPosition;
+}
+
+/**
+ * 前回チェック時から現在までの約定履歴を取得し記録する
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @returns {Promise<number>} - 処理した約定数
+ */
+async function updateFilledTrades(exchange, symbol, strategyKey) {
+ 
+  try {
+    // 前回のチェック時間を取得
+    const summary = await getFilledSummary({
+      exchangeId: exchange.id,
+      symbol,
+      strategyKey
+    });
+    
+    // 前回のチェック時間（ない場合は24時間前）
+    const lastCheckTime = summary.updatedAt 
+      ? summary.updatedAt 
+      : Date.now() - 24 * 60 * 60 * 1000;
+    
+    // 取引所から約定履歴を取得
+    const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
+    
+    let processedCount = 0;
+    
+    // 各約定を処理
+    for (const trade of trades) {
+      await addFilledTrade(
+        exchange.id,
+        symbol,
+        strategyKey,
+        trade.side,
+        trade.amount,
+        trade.price,
+        trade.cost || trade.amount * trade.price,
+        trade.id || trade.order_id || trade.order,
+        trade.type || 'market',
+        trade.fee ? trade.fee.cost : undefined 
+      );
+      
+      processedCount++;
+    }
+    
+    console.log(`${exchange.id} ${symbol} ${strategyKey}: ${processedCount}件の約定を記録しました`);
+    return processedCount;
+  } catch (error) {
+    console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} ${strategyKey}):`, error);
+    return 0;
+  }
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -141,5 +231,8 @@ module.exports = {
   weightedAverage,
   fetchTotal,
   getMarketParameters,
+  getNetPosition,
+  getFilledCurrentPosition,
+  updateFilledTrades,  // 新しい関数を追加
   sleep
 };

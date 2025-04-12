@@ -1,5 +1,7 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
+const { addFilledTrade } = require('../src/redisDatabase'); // Redisデータベースの関数をインポート
+
 /**
  * レンジ相場向け受動的マーケットメイキング戦略クラス
  */
@@ -247,6 +249,16 @@ class MarketMakingStrategy {
                 pair[filledKey] = true;
                 // 約定した場合、ポジション数を更新 (取引記録更新時に行われている場合は不要かも)
                 // this._updatePositionOnFill(side, order.amount);
+                addFilledTrade(this.exchange.id,
+                   this.symbol, 'MARKET_MAKING',
+                   side,
+                   orderStatus.amount,
+                   orderStatus.price,
+                   orderStatus.cost || orderStatus.amount * orderStatus.price,
+                   order.id,
+                   'limit',
+                   orderStatus.fee ? orderStatus.fee.cost : undefined,
+                );
                 return; // 約定したので以降の処理は不要
             }
             // closed/filled 以外 (canceledなど) の場合もアクティブではないのでリセットへ

@@ -3,7 +3,7 @@
  */
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
-const { getBuyAmount } = require('./indicators');
+const { getFilledCurrentPosition } = require('../src/utils');
 
 
 /**
@@ -238,7 +238,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 取引所Aでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountA = getBuyAmount(tradeRecords, exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE');
+        const inyoBuyAmountA = getFilledCurrentPosition(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE');
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountA = parseFloat(inyoBuyAmountA.toFixed(amountPrecision));
@@ -255,7 +255,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         } else if (availableAssetA >= adjustedAmountA) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
-            await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            // await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
             
             // 売り注文を作成
             const sellOrderA = await exchangeA.createLimitSellOrder(symbol, adjustedAmountA, sellPriceA);
@@ -332,7 +332,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 取引所Bでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountB = getBuyAmount(tradeRecords, exchangeB, symbol, updateTradeRecord);
+        const inyoBuyAmountB = getFilledCurrentPosition(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE");
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountB = parseFloat(inyoBuyAmountB.toFixed(amountPrecision));

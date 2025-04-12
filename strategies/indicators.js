@@ -207,35 +207,10 @@ function calculateBollingerBands(prices, period = 20, multiplier = 2) {
   };
 }
 
-/**
- * 取引記録から買った量を取得
- * @param {Object} tradeRecords - 取引記録
- * @param {Object} exchange - 取引所
- * @param {string} symbol - シンボル
- * @param {string} strategyKey - 戦略キー
- * @returns {number} - 買い量
- */
-function getBuyAmount(tradeRecords, exchange, symbol, strategyKey) {
-  let buyAmount = 0;
-  // tradeRecordsから該当する取引所とシンボルの買い量を取得
-  const exchangeRecords = tradeRecords[exchange.id];
-  if (exchangeRecords && exchangeRecords[symbol]) {
-    if (strategyKey && exchangeRecords[symbol][strategyKey]) {
-      // 特定の戦略の買い量を取得
-      buyAmount = exchangeRecords[symbol][strategyKey].netPosition || 0;
-    }
-    if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
-    if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
-  }
-  return buyAmount;
-}
-
-
 module.exports = {
   calculateSMA,
   calculateEMA,
   calculateMACD,
   calculateRSI,
-  calculateBollingerBands,
-  getBuyAmount
+  calculateBollingerBands
 };
