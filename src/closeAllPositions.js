@@ -4,7 +4,7 @@
 
 // モジュールのインポート
 const { exchangeBB, exchangeBF } = require('./config');
-const { updateTradeRecord, tradeRecords } = require('./tradeRecords');
+const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
 const { getMarketParameters, sleep } = require('./utils');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 

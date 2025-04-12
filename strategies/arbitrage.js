@@ -238,7 +238,8 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 取引所Aでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountA = getFilledCurrentPosition(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE');
+        // tradeRecordsパラメータを追加し、awaitを使用
+        const inyoBuyAmountA = await getFilledCurrentPosition(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE');
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountA = parseFloat(inyoBuyAmountA.toFixed(amountPrecision));
@@ -332,7 +333,8 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 取引所Bでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountB = getFilledCurrentPosition(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE");
+        // tradeRecordsパラメータを追加し、awaitを使用
+        const inyoBuyAmountB = await getFilledCurrentPosition(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE");
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountB = parseFloat(inyoBuyAmountB.toFixed(amountPrecision));

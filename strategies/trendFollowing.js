@@ -109,7 +109,8 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'MA');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'MA');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
@@ -270,7 +271,8 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'MACD');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'MACD');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
@@ -431,7 +433,8 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'RSI');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'RSI');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
@@ -594,7 +597,8 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'BB');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'BOLLINGER_BANDS');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;

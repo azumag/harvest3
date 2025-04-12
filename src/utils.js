@@ -158,7 +158,7 @@ function getNetPosition(tradeRecords, exchange, symbol, strategyKey) {
   return buyAmount;
 }
 
-async function getFilledCurrentPosition(tradeRecords, exchange, symbol, strategyKey) {
+async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
   // 約定を更新
   await updateFilledTrades(exchange, symbol, strategyKey);
 
@@ -189,9 +189,15 @@ async function updateFilledTrades(exchange, symbol, strategyKey) {
     });
     
     // 前回のチェック時間（ない場合は24時間前）
-    const lastCheckTime = summary.updatedAt 
-      ? summary.updatedAt 
+    const lastCheckTime = summary.updatedAt
+      ? summary.updatedAt
       : Date.now() - 24 * 60 * 60 * 1000;
+    
+    // fetchMyTradesメソッドが利用可能かどうかを確認
+    if (!exchange.has || !exchange.has['fetchMyTrades']) {
+      console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} ${strategyKey}): fetchMyTradesメソッドがサポートされていません`);
+      return 0;
+    }
     
     // 取引所から約定履歴を取得
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);

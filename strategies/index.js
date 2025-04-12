@@ -11,7 +11,7 @@ const { highFrequencyTrading, scalpingStrategy, orderCheckCancel } = require('./
 const { passiveMarketMaking } = require('./marketMaking');
 const { inyoStrategy } = require('./inyo');
 
-const database = require('../src/database');
+const { database } = require('../src/dbConfig');
 
 // 戦略の種類を定義
 const STRATEGY_TYPES = {
@@ -116,9 +116,7 @@ async function executeStrategy(strategyKey, params) {
     throw new Error(`指定された戦略が見つかりません: ${strategyKey}`);
   }
 
-  // 別プロセスのDB読み取りのため、
-  // 戦略の実行前にDBチェックポイントを実行
-  database.checkpoint();
+  // Redisデータベースではcheckpointは不要
   
   return await strategy.function(...params);
 }

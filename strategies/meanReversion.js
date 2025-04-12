@@ -107,8 +107,8 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'MEAN_REVERSION');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'MEAN_REVERSION');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
@@ -285,7 +285,8 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      let buyAmount = getFilledCurrentPosition(exchange, symbol, 'OSCILLATOR');
+      // tradeRecordsパラメータを追加し、awaitを使用
+      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'OSCILLATOR');
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;

@@ -1,5 +1,5 @@
 const { postResultToDiscord, postErrorToDiscord } = require('./notifications');
-const { tradeRecords } = require('./tradeRecords');
+const { tradeRecords } = require('./redisTradeRecords');
 const strategies = require('../strategies');
 
 /**
