@@ -1,4 +1,17 @@
 services:
+  # Redis サービスの追加
+  redis:
+    image: redis:7-alpine
+    container_name: harvest3-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    networks:
+      - harvest-network
+
   bot:
     image: harvest3-bot-image
     build: .
@@ -14,6 +27,12 @@ services:
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: npm start
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
 
   hft:
     image: harvest3-bot-image
@@ -29,6 +48,12 @@ services:
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: npm run start-hft
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
 
   mm:
     image: harvest3-bot-image
@@ -44,6 +69,12 @@ services:
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: npm run start-mm
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
 
   web-ui:
     container_name: trade_viewer
@@ -61,10 +92,14 @@ services:
       - .env:/usr/src/app/.env
     depends_on:
       - bot # botサービスが起動してからUIを起動
+      - redis
     environment:
       - NODE_ENV=production
       - PORT=3000
       - ENABLE_REALTIME=true
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
     command: npm run start-web # package.jsonで定義したスクリプトを使用
 
   # test:
@@ -79,3 +114,12 @@ services:
   #     - ./bot.js:/usr/src/app/bot.js
   #     - ./package.json:/usr/src/app/package.json
   #   command: node test/checkOrderStatus.js
+
+# ボリュームとネットワークの定義を追加
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  harvest-network:
+    driver: bridge
