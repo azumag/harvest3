@@ -3,9 +3,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 const fetch = require('node-fetch');
-const routes = require('./routes');
-const { addEventListner } = require('./database-events');
-const { sendEventToAll } = require('./controllers/events');
+const { apiRoutes, databaseEvents, initialize } = require('../dbConfig');
 require('dotenv').config();
 console.log('環境変数 USE_LOCALTUNNEL:', process.env.USE_LOCALTUNNEL);
 console.log('localtunnelモジュールを読み込む前...');
@@ -34,16 +32,11 @@ app.use(morgan('dev'));
 app.use(express.static(path.join(__dirname, '../web')));
 
 // APIルート
-app.use('/api', routes);
+app.use('/api', apiRoutes);
 
 // メインHTMLルート
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../web/index.html'));
-});
-
-// データベースイベントをSSEで配信
-addEventListner((event) => {
-  sendEventToAll(event);
 });
 
 app.get('/history', (req, res) => {
@@ -57,6 +50,14 @@ app.get('/analysis', (req, res) => {
 // サーバー起動
 app.listen(PORT, async () => {
   console.log(`API & Web Server running on port ${PORT}`);
+  
+  // データベースの初期化
+  try {
+    await initialize();
+    console.log('データベースが正常に初期化されました');
+  } catch (error) {
+    console.error('データベース初期化エラー:', error);
+  }
 
   if (process.env.USE_LOCALTUNNEL === 'true') {
     console.log('localtunnel機能が有効になっています');

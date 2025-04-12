@@ -146,9 +146,10 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                       }
                       
                       // 取引記録を更新（実際の約定価格を使用）
-                      if (updateTradeRecord) {
-                        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'buy');
-                      }
+                      // if (updateTradeRecord) {
+                      //   updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'buy', );
+                      // }
+                      // updateFilledHistory();
                       
                       // 取引履歴に追加（実際の約定価格を使用）
                       tradeHistory.push({
@@ -233,9 +234,10 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                       }
                       
                       // 取引記録を更新（実際の約定価格を使用）
-                      if (updateTradeRecord) {
-                        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell');
-                      }
+                      // if (updateTradeRecord) {
+                      //   updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell');
+                      // }
+                      // updateFilledHistory();
                       
                       // 取引履歴に追加（実際の約定価格を使用）
                       tradeHistory.push({
@@ -481,7 +483,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, buyAmount, buyPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, buyAmount, buyPrice, 'buy', buyOrder.id, 'limit');
         }
       } else {
         console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
@@ -500,7 +502,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, sellAmount, sellPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, sellAmount, sellPrice, 'sell', sellOrder.id, 'limit');
         }
       } else {
         console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);

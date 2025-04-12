@@ -120,10 +120,10 @@ class MarketMakingStrategy {
    * @param {Number} price - 価格
    * @param {Number} amount - 量
    */
-  _updateTradeRecord(side, price, amount) {
+  _updateTradeRecord(side, price, amount, orderId, orderType) {
     if (this.options.updateTradeRecord) {
       try {
-        this.options.updateTradeRecord(this.exchange.id, this.symbol, amount, price, side);
+        this.options.updateTradeRecord(this.exchange.id, this.symbol, amount, price, side, orderId, orderType);
       } catch (error) {
         console.error(`${this.symbol}: 取引記録の更新中にエラー:`, error);
       }
@@ -507,7 +507,7 @@ class MarketMakingStrategy {
         console.log(`${this.symbol}: -- 売り注文成功: ID ${order.id}, ペアID: ${newPair.id}`);
       }
 
-      this._updateTradeRecord(side, price, amount); // 取引記録更新
+      this._updateTradeRecord(side, price, amount, order.id, 'limit'); // 取引記録更新
       this.orderHistory.push({
         time: timestamp,
         type: side,

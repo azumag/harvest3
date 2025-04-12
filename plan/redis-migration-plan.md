@@ -20,11 +20,11 @@ graph TD
     A --> F[トレードペア]
  
     
-    B --> B1[Hash: trade:record:{exchangeId}:{symbol}:{strategyKey}]
+    B --> B1[Hash: trade:orderSummary:{exchangeId}:{symbol}:{strategyKey}]
     B1 --> B1a[buyAmount, sellAmount, totalBuyCost, totalSellValue, netPosition, createdAt, updatedAt]
     
     C --> C1[List: trade:orderHistory:{exchangeId}:{symbol}:{strategyKey}]
-    C1 --> C1a[orderId, amount, side, price, orderType, orderAt]
+    C1 --> C1a[orderId, amount, side, price, orderType, orderedAt]
 
     D --> D1[List: trade:filledHistory:{exchangeId}:{symbol}:{strategyKey}]
     D1 --> D1a[orderId, amount, side, price, orderType, fee, filledAt] 
@@ -38,7 +38,7 @@ graph TD
     E --> E4[Sorted Set: trade:orderHistory:time]
     E --> E5[Sorted Set: trade:filledHistory:time]
     E --> E6[Sorted Set: trade:pairs:time:{exchangeId}:{symbol}:{strategyKey}]
-    E --> E7[Sorted Set: trade:record:time]
+    E --> E7[Sorted Set: trade:orderSummary:time]
     E4 --> E4a[スコア: タイムスタンプ, メンバー: 取引ID]
     E5 --> E5a[スコア: タイムスタンプ, メンバー: 取引ID]
     E5 --> E5a[スコア: タイムスタンプ, メンバー: 取引ID]
@@ -47,9 +47,9 @@ graph TD
 ```
 
 #### 1. 取引記録（trade_records）
-- **ハッシュ構造**を使用: `trade:record:{exchangeId}:{symbol}:{strategyKey}`
+- **ハッシュ構造**を使用: `trade:orderSummary:{exchangeId}:{symbol}:{strategyKey}`
   - フィールド: `buyAmount`, `sellAmount`, `totalBuyCost`, `totalSellValue`, `netPosition`, `updatedAt` など
-  - 例: `trade:record:binance:BTC/USDT:trendFollowing`
+  - 例: `trade:orderSummary:binance:BTC/USDT:trendFollowing`
 
 #### 2. 取引履歴
 a. 注文履歴（trade:orderHistory）  

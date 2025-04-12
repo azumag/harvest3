@@ -89,7 +89,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -187,7 +187,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
@@ -295,7 +295,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -401,7 +401,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
@@ -509,7 +509,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -613,7 +613,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
@@ -723,7 +723,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -833,7 +833,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);

@@ -134,7 +134,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', strategyKey);
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', strategyKey, order.id, 'market');
           
           // 最後のシグナルを記録
           if (!tradeRecords[exchange.id][symbol][strategyKey].lastSignal) {
@@ -210,7 +210,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
         
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', strategyKey);
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', strategyKey, order.id, 'market');
           
           // 最後のシグナルを記録
           if (!tradeRecords[exchange.id][symbol][strategyKey].lastSignal) {

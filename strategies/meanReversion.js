@@ -86,7 +86,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -187,7 +187,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
@@ -294,7 +294,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
 
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
         }
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
@@ -398,7 +398,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
 
         // 取引記録を更新
         if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell');
+          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
         }
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);

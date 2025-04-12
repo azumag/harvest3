@@ -22,8 +22,8 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     const params = [];
     
     // updateTradeRecordに戦略キーを渡すラッパー関数
-    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side) => {
-      updateTradeRecord(exchangeId, symbol, amount, price, side, strategyKey);
+    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side, orderId, orderType) => {
+      updateTradeRecord(exchangeId, symbol, amount, price, side, strategyKey, orderId, orderType);
     };
     
     switch (strategyKey) {
@@ -102,8 +102,8 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
     }
     
     // updateTradeRecordに戦略キーを渡すラッパー関数
-    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side) => {
-      updateTradeRecord(exchangeId, symbol, amount, price, side, 'INTER_EXCHANGE_ARBITRAGE');
+    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side, orderId, orderType) => {
+      updateTradeRecord(exchangeId, symbol, amount, price, side, 'INTER_EXCHANGE_ARBITRAGE', orderId, orderType);
     };
     
     const params = [

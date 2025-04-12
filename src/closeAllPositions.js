@@ -93,7 +93,7 @@ async function closeAllPositions(exchange) {
         await postOrderToDiscord(`[SUCCESS] ${exchange.id}: ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
         
         // 取引記録を更新
-        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell', 'CLOSE_ALL');
+        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell', 'CLOSE_ALL', order.id, 'market');
         
         soldCount++;
       } catch (error) {

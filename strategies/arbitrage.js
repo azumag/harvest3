@@ -221,7 +221,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             
             // 取引記録を更新
             if (updateTradeRecord) {
-              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, buyPriceA, 'buy');
+              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, buyPriceA, 'buy', buyOrderA.id, 'limit');
             }
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
@@ -271,7 +271,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             
             // 取引記録を更新
             if (updateTradeRecord) {
-              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, sellPriceA, 'sell');
+              updateTradeRecord(exchangeAId, symbol, adjustedAmountA, sellPriceA, 'sell', sellOrderA.id, 'limit');
             }
           } catch (error) {
             console.error(`売り注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
@@ -321,7 +321,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             
             // 取引記録を更新
             if (updateTradeRecord) {
-              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, buyPriceB, 'buy');
+              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, buyPriceB, 'buy', buyOrderB.id, 'limit');
             }
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
@@ -371,7 +371,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             
             // 取引記録を更新
             if (updateTradeRecord) {
-              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, sellPriceB, 'sell');
+              updateTradeRecord(exchangeBId, symbol, adjustedAmountB, sellPriceB, 'sell', sellOrderB.id, 'limit');
             }
           } catch (error) {
             console.error(`売り注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
