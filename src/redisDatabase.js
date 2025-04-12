@@ -315,8 +315,15 @@ async function getLatestTradeAmount(exchangeId, symbol, strategyKey) {
  * @param {Number} offset - オフセット
  * @returns {Promise<Object>} 取引履歴と合計件数
  */
-async function getTradeHistory(filters = {}, limit = 100, offset = 0) {
+async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
   const { exchangeId, symbol, strategyKey, startDate, endDate } = filters;
+  
+  // デバッグログ: 関数呼び出しを記録
+  console.log('getFilledHistory関数呼び出し:', {
+    filters,
+    limit,
+    offset
+  });
   
   // 時系列インデックスから取得
   let historyItems = [];
@@ -324,6 +331,10 @@ async function getTradeHistory(filters = {}, limit = 100, offset = 0) {
   if (exchangeId && symbol && strategyKey) {
     // 特定の取引所、通貨ペア、戦略の履歴を取得
     const historyKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
+    
+    // デバッグログ: 使用しているRedisキーを記録
+    console.log('使用しているRedisキー:', historyKey);
+    
     const data = await client.lRange(historyKey, offset, offset + limit - 1);
     
     historyItems = data.map(item => {
@@ -693,13 +704,130 @@ async function getOrderDetailsByOrderId(orderId) {
 
 
 // モジュールのエクスポート
+/**
+ * 取引履歴（注文履歴）を取得する関数
+ * @param {Object} filters - フィルター条件
+ * @param {Number} limit - 取得件数
+ * @param {Number} offset - オフセット
+ * @returns {Promise<Object>} 取引履歴と合計件数
+ */
+async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
+  const { exchangeId, symbol, strategyKey, startDate, endDate } = filters;
+  
+  console.log('getOrderHistory関数呼び出し:', {
+    filters,
+    limit,
+    offset
+  });
+  
+  // 時系列インデックスから取得
+  let historyItems = [];
+  
+  if (exchangeId && symbol && strategyKey) {
+    // 特定の取引所、通貨ペア、戦略の履歴を取得
+    const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+    
+    console.log('使用しているRedisキー:', historyKey);
+    
+    const data = await client.lRange(historyKey, offset, offset + limit - 1);
+    
+    historyItems = data.map(item => {
+      const trade = JSON.parse(item);
+      return {
+        id: trade.orderId,
+        timestamp: trade.orderedAt,
+        exchangeId,
+        symbol,
+        strategyKey,
+        side: trade.side,
+        amount: trade.amount,
+        price: trade.price,
+        value: trade.amount * trade.price
+      };
+    });
+  } else {
+    // 時系列インデックスから取得
+    let scoreMin = '-inf';
+    let scoreMax = '+inf';
+    
+    if (startDate) {
+      scoreMin = startDate;
+    }
+    
+    if (endDate) {
+      scoreMax = endDate;
+    }
+    
+    // 時系列インデックスから取得
+    const timeRangeItems = await client.zRangeByScore('trade:orderHistory:time', scoreMin, scoreMax, {
+      LIMIT: {
+        offset,
+        count: limit
+      }
+    });
+    
+    // 各アイテムの詳細を取得
+    for (const item of timeRangeItems) {
+      const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
+      
+      // フィルター条件に一致するか確認
+      if (exchangeId && itemExchangeId !== exchangeId) continue;
+      if (symbol && itemSymbol !== symbol) continue;
+      if (strategyKey && itemStrategyKey !== strategyKey) continue;
+      
+      // 履歴キー
+      const historyKey = `trade:orderHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
+      
+      // インデックスを特定するのは難しいので、全て取得して検索
+      const allHistory = await client.lRange(historyKey, 0, -1);
+      
+      for (const historyItem of allHistory) {
+        const trade = JSON.parse(historyItem);
+        
+        // タイムスタンプが一致するものを探す
+        if (trade.orderedAt.toString() === timestamp) {
+          historyItems.push({
+            id: trade.orderId,
+            timestamp: trade.orderedAt,
+            exchangeId: itemExchangeId,
+            symbol: itemSymbol,
+            strategyKey: itemStrategyKey,
+            side: trade.side,
+            amount: trade.amount,
+            price: trade.price,
+            value: trade.amount * trade.price
+          });
+          break;
+        }
+      }
+    }
+  }
+  
+  // 合計数を取得（実際の実装ではより効率的な方法が必要）
+  let totalCount = 0;
+  
+  if (exchangeId && symbol && strategyKey) {
+    const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+    totalCount = await client.lLen(historyKey);
+  } else {
+    // 時系列インデックスのカウント（フィルタリングは考慮していない簡易実装）
+    totalCount = await client.zCount('trade:orderHistory:time', '-inf', '+inf');
+  }
+  
+  return {
+    history: historyItems,
+    total: totalCount
+  };
+}
+
 module.exports = {
   initialize,
   addTrade,
   addFilledTrade,
   getTradeRecordsAsObject,
   getLatestTradeAmount,
-  getTradeHistory,
+  getFilledHistory, // 関数名を変更
+  getOrderHistory,
   getTradeSummary,
   getFilledSummary,
   getOrderStrategyKeyByOrderId,
