@@ -1,5 +1,4 @@
 services:
-  # Redis サービスの追加
   redis:
     image: redis:7-alpine
     container_name: harvest3-redis

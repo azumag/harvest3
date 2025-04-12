@@ -1,6 +1,6 @@
 const strategies = require('../strategies');
 const { config, bitflyerMinTradeAmounts } = require('./config');
-const { updateTradeRecord, tradeRecords } = require('./tradeRecords');
+const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { getMarketParameters } = require('./utils');
 

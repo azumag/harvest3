@@ -11,13 +11,10 @@
     "close-all": "node src/closeAllPositions.js",
     "close-bb": "node src/closeAllPositions.js --bitbank",
     "close-bf": "node src/closeAllPositions.js --bitflyer",
-    "check-order-status": "node test/checkOrderStatus.js",
-    "migrate-to-sqlite": "node scripts/migrateToSqlite.js",
-    "test-sqlite": "node test/testSqlite.js"
+    "check-order-status": "node test/checkOrderStatus.js"
   },
   "dependencies": {
     "axios": "^1.7.7",
-    "better-sqlite3": "^11.9.1",
     "ccxt": "^3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
