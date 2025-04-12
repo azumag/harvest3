@@ -212,52 +212,24 @@ function calculateBollingerBands(prices, period = 20, multiplier = 2) {
  * @param {Object} tradeRecords - 取引記録
  * @param {Object} exchange - 取引所
  * @param {string} symbol - シンボル
- * @param {Function} updateTradeRecord - 取引記録更新関数
- * @param {string} strategyKey - 戦略キー（オプション）
+ * @param {string} strategyKey - 戦略キー
  * @returns {number} - 買い量
  */
-function getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, strategyKey = null) {
+function getBuyAmount(tradeRecords, exchange, symbol, strategyKey) {
   let buyAmount = 0;
-  if (updateTradeRecord) {
-    // tradeRecordsから該当する取引所とシンボルの買い量を取得
-    const exchangeRecords = tradeRecords[exchange.id];
-    if (exchangeRecords && exchangeRecords[symbol]) {
-      if (strategyKey && exchangeRecords[symbol][strategyKey]) {
-        // 特定の戦略の買い量を取得（MMなど）
-        buyAmount = exchangeRecords[symbol][strategyKey].buyAmount || 0;
-      } else {
-        // 通常の買い量を取得（全戦略の合計）
-        buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
-      }
-      if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
-      if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+  // tradeRecordsから該当する取引所とシンボルの買い量を取得
+  const exchangeRecords = tradeRecords[exchange.id];
+  if (exchangeRecords && exchangeRecords[symbol]) {
+    if (strategyKey && exchangeRecords[symbol][strategyKey]) {
+      // 特定の戦略の買い量を取得
+      buyAmount = exchangeRecords[symbol][strategyKey].netPosition || 0;
     }
+    if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
+    if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
   }
   return buyAmount;
 }
 
-/**
- * MMで買った量を取得する便利関数
- * @param {Object} tradeRecords - 取引記録
- * @param {Object} exchange - 取引所
- * @param {string} symbol - シンボル
- * @param {Function} updateTradeRecord - 取引記録更新関数
- * @returns {number} - MMで買った量
- */
-function getInyoBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord) {
-  // データベースからの最新の取引量を取得
-  const { getLatestTradeAmount } = require('../src/database');
-  const latestAmount = getLatestTradeAmount(exchange.id, symbol, 'MARKET_MAKING');
-  
-  // 最新の取引があれば、その量を返す
-  if (latestAmount > 0) {
-    return latestAmount;
-  }
-  
-  // なければ 0 を返す
-  return 0;
-  // return getBuyAmount(tradeRecords, exchange, symbol, updateTradeRecord, 'MARKET_MAKING');
-}
 
 module.exports = {
   calculateSMA,
@@ -265,6 +237,5 @@ module.exports = {
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
-  getBuyAmount,
-  getInyoBuyAmount
+  getBuyAmount
 };

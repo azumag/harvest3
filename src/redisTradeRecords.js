@@ -1,25 +1,7 @@
 /**
  * Redis版の取引記録を管理するモジュール
- * SQLiteからRedisへの移行の一部として実装
  */
 const { addTrade, getTradeRecordsAsObject } = require('./redisDatabase');
-
-// インメモリキャッシュ（パフォーマンス向上のため）
-let tradeRecordsCache = {};
-
-// 初期化時にキャッシュを読み込む
-async function initializeCache() {
-  try {
-    tradeRecordsCache = await getTradeRecordsAsObject();
-    console.log('取引記録キャッシュが初期化されました');
-  } catch (error) {
-    console.error('取引記録キャッシュの初期化エラー:', error);
-    tradeRecordsCache = {};
-  }
-}
-
-// 初期化を実行
-initializeCache();
 
 /**
  * 取引記録を更新する関数
@@ -38,11 +20,9 @@ async function updateTradeRecord(exchangeId, symbol, amount, price, side, strate
   // データベースに追加
   await addTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType);
   
-  // キャッシュを更新
-  tradeRecordsCache = await getTradeRecordsAsObject();
-  
-  // 現在の記録を取得（既存のログ出力を維持）
-  const record = tradeRecordsCache[exchangeId]?.[symbol]?.[strategyKey] || { 
+  // 現在の記録を取得（ログ出力用）
+  const records = await getTradeRecordsAsObject();
+  const record = records[exchangeId]?.[symbol]?.[strategyKey] || { 
     buyAmount: 0, 
     sellAmount: 0, 
     netPosition: 0 
@@ -54,32 +34,33 @@ async function updateTradeRecord(exchangeId, symbol, amount, price, side, strate
   return true;
 }
 
-// tradeRecordsをプロキシとして実装し、常に最新のキャッシュを提供
+// tradeRecordsをゲッター関数として実装し、常に最新のデータを提供
 const tradeRecords = new Proxy({}, {
-  get: (target, prop) => {
-    return tradeRecordsCache[prop];
+  get: async (target, prop) => {
+    const records = await getTradeRecordsAsObject();
+    return records[prop];
   },
-  ownKeys: () => {
-    return Reflect.ownKeys(tradeRecordsCache);
+  ownKeys: async () => {
+    const records = await getTradeRecordsAsObject();
+    return Reflect.ownKeys(records);
   },
-  getOwnPropertyDescriptor: (target, prop) => {
+  getOwnPropertyDescriptor: async (target, prop) => {
+    const records = await getTradeRecordsAsObject();
     return {
       configurable: true,
       enumerable: true,
-      value: tradeRecordsCache[prop]
+      value: records[prop]
     };
   }
 });
 
-// キャッシュを手動で更新する関数（必要に応じて使用）
-async function refreshCache() {
-  tradeRecordsCache = await getTradeRecordsAsObject();
-  return tradeRecordsCache;
+// 現在のデータを取得する関数
+async function getLatestRecords() {
+  return await getTradeRecordsAsObject();
 }
 
 module.exports = {
   tradeRecords,
   updateTradeRecord,
-  refreshCache,
-  initializeCache
+  getLatestRecords
 };

@@ -3,7 +3,7 @@
  */
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
-const { getInyoBuyAmount } = require('./indicators');
+const { getBuyAmount } = require('./indicators');
 
 
 /**
@@ -237,20 +237,14 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         }
         
         // 取引所Aでの売り注文
-        // MM戦略で買った額を取得
-        const inyoBuyAmountA = getInyoBuyAmount(tradeRecords, exchangeA, symbol, updateTradeRecord);
+        // 戦略で買った額を取得
+        const inyoBuyAmountA = getBuyAmount(tradeRecords, exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE');
         
-        // 売却後の残高をチェック（MMで買った分以上残るようにする）
-        const remainingAfterSellA = availableAssetA - adjustedAmountA;
-        
-        if (remainingAfterSellA < inyoBuyAmountA && availableAssetA > inyoBuyAmountA) {
-          // MMで買った分を残して売る
-          const originalAmountA = adjustedAmountA;
-          adjustedAmountA = parseFloat((availableAssetA - inyoBuyAmountA).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${exchangeAId} - ${symbol} - MM買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
-          if (postOrderToDiscord) {
-            await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeAId} - ${symbol} - MM買い分: ${inyoBuyAmountA}, 元の売却量: ${originalAmountA}, 調整後: ${adjustedAmountA}`);
-          }
+        // 売却量を戦略で買った量のみに設定
+        adjustedAmountA = parseFloat(inyoBuyAmountA.toFixed(amountPrecision));
+        console.log(`売却量を買い分のみに設定しました: ${exchangeAId} - ${symbol} - 買い分: ${inyoBuyAmountA}, 売却量: ${adjustedAmountA}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[アービトラージ] 売却量を買い分のみに設定しました: ${exchangeAId} - ${symbol} - 買い分: ${inyoBuyAmountA}, 売却量: ${adjustedAmountA}`);
         }
         
         if (adjustedAmountA < 0.0001) {
@@ -337,20 +331,14 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         }
         
         // 取引所Bでの売り注文
-        // MM戦略で買った額を取得
-        const inyoBuyAmountB = getInyoBuyAmount(tradeRecords, exchangeB, symbol, updateTradeRecord);
+        // 戦略で買った額を取得
+        const inyoBuyAmountB = getBuyAmount(tradeRecords, exchangeB, symbol, updateTradeRecord);
         
-        // 売却後の残高をチェック（MMで買った分以上残るようにする）
-        const remainingAfterSellB = availableAssetB - adjustedAmountB;
-        
-        if (remainingAfterSellB < inyoBuyAmountB && availableAssetB > inyoBuyAmountB) {
-          // MMで買った分を残して売る
-          const originalAmountB = adjustedAmountB;
-          adjustedAmountB = parseFloat((availableAssetB - inyoBuyAmountB).toFixed(amountPrecision));
-          console.log(`売却量を調整しました: ${exchangeBId} - ${symbol} - MM買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);
-          if (postOrderToDiscord) {
-            await postOrderToDiscord(`[アービトラージ] 売却量を調整しました: ${exchangeBId} - ${symbol} - MM買い分: ${inyoBuyAmountB}, 元の売却量: ${originalAmountB}, 調整後: ${adjustedAmountB}`);
-          }
+        // 売却量を戦略で買った量のみに設定
+        adjustedAmountB = parseFloat(inyoBuyAmountB.toFixed(amountPrecision));
+        console.log(`売却量を買い分のみに設定しました: ${exchangeBId} - ${symbol} - 買い分: ${inyoBuyAmountB}, 売却量: ${adjustedAmountB}`);
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(`[アービトラージ] 売却量を買い分のみに設定しました: ${exchangeBId} - ${symbol} - 買い分: ${inyoBuyAmountB}, 売却量: ${adjustedAmountB}`);
         }
         
         if (adjustedAmountB < 0.0001) {
