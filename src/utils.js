@@ -209,16 +209,9 @@ async function updateFilledTrades(exchange, symbol) {
 
       let strategyKey = 'OUTSIDE';
       if (trade.id || trade.order_id || trade.order) {
-        const orderHistory = await getOrderHistoryByOrderIdForExchangeSymbol(
-          exchange.id,
-          symbol,
+        strategyKey = await getOrderStrategyKeyByOrderId(
           trade.id || trade.order_id || trade.order,
-          lastCheckTime
         );
-        
-        if (orderHistory && orderHistory.length > 0) {
-          strategyKey = orderHistory[0].strategyKey || 'OUTSIDE';
-        }
       }
 
       await addFilledTrade(
