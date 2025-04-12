@@ -1,6 +1,8 @@
 const { postErrorToDiscord } = require('./notifications');
 const { bitflyerMinTradeAmounts } = require('./config');
-const { getFilledSummary, addFilledTrade } = require('./redisDatabase');
+const { 
+  getFilledSummary, addFilledTrade, getOrderHistoryByOrderIdForExchangeSymbol
+} = require('./redisDatabase');
  
 /**
  * 加重平均を計算する関数
@@ -160,7 +162,7 @@ function getNetPosition(tradeRecords, exchange, symbol, strategyKey) {
 
 async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
   // 約定を更新
-  await updateFilledTrades(exchange, symbol, strategyKey);
+  await updateFilledTrades(exchange, symbol);
 
   const summary = await getFilledSummary({
     exchangeId: exchange.id,
@@ -175,10 +177,9 @@ async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
  * 前回チェック時から現在までの約定履歴を取得し記録する
  * @param {Object} exchange - 取引所オブジェクト
  * @param {string} symbol - 通貨ペア
- * @param {string} strategyKey - 戦略キー
  * @returns {Promise<number>} - 処理した約定数
  */
-async function updateFilledTrades(exchange, symbol, strategyKey) {
+async function updateFilledTrades(exchange, symbol) {
  
   try {
     // 前回のチェック時間を取得
@@ -195,7 +196,7 @@ async function updateFilledTrades(exchange, symbol, strategyKey) {
     
     // fetchMyTradesメソッドが利用可能かどうかを確認
     if (!exchange.has || !exchange.has['fetchMyTrades']) {
-      console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} ${strategyKey}): fetchMyTradesメソッドがサポートされていません`);
+      console.error(`約定履歴の更新エラー (${exchange.id} ${symbol}): fetchMyTradesメソッドがサポートされていません`);
       return 0;
     }
     
@@ -205,6 +206,21 @@ async function updateFilledTrades(exchange, symbol, strategyKey) {
     let processedCount = 0;
     // 各約定を処理
     for (const trade of trades) {
+
+      let strategyKey = 'OUTSIDE';
+      if (trade.id || trade.order_id || trade.order) {
+        const orderHistory = await getOrderHistoryByOrderIdForExchangeSymbol(
+          exchange.id,
+          symbol,
+          trade.id || trade.order_id || trade.order,
+          lastCheckTime
+        );
+        
+        if (orderHistory && orderHistory.length > 0) {
+          strategyKey = orderHistory[0].strategyKey || 'OUTSIDE';
+        }
+      }
+
       await addFilledTrade(
         exchange.id,
         symbol,

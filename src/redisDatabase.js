@@ -34,6 +34,10 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
   await client.sAdd(`symbols:${exchangeId}`, symbol);
   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
+  // 注文IDをキーとしたインデックスを作成
+  // この形式で、オーダーIDから取引所、通貨ペア、戦略キーの情報を取得可能に
+  await client.set(`order:index:${orderId}`, `${exchangeId}:${symbol}:${strategyKey}`);
+  
   // 取引記録が存在するか確認
   const exists = await client.exists(recordKey);
   
@@ -634,43 +638,21 @@ async function getFilledSummary(filters = {}) {
 }
 
 /**
- * 特定の取引所とシンボルに対して、オーダーIDから注文履歴を取得する関数
- * @param {String} exchangeId - 取引所ID
- * @param {String} symbol - 通貨ペア
+ * 特定の注文IDから戦略キーを取得する関数
  * @param {String} orderId - 注文ID
- * @returns {Promise<Object|null>} 注文履歴と戦略キー情報、見つからない場合はnull
  */
-async function getOrderHistoryByOrderIdForExchangeSymbol(exchangeId, symbol, orderId) {
-  // 戦略一覧を取得
-  const strategies = await client.sMembers(`strategies:${exchangeId}:${symbol}`);
+async function getOrderStrategyKeyByOrderId(orderId) {
+  const indexValue = await client.get(`order:index:${orderId}`);
   
-  for (const strategyKey of strategies) {
-    // 注文履歴キー
-    const orderHistoryKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
-    
-    // 注文履歴を取得
-    const historyData = await client.lRange(orderHistoryKey, 0, -1);
-    
-    // 各注文履歴をチェック
-    for (const data of historyData) {
-      try {
-        const order = JSON.parse(data);
-        
-        // オーダーIDが一致する場合
-        if (order.orderId === orderId) {
-          return {
-            order,
-            strategyKey
-          };
-        }
-      } catch (error) {
-        console.error('注文履歴のパースエラー:', error);
-      }
-    }
+  // インデックスが存在しない場合
+  if (!indexValue) {
+    return 'OUTSIDE';
   }
   
-  // 見つからなかった場合
-  return null;
+  // インデックス値を分解
+  const [exchangeId, symbol, strategyKey] = indexValue.split(':');
+  
+  return strategyKey;
 }
 
 // モジュールのエクスポート
@@ -683,5 +665,5 @@ module.exports = {
   getTradeHistory,
   getTradeSummary,
   getFilledSummary,
-  getOrderHistoryByOrderIdForExchangeSymbol
+  getOrderStrategyKeyByOrderId
 };
