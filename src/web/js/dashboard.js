@@ -458,14 +458,14 @@ function getPeriodText(period) {
 function loadRecentTrades() {
   const tableBody = document.querySelector('#recent-trades-table tbody');
   
-  // APIからデータ取得
-  fetch('/api/history?limit=50')
+  // APIからデータ取得（約定履歴を使用）
+  fetch('/api/filled-history?limit=50')
     .then(response => response.json())
     .then(data => {
       if (!data.history || data.history.length === 0) {
         tableBody.innerHTML = `
           <tr>
-            <td colspan="8" class="text-center">取引データがありません</td>
+            <td colspan="9" class="text-center">約定データがありません</td>
           </tr>
         `;
         return;
@@ -480,11 +480,11 @@ function loadRecentTrades() {
       tableBody.innerHTML = html;
     })
     .catch(error => {
-      console.error('取引履歴の取得に失敗しました:', error);
+      console.error('約定履歴の取得に失敗しました:', error);
       tableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="text-center text-danger">
-            取引履歴の取得に失敗しました。詳細はコンソールを確認してください。
+          <td colspan="9" class="text-center text-danger">
+            約定履歴の取得に失敗しました。詳細はコンソールを確認してください。
           </td>
         </tr>
       `;
@@ -511,6 +511,7 @@ function createTradeTableRow(trade) {
       <td>${trade.amount}</td>
       <td>${trade.price !== null && trade.price !== undefined ? trade.price.toLocaleString() : '0'}</td>
       <td>${trade.value !== null && trade.value !== undefined ? trade.value.toLocaleString() : '0'}</td>
+      <td>${trade.fee !== null && trade.fee !== undefined ? trade.fee.toLocaleString() : '-'}</td>
     </tr>
   `;
 }

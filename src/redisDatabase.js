@@ -223,7 +223,7 @@ async function getTradeRecordsAsObject() {
       
       for (const strategyKey of strategies) {
         // 取引記録を取得
-        const recordKey = `trade:orderSummary:${exchangeId}:${symbol}:${strategyKey}`;
+        const recordKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
         const record = await client.hGetAll(recordKey);
         
         if (Object.keys(record).length === 0) {

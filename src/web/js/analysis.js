@@ -330,7 +330,7 @@ function loadTimeSeriesData() {
   params.append('limit', 1000); // 十分なデータポイント数を取得
   
   // APIからデータ取得
-  fetch(`/api/history?${params.toString()}`)
+  fetch(`/api/filled-history?${params.toString()}`)
     .then(response => response.json())
     .then(data => {
       if (!data.history || data.history.length === 0) {
@@ -643,7 +643,7 @@ function loadDetailedAnalysisData() {
   params.append('limit', 1000); // 十分なデータポイント数を取得
   
   // APIからデータ取得
-  fetch(`/api/history?${params.toString()}`)
+  fetch(`/api/filled-history?${params.toString()}`)
     .then(response => response.json())
     .then(data => {
       if (!data.history || data.history.length === 0) {
