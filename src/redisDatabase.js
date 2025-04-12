@@ -38,6 +38,21 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
   // この形式で、オーダーIDから取引所、通貨ペア、戦略キーの情報を取得可能に
   await client.set(`order:index:${orderId}`, `${exchangeId}:${symbol}:${strategyKey}`);
   
+  // 注文詳細のインデックスを作成（検索高速化のため）
+  const orderDetails = {
+    orderId,
+    amount,
+    side,
+    price,
+    orderType,
+    orderedAt: now,
+    type: 'order',
+    exchangeId,
+    symbol,
+    strategyKey
+  };
+  await client.set(`order:details:${orderId}`, JSON.stringify(orderDetails));
+  
   // 取引記録が存在するか確認
   const exists = await client.exists(recordKey);
   
@@ -655,6 +670,25 @@ async function getOrderStrategyKeyByOrderId(orderId) {
   return strategyKey;
 }
 
+/**
+ * 特定の注文IDから注文の詳細情報を取得する関数（効率化版）
+ * @param {String} orderId - 注文ID
+ * @returns {Promise<Object|null>} 注文の詳細情報またはnull
+ */
+async function getOrderDetailsByOrderId(orderId) {
+  // 直接インデックスから詳細情報を取得（高速）
+  const orderDetails = await client.get(`order:details:${orderId}`);
+  if (orderDetails) {
+    try {
+      return JSON.parse(orderDetails);
+    } catch (error) {
+      console.error('注文詳細のパースエラー:', error);
+    }
+  }
+  return null;
+}
+
+
 // モジュールのエクスポート
 module.exports = {
   initialize,
@@ -665,5 +699,6 @@ module.exports = {
   getTradeHistory,
   getTradeSummary,
   getFilledSummary,
-  getOrderStrategyKeyByOrderId
+  getOrderStrategyKeyByOrderId,
+  getOrderDetailsByOrderId
 };
