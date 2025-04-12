@@ -144,7 +144,7 @@ function loadFilledTradeHistory() {
   // ローディング表示
   tableBody.innerHTML = `
     <tr>
-      <td colspan="10" class="text-center py-4">
+      <td colspan="11" class="text-center py-4">
         <div class="spinner-border text-primary" role="status">
           <span class="visually-hidden">読み込み中...</span>
         </div>
@@ -169,7 +169,7 @@ function loadFilledTradeHistory() {
       if (!data.history || data.history.length === 0) {
         tableBody.innerHTML = `
           <tr>
-            <td colspan="10" class="text-center">約定データがありません</td>
+            <td colspan="11" class="text-center">約定データがありません</td>
           </tr>
         `;
         // ページネーション情報を更新
@@ -194,7 +194,7 @@ function loadFilledTradeHistory() {
       console.error('約定履歴の取得に失敗しました:', error);
       tableBody.innerHTML = `
         <tr>
-          <td colspan="10" class="text-center text-danger">
+          <td colspan="11" class="text-center text-danger">
             約定履歴の取得に失敗しました。詳細はコンソールを確認してください。
           </td>
         </tr>
@@ -224,7 +224,7 @@ function createTradeTableRow(trade) {
       <td>${trade.amount}</td>
       <td>${trade.price.toLocaleString()}</td>
       <td>${trade.value.toLocaleString()}</td>
-      <td>${trade.fee ? trade.fee.toLocaleString() : '-'}</td>
+      <td>${trade.fee !== undefined && trade.fee !== null ? trade.fee.toLocaleString() : '-'}</td>
     </tr>
   `;
 }
@@ -442,7 +442,7 @@ function prependTradeToTable(trade) {
   const tableBody = document.querySelector('#filled-trades-history-table tbody');
   
   // 「データなし」の行がある場合は削除
-  const noDataRow = tableBody.querySelector('td[colspan="10"]');
+  const noDataRow = tableBody.querySelector('td[colspan="11"]');
   if (noDataRow) {
     tableBody.innerHTML = '';
   }

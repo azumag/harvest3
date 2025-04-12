@@ -203,7 +203,6 @@ async function updateFilledTrades(exchange, symbol, strategyKey) {
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
     
     let processedCount = 0;
-    
     // 各約定を処理
     for (const trade of trades) {
       await addFilledTrade(
@@ -216,7 +215,7 @@ async function updateFilledTrades(exchange, symbol, strategyKey) {
         trade.cost || trade.amount * trade.price,
         trade.id || trade.order_id || trade.order,
         trade.type || 'market',
-        trade.fee ? trade.fee.cost : undefined 
+        trade.fee ? trade.fee.cost : undefined
       );
       
       processedCount++;

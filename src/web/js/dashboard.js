@@ -244,6 +244,15 @@ function loadSummary() {
   fetch(`/api/summary?period=${currentPeriod}`)
     .then(response => response.json())
     .then(data => {
+      // デバッグ用：APIレスポンスをコンソールに出力
+      console.log('サマリーデータ:', data);
+      
+      // 手数料が含まれていない場合は0を設定
+      if (data.summary && data.summary.totalFee === undefined) {
+        data.summary.totalFee = 0;
+        console.warn('手数料データが見つかりません。0を設定します。');
+      }
+      
       // 取引所別サマリーを表示
       displayExchangeSummary(data, exchangeContainer);
       
@@ -280,14 +289,17 @@ function displayExchangeSummary(data, container) {
     return;
   }
   
-  let html = '<table class="summary-table">';
+  // テーブルをレスポンシブコンテナで囲む
+  let html = '<div class="table-responsive"><table class="summary-table table-sm">';
   html += `
     <thead>
       <tr>
         <th>取引所</th>
-        <th>買い量</th>
-        <th>売り量</th>
+        <th>買った額</th>
+        <th>売った額</th>
+        <th>手数料</th>
         <th>実現損益</th>
+        <th>純損益</th>
       </tr>
     </thead>
     <tbody>
@@ -297,18 +309,32 @@ function displayExchangeSummary(data, container) {
   Object.keys(data.byExchange).forEach(exchangeId => {
     const exchange = data.byExchange[exchangeId];
     const pnlClass = exchange.realizedPnL > 0 ? 'profit' : exchange.realizedPnL < 0 ? 'loss' : '';
+    const netPnlClass = exchange.netPnL > 0 ? 'profit' : exchange.netPnL < 0 ? 'loss' : '';
+    
+    // 数値を短く表示するためのフォーマット関数
+    const formatNumber = (num) => {
+      if (num === null || num === undefined) return '0';
+      // 1000以上の場合は小数点以下を省略
+      if (Math.abs(num) >= 1000) {
+        return Math.round(num).toLocaleString();
+      }
+      // 1000未満の場合は小数点以下1桁まで表示
+      return num.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    };
     
     html += `
       <tr>
         <td>${exchangeId}</td>
-        <td>${exchange.totalBuyAmount.toFixed(6)}</td>
-        <td>${exchange.totalSellAmount.toFixed(6)}</td>
-        <td class="${pnlClass}">${exchange.realizedPnL !== null && exchange.realizedPnL !== undefined ? exchange.realizedPnL.toLocaleString() : '0'} 円</td>
+        <td>${formatNumber(exchange.totalBuyCost)} 円</td>
+        <td>${formatNumber(exchange.totalSellValue)} 円</td>
+        <td>${formatNumber(exchange.totalFee)} 円</td>
+        <td class="${pnlClass}">${formatNumber(exchange.realizedPnL)} 円</td>
+        <td class="${netPnlClass}">${formatNumber(exchange.netPnL)} 円</td>
       </tr>
     `;
   });
   
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   container.innerHTML = html;
 }
 
@@ -327,14 +353,17 @@ function displayStrategySummary(data, container) {
     return;
   }
   
-  let html = '<table class="summary-table">';
+  // テーブルをレスポンシブコンテナで囲む
+  let html = '<div class="table-responsive"><table class="summary-table table-sm">';
   html += `
     <thead>
       <tr>
         <th>戦略</th>
-        <th>買い量</th>
-        <th>売り量</th>
+        <th>買った額</th>
+        <th>売った額</th>
+        <th>手数料</th>
         <th>実現損益</th>
+        <th>純損益</th>
       </tr>
     </thead>
     <tbody>
@@ -344,18 +373,32 @@ function displayStrategySummary(data, container) {
   Object.keys(data.byStrategy).forEach(strategyKey => {
     const strategy = data.byStrategy[strategyKey];
     const pnlClass = strategy.realizedPnL > 0 ? 'profit' : strategy.realizedPnL < 0 ? 'loss' : '';
+    const netPnlClass = strategy.netPnL > 0 ? 'profit' : strategy.netPnL < 0 ? 'loss' : '';
+    
+    // 数値を短く表示するためのフォーマット関数
+    const formatNumber = (num) => {
+      if (num === null || num === undefined) return '0';
+      // 1000以上の場合は小数点以下を省略
+      if (Math.abs(num) >= 1000) {
+        return Math.round(num).toLocaleString();
+      }
+      // 1000未満の場合は小数点以下1桁まで表示
+      return num.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    };
     
     html += `
       <tr>
         <td>${strategyKey}</td>
-        <td>${strategy.totalBuyAmount.toFixed(6)}</td>
-        <td>${strategy.totalSellAmount.toFixed(6)}</td>
-        <td class="${pnlClass}">${strategy.realizedPnL !== null && strategy.realizedPnL !== undefined ? strategy.realizedPnL.toLocaleString() : '0'} 円</td>
+        <td>${formatNumber(strategy.totalBuyCost)} 円</td>
+        <td>${formatNumber(strategy.totalSellValue)} 円</td>
+        <td>${formatNumber(strategy.totalFee)} 円</td>
+        <td class="${pnlClass}">${formatNumber(strategy.realizedPnL)} 円</td>
+        <td class="${netPnlClass}">${formatNumber(strategy.netPnL)} 円</td>
       </tr>
     `;
   });
   
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   container.innerHTML = html;
 }
 
@@ -367,9 +410,7 @@ function updateProfitChart(data) {
   const canvas = document.getElementById('profitChart');
   const ctx = canvas.getContext('2d');
   
-  // キャンバスの高さを固定
-  canvas.style.height = '250px';
-  canvas.height = 250;
+  // CSSで高さを制御するため、ここでの高さ設定は削除
   
   // 既存のグラフがあれば破棄
   if (profitChart) {
@@ -388,10 +429,24 @@ function updateProfitChart(data) {
       labels: ['累積'],
       datasets: [
         {
-          label: '実現損益',
+          label: '純損益（手数料差引後）',
+          data: [data.summary.netPnL],
+          backgroundColor: data.summary.netPnL >= 0 ? 'rgba(40, 167, 69, 0.5)' : 'rgba(220, 53, 69, 0.5)',
+          borderColor: data.summary.netPnL >= 0 ? 'rgb(40, 167, 69)' : 'rgb(220, 53, 69)',
+          borderWidth: 1
+        },
+        {
+          label: '実現損益（手数料込み）',
           data: [data.summary.realizedPnL],
-          backgroundColor: data.summary.realizedPnL >= 0 ? 'rgba(40, 167, 69, 0.5)' : 'rgba(220, 53, 69, 0.5)',
-          borderColor: data.summary.realizedPnL >= 0 ? 'rgb(40, 167, 69)' : 'rgb(220, 53, 69)',
+          backgroundColor: data.summary.realizedPnL >= 0 ? 'rgba(92, 184, 92, 0.3)' : 'rgba(217, 83, 79, 0.3)',
+          borderColor: data.summary.realizedPnL >= 0 ? 'rgb(92, 184, 92)' : 'rgb(217, 83, 79)',
+          borderWidth: 1
+        },
+        {
+          label: '手数料',
+          data: [data.summary.totalFee],
+          backgroundColor: 'rgba(240, 173, 78, 0.5)',
+          borderColor: 'rgb(240, 173, 78)',
           borderWidth: 1
         },
         {
@@ -465,7 +520,7 @@ function loadRecentTrades() {
       if (!data.history || data.history.length === 0) {
         tableBody.innerHTML = `
           <tr>
-            <td colspan="9" class="text-center">約定データがありません</td>
+            <td colspan="10" class="text-center">約定データがありません</td>
           </tr>
         `;
         return;
@@ -483,7 +538,7 @@ function loadRecentTrades() {
       console.error('約定履歴の取得に失敗しました:', error);
       tableBody.innerHTML = `
         <tr>
-          <td colspan="9" class="text-center text-danger">
+          <td colspan="10" class="text-center text-danger">
             約定履歴の取得に失敗しました。詳細はコンソールを確認してください。
           </td>
         </tr>
@@ -563,7 +618,7 @@ function addTradeToRecentTable(trade) {
   const tableBody = document.querySelector('#recent-trades-table tbody');
   
   // 「データなし」の行がある場合は削除
-  const noDataRow = tableBody.querySelector('td[colspan="8"]');
+  const noDataRow = tableBody.querySelector('td[colspan="10"]');
   if (noDataRow) {
     tableBody.innerHTML = '';
   }

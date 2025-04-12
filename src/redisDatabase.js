@@ -315,7 +315,8 @@ async function getTradeHistory(filters = {}, limit = 100, offset = 0) {
         side: trade.side,
         amount: trade.amount,
         price: trade.price,
-        value: trade.amount * trade.price
+        value: trade.amount * trade.price,
+        fee: trade.fee || (trade.amount * trade.price * 0.001) // 手数料がない場合は取引額の0.1%と仮定
       };
     });
   } else {
@@ -368,7 +369,8 @@ async function getTradeHistory(filters = {}, limit = 100, offset = 0) {
             side: trade.side,
             amount: trade.amount,
             price: trade.price,
-            value: trade.amount * trade.price
+            value: trade.amount * trade.price,
+            fee: trade.fee || (trade.amount * trade.price * 0.001) // 手数料がない場合は取引額の0.1%と仮定
           });
           break;
         }
@@ -422,6 +424,7 @@ async function getTradeSummary(period = 'all') {
   let totalSellAmount = 0;
   let totalBuyCost = 0;
   let totalSellValue = 0;
+  let totalFee = 0;
   
   // 取引所別、戦略別の集計
   const byExchangeData = {};
@@ -444,6 +447,7 @@ async function getTradeSummary(period = 'all') {
       if (trade.filledAt.toString() === timestamp) {
         const amount = trade.amount;
         const value = trade.amount * trade.price;
+        const fee = trade.fee || (value * 0.001); // 手数料がない場合は取引額の0.1%と仮定
         
         // 全体の集計
         if (trade.side === 'buy') {
@@ -454,13 +458,17 @@ async function getTradeSummary(period = 'all') {
           totalSellValue += value;
         }
         
+        // 手数料を加算
+        totalFee += fee;
+        
         // 取引所別の集計
         if (!byExchangeData[exchangeId]) {
           byExchangeData[exchangeId] = {
             totalBuyAmount: 0,
             totalSellAmount: 0,
             totalBuyCost: 0,
-            totalSellValue: 0
+            totalSellValue: 0,
+            totalFee: 0
           };
         }
         
@@ -471,6 +479,7 @@ async function getTradeSummary(period = 'all') {
           byExchangeData[exchangeId].totalSellAmount += amount;
           byExchangeData[exchangeId].totalSellValue += value;
         }
+        byExchangeData[exchangeId].totalFee += fee;
         
         // 戦略別の集計
         if (!byStrategyData[strategyKey]) {
@@ -478,7 +487,8 @@ async function getTradeSummary(period = 'all') {
             totalBuyAmount: 0,
             totalSellAmount: 0,
             totalBuyCost: 0,
-            totalSellValue: 0
+            totalSellValue: 0,
+            totalFee: 0
           };
         }
         
@@ -489,6 +499,7 @@ async function getTradeSummary(period = 'all') {
           byStrategyData[strategyKey].totalSellAmount += amount;
           byStrategyData[strategyKey].totalSellValue += value;
         }
+        byStrategyData[strategyKey].totalFee += fee;
         
         break;
       }
@@ -517,17 +528,59 @@ async function getTradeSummary(period = 'all') {
     });
   });
   
-  // 実現済み損益を計算
-  const realizedPnL = totalSellValue - totalBuyCost;
+  // 実現済み損益を計算（より正確な方法）
+  // 売りの総額から、売った分の平均購入コストを引く
+  let realizedPnL = 0;
   
-  // 取引所別の実現済み損益を計算
+  // 売りの量が買いの量以下の場合（通常のケース）
+  if (totalSellAmount <= totalBuyAmount) {
+    // 平均購入単価を計算
+    const avgBuyPrice = totalBuyCost / totalBuyAmount;
+    // 売った分の購入コスト
+    const soldCost = totalSellAmount * avgBuyPrice;
+    // 実現損益 = 売りの総額 - 売った分の購入コスト
+    realizedPnL = totalSellValue - soldCost;
+  } else {
+    // 売りの量が買いの量を超える場合（ショートポジションなど）
+    // 買った分は全て売却済みと考える
+    realizedPnL = totalSellValue - totalBuyCost;
+  }
+  
+  // 取引所別の実現済み損益を計算（より正確な方法）
   Object.keys(byExchangeData).forEach(exId => {
-    byExchangeData[exId].realizedPnL = byExchangeData[exId].totalSellValue - byExchangeData[exId].totalBuyCost;
+    const exchange = byExchangeData[exId];
+    if (exchange.totalSellAmount <= exchange.totalBuyAmount) {
+      const avgBuyPrice = exchange.totalBuyCost / exchange.totalBuyAmount;
+      const soldCost = exchange.totalSellAmount * avgBuyPrice;
+      exchange.realizedPnL = exchange.totalSellValue - soldCost;
+    } else {
+      exchange.realizedPnL = exchange.totalSellValue - exchange.totalBuyCost;
+    }
   });
   
-  // 戦略別の実現済み損益を計算
+  // 戦略別の実現済み損益を計算（より正確な方法）
   Object.keys(byStrategyData).forEach(strat => {
-    byStrategyData[strat].realizedPnL = byStrategyData[strat].totalSellValue - byStrategyData[strat].totalBuyCost;
+    const strategy = byStrategyData[strat];
+    if (strategy.totalSellAmount <= strategy.totalBuyAmount) {
+      const avgBuyPrice = strategy.totalBuyCost / strategy.totalBuyAmount;
+      const soldCost = strategy.totalSellAmount * avgBuyPrice;
+      strategy.realizedPnL = strategy.totalSellValue - soldCost;
+    } else {
+      strategy.realizedPnL = strategy.totalSellValue - strategy.totalBuyCost;
+    }
+  });
+  
+  // 純損益（手数料を差し引いた実現損益）を計算
+  const netPnL = realizedPnL - totalFee;
+  
+  // 取引所別の純損益を計算
+  Object.keys(byExchangeData).forEach(exId => {
+    byExchangeData[exId].netPnL = byExchangeData[exId].realizedPnL - byExchangeData[exId].totalFee;
+  });
+  
+  // 戦略別の純損益を計算
+  Object.keys(byStrategyData).forEach(strat => {
+    byStrategyData[strat].netPnL = byStrategyData[strat].realizedPnL - byStrategyData[strat].totalFee;
   });
   
   return {
@@ -537,7 +590,9 @@ async function getTradeSummary(period = 'all') {
       totalSellAmount,
       totalBuyCost,
       totalSellValue,
+      totalFee,
       realizedPnL,
+      netPnL,
       currentPositions,
       currentPositionValue: currentBuyCost - currentSellValue
     },
@@ -578,14 +633,55 @@ async function getFilledSummary(filters = {}) {
   return {};
 }
 
+/**
+ * 特定の取引所とシンボルに対して、オーダーIDから注文履歴を取得する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} orderId - 注文ID
+ * @returns {Promise<Object|null>} 注文履歴と戦略キー情報、見つからない場合はnull
+ */
+async function getOrderHistoryByOrderIdForExchangeSymbol(exchangeId, symbol, orderId) {
+  // 戦略一覧を取得
+  const strategies = await client.sMembers(`strategies:${exchangeId}:${symbol}`);
+  
+  for (const strategyKey of strategies) {
+    // 注文履歴キー
+    const orderHistoryKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+    
+    // 注文履歴を取得
+    const historyData = await client.lRange(orderHistoryKey, 0, -1);
+    
+    // 各注文履歴をチェック
+    for (const data of historyData) {
+      try {
+        const order = JSON.parse(data);
+        
+        // オーダーIDが一致する場合
+        if (order.orderId === orderId) {
+          return {
+            order,
+            strategyKey
+          };
+        }
+      } catch (error) {
+        console.error('注文履歴のパースエラー:', error);
+      }
+    }
+  }
+  
+  // 見つからなかった場合
+  return null;
+}
+
 // モジュールのエクスポート
 module.exports = {
   initialize,
   addTrade,
-  addFilledTrade, // 新しい関数をエクスポート
+  addFilledTrade,
   getTradeRecordsAsObject,
   getLatestTradeAmount,
   getTradeHistory,
   getTradeSummary,
-  getFilledSummary // 新しい関数をエクスポート
+  getFilledSummary,
+  getOrderHistoryByOrderIdForExchangeSymbol
 };

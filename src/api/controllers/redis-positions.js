@@ -37,13 +37,19 @@ async function getPositions(req, res) {
           
           const record = allRecords[exId][sym][strat];
           
+          // recordが存在することを確認
+          if (!record) {
+            console.warn(`レコードが見つかりません: ${exId}/${sym}/${strat}`);
+            return;
+          }
+          
           // 平均購入価格と平均販売価格を計算
-          const averageBuyPrice = record.buyAmount > 0 
-            ? record.totalBuyCost / record.buyAmount 
+          const averageBuyPrice = record.buyAmount > 0
+            ? record.totalBuyCost / record.buyAmount
             : 0;
           
-          const averageSellPrice = record.sellAmount > 0 
-            ? record.totalSellValue / record.sellAmount 
+          const averageSellPrice = record.sellAmount > 0
+            ? record.totalSellValue / record.sellAmount
             : 0;
           
           // 実現済みの損益を計算
@@ -54,16 +60,16 @@ async function getPositions(req, res) {
             exchangeId: exId,
             symbol: sym,
             strategyKey: strat,
-            buyAmount: record.buyAmount,
-            sellAmount: record.sellAmount,
-            netPosition: record.netPosition,
+            buyAmount: record.buyAmount || 0,
+            sellAmount: record.sellAmount || 0,
+            netPosition: record.netPosition || 0,
             averageBuyPrice,
             averageSellPrice,
-            totalBuyCost: record.totalBuyCost,
-            totalSellValue: record.totalSellValue,
+            totalBuyCost: record.totalBuyCost || 0,
+            totalSellValue: record.totalSellValue || 0,
             realizedPnL: isNaN(realizedPnL) ? 0 : realizedPnL,
-            // 最新の数件の取引を含める
-            recentTrades: record.trades.slice(0, 5)
+            // 最新の数件の取引を含める（tradesプロパティが存在する場合のみ）
+            recentTrades: Array.isArray(record.trades) ? record.trades.slice(0, 5) : []
           });
         });
       });
