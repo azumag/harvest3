@@ -6,6 +6,7 @@
 const { exchangeBB, exchangeBF } = require('./config');
 const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
 const { getMarketParameters, sleep } = require('./utils');
+const { client, initRedisClient } = require('./redisClient');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 
 /**
@@ -172,6 +173,9 @@ if (args.includes('--help') || args.includes('-h')) {
 // メイン処理
 async function main() {
   try {
+    // Redisクライアントを初期化
+    await initRedisClient();
+    
     if (args.includes('--bitbank') || args.includes('-bb')) {
       console.log('BitBankのポジションのみを解消します...');
       await closeAllPositions(exchangeBB);
