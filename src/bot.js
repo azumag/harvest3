@@ -65,9 +65,10 @@ async function startBot() {
           );
           
           // 一度に処理する通貨ペアの数を制限（最大5つ）
-          const symbolsToProcess = symbols.slice(0, 5);
+          // const symbolsToProcess = symbols.slice(0, 5);
           
-          for (const symbol of symbolsToProcess) {
+          // for (const symbol of symbolsToProcess) {
+          for (const symbol of symbols) {
             try {
               await updateFilledTrades(exchange, symbol); // 約定履歴を更新
               await runStrategies(exchange, symbol, { spreadHistory });
@@ -79,7 +80,7 @@ async function startBot() {
           }
           
           // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
-          symbols.push(symbols.shift());
+          // symbols.push(symbols.shift());
           
           // 各取引所の処理の間に5秒待機
           await sleep(5000);

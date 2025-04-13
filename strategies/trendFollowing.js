@@ -11,7 +11,7 @@ const {
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
 
-const { getFilledCurrentPosition } = require('../src/utils');
+const { formatttedBuyAmount } = require('../src/utils');
 
 /**
  * 移動平均線クロス戦略
@@ -110,27 +110,9 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'MA');
+      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MA', amountPrecision);
 
-      // 売却量を計算（買った分だけを売却）
-      let sellAmount = buyAmount;
-      
-      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      // if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-      //   sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
-      // }
-      
-      // 利用可能な資産を超えないようにする
-      sellAmount = Math.min(sellAmount, availableAsset);
-      
-      // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
-      const tradeAmount = Math.max(minTradeAmount, sellAmount);
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-      // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
-      
-      if (availableAsset >= formattedAmount) {
+      if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
@@ -272,27 +254,9 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'MACD');
+      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MACD', amountPrecision);
 
-      // 売却量を計算（買った分だけを売却）
-      let sellAmount = buyAmount;
-      
-      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      // if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-      //   sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
-      // }
-      
-      // 利用可能な資産を超えないようにする
-      sellAmount = Math.min(sellAmount, availableAsset);
-      
-      // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
-      const tradeAmount = Math.max(minTradeAmount, sellAmount);
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-      // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
-      
-      if (availableAsset >= formattedAmount) {
+      if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
@@ -434,27 +398,9 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'RSI');
-
-      // 売却量を計算（買った分だけを売却）
-      let sellAmount = buyAmount;
+      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'RSI', amountPrecision);
       
-      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      // if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-      //   sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
-      // }
-      
-      // 利用可能な資産を超えないようにする
-      sellAmount = Math.min(sellAmount, availableAsset);
-      
-      // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
-      const tradeAmount = Math.max(minTradeAmount, sellAmount);
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-      // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
-      
-      if (availableAsset >= formattedAmount) {
+      if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
@@ -598,27 +544,9 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      let buyAmount = await getFilledCurrentPosition(exchange, symbol, 'BOLLINGER_BANDS');
-
-      // 売却量を計算（買った分だけを売却）
-      let sellAmount = buyAmount;
+      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'BOLLINGER_BANDS', amountPrecision);
       
-      // 買った記録がなくても、利用可能な資産があれば残高 * tradePercentageと最小単位の大きい方を売却
-      if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
-        sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
-      }
-      
-      // 利用可能な資産を超えないようにする
-      sellAmount = Math.min(sellAmount, availableAsset);
-      
-      // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
-      const tradeAmount = Math.max(minTradeAmount, sellAmount);
-      // 精度を考慮して、最小精度以上の値を確保
-      let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
-      // 最小精度（0.0001）を下回らないようにする
-      formattedAmount = Math.max(formattedAmount, 0.0001);
-      
-      if (availableAsset >= formattedAmount) {
+      if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);

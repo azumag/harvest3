@@ -4,6 +4,7 @@ const {
   getFilledSummary, addFilledTrade, getFilledSummaryTimestamp,
   getOrderStrategyKeyByOrderId, updateFilledSummaryTimestamp
 } = require('./redisDatabase');
+const { format } = require('morgan');
  
 /**
  * 加重平均を計算する関数
@@ -171,7 +172,7 @@ async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
     strategyKey
   });
   
-  return summary.netPosition;
+  return summary.netPosition || 0;
 }
 
 /**
@@ -234,6 +235,14 @@ async function updateFilledTrades(exchange, symbol) {
   }
 }
 
+async function formatttedBuyAmount(exchange, symbol, strategyKey, amountPrecision) {
+  // 取引記録から買った量を取得
+  const buyAmount = await getFilledCurrentPosition(exchange, symbol, strategyKey);
+
+  // 精度を考慮して、最小精度以上の値を確保
+  return parseFloat(buyAmount.toFixed(amountPrecision));
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -244,5 +253,6 @@ module.exports = {
   getNetPosition,
   getFilledCurrentPosition,
   updateFilledTrades,
+  formatttedBuyAmount,
   sleep
 };
