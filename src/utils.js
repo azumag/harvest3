@@ -181,13 +181,13 @@ async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
  * @returns {Promise<number>} - 処理した約定数
  */
 async function updateFilledTrades(exchange, symbol) {
-  // await updateFilledSummaryTimestamp();
+  // await updateFilledSummaryTimestamp(exchange.id, symbol);
  
   try {
     // 前回のチェック時間を取得
-    const timestamp = await getFilledSummaryTimestamp();
+    const timestamp = await getFilledSummaryTimestamp(exchange, symbol);
     
-    // 前回のチェック時間（ない場合は1時間前）
+    // 前回のチェック時間（ない場合は24時間前）
     const lastCheckTime = timestamp ? timestamp : Date.now() - 24 * 60 * 60 * 1000;
     
     // fetchMyTradesメソッドが利用可能かどうかを確認
@@ -198,7 +198,7 @@ async function updateFilledTrades(exchange, symbol) {
     
     // 取引所から約定履歴を取得
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
-    // console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+    console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
     
     let processedCount = 0;
     let strategyKey = 'OUTSIDE';

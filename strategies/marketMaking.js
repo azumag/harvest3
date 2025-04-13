@@ -1,6 +1,6 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
-const { addFilledTrade } = require('../src/redisDatabase'); // Redisデータベースの関数をインポート
+const { updateFilledTrades } = require('../src/utils.js'); // RedisTradeRecordsの関数をインポート
 
 /**
  * レンジ相場向け受動的マーケットメイキング戦略クラス

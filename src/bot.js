@@ -4,7 +4,7 @@ const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { postReport, postStrategyProfitReport } = require('./reports');
 const { runStrategy, runArbitrageStrategy, runStrategies } = require('./strategyRunner');
-const { getMarketParameters, sleep } = require('./utils');
+const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
 const strategies = require('../strategies');
 
 /**
@@ -69,6 +69,7 @@ async function startBot() {
           
           for (const symbol of symbolsToProcess) {
             try {
+              await updateFilledTrades(exchange, symbol); // 約定履歴を更新
               await runStrategies(exchange, symbol, { spreadHistory });
               await sleep(2000); // 1秒から2秒に延長
             } catch (error) {

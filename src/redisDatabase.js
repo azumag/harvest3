@@ -217,7 +217,7 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   
   // 更新日時を設定
   await client.hSet(summaryKey, 'updatedAt', now);
-  await updateFilledSummaryTimestamp();
+  await updateFilledSummaryTimestamp(exchangeId, symbol);
   
   return true;
 }
@@ -840,9 +840,9 @@ module.exports = {
  * 約定サマリーが更新された時間のみを記録するテーブルを管理します
  * @returns {Promise<Boolean>} 処理完了時に解決されるPromise
  */
-async function updateFilledSummaryTimestamp() {
+async function updateFilledSummaryTimestamp(exchangeId, symbol) {
   // 約定サマリー更新時間テーブルのキー
-  const timestampKey = `trade:filledSummaryTimestamp:`;
+  const timestampKey = `summary:filledSummaryTimestamp:${exchangeId}:${symbol}`;
   const timestamp = Date.now();
   
   // 更新時間を設定
@@ -855,9 +855,9 @@ async function updateFilledSummaryTimestamp() {
  * 特定の約定サマリーの最終更新時間を取得する関数
  * @returns {Promise<Number|null>} 最終更新時間（ミリ秒）またはnull
  */
-async function getFilledSummaryTimestamp() {
+async function getFilledSummaryTimestamp(exchange, symbol) {
   // 約定サマリー更新時間テーブルのキー
-  const timestampKey = `trade:filledSummaryTimestamp:`;
+  const timestampKey = `summary:filledSummaryTimestamp:${exchange.id}:${symbol}`;
   
   // 更新時間を取得
   const timestamp = await client.get(timestampKey);
