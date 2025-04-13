@@ -60,6 +60,7 @@ function setActivePeriod(period) {
 function loadDashboardData() {
   loadPositions();
   loadSummary();
+  loadOrderPairsSummary(); // 注文ペアサマリーを読み込む
   loadRecentTrades();
 }
 
@@ -598,6 +599,13 @@ function setupRealtimeUpdates() {
     // ポジションとサマリーを更新
     debounceUpdate();
   });
+  
+  // 注文ペア更新イベント
+  realtimeUpdater.addListener('order_pair_updated', (data) => {
+    console.log('注文ペア更新イベント受信:', data);
+    // 注文ペアサマリーを更新
+    loadOrderPairsSummary();
+  });
 }
 
 // 短時間の重複更新を避けるための遅延処理
@@ -607,6 +615,7 @@ function debounceUpdate() {
   updateTimeout = setTimeout(() => {
     loadPositions();
     loadSummary();
+    loadOrderPairsSummary(); // 注文ペアサマリーも更新
   }, 1000);
 }
 
@@ -637,4 +646,123 @@ function addTradeToRecentTable(trade) {
   while (tableBody.children.length > 50) {
     tableBody.removeChild(tableBody.lastChild);
   }
+}
+
+/**
+ * 注文ペアサマリーを読み込んで表示
+ */
+function loadOrderPairsSummary() {
+  const container = document.getElementById('order-pairs-summary-container');
+  
+  // ローディング表示
+  container.innerHTML = `
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">読み込み中...</span>
+      </div>
+    </div>
+  `;
+  
+  // APIからデータ取得
+  fetch('/api/current-order-pairs')
+    .then(response => response.json())
+    .then(data => {
+      if (!data.currentOrderPairs || data.currentOrderPairs.length === 0) {
+        container.innerHTML = `
+          <div class="no-data-message">
+            <p>注文ペアデータがありません</p>
+          </div>
+        `;
+        return;
+      }
+      
+      // カードを生成
+      let html = '';
+      
+      data.currentOrderPairs.forEach(item => {
+        // 買い/売り注文情報を取得
+        const buyOrder = item.pair.buyOrder || {};
+        const sellOrder = item.pair.sellOrder || {};
+        
+        // ステータスバッジのスタイルを決定
+        const getBadgeClass = (status) => {
+          switch(status) {
+            case 'open': return 'bg-primary';
+            case 'closed': return 'bg-success';
+            case 'canceled': return 'bg-warning';
+            case 'expired': return 'bg-secondary';
+            case 'rejected': return 'bg-danger';
+            default: return 'bg-secondary';
+          }
+        };
+        
+        // 価格とステータスの表示を整形
+        const buyPrice = buyOrder.price ? buyOrder.price.toLocaleString() : '-';
+        const sellPrice = sellOrder.price ? sellOrder.price.toLocaleString() : '-';
+        const buyStatus = buyOrder.status || '-';
+        const sellStatus = sellOrder.status || '-';
+        const amount = item.pair.amount || (buyOrder.amount || sellOrder.amount || 0);
+        
+        // 買い/売り注文の状態に応じたバッジスタイル
+        const buyBadgeClass = getBadgeClass(buyStatus);
+        const sellBadgeClass = getBadgeClass(sellStatus);
+        
+        // 日時表示
+        const formatDate = (timestamp) => {
+          if (!timestamp) return '-';
+          const date = new Date(timestamp);
+          return date.toLocaleString('ja-JP', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        };
+        
+        const buyDate = formatDate(buyOrder.timestamp);
+        const sellDate = formatDate(sellOrder.timestamp);
+        
+        // カードHTMLを生成
+        html += `
+          <div class="order-pair-card">
+            <h6>
+              ${item.symbol}
+              <small class="text-muted">${item.exchangeId}</small>
+            </h6>
+            <div class="small text-muted mb-2">${item.strategyKey}</div>
+            
+            <div class="price-info">
+              <span class="price-label">買価格:</span>
+              <span class="buy-price">${buyPrice}</span>
+            </div>
+            <div class="price-info">
+              <span class="price-label">売価格:</span>
+              <span class="sell-price">${sellPrice}</span>
+            </div>
+            
+            <div class="small">数量: ${amount}</div>
+            
+            <div class="status">
+              <span>買: <span class="badge ${buyBadgeClass}">${buyStatus}</span></span>
+              <span>売: <span class="badge ${sellBadgeClass}">${sellStatus}</span></span>
+            </div>
+            
+            <div class="metadata">
+              <div>買: ${buyDate}</div>
+              <div>売: ${sellDate}</div>
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    })
+    .catch(error => {
+      console.error('注文ペアサマリーの取得に失敗しました:', error);
+      container.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          注文ペアサマリーの取得に失敗しました。詳細はコンソールを確認してください。
+        </div>
+      `;
+    });
 }

@@ -10,6 +10,7 @@ const { getFilledHistory } = require('./controllers/redis-filled-history');
 const { getPositions } = require('./controllers/redis-positions');
 const { getSummary } = require('./controllers/redis-summary');
 const { getOrderPairs } = require('./controllers/redis-order-pairs');
+const { getCurrentOrderPairs } = require('./controllers/redis-current-order-pairs');
 const { eventsHandler } = require('./controllers/redis-events');
 
 // Redis版のデータベースイベントモジュールをインポート
@@ -38,6 +39,9 @@ router.get('/events', eventsHandler);
 
 // 注文ペアAPI
 router.get('/order-pairs', getOrderPairs);
+
+// 現在の注文ペアAPI
+router.get('/current-order-pairs', getCurrentOrderPairs);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {

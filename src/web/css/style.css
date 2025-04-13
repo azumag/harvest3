@@ -167,3 +167,65 @@ body {
         padding-right: 10px;
     }
 }
+
+/* 注文ペアカード用のスタイル */
+.order-pairs-cards {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  gap: 1rem;
+}
+
+.order-pair-card {
+  min-width: 270px;
+  margin-bottom: 0.5rem;
+  flex: 0 0 auto;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  position: relative;
+}
+
+.order-pair-card h6 {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order-pair-card .price-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.order-pair-card .price-label {
+  color: #6c757d;
+}
+
+.order-pair-card .buy-price {
+  color: #198754;
+}
+
+.order-pair-card .sell-price {
+  color: #dc3545;
+}
+
+.order-pair-card .status {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.order-pair-card .metadata {
+  color: #6c757d;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid #e9ecef;
+  padding-top: 0.5rem;
+}
