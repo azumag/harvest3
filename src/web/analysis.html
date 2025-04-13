@@ -10,40 +10,8 @@
     <link href="css/style.css" rel="stylesheet">
 </head>
 <body>
-    <!-- ナビゲーションバー -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">取引データ閲覧</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="index.html">ダッシュボード</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="positions.html">ポジション</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="history.html">注文履歴</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="filled-history.html">約定履歴</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="order-pairs.html">注文ペア</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="analysis.html">分析</a>
-                    </li>
-                </ul>
-            </div>
-            <div id="realtime-status" class="text-light">
-                <span class="badge bg-secondary">オフライン</span>
-            </div>
-        </div>
-    </nav>
+    <!-- ナビゲーションバーコンテナ -->
+    <div id="navbar-container"></div>
 
     <!-- メインコンテンツ -->
     <div class="container-fluid mt-4">
@@ -188,6 +156,7 @@
     </script>
 
     <!-- カスタムJavaScript -->
+    <script src="js/navbar.js"></script>
     <script src="js/realtime.js"></script>
     <script src="js/analysis.js"></script>
 </body>
