@@ -10,6 +10,24 @@ async function initialize() {
   console.log('Redisデータベースモジュールが初期化されました');
 }
 
+// 注文ペアの保存
+async function saveOrderPairs(exchangeId, symbol, strategyKey, pair) {
+  const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+  await client.set(key, JSON.stringify({ pair }));
+}
+
+// 注文ペアの取得
+async function getOrderPairs(exchangeId, symbol, strategyKey) {
+  const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+  const data = await client.get(key);
+  
+  if (data) {
+    return JSON.parse(data).pair;
+  }
+  
+  return [];
+}
+
 /**
  * 取引記録を追加/更新する関数
  * @param {String} exchangeId - 取引所ID
@@ -939,4 +957,6 @@ module.exports = {
   getOrderDetailsByOrderId,
   updateFilledSummaryTimestamp,
   getFilledSummaryTimestamp,
+  getOrderPairs,
+  saveOrderPairs
 }

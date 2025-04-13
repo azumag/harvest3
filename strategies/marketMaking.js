@@ -1,6 +1,31 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
-const { updateFilledTrades } = require('../src/utils.js'); // RedisTradeRecordsの関数をインポート
+const { updateFilledTrades } = require('../src/utils.js');
+const { getOrderPairs, saveOrderPairs } = require('../src/redisDatabase.js');
+
+/**
+ * 保存された orderPairs 配列から activeOrders オブジェクトを再構築する
+ * @param {Array<Object>} orderPairs - 保存された注文ペアの配列
+ * @returns {Object} 再構築された activeOrders オブジェクト { buy: order|null, sell: order|null }
+ */
+function rebuildActiveOrders(orderPairs) {
+  let activeBuy = null;
+  let activeSell = null;
+
+  // orderPairs を走査して、最新の未約定の買い注文と売り注文を見つける
+  // ここでは単純に配列の最後に見つかった未約定注文を最新とする
+  for (const pair of orderPairs) {
+    if (pair.buyOrder && !pair.buyFilled) {
+      activeBuy = pair.buyOrder; // 上書きしていく
+    }
+    if (pair.sellOrder && !pair.sellFilled) {
+      activeSell = pair.sellOrder; // 上書きしていく
+    }
+  }
+
+  console.log(`[MM Restore] Active orders rebuilt: Buy=${activeBuy?.id || 'None'}, Sell=${activeSell?.id || 'None'}`);
+  return { buy: activeBuy, sell: activeSell };
+}
 
 /**
  * レンジ相場向け受動的マーケットメイキング戦略クラス
@@ -563,6 +588,14 @@ class MarketMakingStrategy {
     console.log(`${this.symbol}: レンジ相場向け受動的マーケットメイキング戦略を開始`);
     await this._postOrder(`戦略開始 - レンジ期間: ${this.options.rangePeriod}ms, 閾値: ${this.options.rangeThreshold}%, スプレッド: ${this.options.spreadWidth}%, 取引量: ${this.options.amount}`);
 
+    // 0. 注文ペア復元
+    // もしペアがDBに保存されている場合は復元する
+    console.log(`${this.symbol}: DBから注文ペアを復元中...`);
+    this.orderPairs = await getOrderPairs(this.exchange.id, this.symbol, 'MARKET_MAKING');
+    console.log(`${this.symbol}: ${this.orderPairs.length}個の注文ペアを復元しました。`);
+    // activeOrdersの状態も復元する
+    this.activeOrders = rebuildActiveOrders(this.orderPairs);
+
     while (this.isRunning) {
       try {
         const now = Date.now();
@@ -586,6 +619,10 @@ class MarketMakingStrategy {
         } else {
           console.log(`${this.symbol}: 注文条件未達: レンジ相場(${isRange}), 最終注文からの経過時間(${now - this.lastOrderTime}ms / ${this.options.reorderInterval}ms)`);
         }
+
+        // 6. 注文ペア状態の保存
+        // DBに保存する
+        await saveOrderPairs(this.exchange.id, this.symbol, 'MARKET_MAKING', this.orderPairs);
 
         // ループの待機
         await new Promise(resolve => setTimeout(resolve, this.options.loopInterval));
