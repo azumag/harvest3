@@ -640,6 +640,7 @@ class MarketMakingStrategy {
     const restoredPair = await getCurrentOrderPair(this.exchange.id, this.symbol, 'MARKET_MAKING');
     this.orderPairs = restoredPair ? [restoredPair] : this.orderPairs;
     console.log(`${this.symbol}: ${this.orderPairs.length}個の注文ペアを復元しました。`);
+    // console.log({restoredPair})
 
     // activeOrdersの状態も復元する
     this.activeOrders = rebuildActiveOrders(this.orderPairs);

@@ -37,7 +37,7 @@ async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
     return JSON.parse(data).pair;
   }
 
-  return {};
+  return null;
 }
 
 // 注文ペア履歴取得
