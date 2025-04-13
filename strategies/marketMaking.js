@@ -452,9 +452,10 @@ class MarketMakingStrategy {
       // 既存の注文ペアの状態を分析
       // 配列の最初の要素のみを参照する
       const currentPair = this.orderPairs[0] || null;
-      const pendingBuy = currentPair && currentPair.buyOrder && !currentPair.buyFilled;
-      const pendingSell = currentPair && currentPair.sellOrder && !currentPair.sellFilled;
-      const noPendingOrders = !pendingBuy && !pendingSell; // 未注文状態
+      const noOrders = currentPair && !currentPair.buyOrder && !currentPair.sellOrder; // 未注文状態
+      const noBuySellExists = currentPair && !currentPair.buyOrder && currentPair.sellOrder;
+      const noSellBuyExists = currentPair && currentPair.buyOrder && !currentPair.sellOrder;
+
       const hasCompletedPair = currentPair && currentPair.buyFilled && currentPair.sellFilled; // クリーンアップ対象
 
       // クリーンアップが必要な場合は新規注文を見送る (メインループで先に実行されるはずだが念のため)
@@ -465,7 +466,7 @@ class MarketMakingStrategy {
       }
 
       // 新規注文を発注する条件を判定
-      if (noPendingOrders) {
+      if (noOrders) {
           // 1. 未約定の注文が全くない場合: 両方の注文を試みる
           console.log(`${this.symbol}: 未約定の注文がないため、新規の買い注文と売り注文を試みます。`);
           // 現在価格から targetQuote 円分の量を推定し売買に使う。量が最低単位以下なら最低単位を使う
@@ -490,7 +491,7 @@ class MarketMakingStrategy {
           } else {
               console.log(`${this.symbol}: 新規Sellの条件未達(資産不足): 資産=${availableAsset}/${tradeAmount}`);
           }
-      } else if (!pendingBuy && pendingSell) {
+      } else if (noBuySellExists) {
           // 2. 買い注文がなく、未約定の売り注文がある場合: 買い注文のみを試みる
           console.log(`${this.symbol}: 新規の買い注文を試みます。`);
 
@@ -501,10 +502,8 @@ class MarketMakingStrategy {
             tradeAmount = currentPair.amount;
             console.log(`${this.symbol}: 先行する売り注文ペア(${currentPair.id})に基づいて買い注文量を調整: ${tradeAmount}`);
           } else {
-            console.log(`${this.symbol}: 適切な売り注文ペアが見つかりません。デフォルト設定を使用します。`);
-            tradeAmount = this.options.targetQuote / formattedBuyPrice;
-            tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount);
-            tradeAmount = parseFloat(tradeAmount.toFixed(this.options.amountPrecision));
+            console.log(`${this.symbol}: ERROR: 適切な売り注文ペアが見つかりません。`);
+            throw new Error(`${this.symbol}: 適切な売り注文ペアが見つかりません。`);
           }
 
           if (availableFunds >= formattedBuyPrice * tradeAmount) {
@@ -513,7 +512,7 @@ class MarketMakingStrategy {
           } else {
               console.log(`${this.symbol}: 新規Buyの条件未達(資金不足): 資金=${availableFunds}/${formattedBuyPrice * tradeAmount}`);
           }
-      } else if (pendingBuy && !pendingSell) {
+      } else if (noSellBuyExists) {
           // 3. 売り注文がなく、未約定の買い注文がある場合: 売り注文のみを試みる
           console.log(`${this.symbol}: 未約定の売り注文がないため、新規の売り注文のみを試みます。`);
 
@@ -525,9 +524,7 @@ class MarketMakingStrategy {
             console.log(`${this.symbol}: 先行する買い注文ペア(${currentPair.id})に基づいて売り量を調整: ${tradeAmount}`);
           } else {
             console.log(`${this.symbol}: 適切な買い注文ペアが見つかりません。デフォルト設定を使用します。`);
-            tradeAmount = this.options.targetQuote / formattedSellPrice;
-            tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount);
-            tradeAmount = parseFloat(tradeAmount.toFixed(this.options.amountPrecision));
+            throw new Error(`${this.symbol}: 適切な買い注文ペアが見つかりません。`);
           }
 
           if (availableAsset >= tradeAmount) {
