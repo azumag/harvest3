@@ -1,7 +1,7 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
 const { updateFilledTrades } = require('../src/utils.js');
-const { getOrderPairs, saveOrderPairs } = require('../src/redisDatabase.js');
+const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
 
 /**
  * 保存された orderPairs 配列から activeOrders オブジェクトを再構築する
@@ -85,7 +85,14 @@ class MarketMakingStrategy {
     // 状態変数
     this.orderHistory = [];
     this.activeOrders = { buy: null, sell: null };
-    this.orderPairs = [];
+    this.orderPairs = [{
+      id: Date.now().toString() + Math.random().toString(16).slice(2),
+      buyOrder: null,
+      sellOrder: null,
+      buyFilled: false,
+      sellFilled: false,
+      amount: 0
+    }];
     this.priceHistory = [];
     this.lastPriceHistoryUpdate = 0;
     this.lastOrderStatusCheck = 0;
@@ -227,8 +234,8 @@ class MarketMakingStrategy {
 
         console.log(`${this.symbol}: 注文状態チェック - アクティブな注文数: ${openOrders.length}, 現在価格: ${currentPrice}`);
 
-        for (let i = this.orderPairs.length - 1; i >= 0; i--) {
-          const pair = this.orderPairs[i];
+        if (this.orderPairs.length > 0) {
+          const pair = this.orderPairs[0];
           await this._checkSingleOrderStatus(pair, 'buy', activeOrderIds, currentPrice);
           await this._checkSingleOrderStatus(pair, 'sell', activeOrderIds, currentPrice);
 
@@ -365,9 +372,8 @@ class MarketMakingStrategy {
    * @private
    */
   _cleanupCompletedPairs() {
-    let cleanedCount = 0;
-    for (let i = this.orderPairs.length - 1; i >= 0; i--) {
-      const pair = this.orderPairs[i];
+    if (this.orderPairs.length > 0) {
+      const pair = this.orderPairs[0];
       if (pair.buyFilled && pair.sellFilled) {
         console.log(`${this.symbol}: 完了した注文ペア(${pair.id})をクリーンアップします`);
         // 対応するアクティブ注文情報をクリア
@@ -377,12 +383,34 @@ class MarketMakingStrategy {
         if (this.activeOrders.sell && pair.sellOrder && this.activeOrders.sell.id === pair.sellOrder.id) {
             this.activeOrders.sell = null;
         }
-        this.orderPairs.splice(i, 1);
-        cleanedCount++;
+        
+        // 新しい空のペアを作成
+        const newPair = {
+          id: Date.now().toString() + Math.random().toString(16).slice(2),
+          buyOrder: null,
+          sellOrder: null,
+          buyFilled: false,
+          sellFilled: false,
+          amount: 0
+        };
+        
+        // 配列を新しいペアで置き換え
+        this.orderPairs = [newPair];
+        console.log(`${this.symbol}: 完了したペアをクリーンアップし、新しいペアを作成しました。ID: ${newPair.id}`);
       }
-    }
-    if (cleanedCount > 0) {
-        console.log(`${this.symbol}: ${cleanedCount}個の完了したペアをクリーンアップしました`);
+    } else {
+      // ペアがない場合は新しいペアを作成
+      const newPair = {
+        id: Date.now().toString() + Math.random().toString(16).slice(2),
+        buyOrder: null,
+        sellOrder: null,
+        buyFilled: false,
+        sellFilled: false,
+        amount: 0
+      };
+      
+      this.orderPairs = [newPair];
+      console.log(`${this.symbol}: 注文ペアが存在しないため、新しいペアを作成しました。ID: ${newPair.id}`);
     }
   }
 
@@ -422,10 +450,12 @@ class MarketMakingStrategy {
 
       // --- 注文ロジック ---
       // 既存の注文ペアの状態を分析
-      const pendingBuy = this.orderPairs.some(p => p.buyOrder && !p.buyFilled);
-      const pendingSell = this.orderPairs.some(p => p.sellOrder && !p.sellFilled);
+      // 配列の最初の要素のみを参照する
+      const currentPair = this.orderPairs[0] || null;
+      const pendingBuy = currentPair && currentPair.buyOrder && !currentPair.buyFilled;
+      const pendingSell = currentPair && currentPair.sellOrder && !currentPair.sellFilled;
       const noPendingOrders = !pendingBuy && !pendingSell; // 未注文状態
-      const hasCompletedPair = this.orderPairs.some(p => p.buyFilled && p.sellFilled); // クリーンアップ対象
+      const hasCompletedPair = currentPair && currentPair.buyFilled && currentPair.sellFilled; // クリーンアップ対象
 
       // クリーンアップが必要な場合は新規注文を見送る (メインループで先に実行されるはずだが念のため)
       if (hasCompletedPair) {
@@ -466,9 +496,16 @@ class MarketMakingStrategy {
 
           // 買う時に売り注文が先に出ている場合、その売りの分だけ買う
           let tradeAmount = 0;
-          const existingPair = this.orderPairs.find(p => p.sellOrder && !p.buyOrder);
-          tradeAmount = existingPair.amount;
-          console.log(`${this.symbol}: 先行する売り注文ペア(${existingPair.id})に基づいて買い注文量を調整: ${tradeAmount}`);
+          const currentPair = this.orderPairs[0];
+          if (currentPair && currentPair.sellOrder && !currentPair.buyOrder) {
+            tradeAmount = currentPair.amount;
+            console.log(`${this.symbol}: 先行する売り注文ペア(${currentPair.id})に基づいて買い注文量を調整: ${tradeAmount}`);
+          } else {
+            console.log(`${this.symbol}: 適切な売り注文ペアが見つかりません。デフォルト設定を使用します。`);
+            tradeAmount = this.options.targetQuote / formattedBuyPrice;
+            tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount);
+            tradeAmount = parseFloat(tradeAmount.toFixed(this.options.amountPrecision));
+          }
 
           if (availableFunds >= formattedBuyPrice * tradeAmount) {
               await this._executePlaceOrder('buy', formattedBuyPrice, tradeAmount, now);
@@ -482,9 +519,16 @@ class MarketMakingStrategy {
 
           // 売る時に買い注文が先に出ている場合、その買いの分だけ売る
           let tradeAmount = 0;
-          const existingPair = this.orderPairs.find(p => !p.sellOrder && p.buyOrder);
-          tradeAmount = existingPair.amount;
-          console.log(`${this.symbol}: 先行する買い注文ペア(${existingPair.id})に基づいて買い量を調整: ${tradeAmount}`);
+          const currentPair = this.orderPairs[0];
+          if (currentPair && currentPair.buyOrder && !currentPair.sellOrder) {
+            tradeAmount = currentPair.amount;
+            console.log(`${this.symbol}: 先行する買い注文ペア(${currentPair.id})に基づいて売り量を調整: ${tradeAmount}`);
+          } else {
+            console.log(`${this.symbol}: 適切な買い注文ペアが見つかりません。デフォルト設定を使用します。`);
+            tradeAmount = this.options.targetQuote / formattedSellPrice;
+            tradeAmount = Math.max(tradeAmount, this.options.baseMinTradeAmount);
+            tradeAmount = parseFloat(tradeAmount.toFixed(this.options.amountPrecision));
+          }
 
           if (availableAsset >= tradeAmount) {
               await this._executePlaceOrder('sell', formattedSellPrice, tradeAmount, now);
@@ -513,27 +557,44 @@ class MarketMakingStrategy {
   async _executePlaceOrder(side, price, amount, timestamp) {
     try {
       let order;
-      const newPair = { // 新しいペアを作成（または既存のペアに追加）
+      // 既存のペアを使用するか、新しいペアを作成
+      let currentPair = this.orderPairs[0];
+      
+      // 現在のペアが完了している場合は新しいペアを作成
+      if (currentPair && currentPair.buyFilled && currentPair.sellFilled) {
+        currentPair = {
           id: Date.now().toString() + Math.random().toString(16).slice(2), // よりユニークなID
           buyOrder: null,
           sellOrder: null,
           buyFilled: false,
           sellFilled: false,
           amount: amount // このペアでの取引量
-      };
+        };
+        this.orderPairs = [currentPair]; // 配列を1つの要素に置き換え
+      } else if (!currentPair) {
+        currentPair = {
+          id: Date.now().toString() + Math.random().toString(16).slice(2), // よりユニークなID
+          buyOrder: null,
+          sellOrder: null,
+          buyFilled: false,
+          sellFilled: false,
+          amount: amount // このペアでの取引量
+        };
+        this.orderPairs = [currentPair]; // 配列を1つの要素に置き換え
+      }
 
       if (side === 'buy') {
         console.log(`${this.symbol}: -- 買い注文を発注します - 価格: ${price}, 数量: ${amount}`);
         order = await this.exchange.createLimitBuyOrder(this.symbol, amount, price);
         this.activeOrders.buy = order;
-        newPair.buyOrder = order;
-        console.log(`${this.symbol}: -- 買い注文成功: ID ${order.id}, ペアID: ${newPair.id}`);
+        currentPair.buyOrder = order;
+        console.log(`${this.symbol}: -- 買い注文成功: ID ${order.id}, ペアID: ${currentPair.id}`);
       } else { // side === 'sell'
         console.log(`${this.symbol}: -- 売り注文を発注します - 価格: ${price}, 数量: ${amount}`);
         order = await this.exchange.createLimitSellOrder(this.symbol, amount, price);
         this.activeOrders.sell = order;
-        newPair.sellOrder = order;
-        console.log(`${this.symbol}: -- 売り注文成功: ID ${order.id}, ペアID: ${newPair.id}`);
+        currentPair.sellOrder = order;
+        console.log(`${this.symbol}: -- 売り注文成功: ID ${order.id}, ペアID: ${currentPair.id}`);
       }
 
       this._updateTradeRecord(side, price, amount, order.id, 'limit'); // 取引記録更新
@@ -543,26 +604,14 @@ class MarketMakingStrategy {
         price: price,
         amount: amount,
         orderId: order.id,
-        pairId: newPair.id // どのペアに属するか記録
+        pairId: currentPair.id // どのペアに属するか記録
       });
 
       // 既存のペアを探し、片方の注文がすでにあればそこに追加、なければ新しいペアとして追加
-      let existingPair = null;
-      if (side === 'buy' && this.activeOrders.sell) {
-          existingPair = this.orderPairs.find(p => p.sellOrder && p.sellOrder.id === this.activeOrders.sell.id && !p.buyOrder);
-      } else if (side === 'sell' && this.activeOrders.buy) {
-          existingPair = this.orderPairs.find(p => p.buyOrder && p.buyOrder.id === this.activeOrders.buy.id && !p.sellOrder);
-      }
-
-      if (existingPair) {
-          console.log(`${this.symbol}: 既存の注文ペア(${existingPair.id})に${side}注文(${order.id})を追加します。`);
-          if (side === 'buy') existingPair.buyOrder = order;
-          else existingPair.sellOrder = order;
-          existingPair.amount = amount; // 取引量を更新（ペアで統一する場合）
-      } else {
-          console.log(`${this.symbol}: 新しい注文ペア(${newPair.id})を作成し、${side}注文(${order.id})を追加します。`);
-          this.orderPairs.push(newPair);
-      }
+      // すでに現在のペアに注文を追加済みなので、この処理は不要になります
+      console.log(`${this.symbol}: 注文ペア(${currentPair.id})に${side}注文(${order.id})を追加しました。`);
+      // 取引量を更新（常に最新の注文の量に合わせる）
+      currentPair.amount = amount;
 
 
       await this._postOrder(`${side}注文発注: 価格 ${price}, 量 ${amount}, ID ${order.id}`);
@@ -591,8 +640,10 @@ class MarketMakingStrategy {
     // 0. 注文ペア復元
     // もしペアがDBに保存されている場合は復元する
     console.log(`${this.symbol}: DBから注文ペアを復元中...`);
-    this.orderPairs = await getOrderPairs(this.exchange.id, this.symbol, 'MARKET_MAKING');
+    const restoredPair = await getCurrentOrderPair(this.exchange.id, this.symbol, 'MARKET_MAKING');
+    this.orderPairs = restoredPair ? [restoredPair] : this.orderPairs;
     console.log(`${this.symbol}: ${this.orderPairs.length}個の注文ペアを復元しました。`);
+
     // activeOrdersの状態も復元する
     this.activeOrders = rebuildActiveOrders(this.orderPairs);
 
@@ -622,7 +673,12 @@ class MarketMakingStrategy {
 
         // 6. 注文ペア状態の保存
         // DBに保存する
-        await saveOrderPairs(this.exchange.id, this.symbol, 'MARKET_MAKING', this.orderPairs);
+        // 常に配列の最初の要素を保存
+        if (this.orderPairs.length > 0) {
+          await setCurrentOrderPair(this.exchange.id, this.symbol, 'MARKET_MAKING', this.orderPairs[0]);
+        } else {
+          console.log(`${this.symbol}: 注文ペアが存在しないため、保存をスキップします。`);
+        }
 
         // ループの待機
         await new Promise(resolve => setTimeout(resolve, this.options.loopInterval));

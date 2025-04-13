@@ -11,22 +11,46 @@ async function initialize() {
 }
 
 // 注文ペアの保存
-async function saveOrderPairs(exchangeId, symbol, strategyKey, pair) {
-  const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
-  await client.set(key, JSON.stringify({ pair }));
+// async function saveOrderPairs(exchangeId, symbol, strategyKey, pair) {
+//   const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+//   return await client.set(key, JSON.stringify({ pair }));
+// }
+
+// 注文ペア履歴追加
+// async function addOrderPair(exchangeId, symbol, strategyKey, pair) {
+//   const key = `orderPairHistory:${exchangeId}:${symbol}:${strategyKey}`;
+
+//   return await client.rPush(key, pair);
+// }
+
+async function setCurrentOrderPair(exchangeId, symbol, strategyKey, pair) {
+  const key = `currentOrderPair:${exchangeId}:${symbol}:${strategyKey}`;
+
+  return await client.set(key, JSON.stringify({ pair }));
 }
 
-// 注文ペアの取得
-async function getOrderPairs(exchangeId, symbol, strategyKey) {
-  const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
+  const key = `currentOrderPair:${exchangeId}:${symbol}:${strategyKey}`;
   const data = await client.get(key);
-  
+
   if (data) {
     return JSON.parse(data).pair;
   }
-  
-  return [];
+
+  return {};
 }
+
+// 注文ペア履歴取得
+// async function getOrderPairs(exchangeId, symbol, strategyKey) {
+//   const key = `orderPairHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   const data = await client.get(key);
+  
+//   if (data) {
+//     return JSON.parse(data).pair;
+//   }
+  
+//   return [];
+// }
 
 /**
  * 取引記録を追加/更新する関数
@@ -957,6 +981,6 @@ module.exports = {
   getOrderDetailsByOrderId,
   updateFilledSummaryTimestamp,
   getFilledSummaryTimestamp,
-  getOrderPairs,
-  saveOrderPairs
+  setCurrentOrderPair,
+  getCurrentOrderPair,
 }
