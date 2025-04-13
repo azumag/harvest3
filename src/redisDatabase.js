@@ -217,6 +217,7 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   
   // 更新日時を設定
   await client.hSet(summaryKey, 'updatedAt', now);
+  await updateFilledSummaryTimestamp();
   
   return true;
 }
@@ -833,3 +834,52 @@ module.exports = {
   getOrderStrategyKeyByOrderId,
   getOrderDetailsByOrderId
 };
+
+/**
+ * 約定サマリー更新時間テーブルを更新する関数
+ * 約定サマリーが更新された時間のみを記録するテーブルを管理します
+ * @returns {Promise<Boolean>} 処理完了時に解決されるPromise
+ */
+async function updateFilledSummaryTimestamp() {
+  // 約定サマリー更新時間テーブルのキー
+  const timestampKey = `trade:filledSummaryTimestamp:`;
+  const timestamp = Date.now();
+  
+  // 更新時間を設定
+  await client.set(timestampKey, timestamp);
+  
+  return true;
+}
+
+/**
+ * 特定の約定サマリーの最終更新時間を取得する関数
+ * @returns {Promise<Number|null>} 最終更新時間（ミリ秒）またはnull
+ */
+async function getFilledSummaryTimestamp() {
+  // 約定サマリー更新時間テーブルのキー
+  const timestampKey = `trade:filledSummaryTimestamp:`;
+  
+  // 更新時間を取得
+  const timestamp = await client.get(timestampKey);
+  // console.log('約定サマリー更新時間:', timestamp);
+  
+  return parseInt(timestamp || 0);
+}
+
+
+// モジュールのエクスポートに新しい関数を追加
+module.exports = {
+  initialize,
+  addTrade,
+  addFilledTrade,
+  getTradeRecordsAsObject,
+  getLatestTradeAmount,
+  getFilledHistory, // 関数名を変更
+  getOrderHistory,
+  getTradeSummary,
+  getFilledSummary,
+  getOrderStrategyKeyByOrderId,
+  getOrderDetailsByOrderId,
+  updateFilledSummaryTimestamp,
+  getFilledSummaryTimestamp,
+}

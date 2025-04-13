@@ -1,7 +1,8 @@
 const { postErrorToDiscord } = require('./notifications');
 const { bitflyerMinTradeAmounts } = require('./config');
 const { 
-  getFilledSummary, addFilledTrade, getOrderHistoryByOrderIdForExchangeSymbol
+  getFilledSummary, addFilledTrade, getFilledSummaryTimestamp,
+  getOrderStrategyKeyByOrderId, updateFilledSummaryTimestamp
 } = require('./redisDatabase');
  
 /**
@@ -180,19 +181,14 @@ async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
  * @returns {Promise<number>} - 処理した約定数
  */
 async function updateFilledTrades(exchange, symbol) {
+  // await updateFilledSummaryTimestamp();
  
   try {
     // 前回のチェック時間を取得
-    const summary = await getFilledSummary({
-      exchangeId: exchange.id,
-      symbol,
-      strategyKey
-    });
+    const timestamp = await getFilledSummaryTimestamp();
     
-    // 前回のチェック時間（ない場合は24時間前）
-    const lastCheckTime = summary.updatedAt
-      ? summary.updatedAt
-      : Date.now() - 24 * 60 * 60 * 1000;
+    // 前回のチェック時間（ない場合は1時間前）
+    const lastCheckTime = timestamp ? timestamp : Date.now() - 24 * 60 * 60 * 1000;
     
     // fetchMyTradesメソッドが利用可能かどうかを確認
     if (!exchange.has || !exchange.has['fetchMyTrades']) {
@@ -202,17 +198,17 @@ async function updateFilledTrades(exchange, symbol) {
     
     // 取引所から約定履歴を取得
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
+    // console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
     
     let processedCount = 0;
+    let strategyKey = 'OUTSIDE';
     // 各約定を処理
     for (const trade of trades) {
 
-      let strategyKey = 'OUTSIDE';
-      if (trade.id || trade.order_id || trade.order) {
-        strategyKey = await getOrderStrategyKeyByOrderId(
-          trade.id || trade.order_id || trade.order,
-        );
+      if (trade.order) {
+        strategyKey = await getOrderStrategyKeyByOrderId(trade.order);
       }
+      // console.log(`strategykey: ${strategyKey} trade: ${trade.order}`);
 
       await addFilledTrade(
         exchange.id,
@@ -222,7 +218,7 @@ async function updateFilledTrades(exchange, symbol) {
         trade.amount,
         trade.price,
         trade.cost || trade.amount * trade.price,
-        trade.id || trade.order_id || trade.order,
+        trade.order,
         trade.type || 'market',
         trade.fee ? trade.fee.cost : undefined
       );
@@ -233,7 +229,7 @@ async function updateFilledTrades(exchange, symbol) {
     console.log(`${exchange.id} ${symbol} ${strategyKey}: ${processedCount}件の約定を記録しました`);
     return processedCount;
   } catch (error) {
-    console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} ${strategyKey}):`, error);
+    console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} :`, error);
     return 0;
   }
 }
@@ -247,6 +243,6 @@ module.exports = {
   getMarketParameters,
   getNetPosition,
   getFilledCurrentPosition,
-  updateFilledTrades,  // 新しい関数を追加
+  updateFilledTrades,
   sleep
 };

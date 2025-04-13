@@ -249,16 +249,8 @@ class MarketMakingStrategy {
                 pair[filledKey] = true;
                 // 約定した場合、ポジション数を更新 (取引記録更新時に行われている場合は不要かも)
                 // this._updatePositionOnFill(side, order.amount);
-                addFilledTrade(this.exchange.id,
-                   this.symbol, 'MARKET_MAKING',
-                   side,
-                   orderStatus.amount,
-                   orderStatus.price,
-                   orderStatus.cost || orderStatus.amount * orderStatus.price,
-                   order.id,
-                   'limit',
-                   orderStatus.fee ? orderStatus.fee.cost : undefined,
-                );
+                await updateFilledTrades(this.exchange, this.symbol);
+                
                 return; // 約定したので以降の処理は不要
             }
             // closed/filled 以外 (canceledなど) の場合もアクティブではないのでリセットへ
