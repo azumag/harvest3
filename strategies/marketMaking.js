@@ -580,15 +580,18 @@ class MarketMakingStrategy {
         this.orderPairs = [currentPair]; // 配列を1つの要素に置き換え
       }
 
+      // Post-Only オプションを指定して Maker 注文を保証
+      const params = { 'postOnly': true };
+
       if (side === 'buy') {
-        console.log(`${this.symbol}: -- 買い注文を発注します - 価格: ${price}, 数量: ${amount}`);
-        order = await this.exchange.createLimitBuyOrder(this.symbol, amount, price);
+        console.log(`${this.symbol}: -- 買い注文(Post-Only)を発注します - 価格: ${price}, 数量: ${amount}`);
+        order = await this.exchange.createLimitBuyOrder(this.symbol, amount, price, params);
         this.activeOrders.buy = order;
         currentPair.buyOrder = order;
         console.log(`${this.symbol}: -- 買い注文成功: ID ${order.id}, ペアID: ${currentPair.id}`);
       } else { // side === 'sell'
-        console.log(`${this.symbol}: -- 売り注文を発注します - 価格: ${price}, 数量: ${amount}`);
-        order = await this.exchange.createLimitSellOrder(this.symbol, amount, price);
+        console.log(`${this.symbol}: -- 売り注文(Post-Only)を発注します - 価格: ${price}, 数量: ${amount}`);
+        order = await this.exchange.createLimitSellOrder(this.symbol, amount, price, params);
         this.activeOrders.sell = order;
         currentPair.sellOrder = order;
         console.log(`${this.symbol}: -- 売り注文成功: ID ${order.id}, ペアID: ${currentPair.id}`);
