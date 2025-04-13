@@ -51,9 +51,35 @@ async function getFilledHistoryController(req, res) {
       parseInt(offset, 10)
     );
     
-    // デバッグログ: 取得されたデータの最初の項目を表示
+    // データベース層からのデータを必ずソートする
     if (history && history.length > 0) {
-      console.log('約定履歴の最初のアイテム:', history[0]);
+      // タイムスタンプを数値に変換
+      history.forEach(item => {
+        if (typeof item.timestamp === 'string') {
+          item.timestamp = parseInt(item.timestamp, 10);
+        }
+        // 念のため、数値であることを確認
+        item.timestamp = Number(item.timestamp);
+      });
+      
+      // 詳細なデバッグログ
+      console.log('ソート前の約定履歴データ:');
+      history.slice(0, 5).forEach((item, index) => {
+        console.log(`${index}: ${item.timestamp} (${typeof item.timestamp}), ${item.exchangeId}, ${item.symbol}`);
+      });
+      
+      // 降順にソート（新しい順）
+      history.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // ソート後のデバッグログ
+      console.log('ソート後の約定履歴データ:');
+      history.slice(0, 5).forEach((item, index) => {
+        console.log(`${index}: ${item.timestamp} (${typeof item.timestamp}), ${item.exchangeId}, ${item.symbol}`);
+      });
+      
+      console.log(`取得データ数: ${history.length}`);
+    } else {
+      console.log('取得データなし');
     }
     
     // 結果をJSON形式で返す

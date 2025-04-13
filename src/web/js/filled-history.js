@@ -176,6 +176,37 @@ function loadFilledTradeHistory() {
         updatePaginationInfo(0);
         return;
       }
+      // デバッグ: データ構造を確認
+      console.log('約定履歴データ（ソート前）:', JSON.stringify(data.history.slice(0, 10)));
+      console.log('ソート前の最初の10件のtimestamp:');
+      data.history.slice(0, 10).forEach((item, index) => {
+        console.log(`${index}: ${item.timestamp} (${typeof item.timestamp}), ${item.exchangeId}, ${item.symbol}`);
+      });
+      
+      // バックエンドからのデータは既にソートされているはずだが、念のため確認
+      console.log('バックエンドからのデータ確認...');
+      
+      // 全てのtimestampを数値に変換（データを変更）
+      data.history.forEach(item => {
+        if (typeof item.timestamp === 'string') {
+          item.timestamp = parseInt(item.timestamp, 10);
+        }
+        // 念のため、数値であることを確認
+        item.timestamp = Number(item.timestamp);
+      });
+      
+      // 念のため、フロントエンド側でも降順ソートを適用
+      // これにより、バックエンドのソートに問題があっても、フロントエンドで修正される
+      data.history.sort((a, b) => {
+        return b.timestamp - a.timestamp;
+      });
+      
+      // デバッグ: データを確認
+      console.log('約定履歴データ（最終）:', JSON.stringify(data.history.slice(0, 10)));
+      console.log('最初の10件のtimestamp:');
+      data.history.slice(0, 10).forEach((item, index) => {
+        console.log(`${index}: ${item.timestamp} (${typeof item.timestamp}), ${item.exchangeId}, ${item.symbol}`);
+      });
       
       // テーブルを更新
       let html = '';
@@ -210,7 +241,7 @@ function loadFilledTradeHistory() {
  */
 function createTradeTableRow(trade) {
   const date = new Date(trade.timestamp);
-  const formattedDate = date.toLocaleString('ja-JP');
+  const formattedDate = date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
   const sideClass = trade.side === 'buy' ? 'buy-trade' : 'sell-trade';
   
   return `
@@ -355,6 +386,7 @@ function setupRealtimeUpdates() {
     if (matchesFilters(tradeData)) {
       // 現在1ページ目を表示中の場合のみリアルタイム更新
       if (currentPage === 1) {
+        // 新しいデータをテーブルの先頭に追加（降順表示に対応）
         prependTradeToTable(tradeData);
       }
       
@@ -372,15 +404,39 @@ function setupRealtimeUpdates() {
       
       // 現在1ページ目表示中の場合のみテーブル更新
       if (currentPage === 1) {
-        updates.forEach(update => {
-          if (update.type === 'filled_trade_added' && matchesFilters(update.data)) {
-            prependTradeToTable(update.data);
-            newItemsCount++;
+        // 新しいデータを時間の降順でソート
+        const newTrades = updates
+          .filter(update => update.type === 'filled_trade_added' && matchesFilters(update.data))
+          .map(update => update.data);
+        
+        // デバッグ: バッチ更新データの確認
+        console.log('バッチ更新データ（ソート前）:', JSON.stringify(newTrades.slice(0, 5)));
+        
+        // 全てのtimestampを数値に変換
+        newTrades.forEach(item => {
+          if (typeof item.timestamp === 'string') {
+            item.timestamp = parseInt(item.timestamp, 10);
           }
+          // 念のため、数値であることを確認
+          item.timestamp = Number(item.timestamp);
+        });
+        
+        // 数値としてソート
+        newTrades.sort((a, b) => {
+          return b.timestamp - a.timestamp;
+        });
+        
+        // デバッグ: ソート後のデータを確認
+        console.log('バッチ更新データ（ソート後）:', JSON.stringify(newTrades.slice(0, 5)));
+        
+        // ソートされた順序で追加
+        newTrades.forEach(tradeData => {
+          prependTradeToTable(tradeData);
+          newItemsCount++;
         });
       } else {
         // 1ページ目以外ではフィルター一致数のみカウント
-        newItemsCount = updates.filter(update => 
+        newItemsCount = updates.filter(update =>
           update.type === 'filled_trade_added' && matchesFilters(update.data)
         ).length;
       }

@@ -328,6 +328,7 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
   
   // 時系列インデックスから取得
   let historyItems = [];
+  let allTrades = []; // 全データを保持する変数をここで定義
   
   if (exchangeId && symbol && strategyKey) {
     // 特定の取引所、通貨ペア、戦略の履歴を取得
@@ -336,13 +337,24 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
     // デバッグログ: 使用しているRedisキーを記録
     console.log('使用しているRedisキー:', historyKey);
     
-    const data = await client.lRange(historyKey, offset, offset + limit - 1);
+    // リストの長さを取得してログに出力
+    const listLength = await client.lLen(historyKey);
+    console.log(`Redisリストの長さ: ${listLength}, 要求オフセット: ${offset}, 要求リミット: ${limit}`);
     
-    historyItems = data.map(item => {
+    // 全データを取得してソート後にページングする
+    // これにより、全体としての一貫したソート順が保たれる
+    console.log('全データを取得してソート後にページング');
+    
+    // 全データを取得
+    const allData = await client.lRange(historyKey, 0, -1);
+    console.log(`全データ取得: ${allData.length}件`);
+    
+    // 全データをパースしてタイムスタンプでソート
+    allTrades = allData.map(item => {
       const trade = JSON.parse(item);
       return {
         id: trade.orderId,
-        timestamp: trade.filledAt,
+        timestamp: Number(trade.filledAt), // 数値に変換
         exchangeId,
         symbol,
         strategyKey,
@@ -350,9 +362,17 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
         amount: trade.amount,
         price: trade.price,
         value: trade.amount * trade.price,
-        fee: trade.fee || (trade.amount * trade.price * 0.001) // 手数料がない場合は取引額の0.1%と仮定
+        fee: trade.fee || (trade.amount * trade.price * 0.001)
       };
     });
+    
+    // 降順（新しい順）にソート
+    allTrades.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`ソート完了: 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+    
+    // ページングを適用
+    historyItems = allTrades.slice(offset, offset + limit);
+    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
   } else {
     // 時系列インデックスから取得
     let scoreMin = '-inf';
@@ -366,16 +386,15 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
       scoreMax = endDate;
     }
     
-    // 時系列インデックスから取得
-    const timeRangeItems = await client.zRangeByScore('trade:filledHistory:time', scoreMin, scoreMax, {
-      LIMIT: {
-        offset,
-        count: limit
-      }
-    });
+    // 時系列インデックスから全てのアイテムを取得
+    console.log('時系列インデックスから全データを取得');
+    const allTimeRangeItems = await client.zRangeByScore('trade:filledHistory:time', scoreMin, scoreMax);
+    console.log(`全時系列データ取得: ${allTimeRangeItems.length}件`);
     
-    // 各アイテムの詳細を取得
-    for (const item of timeRangeItems) {
+    // 全てのアイテムを処理
+    allTrades = []; // 既に定義されている変数を使用
+    
+    for (const item of allTimeRangeItems) {
       const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
       
       // フィルター条件に一致するか確認
@@ -394,9 +413,9 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
         
         // タイムスタンプが一致するものを探す
         if (trade.filledAt.toString() === timestamp) {
-          historyItems.push({
+          allTrades.push({
             id: trade.orderId,
-            timestamp: trade.filledAt,
+            timestamp: Number(trade.filledAt), // 数値に変換
             exchangeId: itemExchangeId,
             symbol: itemSymbol,
             strategyKey: itemStrategyKey,
@@ -404,24 +423,36 @@ async function getFilledHistory(filters = {}, limit = 100, offset = 0) {
             amount: trade.amount,
             price: trade.price,
             value: trade.amount * trade.price,
-            fee: trade.fee || (trade.amount * trade.price * 0.001) // 手数料がない場合は取引額の0.1%と仮定
+            fee: trade.fee || (trade.amount * trade.price * 0.001)
           });
           break;
         }
       }
     }
+    
+    // 降順（新しい順）にソート
+    allTrades.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`ソート完了: 全${allTrades.length}件, 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+    
+    // ページングを適用
+    historyItems = allTrades.slice(offset, offset + limit);
+    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
   }
   
-  // 合計数を取得（実際の実装ではより効率的な方法が必要）
+  // 合計数を取得
   let totalCount = 0;
   
   if (exchangeId && symbol && strategyKey) {
+    // 特定の取引所、通貨ペア、戦略の場合は、全データの長さを使用
     const historyKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
     totalCount = await client.lLen(historyKey);
   } else {
-    // 時系列インデックスのカウント（フィルタリングは考慮していない簡易実装）
-    totalCount = await client.zCount('trade:filledHistory:time', '-inf', '+inf');
+    // フィルター条件がある場合は、フィルタリング後の全データの長さを使用
+    // この場合、allTradesの長さが実際のフィルタリング後の全データ数
+    totalCount = allTrades ? allTrades.length : 0;
   }
+  
+  console.log(`合計数: ${totalCount}件`);
   
   return {
     history: historyItems,
@@ -723,6 +754,7 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
   
   // 時系列インデックスから取得
   let historyItems = [];
+  let allTrades = []; // 全データを保持する変数
   
   if (exchangeId && symbol && strategyKey) {
     // 特定の取引所、通貨ペア、戦略の履歴を取得
@@ -730,13 +762,19 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
     
     console.log('使用しているRedisキー:', historyKey);
     
-    const data = await client.lRange(historyKey, offset, offset + limit - 1);
+    // 全データを取得してソート後にページングする
+    console.log('全データを取得してソート後にページング');
     
-    historyItems = data.map(item => {
+    // 全データを取得
+    const allData = await client.lRange(historyKey, 0, -1);
+    console.log(`全データ取得: ${allData.length}件`);
+    
+    // 全データをパースしてタイムスタンプでソート
+    allTrades = allData.map(item => {
       const trade = JSON.parse(item);
       return {
         id: trade.orderId,
-        timestamp: trade.orderedAt,
+        timestamp: Number(trade.orderedAt), // 数値に変換
         exchangeId,
         symbol,
         strategyKey,
@@ -746,6 +784,14 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
         value: trade.amount * trade.price
       };
     });
+    
+    // 降順（新しい順）にソート
+    allTrades.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`ソート完了: 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+    
+    // ページングを適用
+    historyItems = allTrades.slice(offset, offset + limit);
+    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
   } else {
     // 時系列インデックスから取得
     let scoreMin = '-inf';
@@ -759,16 +805,15 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
       scoreMax = endDate;
     }
     
-    // 時系列インデックスから取得
-    const timeRangeItems = await client.zRangeByScore('trade:orderHistory:time', scoreMin, scoreMax, {
-      LIMIT: {
-        offset,
-        count: limit
-      }
-    });
+    // 時系列インデックスから全てのアイテムを取得
+    console.log('時系列インデックスから全データを取得');
+    const allTimeRangeItems = await client.zRangeByScore('trade:orderHistory:time', scoreMin, scoreMax);
+    console.log(`全時系列データ取得: ${allTimeRangeItems.length}件`);
     
-    // 各アイテムの詳細を取得
-    for (const item of timeRangeItems) {
+    // 全てのアイテムを処理
+    allTrades = []; // 既に定義されている変数を使用
+    
+    for (const item of allTimeRangeItems) {
       const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
       
       // フィルター条件に一致するか確認
@@ -787,9 +832,9 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
         
         // タイムスタンプが一致するものを探す
         if (trade.orderedAt.toString() === timestamp) {
-          historyItems.push({
+          allTrades.push({
             id: trade.orderId,
-            timestamp: trade.orderedAt,
+            timestamp: Number(trade.orderedAt), // 数値に変換
             exchangeId: itemExchangeId,
             symbol: itemSymbol,
             strategyKey: itemStrategyKey,
@@ -802,18 +847,30 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
         }
       }
     }
+    
+    // 降順（新しい順）にソート
+    allTrades.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`ソート完了: 全${allTrades.length}件, 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+    
+    // ページングを適用
+    historyItems = allTrades.slice(offset, offset + limit);
+    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
   }
   
-  // 合計数を取得（実際の実装ではより効率的な方法が必要）
+  // 合計数を取得
   let totalCount = 0;
   
   if (exchangeId && symbol && strategyKey) {
+    // 特定の取引所、通貨ペア、戦略の場合は、全データの長さを使用
     const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
     totalCount = await client.lLen(historyKey);
   } else {
-    // 時系列インデックスのカウント（フィルタリングは考慮していない簡易実装）
-    totalCount = await client.zCount('trade:orderHistory:time', '-inf', '+inf');
+    // フィルター条件がある場合は、フィルタリング後の全データの長さを使用
+    // この場合、allTradesの長さが実際のフィルタリング後の全データ数
+    totalCount = allTrades ? allTrades.length : 0;
   }
+  
+  console.log(`合計数: ${totalCount}件`);
   
   return {
     history: historyItems,
