@@ -239,21 +239,44 @@ function createOrderPairTableRow(pair) {
   const sellOrderDate = sellOrder.datetime ? new Date(sellOrder.datetime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '-';
   const sellOrderPrice = sellOrder.price ? sellOrder.price.toLocaleString() : '-';
   const sellOrderStatus = getSellOrderStatusText(sellOrder.status, pair.sellFilled);
+  
+  // HTMLエスケープ処理
+  const escapeHtml = (str) => {
+    if (typeof str !== 'string') return str;
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+  
+  // 各データを処理
+  const pairId = escapeHtml(String(pair.id));
+  const buyOrderIdEscaped = escapeHtml(buyOrderId);
+  const sellOrderIdEscaped = escapeHtml(sellOrderId);
+  const buyOrderDateEscaped = escapeHtml(buyOrderDate);
+  const sellOrderDateEscaped = escapeHtml(sellOrderDate);
+  
+  // ソート用のタイムスタンプ（存在する場合）
+  const buyOrderTimestamp = buyOrder.datetime ? new Date(buyOrder.datetime).getTime() : 0;
+  const sellOrderTimestamp = sellOrder.datetime ? new Date(sellOrder.datetime).getTime() : 0;
+  
   return `
     <tr>
-      <td>${exchangeId}</td>
-      <td>${symbol}</td>
-      <td>${strategyKey}</td>
-      <td>${pair.amount}</td>
-      <td>${buyOrderPrice}</td>
+      <td>${escapeHtml(exchangeId)}</td>
+      <td>${escapeHtml(symbol)}</td>
+      <td>${escapeHtml(strategyKey)}</td>
+      <td>${escapeHtml(String(pair.amount))}</td>
+      <td>${escapeHtml(buyOrderPrice)}</td>
       <td>${buyOrderStatus}</td>
-      <td>${sellOrderPrice}</td>
+      <td>${escapeHtml(sellOrderPrice)}</td>
       <td>${sellOrderStatus}</td>
-      <td>${pair.id}</td>
-      <td>${buyOrderDate}</td>
-      <td>${sellOrderDate}</td>
-      <td>${buyOrderId}</td>
-      <td>${sellOrderId}</td>
+      <td data-order="${pairId}" data-search="${pairId}">${pairId}</td>
+      <td data-order="${buyOrderTimestamp}" data-search="${buyOrderDateEscaped}">${buyOrderDateEscaped}</td>
+      <td data-order="${sellOrderTimestamp}" data-search="${sellOrderDateEscaped}">${sellOrderDateEscaped}</td>
+      <td data-order="${buyOrderIdEscaped}" data-search="${buyOrderIdEscaped}">${buyOrderIdEscaped}</td>
+      <td data-order="${sellOrderIdEscaped}" data-search="${sellOrderIdEscaped}">${sellOrderIdEscaped}</td>
     </tr>
   `;
 }
@@ -377,14 +400,25 @@ function initializeDataTable() {
       { responsivePriority: 1, targets: [0, 1, 2, 3] },    // 優先して表示する列（取引所、シンボル、戦略、数量）
       { responsivePriority: 2, targets: [5, 7] },          // 次に優先する列（注文ステータス）
       { responsivePriority: 3, targets: '_all' },          // その他の列
+      { searchable: true, targets: '_all' },               // すべての列を検索可能に設定
       {
         width: '30px',
         className: 'narrow-id',
         render: function(data, type, row) {
-          if (type === 'display') {
-            return `<span title="${data}" class="narrow-id">${data}</span>`;
+          // データをエスケープ
+          const escaped = data ? String(data)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;') : '';
+          
+          // 表示用と検索用で異なる値を返す
+          if (type === 'display' && escaped) {
+            return `<span title="${escaped}" class="narrow-id">${escaped}</span>`;
           }
-          return data;
+          // 検索用と並べ替え用はプレーンテキストを返す
+          return escaped;
         },
         targets: [8]                                       // ID列
       },
@@ -392,19 +426,64 @@ function initializeDataTable() {
         width: '60px',
         className: 'narrow-date',
         render: function(data, type, row) {
-          if (type === 'display') {
-            // 日時を短く表示（ホバーで完全表示）
-            const fullDate = data;
-            let shortDate = data;
-            if (data !== '-' && data.length > 10) {
-              shortDate = data.split(' ')[0]; // 日付部分のみ表示
+          // データをエスケープ
+          const escaped = data ? String(data)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;') : '';
+          
+          // 表示用処理（日時の短縮表示）
+          if (type === 'display' && escaped) {
+            let shortDate = escaped;
+            if (escaped !== '-' && escaped.length > 10) {
+              shortDate = escaped.split(' ')[0]; // 日付部分のみ表示
             }
-            return `<span title="${fullDate}" class="narrow-date">${shortDate}</span>`;
+            return `<span title="${escaped}" class="narrow-date">${shortDate}</span>`;
           }
-          return data;
+          // 検索用と並べ替え用はプレーンテキストを返す
+          return escaped;
         },
         targets: [9, 10]                                   // 日時列
+      },
+      {
+        render: function(data, type, row) {
+          // データをエスケープ
+          const escaped = data ? String(data)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;') : '';
+          
+          // 表示用と検索用で異なる値を返す
+          if (type === 'display' && escaped) {
+            return `<span title="${escaped}">${escaped}</span>`;
+          }
+          // 検索用と並べ替え用はプレーンテキストを返す
+          return escaped;
+        },
+        targets: [11, 12]                                  // 買い注文ID、売り注文ID列
       }
-    ]
+    ],
+    // 検索機能の設定
+    search: {
+      smart: true,
+      regex: false,
+      caseInsensitive: true
+    },
+    // 検索処理のカスタマイズ
+    initComplete: function() {
+      const api = this.api();
+      
+      // カスタム検索処理を追加
+      $('.dataTables_filter input')
+        .off() // デフォルトのイベントハンドラを削除
+        .on('input', function() {
+          const searchValue = $(this).val();
+          api.search(searchValue).draw();
+        });
+    }
   });
 }
