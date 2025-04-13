@@ -14,20 +14,6 @@
     <link href="https://cdn.datatables.net/buttons/2.3.5/css/buttons.bootstrap5.min.css" rel="stylesheet">
     <!-- 注文ペアテーブル用スタイル -->
     <style>
-        #order-pairs-table th, #order-pairs-table td {
-            max-width: 150px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        #order-pairs-table th:nth-child(1), #order-pairs-table td:nth-child(1) { max-width: 100px; } /* ID */
-        #order-pairs-table th:nth-child(2), #order-pairs-table td:nth-child(2) { max-width: 80px; } /* 取引所 */
-        #order-pairs-table th:nth-child(3), #order-pairs-table td:nth-child(3) { max-width: 80px; } /* 通貨ペア */
-        #order-pairs-table th:nth-child(4), #order-pairs-table td:nth-child(4) { max-width: 100px; } /* 戦略 */
-        #order-pairs-table th:nth-child(5), #order-pairs-table td:nth-child(5) { max-width: 70px; } /* 数量 */
-        #order-pairs-table th:nth-child(6), #order-pairs-table td:nth-child(6) { max-width: 100px; } /* 買い注文ID */
-        #order-pairs-table th:nth-child(10), #order-pairs-table td:nth-child(10) { max-width: 100px; } /* 売り注文ID */
-        
         /* ホバー時にツールチップのように全文表示 */
         #order-pairs-table td:hover {
             white-space: normal;
@@ -128,19 +114,19 @@
                             <table id="order-pairs-table" class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>ID</th>
                                         <th>取引所</th>
                                         <th>通貨ペア</th>
                                         <th>戦略</th>
                                         <th>数量</th>
-                                        <th>買い注文ID</th>
-                                        <th>買い注文日時</th>
                                         <th>買い注文価格</th>
                                         <th>買い注文状態</th>
-                                        <th>売り注文ID</th>
-                                        <th>売り注文日時</th>
                                         <th>売り注文価格</th>
                                         <th>売り注文状態</th>
+                                        <th>ID</th>
+                                        <th>買い注文日時</th>
+                                        <th>売り注文日時</th>
+                                        <th>買い注文ID</th>
+                                        <th>売り注文ID</th>
                                     </tr>
                                 </thead>
                                 <tbody>

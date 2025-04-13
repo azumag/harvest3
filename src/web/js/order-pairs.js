@@ -241,19 +241,19 @@ function createOrderPairTableRow(pair) {
   const sellOrderStatus = getSellOrderStatusText(sellOrder.status, pair.sellFilled);
   return `
     <tr>
-      <td>${pair.id}</td>
       <td>${exchangeId}</td>
       <td>${symbol}</td>
       <td>${strategyKey}</td>
       <td>${pair.amount}</td>
-      <td>${buyOrderId}</td>
-      <td>${buyOrderDate}</td>
       <td>${buyOrderPrice}</td>
       <td>${buyOrderStatus}</td>
-      <td>${sellOrderId}</td>
-      <td>${sellOrderDate}</td>
       <td>${sellOrderPrice}</td>
       <td>${sellOrderStatus}</td>
+      <td>${pair.id}</td>
+      <td>${buyOrderDate}</td>
+      <td>${sellOrderDate}</td>
+      <td>${buyOrderId}</td>
+      <td>${sellOrderId}</td>
     </tr>
   `;
 }
@@ -352,9 +352,18 @@ function initializeDataTable() {
     existingTable.destroy();
   }
   
+  // 最初にスタイルを追加
+  const style = document.createElement('style');
+  style.textContent = `
+    .narrow-id { max-width: 30px; width: 30px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .narrow-date { max-width: 60px; width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  `;
+  document.head.appendChild(style);
+
   // 新しいDataTableを初期化
   $('#order-pairs-table').DataTable({
     responsive: true,
+    autoWidth: false,
     pageLength: 25,
     lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "全て"]],
     language: {
@@ -365,9 +374,37 @@ function initializeDataTable() {
       'copy', 'csv', 'excel'
     ],
     columnDefs: [
-      { responsivePriority: 1, targets: [0, 1, 2, 3, 4] }, // 優先して表示する列
-      { responsivePriority: 2, targets: [5, 8, 9, 12] },   // 次に優先する列
-      { responsivePriority: 3, targets: '_all' }           // その他の列
+      { responsivePriority: 1, targets: [0, 1, 2, 3] },    // 優先して表示する列（取引所、シンボル、戦略、数量）
+      { responsivePriority: 2, targets: [5, 7] },          // 次に優先する列（注文ステータス）
+      { responsivePriority: 3, targets: '_all' },          // その他の列
+      {
+        width: '30px',
+        className: 'narrow-id',
+        render: function(data, type, row) {
+          if (type === 'display') {
+            return `<span title="${data}" class="narrow-id">${data}</span>`;
+          }
+          return data;
+        },
+        targets: [8]                                       // ID列
+      },
+      {
+        width: '60px',
+        className: 'narrow-date',
+        render: function(data, type, row) {
+          if (type === 'display') {
+            // 日時を短く表示（ホバーで完全表示）
+            const fullDate = data;
+            let shortDate = data;
+            if (data !== '-' && data.length > 10) {
+              shortDate = data.split(' ')[0]; // 日付部分のみ表示
+            }
+            return `<span title="${fullDate}" class="narrow-date">${shortDate}</span>`;
+          }
+          return data;
+        },
+        targets: [9, 10]                                   // 日時列
+      }
     ]
   });
 }
