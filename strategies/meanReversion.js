@@ -106,7 +106,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
 
-      const formattedAmount = formatttedBuyAmount(exchange, symbol, 'MEAN_REVERSION', amountPrecision);
+      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MEAN_REVERSION', amountPrecision);
 
       if (formattedAmount < minTradeAmount) {
         console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
