@@ -24,6 +24,17 @@ function initDashboard() {
     });
   });
   
+  // ポジションタブのイベントリスナー設定
+  document.querySelectorAll('#positionTabs .nav-link').forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      // タブIDからアクティブなタブを更新
+      const tabId = e.target.id;
+      if (tabId === 'exchange-tab') activePositionTab = 'exchange';
+      else if (tabId === 'symbol-tab') activePositionTab = 'symbol';
+      else if (tabId === 'strategy-tab') activePositionTab = 'strategy';
+    });
+  });
+  
   // 銘柄フィルターの設定
   setupSymbolFilter();
   
@@ -87,50 +98,63 @@ function loadDashboardData() {
  */
 // ポジション表示に関するグローバル変数
 let allPositions = []; // すべてのポジションデータを保持
-let currentPositionPage = 1; // 現在のページ
-const positionsPerPage = 7; // 1ページあたりの表示件数
-
+let currentPositionPage = 1; // 現在のページ（旧方式用）
+const positionsPerPage = 7; // 1ページあたりの表示件数（旧方式用）
+let activePositionTab = 'exchange'; // アクティブなタブ：'exchange', 'symbol', 'strategy'
 function loadPositions() {
-  const container = document.getElementById('positions-container');
-  
-  // ローディング表示
-  container.innerHTML = `
-    <div class="text-center py-5">
+  // 各タブのコンテナに読み込み中の表示
+  const loadingHTML = `
+    <div class="text-center py-3">
       <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">読み込み中...</span>
       </div>
     </div>
   `;
   
+  document.getElementById('positions-container-exchange').innerHTML = loadingHTML;
+  document.getElementById('positions-container-symbol').innerHTML = loadingHTML;
+  document.getElementById('positions-container-strategy').innerHTML = loadingHTML;
+  
   // APIからデータ取得
   fetch('/api/positions')
     .then(response => response.json())
     .then(data => {
       if (!data.positions || data.positions.length === 0) {
-        container.innerHTML = `
+        const noDataHTML = `
           <div class="no-data-message">
             <p>現在のポジションはありません</p>
           </div>
         `;
+        document.getElementById('positions-container-exchange').innerHTML = noDataHTML;
+        document.getElementById('positions-container-symbol').innerHTML = noDataHTML;
+        document.getElementById('positions-container-strategy').innerHTML = noDataHTML;
         return;
       }
       
       // 全ポジションデータをグローバル変数に保存
       allPositions = data.positions;
       
+      // 新しいグループ化表示メソッドで表示
+      displayGroupedPositions();
+      
+      // 旧方式の表示も維持（現在は非表示）
       // 現在のページを1ページ目に戻す
       currentPositionPage = 1;
       
-      // ポジションの表示を更新
-      displayPositionsPage();
+      // ポジションの表示を更新（旧方式）
+      // 互換性のために残しておく
+      // displayPositionsPage();
     })
     .catch(error => {
       console.error('ポジション情報の取得に失敗しました:', error);
-      container.innerHTML = `
+      const errorHTML = `
         <div class="alert alert-danger" role="alert">
           ポジション情報の取得に失敗しました。詳細はコンソールを確認してください。
         </div>
       `;
+      document.getElementById('positions-container-exchange').innerHTML = errorHTML;
+      document.getElementById('positions-container-symbol').innerHTML = errorHTML;
+      document.getElementById('positions-container-strategy').innerHTML = errorHTML;
     });
 }
 
@@ -171,6 +195,131 @@ function displayPositionsPage() {
   
   // ページネーションを更新
   updatePositionsPagination();
+}
+
+/**
+ * ポジションデータを取引所、通貨、戦略別にグループ化して表示
+ */
+function displayGroupedPositions() {
+  // データが空の場合の処理
+  if (allPositions.length === 0) {
+    document.getElementById('positions-container-exchange').innerHTML = '<div class="no-data-message"><p>現在のポジションはありません</p></div>';
+    document.getElementById('positions-container-symbol').innerHTML = '<div class="no-data-message"><p>現在のポジションはありません</p></div>';
+    document.getElementById('positions-container-strategy').innerHTML = '<div class="no-data-message"><p>現在のポジションはありません</p></div>';
+    return;
+  }
+  
+  // タブに応じたデータのグループ化
+  const byExchange = groupPositionsByKey(allPositions, 'exchangeId');
+  const bySymbol = groupPositionsByKey(allPositions, 'symbol');
+  const byStrategy = groupPositionsByKey(allPositions, 'strategyKey');
+  
+  // 各タブのコンテンツを更新
+  displayPositionGroupContent('positions-container-exchange', byExchange);
+  displayPositionGroupContent('positions-container-symbol', bySymbol);
+  displayPositionGroupContent('positions-container-strategy', byStrategy);
+  
+  // タブのイベントリスナーを設定
+  setupPositionTabListeners();
+}
+
+/**
+ * ポジションデータを特定のキーでグループ化する
+ * @param {Array} positions - ポジションデータの配列
+ * @param {string} key - グループ化するキー
+ * @returns {Object} - グループ化されたポジションデータ
+ */
+function groupPositionsByKey(positions, key) {
+  const grouped = {};
+  
+  positions.forEach(position => {
+    const groupKey = position[key];
+    if (!grouped[groupKey]) {
+      grouped[groupKey] = [];
+    }
+    grouped[groupKey].push(position);
+  });
+  
+  return grouped;
+}
+
+/**
+ * グループ化されたポジションをコンテナに表示
+ * @param {string} containerId - 表示するコンテナのID
+ * @param {Object} groupedData - グループ化されたポジションデータ
+ */
+function displayPositionGroupContent(containerId, groupedData) {
+  const container = document.getElementById(containerId);
+  let html = '';
+  
+  // グループごとにポジションを表示
+  Object.keys(groupedData).forEach(groupKey => {
+    const positions = groupedData[groupKey];
+    const totalPnL = positions.reduce((sum, pos) => sum + (pos.realizedPnL || 0), 0);
+    const isPositive = totalPnL > 0;
+    const badgeClass = isPositive ? 'bg-success' : totalPnL < 0 ? 'bg-danger' : 'bg-secondary';
+    
+    // ユニークなIDを生成
+    const groupId = `group-${containerId}-${groupKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    
+    html += `
+      <div class="position-group mb-2">
+        <div class="position-group-header" data-bs-toggle="collapse" data-bs-target="#${groupId}">
+          <h6>
+            ${groupKey}
+            <span>
+              <span class="badge rounded-pill ${badgeClass} me-2">${totalPnL.toLocaleString()} 円</span>
+              <span class="badge bg-secondary">${positions.length}</span>
+            </span>
+          </h6>
+        </div>
+        <div class="collapse show" id="${groupId}">
+          <div class="p-2">
+    `;
+    
+    // グループ内の各ポジションを表示
+    positions.forEach(position => {
+      const isPositive = position.realizedPnL > 0;
+      const cardClass = isPositive ? 'positive' : position.realizedPnL < 0 ? 'negative' : '';
+      
+      html += `
+        <div class="position-summary ${cardClass} mb-2 p-2 border rounded">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>${position.symbol}</strong>
+              <small class="text-muted ms-2">${position.exchangeId} - ${position.strategyKey}</small>
+            </div>
+            <span class="badge ${isPositive ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
+              ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'} 円
+            </span>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+/**
+ * ポジションタブのイベントリスナーを設定
+ */
+function setupPositionTabListeners() {
+  document.querySelectorAll('#positionTabs .nav-link').forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      // タブIDからアクティブなタブを更新
+      const tabId = e.target.id;
+      if (tabId === 'exchange-tab') activePositionTab = 'exchange';
+      else if (tabId === 'symbol-tab') activePositionTab = 'symbol';
+      else if (tabId === 'strategy-tab') activePositionTab = 'strategy';
+    });
+  });
 }
 
 /**

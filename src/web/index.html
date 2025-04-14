@@ -49,14 +49,62 @@
                 <div class="card summary-card">
                     <div class="card-body">
                         <h5 class="card-title">現在のポジション <a href="positions.html" class="btn btn-sm btn-outline-primary float-end">詳細を表示</a></h5>
-                        <div id="positions-container">
-                            <div class="text-center py-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">読み込み中...</span>
+                        
+                        <!-- タブナビゲーション -->
+                        <ul class="nav nav-tabs mb-3" id="positionTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="exchange-tab" data-bs-toggle="tab" data-bs-target="#exchange-content" type="button" role="tab" aria-controls="exchange-content" aria-selected="true">取引所別</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="symbol-tab" data-bs-toggle="tab" data-bs-target="#symbol-content" type="button" role="tab" aria-controls="symbol-content" aria-selected="false">通貨別</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="strategy-tab" data-bs-toggle="tab" data-bs-target="#strategy-content" type="button" role="tab" aria-controls="strategy-content" aria-selected="false">戦略別</button>
+                            </li>
+                        </ul>
+                        
+                        <!-- タブコンテンツ -->
+                        <div class="tab-content" id="positionsTabContent">
+                            <!-- 取引所別タブコンテンツ -->
+                            <div class="tab-pane fade show active" id="exchange-content" role="tabpanel" aria-labelledby="exchange-tab">
+                                <div id="positions-container-exchange" class="positions-container">
+                                    <div class="text-center py-3">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">読み込み中...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 通貨別タブコンテンツ -->
+                            <div class="tab-pane fade" id="symbol-content" role="tabpanel" aria-labelledby="symbol-tab">
+                                <div id="positions-container-symbol" class="positions-container">
+                                    <div class="text-center py-3">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">読み込み中...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 戦略別タブコンテンツ -->
+                            <div class="tab-pane fade" id="strategy-content" role="tabpanel" aria-labelledby="strategy-tab">
+                                <div id="positions-container-strategy" class="positions-container">
+                                    <div class="text-center py-3">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">読み込み中...</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div id="positions-pagination" class="mt-2">
+                        
+                        <!-- 以前の共通コンテナは非表示にしておく -->
+                        <div id="positions-container" style="display: none;">
+                        </div>
+                        
+                        <!-- ページネーションは不要になるため非表示 -->
+                        <div id="positions-pagination" class="mt-2" style="display: none;">
                             <!-- ページネーションコントロールがここに表示されます -->
                         </div>
                     </div>

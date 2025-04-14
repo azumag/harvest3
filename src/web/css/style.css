@@ -168,6 +168,46 @@ body {
     }
 }
 
+/* ポジショングループスタイル */
+.position-group {
+    border: 1px solid #e9ecef;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.position-group-header {
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.position-group-header h6 {
+    margin-bottom: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ポジションコンテナタブ内表示用 */
+.positions-container {
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* ページネーション改善 */
+#positions-pagination {
+    overflow-x: auto;
+    padding-bottom: 5px;
+}
+
+#positions-pagination .pagination {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
 /* 注文ペアカード用のスタイル */
 .order-pairs-cards {
   display: flex;
