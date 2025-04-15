@@ -79,7 +79,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
-        const params = { 'postOnly': true };
+        const params = { 'post_only': true };
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
@@ -130,7 +130,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
-        const params = { 'postOnly': true };
+        const params = { 'post_only': true };
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[平均回帰戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
@@ -238,7 +238,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
-        const params = { 'postOnly': true };
+        const params = { 'post_only': true };
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
@@ -275,7 +275,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
         // 指値注文に変更
-        const params = { 'postOnly': true };
+        const params = { 'post_only': true };
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[オシレーター戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);

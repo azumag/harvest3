@@ -581,7 +581,7 @@ class MarketMakingStrategy {
       }
 
       // Post-Only オプションを指定して Maker 注文を保証
-      const params = { 'postOnly': true };
+      const params = { 'post_only': true };
 
       if (side === 'buy') {
         console.log(`${this.symbol}: -- 買い注文(Post-Only)を発注します - 価格: ${price}, 数量: ${amount}`);
