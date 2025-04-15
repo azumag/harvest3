@@ -13,7 +13,8 @@
     "close-bf": "node src/closeAllPositions.js --bitflyer",
     "check-order-status": "node test/checkOrderStatus.js",
     "update-summary": "node scripts/updateFilledSummary.js",
-    "fix-net-positions": "node scripts/fixNetPositions.js"
+    "fix-net-positions": "node scripts/fixNetPositions.js",
+    "fix-duplicate-history": "node scripts/fixDuplicateFilledHistory.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

@@ -182,6 +182,25 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   await client.sAdd(`symbols:${exchangeId}`, symbol);
   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
+  // 重複チェック用のユニークキーを作成（タイムスタンプを除くすべての要素から作成）
+  // 浮動小数点の精度問題を避けるため、数値を固定小数点形式に変換
+  const tradeUniqueKey = `${exchangeId}:${symbol}:${strategyKey}:${orderId}:${side}:${amount.toFixed(8)}:${price.toFixed(8)}:${orderType}:${fee.toFixed(8)}`;
+  
+  // 重複チェック用のセットキー
+  const uniqueTradeSetKey = `trade:uniqueTrades:${exchangeId}:${symbol}:${strategyKey}`;
+  
+  // セットにこのトレードが既に存在するか確認（O(1)の操作）
+  const isDuplicate = await client.sIsMember(uniqueTradeSetKey, tradeUniqueKey);
+  
+  if (isDuplicate) {
+    // 重複があれば処理をスキップ
+    console.log(`同一の約定記録が既に存在するため、スキップします: ${orderId}`);
+    return true;
+  }
+  
+  // 重複がなければ、セットに追加
+  await client.sAdd(uniqueTradeSetKey, tradeUniqueKey);
+  
   // 約定記録が存在するか確認
   const exists = await client.exists(summaryKey);
   
@@ -221,7 +240,7 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   await client.rPush(filledHistoryKey, filledData);
 
   // オーダーIDをキーとしたインデックスを作成
-  await client.set(`filledOrder:details:${orderId}`, filledData); 
+  await client.set(`filledOrder:details:${orderId}`, filledData);
   
   // 時系列インデックスに追加
   await client.zAdd('trade:filledHistory:time', {

@@ -144,6 +144,27 @@ services:
     depends_on:
       - redis
 
+  fix-duplicate-history:
+    image: harvest3-bot-image
+    container_name: fix_duplicate_history
+    restart: "no"  # オンデマンド実行
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies
+      - ./scripts:/usr/src/app/scripts
+      - ./test:/usr/src/app/test
+      - ./data:/usr/src/app/data
+      - ./bot.js:/usr/src/app/bot.js
+      - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
+    command: npm run fix-duplicate-history
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
+
   # test:
   #   image: harvest3-bot-image
   #   container_name: order_status_test
