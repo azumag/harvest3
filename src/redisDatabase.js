@@ -169,9 +169,10 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
  * @param {String} orderId - 注文ID
  * @param {String} orderType - 注文タイプ（例: 'market', 'limit'）
  * @param {Number} fee - 取引手数料
+ * @param {String} tradeId - トレードID (部分約定を区別するためのユニークID)
  * @returns {Promise} 処理完了時に解決されるPromise
  */
-async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType, fee = value * 0.001) {
+async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType, fee = value * 0.001, tradeId = null) {
   const now = Date.now();
   
   // 約定記録サマリーキー
@@ -182,24 +183,41 @@ async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, pri
   await client.sAdd(`symbols:${exchangeId}`, symbol);
   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
-  // 重複チェック用のユニークキーを作成（タイムスタンプを除くすべての要素から作成）
-  // 浮動小数点の精度問題を避けるため、数値を固定小数点形式に変換
-  const tradeUniqueKey = `${exchangeId}:${symbol}:${strategyKey}:${orderId}:${side}:${amount.toFixed(8)}:${price.toFixed(8)}:${orderType}:${fee.toFixed(8)}`;
+  // 数値は固定小数点形式に変換して精度問題を回避
+  const amountFixed = amount.toFixed(8);
+  const priceFixed = price.toFixed(8);
+  const feeFixed = fee.toFixed(8);
+  
+  // コンテンツハッシュ（トレードID以外の内容のみ）
+  const contentHash = `${exchangeId}:${symbol}:${strategyKey}:${side}:${amountFixed}:${priceFixed}:${orderType}:${feeFixed}`;
+  
+  // フルハッシュ（トレードIDを含む）
+  const fullHash = `${contentHash}:${tradeId}`;
   
   // 重複チェック用のセットキー
-  const uniqueTradeSetKey = `trade:uniqueTrades:${exchangeId}:${symbol}:${strategyKey}`;
+  const fullHashSetKey = `trade:uniqueTradeFullHashes:${exchangeId}:${symbol}:${strategyKey}`;
+  const contentHashSetKey = `trade:uniqueTradeContentHashes:${exchangeId}:${symbol}:${strategyKey}`;
   
-  // セットにこのトレードが既に存在するか確認（O(1)の操作）
-  const isDuplicate = await client.sIsMember(uniqueTradeSetKey, tradeUniqueKey);
+  // フルハッシュで完全な重複チェック（O(1)の操作）
+  const isDuplicate = await client.sIsMember(fullHashSetKey, fullHash);
   
   if (isDuplicate) {
-    // 重複があれば処理をスキップ
-    console.log(`同一の約定記録が既に存在するため、スキップします: ${orderId}`);
+    // 完全な重複(tradeId含めて全く同じ）があれば処理をスキップ
+    console.log(`同一の約定記録が既に存在するため、スキップします: ${tradeId}`);
     return true;
   }
   
-  // 重複がなければ、セットに追加
-  await client.sAdd(uniqueTradeSetKey, tradeUniqueKey);
+  // コンテンツハッシュをチェック（部分約定の可能性）
+  const hasContentMatch = await client.sIsMember(contentHashSetKey, contentHash);
+  if (hasContentMatch) {
+    // 内容は同じだがorderIdが異なる場合（部分約定の可能性）
+    console.log(`部分約定の可能性があります: ${tradeId} (内容は既存レコードと同一)`);
+    // 部分約定は処理を継続
+  }
+  
+  // ハッシュをセットに追加
+  await client.sAdd(fullHashSetKey, fullHash);
+  await client.sAdd(contentHashSetKey, contentHash);
   
   // 約定記録が存在するか確認
   const exists = await client.exists(summaryKey);

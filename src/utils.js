@@ -221,7 +221,8 @@ async function updateFilledTrades(exchange, symbol) {
         trade.cost || trade.amount * trade.price,
         trade.order,
         trade.type || 'market',
-        trade.fee ? trade.fee.cost : undefined
+        trade.fee ? trade.fee.cost : undefined,
+        trade.id
       );
       
       processedCount++;
