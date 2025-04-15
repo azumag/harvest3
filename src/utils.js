@@ -235,12 +235,36 @@ async function updateFilledTrades(exchange, symbol) {
   }
 }
 
-async function formatttedBuyAmount(exchange, symbol, strategyKey, amountPrecision) {
-  // 取引記録から買った量を取得
-  const buyAmount = await getFilledCurrentPosition(exchange, symbol, strategyKey);
-
-  // 精度を考慮して、最小精度以上の値を確保
-  return parseFloat(buyAmount.toFixed(amountPrecision));
+async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision) {
+  try {
+    // 取引記録から買った量を取得（ネットポジション）
+    const netPosition = await getFilledCurrentPosition(exchange, symbol, strategyKey);
+    
+    // 未約定の注文を取得
+    const openOrders = await exchange.fetchOpenOrders(symbol);
+    
+    // 売り注文のみをフィルタリングして合計量を計算
+    const totalSellOrderAmount = openOrders
+      .filter(order => order.side === 'sell')
+      .reduce((sum, order) => sum + order.amount, 0);
+    
+    // 利用可能量 = ネットポジション - 未約定売り注文量
+    let availableAmount = netPosition - totalSellOrderAmount;
+    
+    // 負の値にならないようにする
+    if (availableAmount < 0) availableAmount = 0;
+    
+    // 精度を考慮して、最小精度以上の値を確保
+    return parseFloat(availableAmount.toFixed(amountPrecision));
+  } catch (error) {
+    console.error('利用可能量の計算に失敗しました:', error);
+    // エラーとなった取引所とシンボルを記録
+    const errorMessage = `formattedAvailableAmount実行中にエラーが発生しました: ${exchange.id} ${symbol} ${strategyKey}`;
+    console.error(errorMessage, error);
+    
+    // エラー時は安全のために0を返す（より厳格な対応）
+    return 0;
+  }
 }
 
 // スリープ関数
@@ -253,6 +277,6 @@ module.exports = {
   getNetPosition,
   getFilledCurrentPosition,
   updateFilledTrades,
-  formatttedBuyAmount,
+  formattedAvailableAmount,
   sleep
 };

@@ -11,7 +11,7 @@ const {
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
 
-const { formatttedBuyAmount } = require('../src/utils');
+const { formattedAvailableAmount } = require('../src/utils');
 
 /**
  * 移動平均線クロス戦略
@@ -110,7 +110,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MA', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MA', amountPrecision);
 
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -254,7 +254,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MACD', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MACD', amountPrecision);
 
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -398,7 +398,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'RSI', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'RSI', amountPrecision);
       
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -544,7 +544,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'BOLLINGER_BANDS', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'BOLLINGER_BANDS', amountPrecision);
       
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成

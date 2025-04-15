@@ -3,7 +3,7 @@
  */
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
-const { formatttedBuyAmount } = require('../src/utils');
+const { formattedAvailableAmount } = require('../src/utils');
 
 
 /**
@@ -239,7 +239,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         // 取引所Aでの売り注文
         // 戦略で買った額を取得
         // tradeRecordsパラメータを追加し、awaitを使用
-        const inyoBuyAmountA = await formatttedBuyAmount(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE', amountPrecision);
+        const inyoBuyAmountA = await formattedAvailableAmount(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE', amountPrecision);
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountA = parseFloat(inyoBuyAmountA.toFixed(amountPrecision));
@@ -333,7 +333,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         
         // 取引所Bでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountB = await formatttedBuyAmount(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE", amountPrecision);
+        const inyoBuyAmountB = await formattedAvailableAmount(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE", amountPrecision);
         
         // 売却量を戦略で買った量のみに設定
         adjustedAmountB = parseFloat(inyoBuyAmountB.toFixed(amountPrecision));

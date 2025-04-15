@@ -7,7 +7,7 @@ const {
   calculateBollingerBands,
 } = require('./indicators');
 
-const { formatttedBuyAmount } = require('../src/utils');
+const { formattedAvailableAmount } = require('../src/utils');
 
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
@@ -107,7 +107,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
 
-      const formattedAmount = await formatttedBuyAmount(exchange, symbol, 'MEAN_REVERSION', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MEAN_REVERSION', amountPrecision);
 
       if (formattedAmount < minTradeAmount) {
         console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
@@ -268,7 +268,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAmount(exchange, symbol, 'OSCILLATOR', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'OSCILLATOR', amountPrecision);
       
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
