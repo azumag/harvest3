@@ -66,9 +66,11 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
+
+      const realizedPnL = await getFilledSummary(exchange, symbol, 'MA')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
+      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -210,9 +212,11 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
+
+      const realizedPnL = await getFilledSummary(exchange, symbol, 'MACD')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
+      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -354,9 +358,11 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
+
+      const realizedPnL = await getFilledSummary(exchange, symbol, 'RSI')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
+      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -500,9 +506,12 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
+
+      const realizedPnL = await getFilledSummary(exchange, symbol, 'BOLLINGER_BANDS')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
+      // const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
+      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保

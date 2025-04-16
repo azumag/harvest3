@@ -14,6 +14,8 @@ const { getTradeRecordsAsObject } = require('../../redisDatabase');
 async function getPositions(req, res) {
   try {
     // データベースから全ての取引記録を取得
+    // TODO: サマリーから取得するように変更
+    // まずサマリーに保存する機能を実装
     const allRecords = await getTradeRecordsAsObject();
     
     // クエリパラメータを取得
