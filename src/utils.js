@@ -243,11 +243,21 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     
     // 未約定の注文を取得
     const openOrders = await exchange.fetchOpenOrders(symbol);
+
+    // 未約定の売り注文のうち、売り注文を戦略キーでフィルタリングして合計量を計算
+    // つまり、戦略で売りに出ている量を取得
+    const sellOrderAmounts = await Promise.all(
+      openOrders.map(async (order) => {
+        const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+        return (strategyKey === _strategyKey && order.side === 'sell') ? order.amount : 0;
+      })
+    );
+    const totalSellOrderAmount = sellOrderAmounts.reduce((sum, amount) => sum + amount, 0);
     
     // 売り注文のみをフィルタリングして合計量を計算
-    const totalSellOrderAmount = openOrders
-      .filter(order => order.side === 'sell')
-      .reduce((sum, order) => sum + order.amount, 0);
+    // const totalSellOrderAmount = openOrders
+    //   .filter(order => order.side === 'sell')
+    //   .reduce((sum, order) => sum + order.amount, 0);
     
     // 利用可能量 = ネットポジション - 未約定売り注文量
     let availableAmount = netPosition - totalSellOrderAmount;
