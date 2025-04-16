@@ -781,7 +781,15 @@ async function getFilledSummary(filters = {}) {
  * 特定の注文IDから戦略キーを取得する関数
  * @param {String} orderId - 注文ID
  */
+const orderStrategyKeyCache = new Map();
+
 async function getOrderStrategyKeyByOrderId(orderId) {
+  // キャッシュに存在する場合はキャッシュを返す
+  if (orderStrategyKeyCache.has(orderId)) {
+    return orderStrategyKeyCache.get(orderId);
+  }
+
+  // キャッシュにない場合はRedisから取得
   const indexValue = await client.get(`order:index:${orderId}`);
   
   // インデックスが存在しない場合
@@ -791,6 +799,8 @@ async function getOrderStrategyKeyByOrderId(orderId) {
   
   // インデックス値を分解
   const [exchangeId, symbol, strategyKey] = indexValue.split(':');
+
+  orderStrategyKeyCache.set(orderId, strategyKey);
   
   return strategyKey;
 }

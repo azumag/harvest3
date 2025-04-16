@@ -102,12 +102,12 @@ const config = {
     // 高頻度取引戦略
     HFT: {
       enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-      interval: 1000,
+      interval: 100,
       priceThreshold: 0.05,
-      maxOrdersPerMinute: 10
+      maxOrdersPerMinute: 100
     },
     SCALPING: {
-      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'false'
+      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'
     },
     
     // マーケットメイキング戦略

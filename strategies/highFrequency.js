@@ -16,10 +16,10 @@ const { formattedAvailableAmount } = require("../src/utils");
  * @param {Number} amount - 取引量
  * @param {Object} options - その他のオプション
  */
-async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThreshold = 0.05, amount, options = {}) {
+async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, amount, options = {}) {
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, postOrderToDiscord, maxOrdersPerMinute = 10, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options; // tradeRecords を追加
+    const { pricePrecision, amountPrecision, postOrderToDiscord, maxOrdersPerMinute, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options; // tradeRecords を追加
     
     // 取引履歴を保持する配列
     const tradeHistory = [];
@@ -51,9 +51,9 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
     const orderBookDepth = 5; // 注文ブックの深さ（上位5件）
     
     console.log(`高頻度取引を開始: ${symbol} - 間隔: ${interval}ms, 閾値: ${priceThreshold}%, 最小取引量: ${baseMinTradeAmount}`);
-    if (postOrderToDiscord) {
-      await postOrderToDiscord(`[HFT] 高頻度取引を開始: ${exchange.id} - ${symbol} - 間隔: ${interval}ms, 閾値: ${priceThreshold}%, 最小取引量: ${baseMinTradeAmount}`);
-    }
+    // if (postOrderToDiscord) {
+    //   await postOrderToDiscord(`[HFT] 高頻度取引を開始: ${exchange.id} - ${symbol} - 間隔: ${interval}ms, 閾値: ${priceThreshold}%, 最小取引量: ${baseMinTradeAmount}`);
+    // }
     
     // 高頻度取引ループ
     while (true) {
@@ -215,7 +215,11 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                 }
               }
             }
+          } else {
+            console.log(`価格変動が閾値を超えませんでした: ${symbol} - 変動: ${priceChange.toFixed(2)}%`);
           }
+        } else {
+          console.log(`最初の価格を取得中: ${symbol}`);
         }
         
         // 現在の価格を保存
