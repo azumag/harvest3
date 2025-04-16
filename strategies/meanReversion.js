@@ -7,7 +7,7 @@ const {
   calculateBollingerBands,
 } = require('./indicators');
 
-const { formattedAvailableAmount } = require('../src/utils');
+const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
@@ -66,7 +66,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const availableFunds = balance.free[baseCurrency];
 
       // 損益を取得
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'MEAN_REVERSION')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MEAN_REVERSION')
 
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
@@ -227,7 +227,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'OSCILLATOR')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'OSCILLATOR')
 
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;

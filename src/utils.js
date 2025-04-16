@@ -162,6 +162,20 @@ function getNetPosition(tradeRecords, exchange, symbol, strategyKey) {
   return buyAmount;
 }
 
+async function getRealizedPnL(exchange, symbol, strategyKey) {
+  // 約定を更新
+  await updateFilledTrades(exchange, symbol);
+
+  const summary = await getFilledSummary({
+    exchangeId: exchange.id,
+    symbol,
+    strategyKey
+  });
+  
+  // console.log(summary);
+  return summary.realizedPnL || 0;
+}
+
 async function getFilledCurrentPosition(exchange, symbol, strategyKey) {
   // 約定を更新
   await updateFilledTrades(exchange, symbol);
@@ -289,5 +303,6 @@ module.exports = {
   getFilledCurrentPosition,
   updateFilledTrades,
   formattedAvailableAmount,
+  getRealizedPnL,
   sleep
 };

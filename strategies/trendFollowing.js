@@ -11,7 +11,7 @@ const {
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
 
-const { formattedAvailableAmount } = require('../src/utils');
+const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 
 /**
  * 移動平均線クロス戦略
@@ -67,7 +67,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'MA')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MA')
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
@@ -213,7 +213,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'MACD')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MACD')
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
@@ -359,7 +359,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'RSI')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'RSI')
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
@@ -507,7 +507,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getFilledSummary(exchange, symbol, 'BOLLINGER_BANDS')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, 'BOLLINGER_BANDS')
       
       // 利用可能な資金の割合に基づいて取引量を計算
       // const maxBuyAmount = availableFunds * tradePercentage / currentPrice;

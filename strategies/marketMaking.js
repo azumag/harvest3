@@ -1,6 +1,6 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
-const { updateFilledTrades } = require('../src/utils.js');
+const { updateFilledTrades, getRealizedPnL } = require('../src/utils.js');
 const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
 
 /**
@@ -471,7 +471,7 @@ class MarketMakingStrategy {
           console.log(`${this.symbol}: 未約定の注文がないため、新規の買い注文と売り注文を試みます。`);
           // 現在価格から targetQuote 円分の量を推定し売買に使う。量が最低単位以下なら最低単位を使う
           // 利用可能な資金の割合に基づいて取引量を計算
-          const realizedPnL = await getFilledSummary(exchange, symbol, 'MARKET_MAKING');
+          const realizedPnL = await getRealizedPnL(exchange, symbol, 'MARKET_MAKING');
           
           let amount = this.options.targetQuote + realizedPnL / midPrice;
           // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用kj
