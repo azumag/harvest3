@@ -211,7 +211,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         if (availableFundsA >= buyPriceA * adjustedAmountA) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
-            await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
+            // await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
             
             // 買い注文を作成
             const buyOrderA = await exchangeA.createLimitBuyOrder(symbol, adjustedAmountA, buyPriceA);

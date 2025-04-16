@@ -2,6 +2,8 @@
  * 高頻度取引（HFT）戦略
  */
 
+const { formattedAvailableAmount } = require("../src/utils");
+
 // 循環参照を避けるため、直接インポートしない
 
 /**
@@ -127,38 +129,41 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
-                      // 買い注文を作成（成行注文）
-                      const order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+                      // 買い注文を作成
+                      await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
+                      const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
                       
                       // 約定情報を取得して実際の約定価格を取得
-                      let executedPrice;
-                      try {
-                        const orderDetails = await exchange.fetchOrder(order.id, symbol);
-                        executedPrice = orderDetails.price || orderDetails.average || midPrice; // 約定価格を取得、取得できない場合はmidPriceを使用
-                      } catch (fetchError) {
-                        console.error(`約定情報の取得に失敗しました: ${symbol}`, fetchError);
-                        executedPrice = midPrice; // 取得に失敗した場合はmidPriceを使用
-                      }
+                      // let executedPrice;
+                      // try {
+                      //   const orderDetails = await exchange.fetchOrder(order.id, symbol);
+                      //   executedPrice = orderDetails.price || orderDetails.average || midPrice; // 約定価格を取得、取得できない場合はmidPriceを使用
+                      // } catch (fetchError) {
+                      //   console.error(`約定情報の取得に失敗しました: ${symbol}`, fetchError);
+                      //   executedPrice = midPrice; // 取得に失敗した場合はmidPriceを使用
+                      // }
                       
-                      console.log(`HFT買い注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      }
+                      // console.log(`HFT買い注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      // if (postOrderToDiscord) {
+                        // await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      // }
                       
                       // 取引記録を更新（実際の約定価格を使用）
                       // if (updateTradeRecord) {
                       //   updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'buy', );
                       // }
                       // updateFilledHistory();
+                      updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'buy', order.id, 'limit');
                       
                       // 取引履歴に追加（実際の約定価格を使用）
-                      tradeHistory.push({
-                        time: now,
-                        type: 'buy',
-                        price: executedPrice,
-                        amount: formattedAmount,
-                        priceChange
-                      });
+                      // tradeHistory.push({
+                      //   time: now,
+                      //   type: 'buy',
+                      //   price: executedPrice,
+                      //   amount: formattedAmount,
+                      //   priceChange
+                      // });
                       
                       // 最後の取引時間を更新
                       lastTradeTime = now;
@@ -181,72 +186,19 @@ async function highFrequencyTrading(exchange, symbol, interval = 1000, priceThre
                   const quoteCurrency = symbol.split('/')[0];
                   const availableAsset = balance.free[quoteCurrency];
 
-                  // 取引記録から買った量を取得
-                  let buyAmount = 0;
-                  if (updateTradeRecord) {
-                    // tradeRecordsから該当する取引所とシンボルの買い量を取得
-                    const exchangeRecords = tradeRecords[exchange.id];
-                    if (exchangeRecords && exchangeRecords[symbol]) {
-                      buyAmount = exchangeRecords[symbol].buyAmount - exchangeRecords[symbol].sellAmount;
-                      if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする (Number.isNaNを使用)
-                      if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
-                    }
-                  }
-
-                  // 売却量を計算（買った分だけを売却）
-                  let sellAmount = buyAmount;
-
-                  // 買った記録がなくても、利用可能な資産があれば最小単位を売却
-                  // if (sellAmount <= 0 && availableAsset >= baseMinTradeAmount) {
-                  //   sellAmount = baseMinTradeAmount;
-                  // }
-
-                  // 利用可能な資産を超えないようにする
-                  sellAmount = Math.min(sellAmount, availableAsset);
-
-                  // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
-                  const tradeAmount = Math.max(baseMinTradeAmount, sellAmount);
-                  // 精度を考慮して、最小精度以上の値を確保
-                  // amountPrecisionのデフォルト値を設定
-                  const precisionToUse = amountPrecision || 8;
-                  let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
                   // 最小取引量を下回らないようにする
-                  formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
+                  const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
                   
-                  if (availableAsset >= formattedAmount && sellAmount > 0) {
+                  if (availableAsset >= formattedAmount && formattedAmount > 0) {
                     try {
-                      // 売り注文を作成（成行注文）
-                      const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+                      // 売り注文を作成
+                      await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
+                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
                       
-                      // 約定情報を取得して実際の約定価格を取得
-                      let executedPrice;
-                      try {
-                        const orderDetails = await exchange.fetchOrder(order.id, symbol);
-                        executedPrice = orderDetails.price || orderDetails.average || midPrice; // 約定価格を取得、取得できない場合はmidPriceを使用
-                      } catch (fetchError) {
-                        console.error(`約定情報の取得に失敗しました: ${symbol}`, fetchError);
-                        executedPrice = midPrice; // 取得に失敗した場合はmidPriceを使用
-                      }
-                      
-                      console.log(`HFT売り注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      }
+                      console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       
                       // 取引記録を更新（実際の約定価格を使用）
-                      // if (updateTradeRecord) {
-                      //   updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell');
-                      // }
-                      // updateFilledHistory();
-                      
-                      // 取引履歴に追加（実際の約定価格を使用）
-                      tradeHistory.push({
-                        time: now,
-                        type: 'sell',
-                        price: executedPrice,
-                        amount: formattedAmount,
-                        priceChange
-                      });
+                      updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'sell');
                       
                       // 最後の取引時間を更新
                       lastTradeTime = now;
@@ -540,22 +492,22 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
  * 古い注文をキャンセルする関数
  * @param {Object} exchange - ccxtの取引所オブジェクト
  * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - ストラテジーのキー
  * @param {Number} cancelOrderThreshold - キャンセルする閾値（デフォルト30）
  * @param {Function} postOrderToDiscord - Discord通知関数
  */
-async function orderCheckCancel(exchange, symbol, cancelOrderThreshold = 30, postOrderToDiscord) {
+async function orderCheckCancel(exchange, symbol, strategyKey, cancelOrderThreshold = 30) {
   try {
     // 通貨ペアの注文を取得
     const orders = await exchange.fetchOpenOrders(symbol);
     
-    // 通貨ごとに注文数が10を超えたら、最も古い注文をキャンセル
+    // 通貨ごとに注文数が超えたら、最も古い注文をキャンセル
     if (orders.length >= cancelOrderThreshold) {
-      const oldestOrder = orders[0]; // 一番古い注文
-      await exchange.cancelOrder(oldestOrder.id, symbol);
-      if (postOrderToDiscord) {
-        await postOrderToDiscord(`注文数が${cancelOrderThreshold}を超えたため、最も古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
+      const targetOrder = await findFirstOrderByStrategyKey(orders, strategyKey);
+      if (targetOrder) {
+        await exchange.cancelOrder(targetOrder.id, symbol);
+        console.log(`注文数が${cancelOrderThreshold}を超えたため、最も古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
       }
-      console.log(`注文数が${cancelOrderThreshold}を超えたため、最も古い注文をキャンセルしました: ${exchange.id} - ${symbol} : ${oldestOrder.id}`);
     }
     
     return orders.length;
@@ -567,6 +519,17 @@ async function orderCheckCancel(exchange, symbol, cancelOrderThreshold = 30, pos
     return 0;
   }
 }
+
+async function findFirstOrderByStrategyKey(openOrders, strategyKey) {
+  for (const order of openOrders) {
+    const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+    if (_strategyKey === strategyKey) {
+      return order;
+    }
+  }
+  return null;
+}
+
 
 module.exports = {
   highFrequencyTrading,

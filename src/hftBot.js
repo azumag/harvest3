@@ -11,7 +11,8 @@ const { getMarketParameters, sleep } = require('./utils');
  */
 async function startHFTBot() {
   try {
-    const exchanges = [exchangeBB, exchangeBF];
+    // const exchanges = [exchangeBB, exchangeBF];
+    const exchanges = [exchangeBB];
     
     // 高頻度取引戦略（HFT）を実行
     if (config.strategies.HFT.enabled) {
@@ -55,16 +56,16 @@ async function startHFTBot() {
   }
 }
 
-// レポートを投稿するためのタイマー設定
-setInterval(() => {
-  const now = new Date();
-  if (now.getMinutes() === 0) { // 時間ごと
+// // レポートを投稿するためのタイマー設定
+// setInterval(() => {
+//   const now = new Date();
+//   if (now.getMinutes() === 0) { // 時間ごと
     
-    // 戦略と銘柄ごとの損益レポート
-    postStrategyProfitReport(exchangeBB);
-    postStrategyProfitReport(exchangeBF);
-  }
-}, 60000); // 1分ごとにチェック
+//     // 戦略と銘柄ごとの損益レポート
+//     postStrategyProfitReport(exchangeBB);
+//     postStrategyProfitReport(exchangeBF);
+//   }
+// }, 60000); // 1分ごとにチェック
 
 
 // ボットを起動
