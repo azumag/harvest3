@@ -70,7 +70,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const realizedPnL = await getRealizedPnL(exchange, symbol, 'MA')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -216,7 +216,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const realizedPnL = await getRealizedPnL(exchange, symbol, 'MACD')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -362,7 +362,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const realizedPnL = await getRealizedPnL(exchange, symbol, 'RSI')
       
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -511,7 +511,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       
       // 利用可能な資金の割合に基づいて取引量を計算
       // const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保

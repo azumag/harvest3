@@ -69,7 +69,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       const realizedPnL = await getRealizedPnL(exchange, symbol, 'MEAN_REVERSION')
 
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
@@ -230,7 +230,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       const realizedPnL = await getRealizedPnL(exchange, symbol, 'OSCILLATOR')
 
       // 利用可能な資金の割合に基づいて取引量を計算
-      const maxBuyAmount = (availableFunds * tradePercentage) + realizedPnL / currentPrice;
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
       // 精度を考慮して、最小精度以上の値を確保
