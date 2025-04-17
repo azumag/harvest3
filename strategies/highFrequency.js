@@ -3,6 +3,7 @@
  */
 
 const { formattedAvailableAmount } = require("../src/utils");
+const { getOrderStrategyKeyByOrderId } = require("../src/redisDatabase");
 
 // 循環参照を避けるため、直接インポートしない
 
@@ -130,7 +131,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   if (availableFunds >= midPrice * formattedAmount) {
                     try {
                       // 買い注文を作成
-                      await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
+                      // await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
                       const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
                       
                       // 約定情報を取得して実際の約定価格を取得
@@ -192,7 +193,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   if (availableAsset >= baseMinTradeAmount && formattedAmount >= baseMinTradeAmount) {
                     try {
                       // 売り注文を作成
-                      await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
+                      // await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
                       const order = await exchange.createLimitSellOrder(symbol, baseMinTradeAmount, midPrice, { 'post_only': true });
                       
                       console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
@@ -217,6 +218,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
             }
           } else {
             console.log(`価格変動が閾値を超えませんでした: ${symbol} - 変動: ${priceChange.toFixed(2)}%`);
+            await cancelAllOrders(exchange, symbol, 'HFT');
           }
         } else {
           console.log(`最初の価格を取得中: ${symbol}`);
@@ -489,6 +491,22 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       symbol,
       error: error.message
     };
+  }
+}
+
+
+async function cancelAllOrders(exchange, symbol, strategyKey) {
+  try {
+    const orders = await exchange.fetchOpenOrders(symbol);
+    for (const order of orders) {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      if (_strategyKey === strategyKey) {
+        await exchange.cancelOrder(order.id, symbol);
+        console.log(`注文キャンセル: ${exchange.id} - ${symbol} - 注文ID: ${order.id}`);
+      }
+    }
+  } catch (error) {
+    console.error(`注文キャンセル処理でエラーが発生しました: ${symbol}`, error);
   }
 }
 
