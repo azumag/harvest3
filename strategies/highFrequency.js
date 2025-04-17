@@ -187,18 +187,18 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   const availableAsset = balance.free[quoteCurrency];
 
                   // 最小取引量を下回らないようにする
-                  const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
+                  let formattedAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
                   
-                  if (availableAsset >= formattedAmount && formattedAmount > 0) {
+                  if (availableAsset >= baseMinTradeAmount && formattedAmount >= baseMinTradeAmount) {
                     try {
                       // 売り注文を作成
                       await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
-                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
+                      const order = await exchange.createLimitSellOrder(symbol, baseMinTradeAmount, midPrice, { 'post_only': true });
                       
                       console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       
                       // 取引記録を更新（実際の約定価格を使用）
-                      updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'sell');
+                      updateTradeRecord(exchange.id, symbol, baseMinTradeAmount, midPrice, 'sell', order.id, 'limit');
                       
                       // 最後の取引時間を更新
                       lastTradeTime = now;
