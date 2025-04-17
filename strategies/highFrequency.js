@@ -2,7 +2,7 @@
  * 高頻度取引（HFT）戦略
  */
 
-const { formattedAvailableAmount } = require("../src/utils");
+const { formattedAvailableAmount, getRealizedPnL } = require("../src/utils");
 const { getOrderStrategyKeyByOrderId } = require("../src/redisDatabase");
 
 // 循環参照を避けるため、直接インポートしない
