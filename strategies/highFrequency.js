@@ -95,6 +95,11 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
         const bidVolume = bids.reduce((sum, bid) => sum + bid[1], 0);
         const askVolume = asks.reduce((sum, ask) => sum + ask[1], 0);
         const volumeImbalance = bidVolume / (bidVolume + askVolume); // 0.5が均衡、>0.5は買い圧力、<0.5は売り圧力
+        // threshold
+        // 買いすぎで売りが少ない場合はこれをあげる
+        // 売りが多い場合はこれを下げる
+        // 利確時に損が多い場合は早く売りすぎているのでこれを下げる
+        const volumeThreshold = 0.6; // 60%の閾値
         
         // 前回の価格がある場合、価格変動を計算
         if (previousPrice !== null) {
@@ -112,7 +117,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
               // 買い注文の場合
               if (isBuy) {
                 // 買い圧力が強い場合は買い注文を実行
-                if (volumeImbalance > 0.5) {
+                if (volumeImbalance > volumeThreshold) {
                   // 利用可能な資金を確認
                   const balance = await exchange.fetchBalance();
                   const baseCurrency = symbol.split('/')[1];
@@ -146,9 +151,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       
                       // console.log(`HFT買い注文実行: ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      // if (postOrderToDiscord) {
-                        // await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
-                      // }
+
                       
                       // 取引記録を更新（実際の約定価格を使用）
                       // if (updateTradeRecord) {
@@ -156,7 +159,10 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       // }
                       // updateFilledHistory();
                       updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'buy', order.id, 'limit');
-                      
+
+                      if (postOrderToDiscord) {
+                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      }
                       // 取引履歴に追加（実際の約定価格を使用）
                       // tradeHistory.push({
                       //   time: now,
@@ -181,7 +187,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                 }
               } else {
                 // 売り圧力が強い場合は売り注文を実行
-                if (volumeImbalance < 0.5) {
+                if (volumeImbalance < volumeThreshold) {
                   // 利用可能な資産を確認
                   const balance = await exchange.fetchBalance();
                   const quoteCurrency = symbol.split('/')[0];
@@ -200,6 +206,10 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       
                       // 取引記録を更新（実際の約定価格を使用）
                       updateTradeRecord(exchange.id, symbol, baseMinTradeAmount, midPrice, 'sell', order.id, 'limit');
+
+                      if (postOrderToDiscord) {
+                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 約定価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                      }
                       
                       // 最後の取引時間を更新
                       lastTradeTime = now;
