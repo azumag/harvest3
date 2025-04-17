@@ -273,7 +273,7 @@ function displayPositionGroupContent(containerId, groupedData) {
             </span>
           </h6>
         </div>
-        <div class="collapse show" id="${groupId}">
+        <div class="collapse" id="${groupId}">
           <div class="p-2">
     `;
     
