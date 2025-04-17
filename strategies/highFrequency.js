@@ -161,7 +161,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'buy', order.id, 'limit');
 
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 約定価格: ${executedPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       // 取引履歴に追加（実際の約定価格を使用）
                       // tradeHistory.push({
@@ -208,7 +208,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       updateTradeRecord(exchange.id, symbol, baseMinTradeAmount, midPrice, 'sell', order.id, 'limit');
 
                       if (postOrderToDiscord) {
-                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 約定価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
+                        await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       }
                       
                       // 最後の取引時間を更新
