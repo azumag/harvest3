@@ -116,9 +116,13 @@ async function executeStrategy(strategyKey, params) {
     throw new Error(`指定された戦略が見つかりません: ${strategyKey}`);
   }
 
-  // Redisデータベースではcheckpointは不要
   
-  return await strategy.function(...params);
+  if (strategyKey === 'HFT') {
+    // HFT の場合は並列
+    return strategy.function(...params);
+  } else {
+    return await strategy.function(...params);
+  }
 }
 
 /**

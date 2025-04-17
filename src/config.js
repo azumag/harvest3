@@ -103,7 +103,7 @@ const config = {
     HFT: {
       enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
       interval: 100,
-      priceThreshold: 0.05,
+      priceThreshold: 0.001,
       maxOrdersPerMinute: 100
     },
     SCALPING: {

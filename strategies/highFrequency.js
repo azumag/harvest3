@@ -49,7 +49,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
     let previousPrice = null;
     
     // 注文ブックの深さを取得
-    const orderBookDepth = 5; // 注文ブックの深さ（上位5件）
+    const orderBookDepth = 15; // 注文ブックの深さ
     
     console.log(`高頻度取引を開始: ${symbol} - 間隔: ${interval}ms, 閾値: ${priceThreshold}%, 最小取引量: ${baseMinTradeAmount}`);
     // if (postOrderToDiscord) {
@@ -132,8 +132,14 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
 
                   // console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
-                  
-                  if (availableFunds >= midPrice * formattedAmount) {
+
+                  // 今まで買った量が資産の一定割合以上なら買わない
+                  const buyAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
+
+                  const realizedPnL = await getRealizedPnL(exchange, symbol, 'HFT');
+                  const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / midPrice;
+
+                  if (availableFunds >= midPrice * formattedAmount && (buyAmount < maxBuyAmount || maxBuyAmount < baseMinTradeAmount)) {
                     try {
                       // 買い注文を作成
                       // await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
