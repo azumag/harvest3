@@ -1012,6 +1012,182 @@ async function getFilledSummaryTimestamp(exchange, symbol) {
   return parseInt(timestamp || 0);
 }
 
+/**
+ * 戦略シグナルを記録する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @param {String} signalType - シグナル種別 (buy/sell/none)
+ * @param {Number} price - 現在価格
+ * @param {Object} strategyResults - 戦略固有の計算結果
+ * @returns {Promise} 処理完了時に解決されるPromise
+ */
+async function addStrategySignal(exchangeId, symbol, strategyKey, signalType, price, strategyResults = {}) {
+  const now = Date.now();
+  
+  // インデックスセットに追加
+  await client.sAdd('exchanges', exchangeId);
+  await client.sAdd(`symbols:${exchangeId}`, symbol);
+  await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
+  
+  // シグナル履歴キー
+  const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
+  
+  // シグナルデータをJSONに変換
+  const signalData = JSON.stringify({
+    timestamp: now,
+    signalType,
+    price,
+    strategyResults
+  });
+  
+  // シグナル履歴を追加
+  await client.rPush(signalHistoryKey, signalData);
+  
+  // 時系列インデックスに追加
+  await client.zAdd('strategy:signalHistory:time', {
+    score: now,
+    value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
+  });
+  
+  // イベントを発火（UIなどに通知するため）
+  const event = {
+    type: 'strategy_signal_added',
+    data: {
+      exchangeId,
+      symbol,
+      strategyKey,
+      signalType,
+      price,
+      timestamp: now,
+      strategyResults
+    }
+  };
+  
+  // イベントをRedisに発行
+  await client.publish('trade_events', JSON.stringify(event));
+  
+  return true;
+}
+
+/**
+ * 戦略シグナル履歴を取得する関数
+ * @param {Object} filters - フィルター条件
+ * @param {Number} limit - 取得件数
+ * @param {Number} offset - オフセット
+ * @returns {Promise<Object>} 戦略シグナル履歴と合計件数
+ */
+async function getStrategySignalHistory(filters = {}, limit = 100, offset = 0) {
+  const { exchangeId, symbol, strategyKey, startDate, endDate, signalType } = filters;
+  
+  let signalItems = [];
+  let allSignals = []; // 全データを保持する変数
+  
+  if (exchangeId && symbol && strategyKey) {
+    // 特定の取引所、通貨ペア、戦略の履歴を取得
+    const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
+    
+    // 全データを取得
+    const allData = await client.lRange(signalHistoryKey, 0, -1);
+    
+    // 全データをパースしてタイムスタンプでソート
+    allSignals = allData.map(item => {
+      const signal = JSON.parse(item);
+      return {
+        timestamp: Number(signal.timestamp),
+        exchangeId,
+        symbol,
+        strategyKey,
+        signalType: signal.signalType,
+        price: signal.price,
+        strategyResults: signal.strategyResults
+      };
+    });
+    
+    // 時間フィルタリング（startDateとendDateがある場合）
+    if (startDate) {
+      allSignals = allSignals.filter(item => item.timestamp >= startDate);
+    }
+    if (endDate) {
+      allSignals = allSignals.filter(item => item.timestamp <= endDate);
+    }
+    
+    // シグナルタイプでフィルタリング（指定されている場合）
+    if (signalType) {
+      allSignals = allSignals.filter(item => item.signalType === signalType);
+    }
+    
+    // 降順（新しい順）にソート
+    allSignals.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // ページングを適用
+    signalItems = allSignals.slice(offset, offset + limit);
+  } else {
+    // 時系列インデックスから取得
+    let scoreMin = '-inf';
+    let scoreMax = '+inf';
+    
+    if (startDate) {
+      scoreMin = startDate;
+    }
+    
+    if (endDate) {
+      scoreMax = endDate;
+    }
+    
+    // 時系列インデックスから全てのアイテムを取得
+    const allTimeRangeItems = await client.zRangeByScore('strategy:signalHistory:time', scoreMin, scoreMax);
+    
+    // 全てのアイテムを処理
+    for (const item of allTimeRangeItems) {
+      const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
+      
+      // フィルター条件に一致するか確認
+      if (exchangeId && itemExchangeId !== exchangeId) continue;
+      if (symbol && itemSymbol !== symbol) continue;
+      if (strategyKey && itemStrategyKey !== strategyKey) continue;
+      
+      // 履歴キー
+      const signalHistoryKey = `strategy:signalHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
+      
+      // インデックスを特定するのは難しいので、全て取得して検索
+      const allHistory = await client.lRange(signalHistoryKey, 0, -1);
+      
+      for (const historyItem of allHistory) {
+        const signal = JSON.parse(historyItem);
+        
+        // タイムスタンプが一致するものを探す
+        if (signal.timestamp.toString() === timestamp) {
+          // シグナルタイプでフィルタリング（指定されている場合）
+          if (signalType && signal.signalType !== signalType) continue;
+          
+          allSignals.push({
+            timestamp: Number(signal.timestamp),
+            exchangeId: itemExchangeId,
+            symbol: itemSymbol,
+            strategyKey: itemStrategyKey,
+            signalType: signal.signalType,
+            price: signal.price,
+            strategyResults: signal.strategyResults
+          });
+          break; // 見つかったら次のアイテムへ
+        }
+      }
+    }
+    
+    // 降順（新しい順）にソート
+    allSignals.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // ページングを適用
+    signalItems = allSignals.slice(offset, offset + limit);
+  }
+  
+  return {
+    count: allSignals.length,
+    data: signalItems
+  };
+}
+
 
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
@@ -1030,4 +1206,6 @@ module.exports = {
   getFilledSummaryTimestamp,
   setCurrentOrderPair,
   getCurrentOrderPair,
+  addStrategySignal,
+  getStrategySignalHistory
 }

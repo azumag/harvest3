@@ -12,6 +12,7 @@ const { getSummary } = require('./controllers/redis-summary');
 const { getOrderPairs } = require('./controllers/redis-order-pairs');
 const { getCurrentOrderPairs } = require('./controllers/redis-current-order-pairs');
 const { eventsHandler } = require('./controllers/redis-events');
+const { getStrategySignals } = require('./controllers/redis-strategy-signals');
 
 // Redis版のデータベースイベントモジュールをインポート
 const { addEventListner } = require('./redis-database-events');
@@ -42,6 +43,9 @@ router.get('/order-pairs', getOrderPairs);
 
 // 現在の注文ペアAPI
 router.get('/current-order-pairs', getCurrentOrderPairs);
+
+// 戦略シグナル履歴API
+router.get('/strategy-signals', getStrategySignals);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {
