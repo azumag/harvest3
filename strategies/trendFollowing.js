@@ -12,6 +12,7 @@ const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
 
 const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
+const { saveStrategySignal } = require('../src/redisDatabase');
 
 /**
  * 移動平均線クロス戦略
@@ -54,26 +55,23 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
     const crossDown = previousShortMA > previousLongMA && currentShortMA < currentLongMA;
 
-    // // シグナルタイプを決定
-    // const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
+    // シグナルタイプを決定
+    const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
     
-    // // 戦略固有の計算結果
-    // const strategyResults = {
-    //   shortMA: currentShortMA,
-    //   longMA: currentLongMA
-    // };
+    // 戦略固有の計算結果
+    const strategyResults = {
+      shortMA: currentShortMA,
+      longMA: currentLongMA
+    };
     
-    // // シグナル保存オプションがあれば実行
-    // if (options.saveStrategySignal) {
-    //   await options.saveStrategySignal(
-    //     exchange.id,
-    //     symbol,
-    //     'MA',
-    //     signalType,
-    //     currentPrice,
-    //     strategyResults
-    //   );
-    // }
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'MA',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
     
     // 注文を作成
     if (crossUp) {
@@ -221,6 +219,24 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     const crossUp = previousMACD < previousSignal && currentMACD > currentSignal;
     const crossDown = previousMACD > previousSignal && currentMACD < currentSignal;
     
+    // シグナルタイプを決定
+    const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
+    
+    // 戦略固有の計算結果
+    const strategyResults = {
+      macd: currentMACD,
+      signal: currentSignal
+    };
+    
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'MACD',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
+    
     // 注文を作成
     if (crossUp) {
       // 買いシグナル
@@ -366,6 +382,25 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     
     // 売りシグナル: RSIが閾値を上回り、前回のRSIが閾値以下
     const sellSignal = currentRSI > overboughtThreshold && previousRSI <= overboughtThreshold;
+    
+    // シグナルタイプを決定
+    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+    
+    // 戦略固有の計算結果
+    const strategyResults = {
+      rsi: currentRSI,
+      oversoldThreshold,
+      overboughtThreshold
+    };
+    
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'RSI',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
     
     // 注文を作成
     if (buySignal) {
@@ -514,6 +549,26 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     
     // 売りシグナル: 価格がバンドの上限に近づいた場合
     const sellSignal = currentPrice >= currentUpper * 0.99; // 上限の1%以内
+    
+    // シグナルタイプを決定
+    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+    
+    // 戦略固有の計算結果
+    const strategyResults = {
+      upper: currentUpper,
+      middle: currentMiddle,
+      lower: currentLower,
+      bandWidth
+    };
+    
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'BOLLINGER_BANDS',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
     
     // 注文を作成
     if (buySignal) {

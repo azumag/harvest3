@@ -11,6 +11,7 @@ const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
+const { saveStrategySignal } = require('../src/redisDatabase');
 
 /**
  * 平均回帰戦略
@@ -44,13 +45,30 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     // 乖離率を計算（%）
     const deviation = ((currentPrice - currentSMA) / currentSMA) * 100;
 
-    // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
-
     // 買いシグナル: 価格が移動平均線から下に大きく乖離
     const buySignal = deviation <= -deviationThreshold;
 
     // 売りシグナル: 価格が移動平均線から上に大きく乖離
     const sellSignal = deviation >= deviationThreshold;
+
+    // シグナルタイプを決定
+    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+    
+    // 戦略固有の計算結果
+    const strategyResults = {
+      sma: currentSMA,
+      deviation
+    };
+    
+    // 戦略シグナルを保存
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'MEAN_REVERSION',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
 
     // 注文を作成
     if (buySignal) {
@@ -206,13 +224,31 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     const ticker = await exchange.fetchTicker(symbol);
     const currentPrice = ticker.last;
 
-    // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
-
     // 買いシグナル: RSIが極端に低い（売られすぎ）
     const buySignal = currentRSI <= oversoldThreshold;
 
     // 売りシグナル: RSIが極端に高い（買われすぎ）
     const sellSignal = currentRSI >= overboughtThreshold;
+
+    // シグナルタイプを決定
+    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+    
+    // 戦略固有の計算結果
+    const strategyResults = {
+      rsi: currentRSI,
+      oversoldThreshold,
+      overboughtThreshold
+    };
+    
+    // 戦略シグナルを保存
+    saveStrategySignal(
+      exchange.id,
+      symbol,
+      'OSCILLATOR',
+      signalType,
+      currentPrice,
+      strategyResults
+    );
 
     // 注文を作成
     if (buySignal) {
