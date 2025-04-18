@@ -53,6 +53,27 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     // クロスを検出
     const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
     const crossDown = previousShortMA > previousLongMA && currentShortMA < currentLongMA;
+
+    // // シグナルタイプを決定
+    // const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
+    
+    // // 戦略固有の計算結果
+    // const strategyResults = {
+    //   shortMA: currentShortMA,
+    //   longMA: currentLongMA
+    // };
+    
+    // // シグナル保存オプションがあれば実行
+    // if (options.saveStrategySignal) {
+    //   await options.saveStrategySignal(
+    //     exchange.id,
+    //     symbol,
+    //     'MA',
+    //     signalType,
+    //     currentPrice,
+    //     strategyResults
+    //   );
+    // }
     
     // 注文を作成
     if (crossUp) {
