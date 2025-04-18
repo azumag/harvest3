@@ -64,14 +64,17 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       longMA: currentLongMA
     };
     
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'MA',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'MA',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
     
     // 注文を作成
     if (crossUp) {
@@ -228,14 +231,17 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       signal: currentSignal
     };
     
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'MACD',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'MACD',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
     
     // 注文を作成
     if (crossUp) {
@@ -393,14 +399,17 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       overboughtThreshold
     };
     
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'RSI',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'RSI',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
     
     // 注文を作成
     if (buySignal) {
@@ -561,14 +570,17 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       bandWidth
     };
     
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'BOLLINGER_BANDS',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'BOLLINGER_BANDS',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
     
     // 注文を作成
     if (buySignal) {

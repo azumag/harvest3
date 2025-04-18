@@ -60,15 +60,18 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
       deviation
     };
     
-    // 戦略シグナルを保存
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'MEAN_REVERSION',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      // 戦略シグナルを保存
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'MEAN_REVERSION',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
 
     // 注文を作成
     if (buySignal) {
@@ -240,15 +243,18 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
       overboughtThreshold
     };
     
-    // 戦略シグナルを保存
-    addStrategySignal(
-      exchange.id,
-      symbol,
-      'OSCILLATOR',
-      signalType,
-      currentPrice,
-      strategyResults
-    );
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      // 戦略シグナルを保存
+      addStrategySignal(
+        exchange.id,
+        symbol,
+        'OSCILLATOR',
+        signalType,
+        currentPrice,
+        strategyResults
+      );
+    }
 
     // 注文を作成
     if (buySignal) {
