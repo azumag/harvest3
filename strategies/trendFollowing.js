@@ -12,7 +12,7 @@ const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
 
 const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
-const { saveStrategySignal } = require('../src/redisDatabase');
+const { addStrategySignal } = require('../src/redisDatabase');
 
 /**
  * 移動平均線クロス戦略
@@ -64,7 +64,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       longMA: currentLongMA
     };
     
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'MA',
@@ -228,7 +228,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       signal: currentSignal
     };
     
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'MACD',
@@ -393,7 +393,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       overboughtThreshold
     };
     
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'RSI',
@@ -561,7 +561,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       bandWidth
     };
     
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'BOLLINGER_BANDS',

@@ -321,8 +321,8 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     };
     
     // シグナル保存オプションがあれば実行
-    if (options.saveStrategySignal) {
-      await options.saveStrategySignal(
+    if (options.addStrategySignal) {
+      await options.addStrategySignal(
         exchange.id,
         symbol,
         'MA',
@@ -360,7 +360,7 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     // シグナル保存関数をオプションに追加
     const enhancedOptions = {
       ...options,
-      saveStrategySignal: addStrategySignal
+      addStrategySignal: addStrategySignal
     };
     
     // 戦略パラメータの設定

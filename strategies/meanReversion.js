@@ -11,7 +11,7 @@ const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 
 const { orderCheckCancel } = require('./highFrequency');
 const { config } = require('../src/config');
-const { saveStrategySignal } = require('../src/redisDatabase');
+const { addStrategySignal } = require('../src/redisDatabase');
 
 /**
  * 平均回帰戦略
@@ -61,7 +61,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     };
     
     // 戦略シグナルを保存
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'MEAN_REVERSION',
@@ -241,7 +241,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     };
     
     // 戦略シグナルを保存
-    saveStrategySignal(
+    addStrategySignal(
       exchange.id,
       symbol,
       'OSCILLATOR',
