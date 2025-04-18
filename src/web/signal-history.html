@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シグナル履歴 - 取引データ閲覧</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- カスタムCSS -->
+    <link href="css/style.css" rel="stylesheet">
+    <!-- データテーブル -->
+    <link href="https://cdn.datatables.net/1.13.1/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- ナビゲーションバーコンテナ -->
+    <div id="navbar-container"></div>
+
+    <!-- メインコンテンツ -->
+    <div class="container-fluid mt-4">
+        <!-- フィルターパネル -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">フィルター</h5>
+                        <form id="signal-filter-form" class="row g-3">
+                            <div class="col-md-2">
+                                <label for="exchange-filter" class="form-label">取引所</label>
+                                <select id="exchange-filter" class="form-select">
+                                    <option value="">すべて</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="symbol-filter" class="form-label">銘柄</label>
+                                <select id="symbol-filter" class="form-select">
+                                    <option value="">すべて</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="strategy-filter" class="form-label">戦略</label>
+                                <select id="strategy-filter" class="form-select">
+                                    <option value="">すべて</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="signal-type-filter" class="form-label">シグナルタイプ</label>
+                                <select id="signal-type-filter" class="form-select">
+                                    <option value="">すべて</option>
+                                    <option value="buy">買い</option>
+                                    <option value="sell">売り</option>
+                                    <option value="none">シグナルなし</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="start-date" class="form-label">開始日時</label>
+                                <input type="datetime-local" id="start-date" class="form-control">
+                            </div>
+                            <div class="col-md-2">
+                                <label for="end-date" class="form-label">終了日時</label>
+                                <input type="datetime-local" id="end-date" class="form-control">
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">適用</button>
+                                <button type="button" id="reset-filter" class="btn btn-outline-secondary">リセット</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- シグナル履歴テーブル -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">シグナル履歴</h5>
+                        <div class="table-responsive">
+                            <table id="signals-table" class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>日時</th>
+                                        <th>取引所</th>
+                                        <th>銘柄</th>
+                                        <th>戦略</th>
+                                        <th>シグナル</th>
+                                        <th>価格</th>
+                                        <th>詳細</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="signals-tbody">
+                                    <!-- APIから取得したデータがここに表示されます -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- ページネーション -->
+                        <div id="signals-pagination" class="d-flex justify-content-between align-items-center mt-3">
+                            <div>
+                                <span id="showing-records">0件中0件を表示</span>
+                            </div>
+                            <nav aria-label="シグナル履歴ページネーション">
+                                <ul class="pagination pagination-sm mb-0">
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- シグナル詳細モーダル -->
+    <div class="modal fade" id="signal-detail-modal" tabindex="-1" aria-labelledby="signal-detail-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="signal-detail-modal-label">シグナル詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="signal-detail-content">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript ライブラリ -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.1/js/dataTables.bootstrap5.min.js"></script>
+
+    <!-- カスタムJavaScript -->
+    <script src="js/navbar.js"></script>
+    <script src="js/realtime.js"></script>
+    <script src="js/signal-history.js"></script>
+</body>
+</html>

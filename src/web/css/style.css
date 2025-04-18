@@ -269,3 +269,78 @@ body {
   border-top: 1px solid #e9ecef;
   padding-top: 0.5rem;
 }
+
+/* 戦略シグナル関連のスタイル */
+.strategy-signals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.signals-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.signal-item {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  min-width: 140px;
+}
+
+.signal-buy {
+  border-left: 4px solid #28a745;
+  background-color: rgba(40, 167, 69, 0.1);
+}
+
+.signal-sell {
+  border-left: 4px solid #dc3545;
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.signal-none {
+  border-left: 4px solid #6c757d;
+  background-color: rgba(108, 117, 125, 0.1);
+}
+
+.signal-header, .signal-content, .signal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.signal-content {
+  margin: 5px 0;
+}
+
+.signal-symbol {
+  font-weight: bold;
+}
+
+.signal-exchange {
+  font-size: 0.8em;
+  color: #666;
+}
+
+.signal-icon {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.signal-time {
+  font-size: 0.8em;
+  color: #666;
+}
+
+/* シグナル詳細モーダル */
+.signal-detail h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.signal-detail .table th {
+  width: 30%;
+}

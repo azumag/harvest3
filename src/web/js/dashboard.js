@@ -91,6 +91,204 @@ function loadDashboardData() {
   loadSummary();
   loadOrderPairsSummary(); // 注文ペアサマリーを読み込む
   loadRecentTrades();
+  loadStrategySignals(); // 戦略シグナルを読み込む
+}
+
+/**
+ * 戦略シグナルデータを読み込んで表示
+ */
+function loadStrategySignals() {
+  const container = document.getElementById('strategy-signals-container');
+  
+  // ローディング表示
+  container.innerHTML = `
+    <div class="text-center py-3">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">読み込み中...</span>
+      </div>
+    </div>
+  `;
+  
+  // APIからデータ取得
+  fetch('/api/strategy-signals?limit=100')
+    .then(response => response.json())
+    .then(data => {
+      // 最新のシグナルのみを戦略ごとに抽出
+      displayStrategySignals(data, container);
+    })
+    .catch(error => {
+      console.error('戦略シグナル情報の取得に失敗しました:', error);
+      const errorHTML = `
+        <div class="alert alert-danger" role="alert">
+          戦略シグナル情報の取得に失敗しました。詳細はコンソールを確認してください。
+        </div>
+      `;
+      container.innerHTML = errorHTML;
+    });
+}
+
+/**
+ * 戦略シグナルデータを表示
+ * @param {Object} data - APIから取得したシグナルデータ
+ * @param {HTMLElement} container - 表示するコンテナ要素
+ */
+function displayStrategySignals(data, container) {
+  if (!data.data || data.data.length === 0) {
+    container.innerHTML = `
+      <div class="no-data-message">
+        <p>表示するシグナルデータがありません</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // 戦略ごとに最新のシグナルだけを抽出
+  const latestSignals = {};
+  
+  data.data.forEach(signal => {
+    const key = `${signal.exchangeId}:${signal.symbol}:${signal.strategyKey}`;
+    
+    if (!latestSignals[key] || signal.timestamp > latestSignals[key].timestamp) {
+      latestSignals[key] = signal;
+    }
+  });
+  
+  // 戦略ごとにグループ化
+  const groupedByStrategy = {};
+  
+  Object.values(latestSignals).forEach(signal => {
+    if (!groupedByStrategy[signal.strategyKey]) {
+      groupedByStrategy[signal.strategyKey] = [];
+    }
+    groupedByStrategy[signal.strategyKey].push(signal);
+  });
+  
+  let html = '<div class="strategy-signals-grid">';
+  
+  // 各戦略のシグナルを表示
+  Object.keys(groupedByStrategy).sort().forEach(strategyKey => {
+    const signals = groupedByStrategy[strategyKey];
+    
+    html += `
+      <div class="strategy-signal-group mb-3">
+        <h6 class="strategy-name">${strategyKey}</h6>
+        <div class="signals-container">
+    `;
+    
+    // 各シグナルを表示
+    signals.forEach(signal => {
+      const signalClass = signal.signalType === 'buy' ? 'signal-buy' :
+                         signal.signalType === 'sell' ? 'signal-sell' : 'signal-none';
+      const signalIcon = signal.signalType === 'buy' ? '↑' :
+                        signal.signalType === 'sell' ? '↓' : '→';
+      const signalText = signal.signalType === 'buy' ? '買い' :
+                        signal.signalType === 'sell' ? '売り' : 'シグナルなし';
+      
+      // シグナル発生時間をフォーマット
+      const date = new Date(signal.timestamp);
+      const formattedDate = date.toLocaleString('ja-JP', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      html += `
+        <div class="signal-item ${signalClass}">
+          <div class="signal-header">
+            <span class="signal-symbol">${signal.symbol}</span>
+            <span class="signal-exchange">${signal.exchangeId}</span>
+          </div>
+          <div class="signal-content">
+            <span class="signal-icon">${signalIcon}</span>
+            <span class="signal-type">${signalText}</span>
+            <span class="signal-price">${signal.price.toLocaleString()} 円</span>
+          </div>
+          <div class="signal-footer">
+            <span class="signal-time">${formattedDate}</span>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `
+        </div>
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  
+  container.innerHTML = html;
+  
+  // スタイルをCSSに追加
+  addStrategySignalStyles();
+}
+
+/**
+ * 戦略シグナル表示用のスタイルを追加
+ */
+function addStrategySignalStyles() {
+  // スタイルがすでに存在する場合は追加しない
+  if (document.getElementById('strategy-signals-style')) return;
+  
+  const style = document.createElement('style');
+  style.id = 'strategy-signals-style';
+  style.textContent = `
+    .strategy-signals-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+    .signals-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .signal-item {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      min-width: 140px;
+    }
+    .signal-buy {
+      border-left: 4px solid #28a745;
+      background-color: rgba(40, 167, 69, 0.1);
+    }
+    .signal-sell {
+      border-left: 4px solid #dc3545;
+      background-color: rgba(220, 53, 69, 0.1);
+    }
+    .signal-none {
+      border-left: 4px solid #6c757d;
+      background-color: rgba(108, 117, 125, 0.1);
+    }
+    .signal-header, .signal-content, .signal-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .signal-content {
+      margin: 5px 0;
+    }
+    .signal-symbol {
+      font-weight: bold;
+    }
+    .signal-exchange {
+      font-size: 0.8em;
+      color: #666;
+    }
+    .signal-icon {
+      font-size: 1.2em;
+      font-weight: bold;
+    }
+    .signal-time {
+      font-size: 0.8em;
+      color: #666;
+    }
+  `;
+  
+  document.head.appendChild(style);
 }
 
 /**
