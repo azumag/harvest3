@@ -20,7 +20,7 @@ async function startHFTBot() {
       for (const exchange of exchanges) {
         const markets = await exchange.loadMarkets();
         const symbols = Object.keys(markets).filter(symbol => 
-          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
+          symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // && symbol !== 'BTC/JPY' // ELFとBTC/JPYを除外
         );
         
         for (const symbol of symbols) {
