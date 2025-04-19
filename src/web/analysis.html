@@ -108,6 +108,41 @@
             </div>
         </div>
 
+        <!-- 取引所・銘柄選択とろうそく足チャート -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">ろうそく足チャート</h5>
+                <div class="row mb-3">
+                  <div class="col-md-3">
+                    <select id="exchange-select" class="form-select"></select>
+                  </div>
+                  <div class="col-md-3">
+                    <select id="symbol-select" class="form-select"></select>
+                  </div>
+                </div>
+                <!-- 時間足選択ボタングループの追加 -->
+                <div class="row mb-3">
+                  <div class="col-12">
+                    <div class="btn-group" role="group" aria-label="時間足選択">
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="5m">5分</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="15m">15分</button>
+                      <button type="button" class="btn btn-primary interval-btn" data-interval="1h">1時間</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="chart-container" style="position: relative; height:400px;">
+                  <canvas id="ohlc-chart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 詳細な統計情報 -->
         <div class="row mb-4">
             <div class="col-12">
@@ -143,7 +178,9 @@
     <!-- Chart.js拡張ライブラリ -->
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
-    
+    <!-- Chart.js Financial Chart プラグイン -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
+
     <!-- Chart.js読み込み確認 -->
     <script>
       document.addEventListener('DOMContentLoaded', function() {

@@ -967,19 +967,15 @@ async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
   };
 }
 
-module.exports = {
-  initialize,
-  addTrade,
-  addFilledTrade,
-  getTradeRecordsAsObject,
-  getLatestTradeAmount,
-  getFilledHistory, // 関数名を変更
-  getOrderHistory,
-  getTradeSummary,
-  getFilledSummary,
-  getOrderStrategyKeyByOrderId,
-  getOrderDetailsByOrderId
-};
+/**
+ * 取引所一覧を取得する関数
+ * @returns {Promise<Array>} 取引所一覧
+ */
+async function getExchanges() {
+  // Redisの'exchanges'セットから取引所一覧を取得
+  return await client.sMembers('exchanges');
+}
+
 
 /**
  * 約定サマリー更新時間テーブルを更新する関数
@@ -1207,5 +1203,27 @@ module.exports = {
   setCurrentOrderPair,
   getCurrentOrderPair,
   addStrategySignal,
-  getStrategySignalHistory
+  getStrategySignalHistory,
+  getExchanges,
+  getStrategies,
+  getSymbols,
+}
+
+/**
+ * 戦略一覧を取得する関数
+ * @returns {Promise<Array>} 戦略一覧
+ */
+async function getStrategies() {
+  // Redisの'strategies'セットから戦略一覧を取得
+  return await client.sMembers('strategies');
+}
+
+/**
+ * 通貨ペア一覧を取得する関数
+ * @param {String} exchangeId - 取引所ID
+ * @returns {Promise<Array>} 通貨ペア一覧
+ */
+async function getSymbols(exchangeId) {
+  // Redisの'symbols:{exchangeId}'セットから通貨ペア一覧を取得
+  return await client.sMembers(`symbols:${exchangeId}`);
 }

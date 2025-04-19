@@ -4,6 +4,7 @@
 
 // グローバル変数
 let currentPeriod = 'daily';
+let currentInterval = '1h'; // デフォルトは1時間足
 let charts = {
   timeSeriesChart: null,
   strategyPerformanceChart: null,
@@ -33,7 +34,150 @@ const chartColors = {
   ]
 };
 
-// ページロード完了時の処理
+// --- 取引所・銘柄選択とローソク足チャート ---
+let ohlcChart = null;
+
+async function loadExchangeOptions() {
+  const select = document.getElementById('exchange-select');
+  select.innerHTML = '';
+  try {
+    const res = await fetch('/api/exchanges');
+    const exchanges = await res.json();
+    exchanges.forEach(ex => {
+      const opt = document.createElement('option');
+      opt.value = ex;
+      opt.textContent = ex;
+      select.appendChild(opt);
+    });
+    if (exchanges.length > 0) {
+      select.value = exchanges[0];
+      await loadSymbolOptions();
+    }
+  } catch (e) {
+    select.innerHTML = '<option>取得失敗</option>';
+  }
+}
+
+async function loadSymbolOptions() {
+  const exchange = document.getElementById('exchange-select').value;
+  const select = document.getElementById('symbol-select');
+  select.innerHTML = '';
+  if (!exchange) return;
+  try {
+    const res = await fetch(`/api/symbols?exchange=${exchange}`);
+    const symbols = await res.json();
+    symbols.forEach(sym => {
+      const opt = document.createElement('option');
+      opt.value = sym;
+      opt.textContent = sym;
+      select.appendChild(opt);
+    });
+    if (symbols.length > 0) {
+      select.value = symbols[0];
+      await loadOhlcvData();
+    }
+  } catch (e) {
+    select.innerHTML = '<option>取得失敗</option>';
+  }
+}
+
+async function loadOhlcvData() {
+  const exchange = document.getElementById('exchange-select').value;
+  const symbol = document.getElementById('symbol-select').value;
+  const interval = currentInterval; // グローバル変数から時間足を取得
+  const limit = 100;
+  if (!exchange || !symbol) return;
+  try {
+    const params = new URLSearchParams({ exchange, symbol, interval, limit });
+    const res = await fetch(`/api/ohlcv?${params.toString()}`);
+    const data = await res.json();
+    if (!data || data.length === 0) {
+      updateOhlcChart([]);
+      return;
+    }
+    // Chart.js Financial形式に変換
+    const ohlcvData = data.map(item => ({
+      x: item[0], o: item[1], h: item[2], l: item[3], c: item[4]
+    }));
+    updateOhlcChart(ohlcvData);
+  } catch (e) {
+    updateOhlcChart([]);
+  }
+}
+
+function updateOhlcChart(ohlcvData) {
+  const ctx = document.getElementById('ohlc-chart').getContext('2d');
+  // 時間足に応じてX軸の表示形式を最適化
+  let timeUnit = 'hour';
+  let tooltipFormat = 'yyyy/MM/dd HH:mm';
+  switch(currentInterval) {
+    case '1m':
+    case '5m':
+    case '15m':
+      timeUnit = 'minute';
+      break;
+    case '1h':
+    case '4h':
+      timeUnit = 'hour';
+      break;
+    case '1d':
+      timeUnit = 'day';
+      tooltipFormat = 'yyyy/MM/dd';
+      break;
+  }
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      title: { display: true, text: `ローソク足チャート（${getIntervalText(currentInterval)}）` }
+    },
+    scales: {
+      x: { 
+        type: 'time', 
+        time: { 
+          unit: timeUnit,
+          tooltipFormat: tooltipFormat 
+        } 
+      },
+      y: { beginAtZero: false }
+    }
+  };
+  if (ohlcChart) {
+    ohlcChart.data.datasets[0].data = ohlcvData;
+    ohlcChart.options = chartOptions;
+    ohlcChart.update();
+    return;
+  }
+  ohlcChart = new Chart(ctx, {
+    type: 'candlestick',
+    data: {
+      datasets: [{
+        label: 'ローソク足',
+        data: ohlcvData,
+        color: {
+          up: '#26a69a', down: '#ef5350', unchanged: '#ccc'
+        }
+      }]
+    },
+    options: chartOptions
+  });
+}
+
+/**
+ * 時間足の表示用テキストを取得
+ */
+function getIntervalText(interval) {
+  const intervalMap = {
+    '1m': '1分足',
+    '5m': '5分足',
+    '15m': '15分足',
+    '1h': '1時間足',
+    '4h': '4時間足',
+    '1d': '日足'
+  };
+  return intervalMap[interval] || interval;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Chart.jsが読み込まれているか確認
   if (typeof Chart === 'undefined') {
@@ -59,6 +203,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   
+  // 時間足選択ボタンのイベントリスナー設定
+  document.querySelectorAll('.interval-btn').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const interval = e.target.getAttribute('data-interval');
+      setActiveInterval(interval);
+    });
+  });
+  
   // 表示切替チェックボックスのイベントリスナー設定
   document.getElementById('show-buy-trades').addEventListener('change', updateTimeSeriesChart);
   document.getElementById('show-sell-trades').addEventListener('change', updateTimeSeriesChart);
@@ -69,6 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // リアルタイム更新の設定
   setupRealtimeUpdates();
+  loadExchangeOptions();
+  document.getElementById('exchange-select').addEventListener('change', loadSymbolOptions);
+  document.getElementById('symbol-select').addEventListener('change', loadOhlcvData);
 });
 
 /**
@@ -88,6 +243,28 @@ function setActivePeriod(period) {
       btn.classList.add('btn-outline-primary');
     }
   });
+}
+
+/**
+ * 選択された時間足を設定する
+ * @param {string} interval - 時間足（例: '1m', '5m', '15m', '1h', '4h', '1d'）
+ */
+function setActiveInterval(interval) {
+  currentInterval = interval;
+  
+  // ボタンのアクティブ状態を更新
+  document.querySelectorAll('.interval-btn').forEach(btn => {
+    if (btn.getAttribute('data-interval') === interval) {
+      btn.classList.remove('btn-outline-primary');
+      btn.classList.add('btn-primary');
+    } else {
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-outline-primary');
+    }
+  });
+  
+  // 選択された時間足でチャートを更新
+  loadOhlcvData();
 }
 
 /**
