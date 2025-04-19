@@ -113,13 +113,19 @@
           <div class="col-12">
             <div class="card">
               <div class="card-body">
-                <h5 class="card-title">ろうそく足チャート</h5>
+                <h5 class="card-title">チャート</h5>
                 <div class="row mb-3">
                   <div class="col-md-3">
+                    <label for="exchange-select" class="form-label">取引所</label>
                     <select id="exchange-select" class="form-select"></select>
                   </div>
                   <div class="col-md-3">
+                    <label for="symbol-select" class="form-label">銘柄</label>
                     <select id="symbol-select" class="form-select"></select>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="strategy-select" class="form-label">戦略</label>
+                    <select id="strategy-select" class="form-select"></select>
                   </div>
                 </div>
                 <!-- 時間足選択ボタングループの追加 -->
@@ -128,10 +134,10 @@
                     <div class="btn-group" role="group" aria-label="時間足選択">
                       <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分</button>
                       <button type="button" class="btn btn-outline-primary interval-btn" data-interval="5m">5分</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="15m">15分</button>
-                      <button type="button" class="btn btn-primary interval-btn" data-interval="1h">1時間</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button>
+                      <button type="button" class="btn btn-primary interval-btn" data-interval="15m">15分</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1h">1時間</button>
+                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button> -->
                     </div>
                   </div>
                 </div>
@@ -179,7 +185,8 @@
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
     <!-- Chart.js Financial Chart プラグイン -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
 
     <!-- Chart.js読み込み確認 -->
     <script>

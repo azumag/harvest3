@@ -4,7 +4,7 @@
 
 // グローバル変数
 let currentPeriod = 'daily';
-let currentInterval = '1h'; // デフォルトは1時間足
+let currentInterval = '15m';
 let charts = {
   timeSeriesChart: null,
   strategyPerformanceChart: null,
@@ -73,11 +73,18 @@ async function loadSymbolOptions() {
       select.appendChild(opt);
     });
     if (symbols.length > 0) {
-      select.value = symbols[0];
+      // BTC/JPYがあればデフォルトで選択、なければ最初の銘柄を選択
+      const btcJpy = symbols.find(sym => sym === 'BTC/JPY');
+      if (btcJpy) {
+        select.value = btcJpy;
+      } else {
+        select.value = symbols[0];
+      }
       await loadOhlcvData();
     }
   } catch (e) {
     select.innerHTML = '<option>取得失敗</option>';
+    console.log(e);
   }
 }
 
@@ -102,65 +109,120 @@ async function loadOhlcvData() {
     updateOhlcChart(ohlcvData);
   } catch (e) {
     updateOhlcChart([]);
+    console.log(e);
   }
 }
 
 function updateOhlcChart(ohlcvData) {
-  const ctx = document.getElementById('ohlc-chart').getContext('2d');
-  // 時間足に応じてX軸の表示形式を最適化
-  let timeUnit = 'hour';
-  let tooltipFormat = 'yyyy/MM/dd HH:mm';
-  switch(currentInterval) {
-    case '1m':
-    case '5m':
-    case '15m':
-      timeUnit = 'minute';
-      break;
-    case '1h':
-    case '4h':
-      timeUnit = 'hour';
-      break;
-    case '1d':
-      timeUnit = 'day';
-      tooltipFormat = 'yyyy/MM/dd';
-      break;
-  }
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      title: { display: true, text: `ローソク足チャート（${getIntervalText(currentInterval)}）` }
-    },
-    scales: {
-      x: { 
-        type: 'time', 
-        time: { 
-          unit: timeUnit,
-          tooltipFormat: tooltipFormat 
-        } 
-      },
-      y: { beginAtZero: false }
+  try {
+    // チャートが存在する場合は必ず破棄
+    if (window.ohlcChart instanceof Chart) {
+      window.ohlcChart.destroy();
+      window.ohlcChart = null;
     }
-  };
-  if (ohlcChart) {
-    ohlcChart.data.datasets[0].data = ohlcvData;
-    ohlcChart.options = chartOptions;
-    ohlcChart.update();
-    return;
+
+    const ctx = document.getElementById('ohlc-chart').getContext('2d');
+    // 時間足に応じてX軸の表示形式を最適化
+    let timeUnit = 'hour';
+    let tooltipFormat = 'yyyy/MM/dd HH:mm';
+    switch(currentInterval) {
+      case '1m':
+      case '5m':
+      case '15m':
+        timeUnit = 'minute';
+        break;
+      case '1h':
+      case '4h':
+        timeUnit = 'hour';
+        break;
+      case '1d':
+        timeUnit = 'day';
+        tooltipFormat = 'yyyy/MM/dd';
+        break;
+    }
+    
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: `ローソク足チャート（${getIntervalText(currentInterval)}）` }
+      },
+      scales: {
+        x: { 
+          type: 'time', 
+          time: { 
+            unit: timeUnit,
+            tooltipFormat: tooltipFormat 
+          } 
+        },
+        y: { beginAtZero: false }
+      }
+    };
+
+    // 新しいチャートを作成
+    window.ohlcChart = new Chart(ctx, {
+      type: 'candlestick',
+      data: {
+        datasets: [{
+          label: 'ローソク足',
+          data: ohlcvData,
+          color: {
+            up: '#26a69a', down: '#ef5350', unchanged: '#ccc'
+          }
+        }]
+      },
+      options: chartOptions
+    });
+  } catch (error) {
+    console.error('ローソク足チャート作成中にエラーが発生しました:', error);
+    
+    // エラーの種類を確認
+    if (error.message && error.message.includes("is not a registered controller")) {
+      console.error('Chart.js Financialプラグインが正しく登録されていません。');
+      // プラグインの登録を試みる
+      registerFinancialPlugin();
+    }
+    
+    // エラーメッセージを表示
+    const canvas = document.getElementById('ohlc-chart');
+    const container = canvas.parentElement;
+    if (container) {
+      container.innerHTML = `<div class="alert alert-danger">
+        ローソク足チャートの作成に失敗しました。<br>
+        エラー: ${error.message}<br>
+        Chart.js Financialプラグインの読み込みを確認してください。
+      </div>`;
+    }
   }
-  ohlcChart = new Chart(ctx, {
-    type: 'candlestick',
-    data: {
-      datasets: [{
-        label: 'ローソク足',
-        data: ohlcvData,
-        color: {
-          up: '#26a69a', down: '#ef5350', unchanged: '#ccc'
-        }
-      }]
-    },
-    options: chartOptions
-  });
+}
+
+// Chart.js Financialプラグインを明示的に登録する関数
+function registerFinancialPlugin() {
+  try {
+    // プラグインの登録処理
+    // 可能性のある複数の名前を確認
+    if (typeof ChartFinancial !== 'undefined') {
+      Chart.register(ChartFinancial);
+      console.log('Chart.js Financialプラグインを登録しました。');
+    } else if (typeof window.ChartFinancial !== 'undefined') {
+      Chart.register(window.ChartFinancial);
+      console.log('Chart.js Financialプラグイン(window.ChartFinancial)を登録しました。');
+    } else if (typeof Chart.ChartFinancial !== 'undefined') {
+      Chart.register(Chart.ChartFinancial);
+      console.log('Chart.js Financialプラグイン(Chart.ChartFinancial)を登録しました。');
+    } else if (typeof Chart.Financial !== 'undefined') {
+      Chart.register(Chart.Financial);
+      console.log('Chart.js Financialプラグイン(Chart.Financial)を登録しました。');
+    } else {
+      console.error('ChartFinancialオブジェクトが見つかりません。プラグインが正しく読み込まれているか確認してください。');
+      
+      // HTMLにスクリプトが含まれているか確認するメッセージ
+      console.info('HTMLファイルに以下のスクリプトタグが含まれているか確認してください:');
+      console.info('<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>');
+    }
+  } catch (error) {
+    console.error('Chart.js Financialプラグインの登録中にエラーが発生しました:', error);
+  }
 }
 
 /**
@@ -221,10 +283,55 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // リアルタイム更新の設定
   setupRealtimeUpdates();
-  loadExchangeOptions();
+  loadInitialData();
   document.getElementById('exchange-select').addEventListener('change', loadSymbolOptions);
   document.getElementById('symbol-select').addEventListener('change', loadOhlcvData);
+  document.getElementById('strategy-select').addEventListener('change', handleStrategyChange); // 戦略変更イベント
 });
+
+async function loadInitialData() {
+  await loadExchangeOptions();
+  await loadStrategyOptions(); // 新しく追加
+}
+
+async function loadStrategyOptions() {
+  const exchange = document.getElementById('exchange-select').value;
+  const symbol = document.getElementById('symbol-select').value;
+  const select = document.getElementById('strategy-select');
+  select.innerHTML = '';
+  try {
+    const params = new URLSearchParams();
+    params.append('exchange', exchange);
+    params.append('symbol', symbol);
+    const res = await fetch(`/api/strategies?${params.toString()}`);
+    const strategies = await res.json();
+    console.log(strategies)
+    
+    // すべての戦略を表示するオプションを最初に追加
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'すべての戦略';
+    select.appendChild(allOption);
+    
+    // 各戦略をオプションとして追加
+    strategies.forEach(strategy => {
+      const opt = document.createElement('option');
+      opt.value = strategy;
+      opt.textContent = strategy;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    select.innerHTML = '<option>取得失敗</option>';
+    console.log('戦略一覧の取得に失敗しました:', e);
+  }
+}
+
+// 戦略変更時のハンドラ
+function handleStrategyChange() {
+  // ここに戦略が変更されたときの処理を追加
+  // 例: 特定の戦略のデータだけをフィルタリングして表示するなど
+  loadAnalysisData(); // 分析データの再読み込み
+}
 
 /**
  * アクティブな期間を設定

@@ -1213,9 +1213,9 @@ module.exports = {
  * 戦略一覧を取得する関数
  * @returns {Promise<Array>} 戦略一覧
  */
-async function getStrategies() {
-  // Redisの'strategies'セットから戦略一覧を取得
-  return await client.sMembers('strategies');
+async function getStrategies(exchangeId, symbol) {
+  const member = await client.sMembers(`strategies:${exchangeId}:${symbol}`);
+  return member;
 }
 
 /**
