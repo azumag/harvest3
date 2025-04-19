@@ -25,6 +25,8 @@ $(document).ready(function() {
             activeNavId = 'nav-order-pairs';
         } else if (pageName === 'analysis.html') {
             activeNavId = 'nav-analysis';
+        } else if (pageName === 'signal-history.html') {
+            activeNavId = 'nav-signal-history';
         }
         
         // アクティブなナビゲーション項目にactiveクラスを追加
