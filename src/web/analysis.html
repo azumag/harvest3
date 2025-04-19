@@ -128,7 +128,7 @@
                     <label for="strategy-select" class="form-label">戦略</label>
                     <select id="strategy-select" class="form-select"></select>
                   </div>
-                  <div class="col-md-3">
+                  <!-- <div class="col-md-3">
                     <label for="time-range-select" class="form-label">時間範囲</label>
                     <select id="time-range-select" class="form-select">
                       <option value="last_100">最新100件</option>
@@ -137,11 +137,11 @@
                       <option value="last_30d">過去30日間</option>
                       <option value="custom">カスタム範囲</option>
                     </select>
-                  </div>
+                  </div> -->
                 </div>
 
                 <!-- カスタム日時範囲セレクター（初期状態では非表示） -->
-                <div class="row mb-3" id="custom-date-range" style="display: none;">
+                <!-- <div class="row mb-3" id="custom-date-range" style="display: none;">
                   <div class="col-md-6">
                     <label for="start-date" class="form-label">開始日時</label>
                     <input type="datetime-local" id="start-date" class="form-control">
@@ -150,20 +150,20 @@
                     <label for="end-date" class="form-label">終了日時</label>
                     <input type="datetime-local" id="end-date" class="form-control">
                   </div>
-                </div>
+                </div> -->
 
                 <!-- 時間足選択ボタングループ -->
                 <div class="row mb-3">
                   <div class="col-12">
                     <div class="btn-group" role="group" aria-label="時間足選択">
                       <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分足</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="5m">5分足</button>
-                      <button type="button" class="btn btn-primary interval-btn" data-interval="15m">15分足</button>
+                      <button type="button" class="btn btn-primary interval-btn" data-interval="5m">5分足</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="15m">15分足</button>
                       <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1h">1時間足</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間足</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button>
+                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間足</button> -->
+                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button> -->
                     </div>
-                    <button id="apply-date-range" class="btn btn-success ms-2">適用</button>
+                    <!-- <button id="apply-date-range" class="btn btn-success ms-2">適用</button> -->
                   </div>
                 </div>
                 <div class="chart-container" style="position: relative; height:400px;">
