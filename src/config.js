@@ -124,6 +124,18 @@ const config = {
     INYO: {
       enabled: process.env.STRATEGY_INYO_ENABLED === 'true'
     },
+  },
+  exchanges: {
+    'bitbank': {
+      apiKey: BBApiKey,
+      secret: BBApiSecret,
+      module: 'bitbank'
+    },
+    'bitflyer': {
+      apiKey: BFApiKey,
+      secret: BFApiSecret,
+      module: 'bitflyer'
+    }
   }
 };
 

@@ -13,6 +13,11 @@ const { getOrderPairs } = require('./controllers/redis-order-pairs');
 const { getCurrentOrderPairs } = require('./controllers/redis-current-order-pairs');
 const { eventsHandler } = require('./controllers/redis-events');
 const { getStrategySignals } = require('./controllers/redis-strategy-signals');
+// 新しいローソク足データコントローラーをインポート
+const { getOhlcv } = require('./controllers/redis-ohlcv');
+const { getExchangesList } = require('./controllers/redis-exchanges');
+const { getStrategiesList } = require('./controllers/redis-strategies');
+const { getSymbolsList } = require('./controllers/redis-symbols');
 
 // Redis版のデータベースイベントモジュールをインポート
 const { addEventListner } = require('./redis-database-events');
@@ -46,6 +51,18 @@ router.get('/current-order-pairs', getCurrentOrderPairs);
 
 // 戦略シグナル履歴API
 router.get('/strategy-signals', getStrategySignals);
+
+// ローソク足データAPI
+router.get('/ohlcv', getOhlcv);
+
+// 取引所一覧API
+router.get('/exchanges', getExchangesList);
+
+// 戦略一覧API
+router.get('/strategies', getStrategiesList);
+
+// 銘柄一覧API
+router.get('/symbols', getSymbolsList);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {
