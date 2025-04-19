@@ -3,7 +3,7 @@
  */
 
 // グローバル変数
-let currentPeriod = 'all';
+let currentPeriod = 'daily';
 let charts = {
   timeSeriesChart: null,
   strategyPerformanceChart: null,

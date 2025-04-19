@@ -3,7 +3,7 @@
  */
 
 // グローバル変数
-let currentPeriod = 'all';
+let currentPeriod = 'daily';
 let profitChart = null;
 let allOrderPairs = []; // すべての注文ペアデータを保持
 let currentSymbolFilter = 'all'; // 現在選択されている銘柄フィルタ
