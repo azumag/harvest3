@@ -114,6 +114,7 @@
             <div class="card">
               <div class="card-body">
                 <h5 class="card-title">チャート</h5>
+                <!-- チャート選択部分に時間範囲セレクターを追加 -->
                 <div class="row mb-3">
                   <div class="col-md-3">
                     <label for="exchange-select" class="form-label">取引所</label>
@@ -127,18 +128,42 @@
                     <label for="strategy-select" class="form-label">戦略</label>
                     <select id="strategy-select" class="form-select"></select>
                   </div>
+                  <div class="col-md-3">
+                    <label for="time-range-select" class="form-label">時間範囲</label>
+                    <select id="time-range-select" class="form-select">
+                      <option value="last_100">最新100件</option>
+                      <option value="last_24h">過去24時間</option>
+                      <option value="last_7d">過去7日間</option>
+                      <option value="last_30d">過去30日間</option>
+                      <option value="custom">カスタム範囲</option>
+                    </select>
+                  </div>
                 </div>
-                <!-- 時間足選択ボタングループの追加 -->
+
+                <!-- カスタム日時範囲セレクター（初期状態では非表示） -->
+                <div class="row mb-3" id="custom-date-range" style="display: none;">
+                  <div class="col-md-6">
+                    <label for="start-date" class="form-label">開始日時</label>
+                    <input type="datetime-local" id="start-date" class="form-control">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="end-date" class="form-label">終了日時</label>
+                    <input type="datetime-local" id="end-date" class="form-control">
+                  </div>
+                </div>
+
+                <!-- 時間足選択ボタングループ -->
                 <div class="row mb-3">
                   <div class="col-12">
                     <div class="btn-group" role="group" aria-label="時間足選択">
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="5m">5分</button>
-                      <button type="button" class="btn btn-primary interval-btn" data-interval="15m">15分</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1h">1時間</button>
-                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button> -->
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分足</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="5m">5分足</button>
+                      <button type="button" class="btn btn-primary interval-btn" data-interval="15m">15分足</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1h">1時間足</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間足</button>
+                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button>
                     </div>
+                    <button id="apply-date-range" class="btn btn-success ms-2">適用</button>
                   </div>
                 </div>
                 <div class="chart-container" style="position: relative; height:400px;">
@@ -180,19 +205,47 @@
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Chart.js - index.htmlと同じバージョンを使用 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <!-- Chart.js拡張ライブラリ -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
-    <!-- Chart.js Financial Chart プラグイン -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@3.3.0/dist/chartjs-chart-financial.min.js"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
 
-    <!-- Chart.js読み込み確認 -->
+    <!-- プラグインの読み込み確認スクリプト -->
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         if (typeof Chart !== 'undefined') {
           console.log('Chart.jsが正常に読み込まれました');
+          
+          // アノテーションプラグインの確認
+          setTimeout(() => {
+            console.log('登録されているプラグイン:', Chart.registry.plugins);
+            
+            // 修正: オブジェクトと配列の両方に対応
+            let hasAnnotation = false;
+            
+            if (Chart.registry.plugins) {
+              if (Chart.registry.plugins.items) {
+                // itemsがオブジェクトの場合
+                if (typeof Chart.registry.plugins.items === 'object' && !Array.isArray(Chart.registry.plugins.items)) {
+                  hasAnnotation = Object.values(Chart.registry.plugins.items).some(p => 
+                    p.id === 'annotation' || (p.id && p.id.includes('annotation')));
+                } 
+                // itemsが配列の場合
+                else if (Array.isArray(Chart.registry.plugins.items)) {
+                  hasAnnotation = Chart.registry.plugins.items.some(p => 
+                    p.id === 'annotation' || (p.id && p.id.includes('annotation')));
+                }
+              } else {
+                // registryの構造が異なる場合、直接チェック
+                hasAnnotation = Object.values(Chart.registry.plugins).some(p => 
+                  p.id === 'annotation' || (p.id && p.id.includes('annotation')));
+              }
+            }
+            
+            console.log('アノテーションプラグイン登録状態:', hasAnnotation ? '成功' : '失敗');
+          }, 500);
         } else {
           console.error('Chart.jsの読み込みに失敗しました');
         }
