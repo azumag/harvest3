@@ -256,6 +256,7 @@ function displayPositionGroupContent(containerId, groupedData) {
   Object.keys(groupedData).forEach(groupKey => {
     const positions = groupedData[groupKey];
     const totalPnL = positions.reduce((sum, pos) => sum + (pos.realizedPnL || 0), 0);
+    const totalFee = positions.reduce((sum, pos) => sum + (pos.totalFee || 0), 0); // 手数料合計を計算
     const isPositive = totalPnL > 0;
     const badgeClass = isPositive ? 'bg-success' : totalPnL < 0 ? 'bg-danger' : 'bg-secondary';
     
@@ -269,6 +270,7 @@ function displayPositionGroupContent(containerId, groupedData) {
             ${groupKey}
             <span>
               <span class="badge rounded-pill ${badgeClass} me-2">${totalPnL.toLocaleString()} 円</span>
+              <span class="text-muted me-2">(${totalFee.toLocaleString()})</span> <!-- 手数料合計を括弧で囲んで追加 -->
               <span class="badge bg-secondary">${positions.length}</span>
             </span>
           </h6>
@@ -289,16 +291,16 @@ function displayPositionGroupContent(containerId, groupedData) {
               <strong>${position.symbol}</strong>
               <small class="text-muted ms-2">${position.exchangeId} - ${position.strategyKey}</small>
             </div>
-            <div>
+            <div class="d-flex align-items-center"> <!-- d-flex と align-items-center を追加 -->
               <span class="badge ${position.realizedPnL > 0 ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'} me-1">
                 ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'}
               </span>
               +
-              <span class="badge bg-info text-dark me-1">
+              <span class="badge bg-info text-dark mx-1"> <!-- me-1 を mx-1 に変更して左右にマージン -->
                 ${position.totalFee !== null && position.totalFee !== undefined ? position.totalFee.toLocaleString() : '0'}
               </span>
               =
-              <span class="badge ${isPositive ? 'bg-success' : position.netPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
+              <span class="badge ${isPositive ? 'bg-success' : position.netPnL < 0 ? 'bg-danger' : 'bg-secondary'} ms-1"> <!-- マージンを追加 -->
                 ${position.netPnL !== null && position.netPnL !== undefined ? position.netPnL.toLocaleString() : '0'} 円
               </span>
             </div>

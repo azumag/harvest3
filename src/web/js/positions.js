@@ -234,17 +234,19 @@ function displayPositions() {
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="card-subtitle text-muted">${position.exchangeId} - ${position.symbol} - ${position.strategyKey}</h6>
-            <span class="badge ${position.realizedPnL > 0 ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'} me-1">
-              ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'}
-            </span>
-            +
-            <span class="badge bg-info text-dark me-1">
-              ${position.totalFee !== null && position.totalFee !== undefined ? position.totalFee.toLocaleString() : '0'} 
-            </span>
-            =
-            <span class="badge ${position.netPnL > 0 ? 'bg-success' : position.netPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
-              ${position.netPnL !== null && position.netPnL !== undefined ? position.netPnL.toLocaleString() : '0'} 円
-            </span>
+            <div class="d-flex align-items-center flex-wrap justify-content-end"> <!-- flex-wrap と justify-content-end を追加 -->
+              <span class="badge ${position.realizedPnL > 0 ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'} me-1 mb-1"> <!-- mb-1 を追加 -->
+                ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'}
+              </span>
+              +
+              <span class="badge bg-info text-dark me-1 mb-1"> <!-- mb-1 を追加 -->
+                ${position.totalFee !== null && position.totalFee !== undefined ? position.totalFee.toLocaleString() : '0'}
+              </span>
+              =
+              <span class="badge ${position.netPnL > 0 ? 'bg-success' : position.netPnL < 0 ? 'bg-danger' : 'bg-secondary'} mb-1"> <!-- mb-1 を追加 -->
+                ${position.netPnL !== null && position.netPnL !== undefined ? position.netPnL.toLocaleString() : '0'} 円
+              </span>
+            </div>
           </div>
           <div class="row">
             <div class="col-6">
