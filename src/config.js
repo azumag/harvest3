@@ -104,7 +104,7 @@ const config = {
       enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
       interval: 100,
       priceThreshold: 0.001,
-      maxOrdersPerMinute: 100
+      maxOrdersPerMinute: 100,
     },
     SCALPING: {
       enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'

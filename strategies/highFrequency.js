@@ -4,6 +4,7 @@
 
 const { formattedAvailableAmount, getRealizedPnL } = require("../src/utils");
 const { getOrderStrategyKeyByOrderId } = require("../src/redisDatabase");
+const { config } = require('../src/config');
 
 // 循環参照を避けるため、直接インポートしない
 
@@ -43,7 +44,12 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
     
     // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
     // 最小取引量だけ記録しておく
-    const baseMinTradeAmount = Math.max(minAmount, amount);
+    const baseMinTradeAmount = (() => {
+      if (symbol === 'BTC/JPY') {
+        return 0.0001;
+      }
+      return 0.001 || Math.max(minAmount, amount);
+    })();
     
     // 前回の価格を保存
     let previousPrice = null;
