@@ -44,12 +44,8 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
     
     // 取引量は後で利用可能な資金に基づいて計算するため、ここでは計算しない
     // 最小取引量だけ記録しておく
-    const baseMinTradeAmount = (() => {
-      if (symbol === 'BTC/JPY') {
-        return 0.0001;
-      }
-      return 0.001 || Math.max(minAmount, amount);
-    })();
+    const baseMinTradeAmount = Math.max(minAmount, amount);
+
     
     // 前回の価格を保存
     let previousPrice = null;
@@ -128,12 +124,15 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   const balance = await exchange.fetchBalance();
                   const baseCurrency = symbol.split('/')[1];
                   const availableFunds = balance.free[baseCurrency];
+                  const baseQuote = availableFunds * tradePercentage;
                   
-                  const tradeAmount = baseMinTradeAmount;
+                  const tradeAmount = baseQuote / midPrice;
+
                   // 精度を考慮して、最小精度以上の値を確保
                   // amountPrecisionのデフォルト値を設定
                   const precisionToUse = amountPrecision || 8;
                   let formattedAmount = parseFloat(tradeAmount.toFixed(precisionToUse));
+
                   // 最小取引量を下回らないようにする
                   formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
 
@@ -206,18 +205,19 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   const availableAsset = balance.free[quoteCurrency];
 
                   // 最小取引量を下回らないようにする
+                  // 売れる量（今まで買った量-今注文に出している量）を取得
                   let formattedAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
                   
                   if (availableAsset >= baseMinTradeAmount && formattedAmount >= baseMinTradeAmount) {
                     try {
                       // 売り注文を作成
                       // await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
-                      const order = await exchange.createLimitSellOrder(symbol, baseMinTradeAmount, midPrice, { 'post_only': true });
+                      const order = await exchange.createLimitSellOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
                       
                       console.log(`HFT売り注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       
                       // 取引記録を更新（実際の約定価格を使用）
-                      updateTradeRecord(exchange.id, symbol, baseMinTradeAmount, midPrice, 'sell', order.id, 'limit');
+                      updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'sell', order.id, 'limit');
 
                       if (postOrderToDiscord) {
                         await postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
