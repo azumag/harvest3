@@ -101,7 +101,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
         // 買いすぎで売りが少ない場合はこれをあげる
         // 売りが多い場合はこれを下げる
         // 利確時に損が多い場合は早く売りすぎているのでこれを下げる
-        const volumeThreshold = 0.6; // 60%の閾値
+        const volumeThreshold = 0.5;
         
         // 前回の価格がある場合、価格変動を計算
         if (previousPrice !== null) {
@@ -126,7 +126,10 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                   const availableFunds = balance.free[baseCurrency];
                   const baseQuote = availableFunds * tradePercentage;
                   
-                  const tradeAmount = baseQuote / midPrice;
+                  // 取引量を計算
+                  // 損益によって可能な取引量を変動させる
+                  const realizedPnL = await getRealizedPnL(exchange, symbol, 'HFT');
+                  const tradeAmount = (baseQuote + realizedPnL) / midPrice;
 
                   // 精度を考慮して、最小精度以上の値を確保
                   // amountPrecisionのデフォルト値を設定
@@ -140,14 +143,15 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
 
                   // 今まで買った量が資産の一定割合以上なら買わない
                   const buyAmount = await formattedAvailableAmount(exchange, symbol, 'HFT', amountPrecision);
-
-                  const realizedPnL = await getRealizedPnL(exchange, symbol, 'HFT');
                   const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / midPrice;
 
                   if (availableFunds >= midPrice * formattedAmount && (buyAmount < maxBuyAmount || maxBuyAmount < baseMinTradeAmount)) {
                     try {
                       // 買い注文を作成
                       // await orderCheckCancel(exchange, symbol, 'HFT', options.cancelOrderThreshold);
+                      if (maxBuyAmount < baseMinTradeAmount) {
+                        formattedAmount = baseMinTradeAmount;
+                      }
                       const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, midPrice, { 'post_only': true });
                       
                       // 約定情報を取得して実際の約定価格を取得
