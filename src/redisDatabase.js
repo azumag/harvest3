@@ -353,7 +353,8 @@ async function getTradeRecordsAsObject() {
           sellAmount: parseFloat(record.sellAmount || 0),
           totalBuyCost: parseFloat(record.totalBuyCost || 0),
           totalSellValue: parseFloat(record.totalSellValue || 0),
-          netPosition: parseFloat(record.netPosition || 0)
+          netPosition: parseFloat(record.netPosition || 0),
+          totalFee: parseFloat(record.totalFee || 0),
         };
       }
     }

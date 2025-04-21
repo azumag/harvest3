@@ -279,8 +279,8 @@ function displayPositionGroupContent(containerId, groupedData) {
     
     // グループ内の各ポジションを表示
     positions.forEach(position => {
-      const isPositive = position.realizedPnL > 0;
-      const cardClass = isPositive ? 'positive' : position.realizedPnL < 0 ? 'negative' : '';
+      const isPositive = position.netPnL > 0; // 合算損益で色分け
+      const cardClass = isPositive ? 'positive' : position.netPnL < 0 ? 'negative' : ''; // 合算損益で色分け
       
       html += `
         <div class="position-summary ${cardClass} mb-2 p-2 border rounded">
@@ -289,9 +289,19 @@ function displayPositionGroupContent(containerId, groupedData) {
               <strong>${position.symbol}</strong>
               <small class="text-muted ms-2">${position.exchangeId} - ${position.strategyKey}</small>
             </div>
-            <span class="badge ${isPositive ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
-              ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'} 円
-            </span>
+            <div>
+              <span class="badge ${position.realizedPnL > 0 ? 'bg-success' : position.realizedPnL < 0 ? 'bg-danger' : 'bg-secondary'} me-1">
+                ${position.realizedPnL !== null && position.realizedPnL !== undefined ? position.realizedPnL.toLocaleString() : '0'}
+              </span>
+              +
+              <span class="badge bg-info text-dark me-1">
+                ${position.totalFee !== null && position.totalFee !== undefined ? position.totalFee.toLocaleString() : '0'}
+              </span>
+              =
+              <span class="badge ${isPositive ? 'bg-success' : position.netPnL < 0 ? 'bg-danger' : 'bg-secondary'}">
+                ${position.netPnL !== null && position.netPnL !== undefined ? position.netPnL.toLocaleString() : '0'} 円
+              </span>
+            </div>
           </div>
         </div>
       `;

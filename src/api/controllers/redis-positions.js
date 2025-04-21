@@ -70,6 +70,8 @@ async function getPositions(req, res) {
             totalBuyCost: record.totalBuyCost || 0,
             totalSellValue: record.totalSellValue || 0,
             realizedPnL: isNaN(realizedPnL) ? 0 : realizedPnL,
+            totalFee: record.totalFee || 0, // totalFeeを追加 (recordに存在すると仮定)
+            netPnL: (isNaN(realizedPnL) ? 0 : realizedPnL) - (record.totalFee || 0), // 合算損益を追加
             // 最新の数件の取引を含める（tradesプロパティが存在する場合のみ）
             recentTrades: Array.isArray(record.trades) ? record.trades.slice(0, 5) : []
           });
