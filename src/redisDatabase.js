@@ -1189,26 +1189,28 @@ async function getStrategySignalHistory(filters = {}, limit = 100, offset = 0) {
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
+  setCurrentOrderPair,
+  getCurrentOrderPair,
   addTrade,
   addFilledTrade,
   getTradeRecordsAsObject,
   getLatestTradeAmount,
-  getFilledHistory, // 関数名を変更
-  getOrderHistory,
+  getFilledHistory,
   getTradeSummary,
   getFilledSummary,
   getOrderStrategyKeyByOrderId,
   getOrderDetailsByOrderId,
+  getOrderHistory,
+  getExchanges,
   updateFilledSummaryTimestamp,
   getFilledSummaryTimestamp,
-  setCurrentOrderPair,
-  getCurrentOrderPair,
   addStrategySignal,
   getStrategySignalHistory,
-  getExchanges,
   getStrategies,
   getSymbols,
-}
+  saveStrategyParameters, // 追加
+  getStrategyParameters,  // 追加
+};
 
 /**
  * 戦略一覧を取得する関数
@@ -1227,4 +1229,63 @@ async function getStrategies(exchangeId, symbol) {
 async function getSymbols(exchangeId) {
   // Redisの'symbols:{exchangeId}'セットから通貨ペア一覧を取得
   return await client.sMembers(`symbols:${exchangeId}`);
+}
+/**
+ * 戦略パラメータを保存する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @param {Object} params - 保存するパラメータオブジェクト
+ * @returns {Promise} 処理完了時に解決されるPromise
+ */
+async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
+  const key = `strategyParams:${exchangeId}:${symbol}:${strategyKey}`;
+  try {
+    // パラメータオブジェクトの各値を文字列に変換
+    const stringifiedParams = {};
+    for (const [paramKey, value] of Object.entries(params)) {
+      stringifiedParams[paramKey] = String(value); // 値を文字列に変換
+    }
+    
+    await client.hSet(key, stringifiedParams);
+    console.log(`戦略パラメータを保存しました: ${key}`);
+    return true;
+  } catch (error) {
+    console.error(`戦略パラメータの保存中にエラーが発生しました: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * 戦略パラメータを読み出す関数
+ * データベースに存在しない場合はnullを返す
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @returns {Promise<Object|null>} 戦略パラメータオブジェクト、またはnull
+ */
+async function getStrategyParameters(exchangeId, symbol, strategyKey) {
+  const key = `strategyParams:${exchangeId}:${symbol}:${strategyKey}`;
+  try {
+    const params = await client.hGetAll(key);
+    
+    if (Object.keys(params).length > 0) {
+      // Redisにパラメータが存在する場合、数値型に変換して返す
+      const parsedParams = {};
+      for (const [paramKey, value] of Object.entries(params)) {
+        // 数値に変換できるものは変換
+        const numValue = parseFloat(value);
+        parsedParams[paramKey] = isNaN(numValue) ? value : numValue;
+      }
+      console.log(`戦略パラメータをRedisから読み出しました: ${key}`);
+      return parsedParams;
+    } else {
+      // Redisにパラメータが存在しない場合
+      console.log(`戦略パラメータがRedisに存在しません: ${key}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`戦略パラメータの読み出し中にエラーが発生しました: ${key}`, error);
+    return null;
+  }
 }
