@@ -21,11 +21,11 @@
 
 # Redis構成
 - summary
-  - order                       # 現在注文中サマリ
-  - filled                      # 現在約定サマリ
+  - order    : 現在注文中サマリ
+  - trade    : 現在約定サマリ
 - current
-  - orderPair                   # オーダーペア保存領域 戦略によってはつかう
-- params                        # 取引所・通貨・戦略ごとのパラメータ
+  - orderPair : オーダーペア保存領域 戦略によってはつかう
+- params      : 取引所・通貨・戦略ごとのパラメータ
 
 ## summary
 ### order
@@ -43,8 +43,8 @@ Redis Hash
 }
 ```
 
-### filled
-Key `summary:filled:${exchange}:${symbol}:${strategy}`
+### trade
+Key `summary:trade:${exchange}:${symbol}:${strategy}`
 Redis hash
 ```json
 {
@@ -154,7 +154,90 @@ Key: `params:${exchange}:${symbol}:${strategy}`
 
 - orders    # 注文履歴 注文IDから戦略キーを取得するためにインデックスを貼る、またユニーク制約をつける
 - signals   # シグナル履歴
-- filleds   # 約定履歴 取引IDでユニーク制約をつける。オーダーとは部分約定があるため多対一の関係になる
+- trades    # 約定履歴 取引IDでユニーク制約をつける。オーダーとは部分約定があるため多対一の関係になる
 - tickers   # ティッカー履歴
 - ohlc      # ロウソク足履歴
 - orderBook # 板情報履歴
+
+## orders
+```json
+{
+  "_id": ObjectId("..."),
+  "orderId": "45233562369",
+  "exchange": "bitbank",
+  "symbol": "BTC/JPY",
+  "strategy": "HFT",
+  "amount": 127.0623,
+  "side": "buy",
+  "price": 3.735,
+  "orderType": "limit",
+  "orderedAt": 1745302022253
+}
+```
+find example: `const order = await db.orders.findOne({ orderId: "xxxx" });`
+
+index
+```js
+db.orders.createIndex({ orderId: 1 }, { unique: true })
+db.orders.createIndex({ timestamp: 1 })  // 昇順
+db.orders.createIndex({ timestamp: -1 }) // 降順
+```
+
+## signals
+```json
+{
+  "_id": ObjectId("..."),
+  "timestamp": 1745302022253,
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "strategy": "HFT",
+  "signalType": "buy",
+  "price": 342342.44,
+  "signalDetail": {
+    ...
+  }
+}
+```
+signalDetail には各戦略で使われている指標のセットが入る。たとえば `MEAN_REVERSION` の場合
+```json
+{
+  "rsi": 87.40004569339726,
+  "oversoldThreshold": 30,
+  "overboughtThreshold": 70
+}
+```
+
+index
+```js
+db.signals.createIndex({ timestamp: 1 })
+db.signals.createIndex({ timestamp: -1 })
+```
+
+## trades
+```json
+{
+  "_id": ObjectId("..."),
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "strategy": "HFT",
+  "orderId": "45233478289",
+  "tradeId": "xxxxxxxxxxx",
+  "amount": 0.227,
+  "side": "buy",
+  "price": 525.132,
+  "orderType": "limit",
+  "fee": -0.0238,
+  "filledAt": 1745302072676
+}
+```
+
+index
+```js
+db.trades.createIndex({ orderId: 1 })
+db.trades.createIndex({ tradeId: 1 }, { unique: true })
+```
+
+# tickers
+# olhc
+# orderBook
+未実装
