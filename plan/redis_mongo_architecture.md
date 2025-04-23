@@ -40,31 +40,17 @@
 
 ## Redis 設計
 
-- キー構造例：`history:<user_id>:<timestamp>`
 - 値の構造：`HSET` によるハッシュ型（履歴内容）
 
 ### Redis に保持する期間
-- 24時間以内の履歴データのみ保持
-- それ以前は MongoDB に移行＆削除
+- 1000件以内の履歴データ
+- それ以上は MongoDB に移行＆削除
 
 ---
 
 ## MongoDB 設計
 
-- コレクション名：`histories`
-- ドキュメント例：
-
-```json
-{
-  "user_id": "abc123",
-  "action": "login",
-  "timestamp": 1713789600,
-  "meta": {...},
-  "redis_key": "history:abc123:1713789600"
-}
-```
-
-- インデックス推奨：`user_id`, `timestamp`, `action`
+- コレクション名,内容は redis と同じにする
 
 ---
 
