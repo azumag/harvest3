@@ -3,7 +3,15 @@ const {
 } = require('./redisDatabase');
 
 const { addTrade, addSignal, addOrder } = require('./mongoDatabase');
-const { getStrategyParameters } = require('../redisDatabase');
+const { getStrategyParameters, getCurrentOrderPair, setCurrentOrderPair } = require('../redisDatabase');
+
+async function getCurrentOrderPair(exchange, symbol, strategyKey) {
+  return await getCurrentOrderPair(exchange.id, symbol, strategyKey);
+}
+
+async function setCurrentOrderPair(exchange, symbol, strategyKey, orderPair) {
+  return await setCurrentOrderPair(exchange.id, symbol, strategyKey, orderPair);
+}
 
 async function getRealizedPnL(exchange, symbol, strategyKey) {
   // 約定を更新
@@ -243,4 +251,6 @@ module.exports = {
   addOrder,
   getStrategyParameters,
   saveStrategyParameters,
+  getCurrentOrderPair,
+  setCurrentOrderPair
 };

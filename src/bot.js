@@ -4,7 +4,9 @@ const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { postReport, postStrategyProfitReport } = require('./reports');
 const { runStrategy, runArbitrageStrategy, runStrategies } = require('./strategyRunner');
-const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
+// const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
+const { sleep } = require('./utils');
+const { updateFilledTrades } = require('./database/manager');
 const strategies = require('../strategies');
 
 /**
@@ -99,22 +101,22 @@ async function startBot() {
 }
 
 // レポートを投稿するためのタイマー設定
-setInterval(() => {
-  const now = new Date();
-  if (now.getMinutes() === 0) { // 時間ごと
-    // 全体資産計算レポート
-    postReport(exchangeBB);
-    postReport(exchangeBF);
+// setInterval(() => {
+//   const now = new Date();
+//   if (now.getMinutes() === 0) { // 時間ごと
+//     // 全体資産計算レポート
+//     postReport(exchangeBB);
+//     postReport(exchangeBF);
     
-    // 戦略と銘柄ごとの損益レポート
-    postStrategyProfitReport(exchangeBB);
-    postStrategyProfitReport(exchangeBF);
-  }
-}, 60000); // 1分ごとにチェック
+//     // 戦略と銘柄ごとの損益レポート
+//     postStrategyProfitReport(exchangeBB);
+//     postStrategyProfitReport(exchangeBF);
+//   }
+// }, 60000); // 1分ごとにチェック
 
-// 初期レポートを投稿
-postReport(exchangeBB);
-postReport(exchangeBF);
+// // 初期レポートを投稿
+// postReport(exchangeBB);
+// postReport(exchangeBF);
 
 // 利用可能な戦略を表示
 console.log('利用可能な戦略:');

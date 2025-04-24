@@ -19,6 +19,7 @@ const { config } = require('../src/config');
  * @param {Object} options - その他のオプション
  */
 async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, amount, options = {}) {
+  const strategyKey = 'HFT';
   try {
     // オプションから値を取得
     const { pricePrecision, amountPrecision, postOrderToDiscord, maxOrdersPerMinute, tradePercentage = 0.01, updateTradeRecord, tradeRecords } = options; // tradeRecords を追加
