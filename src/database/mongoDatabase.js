@@ -23,6 +23,9 @@ async function connectDB() {
       db = client.db(mongoDbName);
       console.log('MongoDBに接続しました');
 
+      // 必要なコレクションが存在するか確認し、存在しない場合は作成
+      await ensureCollectionsExist();
+
       // コレクションの参照を取得
       module.exports.ordersCollection = db.collection('orders');
       module.exports.tradesCollection = db.collection('trades');
@@ -35,6 +38,32 @@ async function connectDB() {
       console.error('MongoDB接続エラー:', error);
       throw error;
     }
+  }
+}
+
+/**
+ * 必要なコレクションが存在するか確認し、存在しない場合は作成する
+ */
+async function ensureCollectionsExist() {
+  try {
+    // 既存のコレクション一覧を取得
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(c => c.name);
+    
+    // 必要なコレクションのリスト
+    const requiredCollections = ['orders', 'trades', 'signals'];
+    
+    // 存在しないコレクションを作成
+    for (const name of requiredCollections) {
+      if (!collectionNames.includes(name)) {
+        console.log(`コレクション ${name} が存在しないため作成します`);
+        await db.createCollection(name);
+        console.log(`コレクション ${name} を作成しました`);
+      }
+    }
+  } catch (error) {
+    console.error('コレクション確認/作成エラー:', error);
+    throw error;
   }
 }
 
@@ -111,7 +140,6 @@ async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
     }
   }
 }
-
 
 /**
  * ordersコレクションにデータを追加する

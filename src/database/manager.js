@@ -1,9 +1,10 @@
-
 const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId } = require('./mongoDatabase');
 const { 
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
-  getCurrentOrderPairRedis, setCurrentOrderPairRedis
+  getCurrentOrderPairRedis, setCurrentOrderPairRedis,
+  getTradeSummaryTimestamp,
+  updateTradeSummaryTimestamp
 } = require('./redisDatabase');
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
@@ -25,7 +26,7 @@ async function getRealizedPnL(exchange, symbol, strategyKey) {
   });
   
   // console.log(summary);
-  return summary.realizedPnL || 0;
+  return (summary && summary.realizedPnL) ? summary.realizedPnL : 0;
 }
 
 async function getTradeCurrentPosition(exchange, symbol, strategyKey) {
@@ -38,13 +39,13 @@ async function getTradeCurrentPosition(exchange, symbol, strategyKey) {
     strategyKey
   });
   
-  return summary.netPosition || 0;
+  return (summary && summary.netPosition) ? summary.netPosition : 0;
 }
 
 async function getOrderStrategyKeyByOrderId(orderId) {
   const order = await getOrderByOrderId(orderId);
 
-  return order.strategy || 'OUTSIDE';
+  return (order && order.strategy) ? order.strategy : 'OUTSIDE';
 }
 
 /**
@@ -56,12 +57,12 @@ async function getOrderStrategyKeyByOrderId(orderId) {
 async function updateFilledTrades(exchange, symbol) {
  
   try {
-    // 前回のチェック時間を取得
-    const tradeSummary = await getTradeSummary(exchange, symbol);
-    const timestamp = tradeSummary.updatedAt;
-    
+    // 前回の更新時間を取得
+    const timestamp = await getTradeSummaryTimestamp(exchange.id, symbol);
+    const now = Date.now();
+
     // 前回のチェック時間（ない場合は24時間前）
-    const lastCheckTime = timestamp ? timestamp : Date.now() - 24 * 60 * 60 * 1000;
+    const lastCheckTime = timestamp ? timestamp : now - 24 * 60 * 60 * 1000;
     
     // fetchMyTradesメソッドが利用可能かどうかを確認
     if (!exchange.has || !exchange.has['fetchMyTrades']) {
@@ -84,7 +85,7 @@ async function updateFilledTrades(exchange, symbol) {
       }
       // console.log(`strategykey: ${strategyKey} trade: ${trade.order}`);
 
-      const trade = {
+      const _trade = {
         exchange: exchange.id,
         symbol,
         strategy: strategyKey,
@@ -96,11 +97,16 @@ async function updateFilledTrades(exchange, symbol) {
         orderType: trade.type || 'market',
         fee: trade.fee ? trade.fee.cost : undefined,
         tradeId: trade.id,
-        timestamp: Date.now(),
+        timestamp: now,
       }
 
-      await addTradeMongoDB(trade);
-      await updateTradeSummary(trade);
+      try {
+        await addTradeMongoDB(_trade);
+        await updateTradeSummary(_trade);
+        await updateTradeSummaryTimestamp(exchange.id, symbol, now);
+      } catch (error) {
+        console.error(`約定履歴の更新エラー (${exchange.id} ${symbol}):`, error);
+      }
       
       processedCount++;
     }

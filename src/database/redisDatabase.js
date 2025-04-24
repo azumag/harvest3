@@ -27,9 +27,27 @@ async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
   return null;
 }
 
+async function updateTradeSummaryTimestamp(exchange, symbol) {
+  const timestampKey = `summary:timestamp:${exchange}:${symbol}`;
+  const now = Date.now();
+
+  await client.set(timestampKey, now);
+}
+
+async function getTradeSummaryTimestamp(exchange, symbol) {
+  const timestampKey = `summary:timestamp:${exchange}:${symbol}`;
+  const timestamp = await client.get(timestampKey);
+
+  if (timestamp) {
+    return parseInt(timestamp);
+  }
+
+  return null;
+}
+
 // サマリーの更新
 async function updateTradeSummary(trade) {
-  const summaryKey = `summary:trade:${trade.exchangeId}:${trade.symbol}:${trade.strategy}`;
+  const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
   const now = Date.now();
 
   const exists = await client.exists(summaryKey);
@@ -55,7 +73,7 @@ async function updateTradeSummary(trade) {
     await client.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
     await client.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
-  } else if (side === 'sell') {
+  } else if (trade.side === 'sell') {
     // 売り注文の場合
     await client.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalSellValue', trade.value);
@@ -178,4 +196,6 @@ module.exports = {
   updateTradeSummary,
   saveStrategyParametersRedis,
   getStrategyParametersRedis,
+  getTradeSummaryTimestamp,
+  updateTradeSummaryTimestamp,
 };

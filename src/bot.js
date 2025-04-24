@@ -7,12 +7,15 @@ const { runStrategy, runArbitrageStrategy, runStrategies } = require('./strategy
 // const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
 const { sleep } = require('./utils');
 const { updateFilledTrades } = require('./database/manager');
+const { initializeDB } = require('./database/dbConfig');
+
 const strategies = require('../strategies');
 
 /**
  * ボットを起動する関数
  */
 async function startBot() {
+  initializeDB();
   try {
     const exchanges = [exchangeBB, exchangeBF]; // TODO: 取引所の配列だが、hftとmmでは別で定義されているので一元化したい
     
