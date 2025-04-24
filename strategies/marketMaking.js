@@ -16,10 +16,10 @@ function rebuildActiveOrders(orderPairs) {
   // ここでは単純に配列の最後に見つかった未約定注文を最新とする
   for (const pair of orderPairs) {
     if (pair.buyOrder && !pair.buyFilled) {
-      activeBuy = pair.buyOrder; // 上書きしていく
+      activeBuy = pair.buyOrder;
     }
     if (pair.sellOrder && !pair.sellFilled) {
-      activeSell = pair.sellOrder; // 上書きしていく
+      activeSell = pair.sellOrder; 
     }
   }
 

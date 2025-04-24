@@ -10,13 +10,13 @@ async function initialize() {
   console.log('Redisデータベースモジュールが初期化されました');
 }
 
-async function setCurrentOrderPair(exchangeId, symbol, strategyKey, pair) {
+async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
   const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
 
   return await client.set(key, JSON.stringify({ pair }));
 }
 
-async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
+async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
   const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
   const data = await client.get(key);
 
@@ -111,12 +111,12 @@ async function getTradeSummary(filters = {}) {
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
-  setCurrentOrderPair,
-  getCurrentOrderPair,
+  setCurrentOrderPairRedis,
+  getCurrentOrderPairRedis,
   getTradeSummary,
   updateTradeSummary,
-  saveStrategyParameters, // 追加
-  getStrategyParameters,  // 追加
+  saveStrategyParametersRedis,
+  getStrategyParametersRedis,
 };
 
 
@@ -128,7 +128,7 @@ module.exports = {
  * @param {Object} params - 保存するパラメータオブジェクト
  * @returns {Promise} 処理完了時に解決されるPromise
  */
-async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
+async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     // パラメータオブジェクトの各値を文字列に変換
@@ -154,7 +154,7 @@ async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
  * @param {String} strategyKey - 戦略キー
  * @returns {Promise<Object|null>} 戦略パラメータオブジェクト、またはnull
  */
-async function getStrategyParameters(exchangeId, symbol, strategyKey) {
+async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     const params = await client.hGetAll(key);

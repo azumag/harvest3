@@ -1,16 +1,17 @@
 const { 
-  getTradeSummary, updateTradeSummary 
+  getTradeSummary, updateTradeSummary, 
+  getStrategyParametersRedis
 } = require('./redisDatabase');
 
-const { addTrade, addSignal, addOrder } = require('./mongoDatabase');
-const { getStrategyParameters, getCurrentOrderPair, setCurrentOrderPair } = require('../redisDatabase');
+const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId } = require('./mongoDatabase');
+const { getStrategyParametersRedis, saveStrategyParametersRedis, getCurrentOrderPairRedis, setCurrentOrderPairRedis } = require('./redisDatabase');
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
-  return await getCurrentOrderPair(exchange.id, symbol, strategyKey);
+  return await getCurrentOrderPairRedis(exchange.id, symbol, strategyKey);
 }
 
 async function setCurrentOrderPair(exchange, symbol, strategyKey, orderPair) {
-  return await setCurrentOrderPair(exchange.id, symbol, strategyKey, orderPair);
+  return await setCurrentOrderPairRedis(exchange.id, symbol, strategyKey, orderPair);
 }
 
 async function getRealizedPnL(exchange, symbol, strategyKey) {
@@ -38,6 +39,12 @@ async function getTradeCurrentPosition(exchange, symbol, strategyKey) {
   });
   
   return summary.netPosition || 0;
+}
+
+async function getOrderStrategyKeyByOrderId(orderId) {
+  const order = await getOrderByOrderId(orderId);
+
+  return order.strategy || 'OUTSIDE';
 }
 
 /**
@@ -92,7 +99,7 @@ async function updateFilledTrades(exchange, symbol) {
         timestamp: Date.now(),
       }
 
-      await addTrade(trade);
+      await addTradeMongoDB(trade);
       await updateTradeSummary(trade);
       
       processedCount++;
@@ -121,7 +128,7 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
       timestamp
     };
 
-    return await addOrder(order);
+    return await addOrderMongoDB(order);
 }
 
 async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
@@ -137,7 +144,7 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
         timestamp
     };
     
-    return await addSignal(signal);
+    return await addSignalMongoDB(signal);
 }
 
 /**
@@ -149,29 +156,7 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
  * @returns {Promise<Object|null>} 戦略パラメータオブジェクト、またはnull
  */
 async function getStrategyParameters(exchangeId, symbol, strategyKey) {
-  const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
-  try {
-    const params = await client.hGetAll(key);
-    
-    if (Object.keys(params).length > 0) {
-      // Redisにパラメータが存在する場合、数値型に変換して返す
-      const parsedParams = {};
-      for (const [paramKey, value] of Object.entries(params)) {
-        // 数値に変換できるものは変換
-        const numValue = parseFloat(value);
-        parsedParams[paramKey] = isNaN(numValue) ? value : numValue;
-      }
-      console.log(`戦略パラメータをRedisから読み出しました: ${key}`);
-      return parsedParams;
-    } else {
-      // Redisにパラメータが存在しない場合
-      console.log(`戦略パラメータがRedisに存在しません: ${key}`);
-      return null;
-    }
-  } catch (error) {
-    console.error(`戦略パラメータの読み出し中にエラーが発生しました: ${key}`, error);
-    return null;
-  }
+  return await getStrategyParametersRedis(exchangeId, symbol, strategyKey);
 }
 
 /**
@@ -183,21 +168,7 @@ async function getStrategyParameters(exchangeId, symbol, strategyKey) {
  * @returns {Promise} 処理完了時に解決されるPromise
  */
 async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
-  const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
-  try {
-    // パラメータオブジェクトの各値を文字列に変換
-    const stringifiedParams = {};
-    for (const [paramKey, value] of Object.entries(params)) {
-      stringifiedParams[paramKey] = String(value); // 値を文字列に変換
-    }
-    
-    await client.hSet(key, stringifiedParams);
-    console.log(`戦略パラメータを保存しました: ${key}`);
-    return true;
-  } catch (error) {
-    console.error(`戦略パラメータの保存中にエラーが発生しました: ${key}`, error);
-    return false;
-  }
+  return await saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params);
 }
 
 // 購入量ー売り注文量を計算
@@ -252,5 +223,6 @@ module.exports = {
   getStrategyParameters,
   saveStrategyParameters,
   getCurrentOrderPair,
-  setCurrentOrderPair
+  setCurrentOrderPair,
+  getOrderStrategyKeyByOrderId
 };

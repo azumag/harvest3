@@ -4,7 +4,7 @@
  */
 
 // データベースモジュールをインポート
-const redisDatabase = require('./redisDatabase');
+const redisDatabase = require('./database/redisDatabase');
 const redisTradeRecords = require('./redisTradeRecords');
 const redisRoutes = require('./api/redis-routes');
 const redisDatabaseEvents = require('./api/redis-database-events');

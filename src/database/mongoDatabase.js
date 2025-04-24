@@ -117,7 +117,7 @@ async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
  * ordersコレクションにデータを追加する
  * @param {Object} orderData - 注文データ
  */
-async function addOrder(orderData) {
+async function addOrderMongoDB(orderData) {
   await connectDB();
   try {
     const result = await module.exports.ordersCollection.insertOne(orderData);
@@ -152,7 +152,7 @@ async function addOrdersBulk(ordersData) {
  * tradesコレクションにデータを追加する
  * @param {Object} tradeData - 約定データ
  */
-async function addTrade(tradeData) {
+async function addTradeMongoDB(tradeData) {
   await connectDB();
   try {
     const result = await module.exports.tradesCollection.insertOne(tradeData);
@@ -168,7 +168,7 @@ async function addTrade(tradeData) {
  * signalsコレクションにデータを追加する
  * @param {Object} signalData - シグナルデータ
  */
-async function addSignal(signalData) {
+async function addSignalMongoDB(signalData) {
   await connectDB();
   try {
     const result = await module.exports.signalsCollection.insertOne(signalData);
@@ -319,17 +319,16 @@ function setupGracefulShutdown() {
 module.exports = {
   connectDB,
   closeDB,
-  addOrder,
+  addOrderMongoDB,
   addOrdersBulk,
-  addTrade,
-  addSignal,
+  addTradeMongoDB,
+  addSignalMongoDB,
   listOrders,
   listTrades,
   listSignals,
   getOrderByOrderId,
   getTradeByTradeId,
   getSignalById,
-  // コレクション参照はconnectDB後に設定される
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
