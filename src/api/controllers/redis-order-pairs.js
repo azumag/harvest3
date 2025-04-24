@@ -2,7 +2,7 @@
  * Redis版の注文ペアを取得するコントローラー
  */
 const { getOrderPairs } = require('../../redisDatabase');
-const { client } = require('../../redisClient');
+const { client } = require('../../database/redisClient');
 
 /**
  * 注文ペアを取得するコントローラー

@@ -2,7 +2,7 @@
  * Redisデータベースモジュール
  * SQLiteからRedisへの移行の一部として実装
  */
-const { client, initRedisClient } = require('./database/redisClient');
+const { client, initRedisClient } = require('./redisClient');
 
 // 初期化関数
 async function initialize() {
@@ -10,27 +10,14 @@ async function initialize() {
   console.log('Redisデータベースモジュールが初期化されました');
 }
 
-// 注文ペアの保存
-// async function saveOrderPairs(exchangeId, symbol, strategyKey, pair) {
-//   const key = `orderPair:${exchangeId}:${symbol}:${strategyKey}`;
-//   return await client.set(key, JSON.stringify({ pair }));
-// }
-
-// 注文ペア履歴追加
-// async function addOrderPair(exchangeId, symbol, strategyKey, pair) {
-//   const key = `orderPairHistory:${exchangeId}:${symbol}:${strategyKey}`;
-
-//   return await client.rPush(key, pair);
-// }
-
 async function setCurrentOrderPair(exchangeId, symbol, strategyKey, pair) {
-  const key = `currentOrderPair:${exchangeId}:${symbol}:${strategyKey}`;
+  const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
 
   return await client.set(key, JSON.stringify({ pair }));
 }
 
 async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
-  const key = `currentOrderPair:${exchangeId}:${symbol}:${strategyKey}`;
+  const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
   const data = await client.get(key);
 
   if (data) {
@@ -40,18 +27,8 @@ async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
   return null;
 }
 
-// 注文ペア履歴取得
-// async function getOrderPairs(exchangeId, symbol, strategyKey) {
-//   const key = `orderPairHistory:${exchangeId}:${symbol}:${strategyKey}`;
-//   const data = await client.get(key);
-  
-//   if (data) {
-//     return JSON.parse(data).pair;
-//   }
-  
-//   return [];
-// }
-
+// add は mongo に移行
+// その後のサマリー処理は前段階の抽象度で行う
 /**
  * 取引記録を追加/更新する関数
  * @param {String} exchangeId - 取引所ID
@@ -65,97 +42,97 @@ async function getCurrentOrderPair(exchangeId, symbol, strategyKey) {
  * @param {String} orderType - 注文タイプ（例: 'market', 'limit'）
  * @returns {Promise} 処理完了時に解決されるPromise
  */
-async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType) {
-  const now = Date.now();
+// async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType) {
+//   const now = Date.now();
   
-  // 取引記録サマリキー
-  const recordKey = `trade:orderSummary:${exchangeId}:${symbol}:${strategyKey}`;
+//   // 取引記録サマリキー
+//   const recordKey = `trade:orderSummary:${exchangeId}:${symbol}:${strategyKey}`;
   
-  // インデックスセットに追加
-  await client.sAdd('exchanges', exchangeId);
-  await client.sAdd(`symbols:${exchangeId}`, symbol);
-  await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
+//   // インデックスセットに追加
+//   await client.sAdd('exchanges', exchangeId);
+//   await client.sAdd(`symbols:${exchangeId}`, symbol);
+//   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
-  // 注文IDをキーとしたインデックスを作成
-  // この形式で、オーダーIDから取引所、通貨ペア、戦略キーの情報を取得可能に
-  await client.set(`order:index:${orderId}`, `${exchangeId}:${symbol}:${strategyKey}`);
+//   // 注文IDをキーとしたインデックスを作成
+//   // この形式で、オーダーIDから取引所、通貨ペア、戦略キーの情報を取得可能に
+//   await client.set(`order:index:${orderId}`, `${exchangeId}:${symbol}:${strategyKey}`);
   
-  // 注文詳細のインデックスを作成（検索高速化のため）
-  const orderDetails = {
-    orderId,
-    amount,
-    side,
-    price,
-    orderType,
-    orderedAt: now,
-    type: 'order',
-    exchangeId,
-    symbol,
-    strategyKey
-  };
-  await client.set(`order:details:${orderId}`, JSON.stringify(orderDetails));
+//   // 注文詳細のインデックスを作成（検索高速化のため）
+//   const orderDetails = {
+//     orderId,
+//     amount,
+//     side,
+//     price,
+//     orderType,
+//     orderedAt: now,
+//     type: 'order',
+//     exchangeId,
+//     symbol,
+//     strategyKey
+//   };
+//   await client.set(`order:details:${orderId}`, JSON.stringify(orderDetails));
   
-  // 取引記録が存在するか確認
-  const exists = await client.exists(recordKey);
+//   // 取引記録が存在するか確認
+//   const exists = await client.exists(recordKey);
   
-  if (!exists) {
-    // 新しい取引記録を作成
-    await client.hSet(recordKey, {
-      buyAmount: 0,
-      sellAmount: 0,
-      totalBuyCost: 0,
-      totalSellValue: 0,
-      netPosition: 0,
-      createdAt: now,
-      updatedAt: now
-    });
+//   if (!exists) {
+//     // 新しい取引記録を作成
+//     await client.hSet(recordKey, {
+//       buyAmount: 0,
+//       sellAmount: 0,
+//       totalBuyCost: 0,
+//       totalSellValue: 0,
+//       netPosition: 0,
+//       createdAt: now,
+//       updatedAt: now
+//     });
     
-    // 時系列インデックスに追加
-    await client.zAdd('trade:orderSummary:time', {
-      score: now,
-      value: `${exchangeId}:${symbol}:${strategyKey}`
-    });
-  }
+//     // 時系列インデックスに追加
+//     await client.zAdd('trade:orderSummary:time', {
+//       score: now,
+//       value: `${exchangeId}:${symbol}:${strategyKey}`
+//     });
+//   }
   
-  // 注文履歴を追加
-  const orderHistoryKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
-  const orderData = JSON.stringify({
-    orderId,
-    amount,
-    side,
-    price,
-    orderType,
-    orderedAt: now
-  });
+//   // 注文履歴を追加
+//   const orderHistoryKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   const orderData = JSON.stringify({
+//     orderId,
+//     amount,
+//     side,
+//     price,
+//     orderType,
+//     orderedAt: now
+//   });
   
-  await client.rPush(orderHistoryKey, orderData);
+//   await client.rPush(orderHistoryKey, orderData);
   
-  // 時系列インデックスに追加
-  await client.zAdd('trade:orderHistory:time', {
-    score: now,
-    value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
-  });
+//   // 時系列インデックスに追加
+//   await client.zAdd('trade:orderHistory:time', {
+//     score: now,
+//     value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
+//   });
   
-  // 取引記録を更新
-  if (side === 'buy') {
-    // 買い注文の場合
-    await client.hIncrByFloat(recordKey, 'buyAmount', amount);
-    await client.hIncrByFloat(recordKey, 'totalBuyCost', value);
-    await client.hIncrByFloat(recordKey, 'netPosition', amount);
-  } else if (side === 'sell') {
-    // 売り注文の場合
-    await client.hIncrByFloat(recordKey, 'sellAmount', amount);
-    await client.hIncrByFloat(recordKey, 'totalSellValue', value);
+//   // 取引記録を更新
+//   if (side === 'buy') {
+//     // 買い注文の場合
+//     await client.hIncrByFloat(recordKey, 'buyAmount', amount);
+//     await client.hIncrByFloat(recordKey, 'totalBuyCost', value);
+//     await client.hIncrByFloat(recordKey, 'netPosition', amount);
+//   } else if (side === 'sell') {
+//     // 売り注文の場合
+//     await client.hIncrByFloat(recordKey, 'sellAmount', amount);
+//     await client.hIncrByFloat(recordKey, 'totalSellValue', value);
     
-    // 買い量から差し引く
-    await client.hIncrByFloat(recordKey, 'netPosition', -amount);
-  }
+//     // 買い量から差し引く
+//     await client.hIncrByFloat(recordKey, 'netPosition', -amount);
+//   }
   
-  // 更新日時を設定
-  await client.hSet(recordKey, 'updatedAt', now);
+//   // 更新日時を設定
+//   await client.hSet(recordKey, 'updatedAt', now);
   
-  return true;
-}
+//   return true;
+// }
 
 /**
  * 約定記録を追加/更新する関数
@@ -172,134 +149,134 @@ async function addTrade(exchangeId, symbol, strategyKey, side, amount, price, va
  * @param {String} tradeId - トレードID (部分約定を区別するためのユニークID)
  * @returns {Promise} 処理完了時に解決されるPromise
  */
-async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType, fee = value * 0.001, tradeId = null) {
-  const now = Date.now();
+// async function addFilledTrade(exchangeId, symbol, strategyKey, side, amount, price, value, orderId, orderType, fee = value * 0.001, tradeId = null) {
+//   const now = Date.now();
   
-  // 約定記録サマリーキー
-  const summaryKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
+//   // 約定記録サマリーキー
+//   const summaryKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
   
-  // インデックスセットに追加
-  await client.sAdd('exchanges', exchangeId);
-  await client.sAdd(`symbols:${exchangeId}`, symbol);
-  await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
+//   // インデックスセットに追加
+//   await client.sAdd('exchanges', exchangeId);
+//   await client.sAdd(`symbols:${exchangeId}`, symbol);
+//   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
-  // 数値は固定小数点形式に変換して精度問題を回避
-  const amountFixed = amount.toFixed(8);
-  const priceFixed = price.toFixed(8);
-  const feeFixed = fee.toFixed(8);
+//   // 数値は固定小数点形式に変換して精度問題を回避
+//   const amountFixed = amount.toFixed(8);
+//   const priceFixed = price.toFixed(8);
+//   const feeFixed = fee.toFixed(8);
   
-  // コンテンツハッシュ（トレードID以外の内容のみ）
-  const contentHash = `${exchangeId}:${symbol}:${strategyKey}:${side}:${amountFixed}:${priceFixed}:${orderType}:${feeFixed}`;
+//   // コンテンツハッシュ（トレードID以外の内容のみ）
+//   const contentHash = `${exchangeId}:${symbol}:${strategyKey}:${side}:${amountFixed}:${priceFixed}:${orderType}:${feeFixed}`;
   
-  // フルハッシュ（トレードIDを含む）
-  const fullHash = `${contentHash}:${tradeId}`;
+//   // フルハッシュ（トレードIDを含む）
+//   const fullHash = `${contentHash}:${tradeId}`;
   
-  // 重複チェック用のセットキー
-  const fullHashSetKey = `trade:uniqueTradeFullHashes:${exchangeId}:${symbol}:${strategyKey}`;
-  const contentHashSetKey = `trade:uniqueTradeContentHashes:${exchangeId}:${symbol}:${strategyKey}`;
+//   // 重複チェック用のセットキー
+//   const fullHashSetKey = `trade:uniqueTradeFullHashes:${exchangeId}:${symbol}:${strategyKey}`;
+//   const contentHashSetKey = `trade:uniqueTradeContentHashes:${exchangeId}:${symbol}:${strategyKey}`;
   
-  // フルハッシュで完全な重複チェック（O(1)の操作）
-  const isDuplicate = await client.sIsMember(fullHashSetKey, fullHash);
+//   // フルハッシュで完全な重複チェック（O(1)の操作）
+//   const isDuplicate = await client.sIsMember(fullHashSetKey, fullHash);
   
-  if (isDuplicate) {
-    // 完全な重複(tradeId含めて全く同じ）があれば処理をスキップ
-    console.log(`同一の約定記録が既に存在するため、スキップします: ${tradeId}`);
-    return true;
-  }
+//   if (isDuplicate) {
+//     // 完全な重複(tradeId含めて全く同じ）があれば処理をスキップ
+//     console.log(`同一の約定記録が既に存在するため、スキップします: ${tradeId}`);
+//     return true;
+//   }
   
-  // コンテンツハッシュをチェック（部分約定の可能性）
-  const hasContentMatch = await client.sIsMember(contentHashSetKey, contentHash);
-  if (hasContentMatch) {
-    // 内容は同じだがorderIdが異なる場合（部分約定の可能性）
-    console.log(`部分約定の可能性があります: ${tradeId} (内容は既存レコードと同一)`);
-    // 部分約定は処理を継続
-  }
+//   // コンテンツハッシュをチェック（部分約定の可能性）
+//   const hasContentMatch = await client.sIsMember(contentHashSetKey, contentHash);
+//   if (hasContentMatch) {
+//     // 内容は同じだがorderIdが異なる場合（部分約定の可能性）
+//     console.log(`部分約定の可能性があります: ${tradeId} (内容は既存レコードと同一)`);
+//     // 部分約定は処理を継続
+//   }
   
-  // ハッシュをセットに追加
-  await client.sAdd(fullHashSetKey, fullHash);
-  await client.sAdd(contentHashSetKey, contentHash);
+//   // ハッシュをセットに追加
+//   await client.sAdd(fullHashSetKey, fullHash);
+//   await client.sAdd(contentHashSetKey, contentHash);
   
-  // 約定記録が存在するか確認
-  const exists = await client.exists(summaryKey);
+//   // 約定記録が存在するか確認
+//   const exists = await client.exists(summaryKey);
   
-  if (!exists) {
-    // 新しい約定サマリーを作成
-    await client.hSet(summaryKey, {
-      buyAmount: 0,
-      sellAmount: 0,
-      totalBuyCost: 0,
-      totalSellValue: 0,
-      netPosition: 0,
-      totalFee: 0,
-      realizedPnL: 0,
-      createdAt: now,
-      updatedAt: now
-    });
+//   if (!exists) {
+//     // 新しい約定サマリーを作成
+//     await client.hSet(summaryKey, {
+//       buyAmount: 0,
+//       sellAmount: 0,
+//       totalBuyCost: 0,
+//       totalSellValue: 0,
+//       netPosition: 0,
+//       totalFee: 0,
+//       realizedPnL: 0,
+//       createdAt: now,
+//       updatedAt: now
+//     });
     
-    // 時系列インデックスに追加
-    await client.zAdd('trade:filledSummary:time', {
-      score: now,
-      value: `${exchangeId}:${symbol}:${strategyKey}`
-    });
-  }
+//     // 時系列インデックスに追加
+//     await client.zAdd('trade:filledSummary:time', {
+//       score: now,
+//       value: `${exchangeId}:${symbol}:${strategyKey}`
+//     });
+//   }
   
-  // 約定履歴を追加
-  const filledHistoryKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
-  const filledData = JSON.stringify({
-    orderId,
-    amount,
-    side,
-    price,
-    orderType,
-    fee,
-    filledAt: now
-  });
+//   // 約定履歴を追加
+//   const filledHistoryKey = `trade:filledHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   const filledData = JSON.stringify({
+//     orderId,
+//     amount,
+//     side,
+//     price,
+//     orderType,
+//     fee,
+//     filledAt: now
+//   });
   
-  await client.rPush(filledHistoryKey, filledData);
+//   await client.rPush(filledHistoryKey, filledData);
 
-  // オーダーIDをキーとしたインデックスを作成
-  await client.set(`filledOrder:details:${orderId}`, filledData);
+//   // オーダーIDをキーとしたインデックスを作成
+//   await client.set(`filledOrder:details:${orderId}`, filledData);
   
-  // 時系列インデックスに追加
-  await client.zAdd('trade:filledHistory:time', {
-    score: now,
-    value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
-  });
+//   // 時系列インデックスに追加
+//   await client.zAdd('trade:filledHistory:time', {
+//     score: now,
+//     value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
+//   });
   
-  // 約定サマリーを更新
-  if (side === 'buy') {
-    // 買い注文の場合
-    await client.hIncrByFloat(summaryKey, 'buyAmount', amount);
-    await client.hIncrByFloat(summaryKey, 'totalBuyCost', value);
-    await client.hIncrByFloat(summaryKey, 'netPosition', amount);
-  } else if (side === 'sell') {
-    // 売り注文の場合
-    await client.hIncrByFloat(summaryKey, 'sellAmount', amount);
-    await client.hIncrByFloat(summaryKey, 'totalSellValue', value);
-    await client.hIncrByFloat(summaryKey, 'netPosition', -amount);
+//   // 約定サマリーを更新
+//   if (side === 'buy') {
+//     // 買い注文の場合
+//     await client.hIncrByFloat(summaryKey, 'buyAmount', amount);
+//     await client.hIncrByFloat(summaryKey, 'totalBuyCost', value);
+//     await client.hIncrByFloat(summaryKey, 'netPosition', amount);
+//   } else if (side === 'sell') {
+//     // 売り注文の場合
+//     await client.hIncrByFloat(summaryKey, 'sellAmount', amount);
+//     await client.hIncrByFloat(summaryKey, 'totalSellValue', value);
+//     await client.hIncrByFloat(summaryKey, 'netPosition', -amount);
     
-    // 実現損益を計算（売りの場合のみ更新）
-    // 単純化のため、売った分の平均購入コストを計算
-    const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
-    const currentBuyCost = parseFloat(await client.hGet(summaryKey, 'totalBuyCost') || 0);
+//     // 実現損益を計算（売りの場合のみ更新）
+//     // 単純化のため、売った分の平均購入コストを計算
+//     const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
+//     const currentBuyCost = parseFloat(await client.hGet(summaryKey, 'totalBuyCost') || 0);
     
-    if (currentBuyAmount > 0) {
-      const avgBuyCost = currentBuyCost / currentBuyAmount;
-      const soldCost = amount * avgBuyCost;
-      const profit = value - soldCost;
-      await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
-    }
-  }
+//     if (currentBuyAmount > 0) {
+//       const avgBuyCost = currentBuyCost / currentBuyAmount;
+//       const soldCost = amount * avgBuyCost;
+//       const profit = value - soldCost;
+//       await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
+//     }
+//   }
   
-  // 手数料を加算
-  await client.hIncrByFloat(summaryKey, 'totalFee', fee);
+//   // 手数料を加算
+//   await client.hIncrByFloat(summaryKey, 'totalFee', fee);
   
-  // 更新日時を設定
-  await client.hSet(summaryKey, 'updatedAt', now);
-  await updateFilledSummaryTimestamp(exchangeId, symbol);
+//   // 更新日時を設定
+//   await client.hSet(summaryKey, 'updatedAt', now);
+//   await updateFilledSummaryTimestamp(exchangeId, symbol);
   
-  return true;
-}
+//   return true;
+// }
 
 /**
  * 取引記録をオブジェクトとして取得する関数
@@ -756,7 +733,7 @@ async function getFilledSummary(filters = {}) {
   
   // 全て指定されている場合は特定のサマリーを取得
   if (exchangeId && symbol && strategyKey) {
-    const summaryKey = `trade:filledSummary:${exchangeId}:${symbol}:${strategyKey}`;
+    const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const summary = await client.hGetAll(summaryKey);
     
     if (Object.keys(summary).length > 0) {
@@ -782,47 +759,47 @@ async function getFilledSummary(filters = {}) {
  * 特定の注文IDから戦略キーを取得する関数
  * @param {String} orderId - 注文ID
  */
-const orderStrategyKeyCache = new Map();
+// const orderStrategyKeyCache = new Map();
 
-async function getOrderStrategyKeyByOrderId(orderId) {
-  // キャッシュに存在する場合はキャッシュを返す
-  if (orderStrategyKeyCache.has(orderId)) {
-    return orderStrategyKeyCache.get(orderId);
-  }
+// async function getOrderStrategyKeyByOrderId(orderId) {
+//   // キャッシュに存在する場合はキャッシュを返す
+//   if (orderStrategyKeyCache.has(orderId)) {
+//     return orderStrategyKeyCache.get(orderId);
+//   }
 
-  // キャッシュにない場合はRedisから取得
-  const indexValue = await client.get(`order:index:${orderId}`);
+//   // キャッシュにない場合はRedisから取得
+//   const indexValue = await client.get(`order:index:${orderId}`);
   
-  // インデックスが存在しない場合
-  if (!indexValue) {
-    return 'OUTSIDE';
-  }
+//   // インデックスが存在しない場合
+//   if (!indexValue) {
+//     return 'OUTSIDE';
+//   }
   
-  // インデックス値を分解
-  const [exchangeId, symbol, strategyKey] = indexValue.split(':');
+//   // インデックス値を分解
+//   const [exchangeId, symbol, strategyKey] = indexValue.split(':');
 
-  orderStrategyKeyCache.set(orderId, strategyKey);
+//   orderStrategyKeyCache.set(orderId, strategyKey);
   
-  return strategyKey;
-}
+//   return strategyKey;
+// }
 
 /**
  * 特定の注文IDから注文の詳細情報を取得する関数（効率化版）
  * @param {String} orderId - 注文ID
  * @returns {Promise<Object|null>} 注文の詳細情報またはnull
  */
-async function getOrderDetailsByOrderId(orderId) {
-  // 直接インデックスから詳細情報を取得（高速）
-  const orderDetails = await client.get(`order:details:${orderId}`);
-  if (orderDetails) {
-    try {
-      return JSON.parse(orderDetails);
-    } catch (error) {
-      console.error('注文詳細のパースエラー:', error);
-    }
-  }
-  return null;
-}
+// async function getOrderDetailsByOrderId(orderId) {
+//   // 直接インデックスから詳細情報を取得（高速）
+//   const orderDetails = await client.get(`order:details:${orderId}`);
+//   if (orderDetails) {
+//     try {
+//       return JSON.parse(orderDetails);
+//     } catch (error) {
+//       console.error('注文詳細のパースエラー:', error);
+//     }
+//   }
+//   return null;
+// }
 
 
 // モジュールのエクスポート
@@ -833,149 +810,149 @@ async function getOrderDetailsByOrderId(orderId) {
  * @param {Number} offset - オフセット
  * @returns {Promise<Object>} 取引履歴と合計件数
  */
-async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
-  const { exchangeId, symbol, strategyKey, startDate, endDate } = filters;
+// async function getOrderHistory(filters = {}, limit = 100, offset = 0) {
+//   const { exchangeId, symbol, strategyKey, startDate, endDate } = filters;
   
-  console.log('getOrderHistory関数呼び出し:', {
-    filters,
-    limit,
-    offset
-  });
+//   console.log('getOrderHistory関数呼び出し:', {
+//     filters,
+//     limit,
+//     offset
+//   });
   
-  // 時系列インデックスから取得
-  let historyItems = [];
-  let allTrades = []; // 全データを保持する変数
+//   // 時系列インデックスから取得
+//   let historyItems = [];
+//   let allTrades = []; // 全データを保持する変数
   
-  if (exchangeId && symbol && strategyKey) {
-    // 特定の取引所、通貨ペア、戦略の履歴を取得
-    const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   if (exchangeId && symbol && strategyKey) {
+//     // 特定の取引所、通貨ペア、戦略の履歴を取得
+//     const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
     
-    console.log('使用しているRedisキー:', historyKey);
+//     console.log('使用しているRedisキー:', historyKey);
     
-    // 全データを取得してソート後にページングする
-    console.log('全データを取得してソート後にページング');
+//     // 全データを取得してソート後にページングする
+//     console.log('全データを取得してソート後にページング');
     
-    // 全データを取得
-    const allData = await client.lRange(historyKey, 0, -1);
-    console.log(`全データ取得: ${allData.length}件`);
+//     // 全データを取得
+//     const allData = await client.lRange(historyKey, 0, -1);
+//     console.log(`全データ取得: ${allData.length}件`);
     
-    // 全データをパースしてタイムスタンプでソート
-    allTrades = allData.map(item => {
-      const trade = JSON.parse(item);
-      return {
-        id: trade.orderId,
-        timestamp: Number(trade.orderedAt), // 数値に変換
-        exchangeId,
-        symbol,
-        strategyKey,
-        side: trade.side,
-        amount: trade.amount,
-        price: trade.price,
-        value: trade.amount * trade.price
-      };
-    });
+//     // 全データをパースしてタイムスタンプでソート
+//     allTrades = allData.map(item => {
+//       const trade = JSON.parse(item);
+//       return {
+//         id: trade.orderId,
+//         timestamp: Number(trade.orderedAt), // 数値に変換
+//         exchangeId,
+//         symbol,
+//         strategyKey,
+//         side: trade.side,
+//         amount: trade.amount,
+//         price: trade.price,
+//         value: trade.amount * trade.price
+//       };
+//     });
     
-    // 降順（新しい順）にソート
-    allTrades.sort((a, b) => b.timestamp - a.timestamp);
-    console.log(`ソート完了: 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+//     // 降順（新しい順）にソート
+//     allTrades.sort((a, b) => b.timestamp - a.timestamp);
+//     console.log(`ソート完了: 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
     
-    // ページングを適用
-    historyItems = allTrades.slice(offset, offset + limit);
-    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
-  } else {
-    // 時系列インデックスから取得
-    let scoreMin = '-inf';
-    let scoreMax = '+inf';
+//     // ページングを適用
+//     historyItems = allTrades.slice(offset, offset + limit);
+//     console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
+//   } else {
+//     // 時系列インデックスから取得
+//     let scoreMin = '-inf';
+//     let scoreMax = '+inf';
     
-    if (startDate) {
-      scoreMin = startDate;
-    }
+//     if (startDate) {
+//       scoreMin = startDate;
+//     }
     
-    if (endDate) {
-      scoreMax = endDate;
-    }
+//     if (endDate) {
+//       scoreMax = endDate;
+//     }
     
-    // 時系列インデックスから全てのアイテムを取得
-    console.log('時系列インデックスから全データを取得');
-    const allTimeRangeItems = await client.zRangeByScore('trade:orderHistory:time', scoreMin, scoreMax);
-    console.log(`全時系列データ取得: ${allTimeRangeItems.length}件`);
+//     // 時系列インデックスから全てのアイテムを取得
+//     console.log('時系列インデックスから全データを取得');
+//     const allTimeRangeItems = await client.zRangeByScore('trade:orderHistory:time', scoreMin, scoreMax);
+//     console.log(`全時系列データ取得: ${allTimeRangeItems.length}件`);
     
-    // 全てのアイテムを処理
-    allTrades = []; // 既に定義されている変数を使用
+//     // 全てのアイテムを処理
+//     allTrades = []; // 既に定義されている変数を使用
     
-    for (const item of allTimeRangeItems) {
-      const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
+//     for (const item of allTimeRangeItems) {
+//       const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
       
-      // フィルター条件に一致するか確認
-      if (exchangeId && itemExchangeId !== exchangeId) continue;
-      if (symbol && itemSymbol !== symbol) continue;
-      if (strategyKey && itemStrategyKey !== strategyKey) continue;
+//       // フィルター条件に一致するか確認
+//       if (exchangeId && itemExchangeId !== exchangeId) continue;
+//       if (symbol && itemSymbol !== symbol) continue;
+//       if (strategyKey && itemStrategyKey !== strategyKey) continue;
       
-      // 履歴キー
-      const historyKey = `trade:orderHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
+//       // 履歴キー
+//       const historyKey = `trade:orderHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
       
-      // インデックスを特定するのは難しいので、全て取得して検索
-      const allHistory = await client.lRange(historyKey, 0, -1);
+//       // インデックスを特定するのは難しいので、全て取得して検索
+//       const allHistory = await client.lRange(historyKey, 0, -1);
       
-      for (const historyItem of allHistory) {
-        const trade = JSON.parse(historyItem);
+//       for (const historyItem of allHistory) {
+//         const trade = JSON.parse(historyItem);
         
-        // タイムスタンプが一致するものを探す
-        if (trade.orderedAt.toString() === timestamp) {
-          allTrades.push({
-            id: trade.orderId,
-            timestamp: Number(trade.orderedAt), // 数値に変換
-            exchangeId: itemExchangeId,
-            symbol: itemSymbol,
-            strategyKey: itemStrategyKey,
-            side: trade.side,
-            amount: trade.amount,
-            price: trade.price,
-            value: trade.amount * trade.price
-          });
-          break;
-        }
-      }
-    }
+//         // タイムスタンプが一致するものを探す
+//         if (trade.orderedAt.toString() === timestamp) {
+//           allTrades.push({
+//             id: trade.orderId,
+//             timestamp: Number(trade.orderedAt), // 数値に変換
+//             exchangeId: itemExchangeId,
+//             symbol: itemSymbol,
+//             strategyKey: itemStrategyKey,
+//             side: trade.side,
+//             amount: trade.amount,
+//             price: trade.price,
+//             value: trade.amount * trade.price
+//           });
+//           break;
+//         }
+//       }
+//     }
     
-    // 降順（新しい順）にソート
-    allTrades.sort((a, b) => b.timestamp - a.timestamp);
-    console.log(`ソート完了: 全${allTrades.length}件, 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
+//     // 降順（新しい順）にソート
+//     allTrades.sort((a, b) => b.timestamp - a.timestamp);
+//     console.log(`ソート完了: 全${allTrades.length}件, 最初のタイムスタンプ=${allTrades[0]?.timestamp}, 最後のタイムスタンプ=${allTrades[allTrades.length-1]?.timestamp}`);
     
-    // ページングを適用
-    historyItems = allTrades.slice(offset, offset + limit);
-    console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
-  }
+//     // ページングを適用
+//     historyItems = allTrades.slice(offset, offset + limit);
+//     console.log(`ページング適用: ${offset}から${offset + limit}まで, 結果=${historyItems.length}件`);
+//   }
   
-  // 合計数を取得
-  let totalCount = 0;
+//   // 合計数を取得
+//   let totalCount = 0;
   
-  if (exchangeId && symbol && strategyKey) {
-    // 特定の取引所、通貨ペア、戦略の場合は、全データの長さを使用
-    const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
-    totalCount = await client.lLen(historyKey);
-  } else {
-    // フィルター条件がある場合は、フィルタリング後の全データの長さを使用
-    // この場合、allTradesの長さが実際のフィルタリング後の全データ数
-    totalCount = allTrades ? allTrades.length : 0;
-  }
+//   if (exchangeId && symbol && strategyKey) {
+//     // 特定の取引所、通貨ペア、戦略の場合は、全データの長さを使用
+//     const historyKey = `trade:orderHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//     totalCount = await client.lLen(historyKey);
+//   } else {
+//     // フィルター条件がある場合は、フィルタリング後の全データの長さを使用
+//     // この場合、allTradesの長さが実際のフィルタリング後の全データ数
+//     totalCount = allTrades ? allTrades.length : 0;
+//   }
   
-  console.log(`合計数: ${totalCount}件`);
+//   console.log(`合計数: ${totalCount}件`);
   
-  return {
-    history: historyItems,
-    total: totalCount
-  };
-}
+//   return {
+//     history: historyItems,
+//     total: totalCount
+//   };
+// }
 
-/**
- * 取引所一覧を取得する関数
- * @returns {Promise<Array>} 取引所一覧
- */
-async function getExchanges() {
-  // Redisの'exchanges'セットから取引所一覧を取得
-  return await client.sMembers('exchanges');
-}
+// /**
+//  * 取引所一覧を取得する関数
+//  * @returns {Promise<Array>} 取引所一覧
+//  */
+// async function getExchanges() {
+//   // Redisの'exchanges'セットから取引所一覧を取得
+//   return await client.sMembers('exchanges');
+// }
 
 
 /**
@@ -983,31 +960,31 @@ async function getExchanges() {
  * 約定サマリーが更新された時間のみを記録するテーブルを管理します
  * @returns {Promise<Boolean>} 処理完了時に解決されるPromise
  */
-async function updateFilledSummaryTimestamp(exchangeId, symbol) {
-  // 約定サマリー更新時間テーブルのキー
-  const timestampKey = `summary:filledSummaryTimestamp:${exchangeId}:${symbol}`;
-  const timestamp = Date.now();
+// async function updateFilledSummaryTimestamp(exchangeId, symbol) {
+//   // 約定サマリー更新時間テーブルのキー
+//   const timestampKey = `summary:filledSummaryTimestamp:${exchangeId}:${symbol}`;
+//   const timestamp = Date.now();
   
-  // 更新時間を設定
-  await client.set(timestampKey, timestamp);
+//   // 更新時間を設定
+//   await client.set(timestampKey, timestamp);
   
-  return true;
-}
+//   return true;
+// }
 
 /**
  * 特定の約定サマリーの最終更新時間を取得する関数
  * @returns {Promise<Number|null>} 最終更新時間（ミリ秒）またはnull
  */
-async function getFilledSummaryTimestamp(exchange, symbol) {
-  // 約定サマリー更新時間テーブルのキー
-  const timestampKey = `summary:filledSummaryTimestamp:${exchange.id}:${symbol}`;
+// async function getFilledSummaryTimestamp(exchange, symbol) {
+//   // 約定サマリー更新時間テーブルのキー
+//   const timestampKey = `summary:filledSummaryTimestamp:${exchange.id}:${symbol}`;
   
-  // 更新時間を取得
-  const timestamp = await client.get(timestampKey);
-  // console.log('約定サマリー更新時間:', timestamp);
+//   // 更新時間を取得
+//   const timestamp = await client.get(timestampKey);
+//   // console.log('約定サマリー更新時間:', timestamp);
   
-  return parseInt(timestamp || 0);
-}
+//   return parseInt(timestamp || 0);
+// }
 
 /**
  * 戦略シグナルを記録する関数
@@ -1019,171 +996,171 @@ async function getFilledSummaryTimestamp(exchange, symbol) {
  * @param {Object} strategyResults - 戦略固有の計算結果
  * @returns {Promise} 処理完了時に解決されるPromise
  */
-async function addStrategySignal(exchangeId, symbol, strategyKey, signalType, price, strategyResults = {}) {
-  const now = Date.now();
+// async function addStrategySignal(exchangeId, symbol, strategyKey, signalType, price, strategyResults = {}) {
+//   const now = Date.now();
   
-  // インデックスセットに追加
-  await client.sAdd('exchanges', exchangeId);
-  await client.sAdd(`symbols:${exchangeId}`, symbol);
-  await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
+//   // インデックスセットに追加
+//   await client.sAdd('exchanges', exchangeId);
+//   await client.sAdd(`symbols:${exchangeId}`, symbol);
+//   await client.sAdd(`strategies:${exchangeId}:${symbol}`, strategyKey);
   
-  // シグナル履歴キー
-  const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   // シグナル履歴キー
+//   const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
   
-  // シグナルデータをJSONに変換
-  const signalData = JSON.stringify({
-    timestamp: now,
-    signalType,
-    price,
-    strategyResults
-  });
+//   // シグナルデータをJSONに変換
+//   const signalData = JSON.stringify({
+//     timestamp: now,
+//     signalType,
+//     price,
+//     strategyResults
+//   });
   
-  // シグナル履歴を追加
-  await client.rPush(signalHistoryKey, signalData);
+//   // シグナル履歴を追加
+//   await client.rPush(signalHistoryKey, signalData);
   
-  // 時系列インデックスに追加
-  await client.zAdd('strategy:signalHistory:time', {
-    score: now,
-    value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
-  });
+//   // 時系列インデックスに追加
+//   await client.zAdd('strategy:signalHistory:time', {
+//     score: now,
+//     value: `${exchangeId}:${symbol}:${strategyKey}:${now}`
+//   });
   
-  // イベントを発火（UIなどに通知するため）
-  const event = {
-    type: 'strategy_signal_added',
-    data: {
-      exchangeId,
-      symbol,
-      strategyKey,
-      signalType,
-      price,
-      timestamp: now,
-      strategyResults
-    }
-  };
+//   // イベントを発火（UIなどに通知するため）
+//   const event = {
+//     type: 'strategy_signal_added',
+//     data: {
+//       exchangeId,
+//       symbol,
+//       strategyKey,
+//       signalType,
+//       price,
+//       timestamp: now,
+//       strategyResults
+//     }
+//   };
   
-  // イベントをRedisに発行
-  await client.publish('trade_events', JSON.stringify(event));
+//   // イベントをRedisに発行
+//   await client.publish('trade_events', JSON.stringify(event));
   
-  return true;
-}
+//   return true;
+// }
 
-/**
- * 戦略シグナル履歴を取得する関数
- * @param {Object} filters - フィルター条件
- * @param {Number} limit - 取得件数
- * @param {Number} offset - オフセット
- * @returns {Promise<Object>} 戦略シグナル履歴と合計件数
- */
-async function getStrategySignalHistory(filters = {}, limit = 100, offset = 0) {
-  const { exchangeId, symbol, strategyKey, startDate, endDate, signalType } = filters;
+// /**
+//  * 戦略シグナル履歴を取得する関数
+//  * @param {Object} filters - フィルター条件
+//  * @param {Number} limit - 取得件数
+//  * @param {Number} offset - オフセット
+//  * @returns {Promise<Object>} 戦略シグナル履歴と合計件数
+//  */
+// async function getStrategySignalHistory(filters = {}, limit = 100, offset = 0) {
+//   const { exchangeId, symbol, strategyKey, startDate, endDate, signalType } = filters;
   
-  let signalItems = [];
-  let allSignals = []; // 全データを保持する変数
+//   let signalItems = [];
+//   let allSignals = []; // 全データを保持する変数
   
-  if (exchangeId && symbol && strategyKey) {
-    // 特定の取引所、通貨ペア、戦略の履歴を取得
-    const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
+//   if (exchangeId && symbol && strategyKey) {
+//     // 特定の取引所、通貨ペア、戦略の履歴を取得
+//     const signalHistoryKey = `strategy:signalHistory:${exchangeId}:${symbol}:${strategyKey}`;
     
-    // 全データを取得
-    const allData = await client.lRange(signalHistoryKey, 0, -1);
+//     // 全データを取得
+//     const allData = await client.lRange(signalHistoryKey, 0, -1);
     
-    // 全データをパースしてタイムスタンプでソート
-    allSignals = allData.map(item => {
-      const signal = JSON.parse(item);
-      return {
-        timestamp: Number(signal.timestamp),
-        exchangeId,
-        symbol,
-        strategyKey,
-        signalType: signal.signalType,
-        price: signal.price,
-        strategyResults: signal.strategyResults
-      };
-    });
+//     // 全データをパースしてタイムスタンプでソート
+//     allSignals = allData.map(item => {
+//       const signal = JSON.parse(item);
+//       return {
+//         timestamp: Number(signal.timestamp),
+//         exchangeId,
+//         symbol,
+//         strategyKey,
+//         signalType: signal.signalType,
+//         price: signal.price,
+//         strategyResults: signal.strategyResults
+//       };
+//     });
     
-    // 時間フィルタリング（startDateとendDateがある場合）
-    if (startDate) {
-      allSignals = allSignals.filter(item => item.timestamp >= startDate);
-    }
-    if (endDate) {
-      allSignals = allSignals.filter(item => item.timestamp <= endDate);
-    }
+//     // 時間フィルタリング（startDateとendDateがある場合）
+//     if (startDate) {
+//       allSignals = allSignals.filter(item => item.timestamp >= startDate);
+//     }
+//     if (endDate) {
+//       allSignals = allSignals.filter(item => item.timestamp <= endDate);
+//     }
     
-    // シグナルタイプでフィルタリング（指定されている場合）
-    if (signalType) {
-      allSignals = allSignals.filter(item => item.signalType === signalType);
-    }
+//     // シグナルタイプでフィルタリング（指定されている場合）
+//     if (signalType) {
+//       allSignals = allSignals.filter(item => item.signalType === signalType);
+//     }
     
-    // 降順（新しい順）にソート
-    allSignals.sort((a, b) => b.timestamp - a.timestamp);
+//     // 降順（新しい順）にソート
+//     allSignals.sort((a, b) => b.timestamp - a.timestamp);
     
-    // ページングを適用
-    signalItems = allSignals.slice(offset, offset + limit);
-  } else {
-    // 時系列インデックスから取得
-    let scoreMin = '-inf';
-    let scoreMax = '+inf';
+//     // ページングを適用
+//     signalItems = allSignals.slice(offset, offset + limit);
+//   } else {
+//     // 時系列インデックスから取得
+//     let scoreMin = '-inf';
+//     let scoreMax = '+inf';
     
-    if (startDate) {
-      scoreMin = startDate;
-    }
+//     if (startDate) {
+//       scoreMin = startDate;
+//     }
     
-    if (endDate) {
-      scoreMax = endDate;
-    }
+//     if (endDate) {
+//       scoreMax = endDate;
+//     }
     
-    // 時系列インデックスから全てのアイテムを取得
-    const allTimeRangeItems = await client.zRangeByScore('strategy:signalHistory:time', scoreMin, scoreMax);
+//     // 時系列インデックスから全てのアイテムを取得
+//     const allTimeRangeItems = await client.zRangeByScore('strategy:signalHistory:time', scoreMin, scoreMax);
     
-    // 全てのアイテムを処理
-    for (const item of allTimeRangeItems) {
-      const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
+//     // 全てのアイテムを処理
+//     for (const item of allTimeRangeItems) {
+//       const [itemExchangeId, itemSymbol, itemStrategyKey, timestamp] = item.split(':');
       
-      // フィルター条件に一致するか確認
-      if (exchangeId && itemExchangeId !== exchangeId) continue;
-      if (symbol && itemSymbol !== symbol) continue;
-      if (strategyKey && itemStrategyKey !== strategyKey) continue;
+//       // フィルター条件に一致するか確認
+//       if (exchangeId && itemExchangeId !== exchangeId) continue;
+//       if (symbol && itemSymbol !== symbol) continue;
+//       if (strategyKey && itemStrategyKey !== strategyKey) continue;
       
-      // 履歴キー
-      const signalHistoryKey = `strategy:signalHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
+//       // 履歴キー
+//       const signalHistoryKey = `strategy:signalHistory:${itemExchangeId}:${itemSymbol}:${itemStrategyKey}`;
       
-      // インデックスを特定するのは難しいので、全て取得して検索
-      const allHistory = await client.lRange(signalHistoryKey, 0, -1);
+//       // インデックスを特定するのは難しいので、全て取得して検索
+//       const allHistory = await client.lRange(signalHistoryKey, 0, -1);
       
-      for (const historyItem of allHistory) {
-        const signal = JSON.parse(historyItem);
+//       for (const historyItem of allHistory) {
+//         const signal = JSON.parse(historyItem);
         
-        // タイムスタンプが一致するものを探す
-        if (signal.timestamp.toString() === timestamp) {
-          // シグナルタイプでフィルタリング（指定されている場合）
-          if (signalType && signal.signalType !== signalType) continue;
+//         // タイムスタンプが一致するものを探す
+//         if (signal.timestamp.toString() === timestamp) {
+//           // シグナルタイプでフィルタリング（指定されている場合）
+//           if (signalType && signal.signalType !== signalType) continue;
           
-          allSignals.push({
-            timestamp: Number(signal.timestamp),
-            exchangeId: itemExchangeId,
-            symbol: itemSymbol,
-            strategyKey: itemStrategyKey,
-            signalType: signal.signalType,
-            price: signal.price,
-            strategyResults: signal.strategyResults
-          });
-          break; // 見つかったら次のアイテムへ
-        }
-      }
-    }
+//           allSignals.push({
+//             timestamp: Number(signal.timestamp),
+//             exchangeId: itemExchangeId,
+//             symbol: itemSymbol,
+//             strategyKey: itemStrategyKey,
+//             signalType: signal.signalType,
+//             price: signal.price,
+//             strategyResults: signal.strategyResults
+//           });
+//           break; // 見つかったら次のアイテムへ
+//         }
+//       }
+//     }
     
-    // 降順（新しい順）にソート
-    allSignals.sort((a, b) => b.timestamp - a.timestamp);
+//     // 降順（新しい順）にソート
+//     allSignals.sort((a, b) => b.timestamp - a.timestamp);
     
-    // ページングを適用
-    signalItems = allSignals.slice(offset, offset + limit);
-  }
+//     // ページングを適用
+//     signalItems = allSignals.slice(offset, offset + limit);
+//   }
   
-  return {
-    count: allSignals.length,
-    data: signalItems
-  };
-}
+//   return {
+//     count: allSignals.length,
+//     data: signalItems
+//   };
+// }
 
 
 // モジュールのエクスポートに新しい関数を追加
@@ -1212,24 +1189,25 @@ module.exports = {
   getStrategyParameters,  // 追加
 };
 
-/**
- * 戦略一覧を取得する関数
- * @returns {Promise<Array>} 戦略一覧
- */
-async function getStrategies(exchangeId, symbol) {
-  const member = await client.sMembers(`strategies:${exchangeId}:${symbol}`);
-  return member;
-}
+// /**
+//  * 戦略一覧を取得する関数
+//  * @returns {Promise<Array>} 戦略一覧
+//  */
+// async function getStrategies(exchangeId, symbol) {
+//   const member = await client.sMembers(`strategies:${exchangeId}:${symbol}`);
+//   return member;
+// }
 
-/**
- * 通貨ペア一覧を取得する関数
- * @param {String} exchangeId - 取引所ID
- * @returns {Promise<Array>} 通貨ペア一覧
- */
-async function getSymbols(exchangeId) {
-  // Redisの'symbols:{exchangeId}'セットから通貨ペア一覧を取得
-  return await client.sMembers(`symbols:${exchangeId}`);
-}
+// /**
+//  * 通貨ペア一覧を取得する関数
+//  * @param {String} exchangeId - 取引所ID
+//  * @returns {Promise<Array>} 通貨ペア一覧
+//  */
+// async function getSymbols(exchangeId) {
+//   // Redisの'symbols:{exchangeId}'セットから通貨ペア一覧を取得
+//   return await client.sMembers(`symbols:${exchangeId}`);
+// }
+
 /**
  * 戦略パラメータを保存する関数
  * @param {String} exchangeId - 取引所ID
@@ -1239,7 +1217,7 @@ async function getSymbols(exchangeId) {
  * @returns {Promise} 処理完了時に解決されるPromise
  */
 async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
-  const key = `strategyParams:${exchangeId}:${symbol}:${strategyKey}`;
+  const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     // パラメータオブジェクトの各値を文字列に変換
     const stringifiedParams = {};
@@ -1265,7 +1243,7 @@ async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
  * @returns {Promise<Object|null>} 戦略パラメータオブジェクト、またはnull
  */
 async function getStrategyParameters(exchangeId, symbol, strategyKey) {
-  const key = `strategyParams:${exchangeId}:${symbol}:${strategyKey}`;
+  const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     const params = await client.hGetAll(key);
     

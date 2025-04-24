@@ -1,5 +1,5 @@
 const { MongoClient, ObjectId } = require('mongodb');
-const { mongoUrl, mongoDbName } = require('./config');
+const { mongoUrl, mongoDbName } = require('../config');
 
 // MongoDB接続オプションを追加
 const mongoOptions = {

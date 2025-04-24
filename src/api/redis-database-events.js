@@ -3,7 +3,7 @@
  * SQLiteからRedisへの移行の一部として実装
  */
 const redis = require('redis');
-const { client, initRedisClient } = require('../redisClient');
+const { client, initRedisClient } = require('../database/redisClient');
 
 // イベントリスナー
 const eventListeners = [];

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { client } = require('../redisClient'); // Redisクライアント
+const { client } = require('../database/redisClient'); // Redisクライアント
 const { config } = require('../config');
 
 /**
