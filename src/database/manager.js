@@ -1,10 +1,10 @@
-const { 
-  getTradeSummary, updateTradeSummary, 
-  getStrategyParametersRedis
-} = require('./redisDatabase');
 
 const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId } = require('./mongoDatabase');
-const { getStrategyParametersRedis, saveStrategyParametersRedis, getCurrentOrderPairRedis, setCurrentOrderPairRedis } = require('./redisDatabase');
+const { 
+  getTradeSummary, updateTradeSummary, 
+  getStrategyParametersRedis, saveStrategyParametersRedis,
+  getCurrentOrderPairRedis, setCurrentOrderPairRedis
+} = require('./redisDatabase');
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
   return await getCurrentOrderPairRedis(exchange.id, symbol, strategyKey);
