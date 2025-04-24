@@ -3,7 +3,8 @@ const { config, bitflyerMinTradeAmounts } = require('./config');
 const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { getMarketParameters } = require('./utils');
-const { getStrategyParameters, saveStrategyParameters } = require('./redisDatabase'); // getStrategyParametersをインポート
+// const { getStrategyParameters, saveStrategyParameters } = require('./redisDatabase'); // getStrategyParametersをインポート
+const { getStrategyParameters, saveStrategyParameters } = require('./database/manager');
 
 /**
  * 指定された戦略を実行する関数
@@ -137,11 +138,6 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
         return defaultConfig;
       }
     })();
-    
-    // updateTradeRecordに戦略キーを渡すラッパー関数
-    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side, orderId, orderType) => {
-      updateTradeRecord(exchangeId, symbol, amount, price, side, 'INTER_EXCHANGE_ARBITRAGE', orderId, orderType);
-    };
     
     const params = [
       exchanges,

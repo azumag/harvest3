@@ -116,7 +116,6 @@ async function executeStrategy(strategyKey, params) {
     throw new Error(`指定された戦略が見つかりません: ${strategyKey}`);
   }
 
-  
   if (strategyKey === 'HFT') {
     // HFT の場合は並列
     return strategy.function(...params);
