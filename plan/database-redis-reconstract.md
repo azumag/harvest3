@@ -191,14 +191,14 @@ db.orders.createIndex({ timestamp: -1 }) // 降順
   "exchange": "bitbank",
   "symbol": "XRP/JPY",
   "strategy": "HFT",
-  "signalType": "buy",
+  "side": "buy",
   "price": 342342.44,
-  "signalDetail": {
+  "detail": {
     ...
   }
 }
 ```
-signalDetail には各戦略で使われている指標のセットが入る。たとえば `MEAN_REVERSION` の場合
+detail には各戦略で使われている指標のセットが入る。たとえば `MEAN_REVERSION` の場合
 ```json
 {
   "rsi": 87.40004569339726,

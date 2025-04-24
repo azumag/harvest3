@@ -52,30 +52,63 @@ async function closeDB() {
 
 /**
  * コレクションにインデックスを作成する
+ * 既に存在するインデックスは再作成しない
  */
 async function createIndexes() {
   try {
-    // ordersコレクションのインデックス
-    await module.exports.ordersCollection.createIndex({ orderId: 1 }, { unique: true });
-    await module.exports.ordersCollection.createIndex({ orderedAt: 1 });
-    await module.exports.ordersCollection.createIndex({ orderedAt: -1 });
-
-    // tradesコレクションのインデックス
-    await module.exports.tradesCollection.createIndex({ orderId: 1 });
-    await module.exports.tradesCollection.createIndex({ tradeId: 1 }, { unique: true });
-    await module.exports.tradesCollection.createIndex({ filledAt: 1 });
-    await module.exports.tradesCollection.createIndex({ filledAt: -1 });
-
-    // signalsコレクションのインデックス
-    await module.exports.signalsCollection.createIndex({ timestamp: 1 });
-    await module.exports.signalsCollection.createIndex({ timestamp: -1 });
-
-    console.log('MongoDBインデックスを作成しました');
+    // 各コレクションのインデックス作成処理
+    await createCollectionIndexesIfNotExist('orders', [
+      { key: { orderId: 1 }, options: { unique: true } },
+      { key: { orderedAt: 1 }, options: {} },
+      { key: { orderedAt: -1 }, options: {} }
+    ]);
+    
+    await createCollectionIndexesIfNotExist('trades', [
+      { key: { orderId: 1 }, options: {} },
+      { key: { tradeId: 1 }, options: { unique: true } },
+      { key: { filledAt: 1 }, options: {} },
+      { key: { filledAt: -1 }, options: {} }
+    ]);
+    
+    await createCollectionIndexesIfNotExist('signals', [
+      { key: { timestamp: 1 }, options: {} },
+      { key: { timestamp: -1 }, options: {} }
+    ]);
+    
+    console.log('MongoDBインデックスの確認/作成が完了しました');
   } catch (error) {
     console.error('MongoDBインデックス作成エラー:', error);
-    // インデックス作成失敗をより明示的に通知するか、
-    // 重要なインデックスが作成できない場合はエラーを投げることを検討
-    // throw new Error(`重要なインデックスの作成に失敗しました: ${error.message}`);
+  }
+}
+
+/**
+ * 指定されたコレクションに、必要なインデックスが存在しない場合のみ作成する
+ * @param {string} collectionName - コレクション名
+ * @param {Array} indexSpecs - インデックス定義の配列
+ */
+async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
+  const collection = db.collection(collectionName);
+  
+  // 既存のインデックスを取得
+  const existingIndexes = await collection.listIndexes().toArray();
+  const existingIndexMap = new Map();
+  
+  // 既存インデックス情報をマップに格納
+  existingIndexes.forEach(index => {
+    // インデックス名をキーとする
+    existingIndexMap.set(JSON.stringify(index.key), index);
+  });
+  
+  // 必要なインデックスを確認し、存在しない場合のみ作成
+  for (const spec of indexSpecs) {
+    const indexKey = JSON.stringify(spec.key);
+    
+    if (!existingIndexMap.has(indexKey)) {
+      console.log(`コレクション ${collectionName} にインデックスを作成: ${indexKey}`);
+      await collection.createIndex(spec.key, spec.options);
+    } else {
+      console.log(`コレクション ${collectionName} のインデックスが既に存在: ${indexKey}`);
+    }
   }
 }
 
@@ -123,7 +156,7 @@ async function addTrade(tradeData) {
   await connectDB();
   try {
     const result = await module.exports.tradesCollection.insertOne(tradeData);
-    // console.log('Trade added:', result.insertedId);
+    console.log('Trade added:', result.insertedId);
     return result;
   } catch (error) {
     console.error('Error adding trade:', error);
