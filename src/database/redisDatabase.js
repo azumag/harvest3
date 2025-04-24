@@ -108,18 +108,6 @@ async function getTradeSummary(filters = {}) {
   return {};
 }
 
-// モジュールのエクスポートに新しい関数を追加
-module.exports = {
-  initialize,
-  setCurrentOrderPairRedis,
-  getCurrentOrderPairRedis,
-  getTradeSummary,
-  updateTradeSummary,
-  saveStrategyParametersRedis,
-  getStrategyParametersRedis,
-};
-
-
 /**
  * 戦略パラメータを保存する関数
  * @param {String} exchangeId - 取引所ID
@@ -131,6 +119,7 @@ module.exports = {
 async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
+    
     // パラメータオブジェクトの各値を文字列に変換
     const stringifiedParams = {};
     for (const [paramKey, value] of Object.entries(params)) {
@@ -179,3 +168,14 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
     return null;
   }
 }
+
+// モジュールのエクスポートに新しい関数を追加
+module.exports = {
+  initialize,
+  setCurrentOrderPairRedis,
+  getCurrentOrderPairRedis,
+  getTradeSummary,
+  updateTradeSummary,
+  saveStrategyParametersRedis,
+  getStrategyParametersRedis,
+};

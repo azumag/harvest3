@@ -2,7 +2,7 @@
 const { exchangeBB, exchangeBF, bitflyerMinTradeAmounts } = require('./config');
 const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
-const { postReport, postStrategyProfitReport } = require('./reports');
+// const { postReport, postStrategyProfitReport } = require('./reports');
 const { runStrategy, runArbitrageStrategy, runStrategies } = require('./strategyRunner');
 // const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
 const { sleep } = require('./utils');

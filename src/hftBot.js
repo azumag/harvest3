@@ -6,10 +6,13 @@ const { postReport, postStrategyProfitReport } = require('./reports');
 const { runStrategy } = require('./strategyRunner');
 const { getMarketParameters, sleep } = require('./utils');
 
+const { initializeDB } = require('./database/dbConfig');
+
 /**
  * 高頻度取引（HFT）ボットを起動する関数
  */
 async function startHFTBot() {
+  initializeDB();
   try {
     // const exchanges = [exchangeBB, exchangeBF];
     const exchanges = [exchangeBB];

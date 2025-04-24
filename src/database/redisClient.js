@@ -12,25 +12,30 @@ const client = redis.createClient({
   url: REDIS_URL
 });
 
-// 接続イベントハンドラー
-client.on('connect', () => {
-  console.log('Redisサーバーに接続しました');
-});
-
-// エラーイベントハンドラー
+// イベントリスナーを追加
 client.on('error', (err) => {
-  console.error('Redis接続エラー:', err);
+  console.error('Redisエラー:', err);
 });
 
-// 再接続イベントハンドラー
-client.on('reconnecting', () => {
-  console.log('Redisサーバーに再接続しています...');
+client.on('connect', () => {
+  console.log('Redisに接続しました');
 });
 
-// 接続終了イベントハンドラー
 client.on('end', () => {
-  console.log('Redisサーバーとの接続が終了しました');
+  console.log('Redis接続が閉じられました');
 });
+
+// 自動再接続を試みる関数
+async function reconnect() {
+  try {
+    if (client.isOpen === false) {
+      console.log('Redisへ再接続を試みています...');
+      await client.connect();
+    }
+  } catch (err) {
+    console.error('Redis再接続に失敗しました:', err);
+  }
+}
 
 /**
  * Redisクライアントを初期化する関数

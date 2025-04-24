@@ -332,5 +332,6 @@ module.exports = {
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
-  setupGracefulShutdown
+  setupGracefulShutdown,
+  connectDB
 };
