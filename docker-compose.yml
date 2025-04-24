@@ -2,12 +2,22 @@ services:
   redis:
     image: redis:7-alpine
     container_name: harvest3-redis
-    # AOFを無効化し、RDBスナップショットを有効化 (例: 900秒で1変更, 300秒で10変更, 60秒で10000変更)
     command: redis-server --save 900 1 --save 300 10 --save 60 10000
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: always
+    networks:
+      - harvest-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: harvest3-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
     restart: always
     networks:
       - harvest-network
@@ -33,6 +43,7 @@ services:
       - harvest-network
     depends_on:
       - redis
+      - mongodb
 
   hft:
     image: harvest3-bot-image
@@ -54,6 +65,7 @@ services:
       - harvest-network
     depends_on:
       - redis
+      - mongodb
 
   mm:
     image: harvest3-bot-image
@@ -75,6 +87,7 @@ services:
       - harvest-network
     depends_on:
       - redis
+      - mongodb
 
   web-ui:
     container_name: trade_viewer
@@ -91,8 +104,8 @@ services:
       - ./package-lock.json:/usr/src/app/package-lock.json # package-lockも追加
       - .env:/usr/src/app/.env
     depends_on:
-      - bot # botサービスが起動してからUIを起動
       - redis
+      - mongodb
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -100,108 +113,13 @@ services:
       - REDIS_URL=redis://redis:6379
     networks:
       - harvest-network
-    command: npm run start-web # package.jsonで定義したスクリプトを使用
-
-  update-summary:
-    image: harvest3-bot-image
-    container_name: update_filled_summary
-    restart: "no"  # オンデマンド実行
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run update-summary
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-
-  fix-net-positions:
-    image: harvest3-bot-image
-    container_name: fix_net_positions
-    restart: "no"  # オンデマンド実行
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run fix-net-positions
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-
-  fix-duplicate-history:
-    image: harvest3-bot-image
-    container_name: fix_duplicate_history
-    restart: "no"  # オンデマンド実行
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run fix-duplicate-history
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-
-  mm-clean:
-    image: harvest3-bot-image
-    container_name: mm_clean
-    restart: "no"  # オンデマンド実行
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run mm-clean
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-
-  # test:
-  #   image: harvest3-bot-image
-  #   container_name: order_status_test
-  #   volumes:
-  #     - ./src:/usr/src/app/src
-  #     - ./strategies:/usr/src/app/strategies
-  #     - ./scripts:/usr/src/app/scripts
-  #     - ./test:/usr/src/app/test
-  #     - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-  #     - ./bot.js:/usr/src/app/bot.js
-  #     - ./package.json:/usr/src/app/package.json
-  #   command: node test/checkOrderStatus.js
+    command: npm run start-web
 
 # ボリュームとネットワークの定義を追加
 volumes:
   redis_data:
+    driver: local
+  mongodb_data:
     driver: local
 
 networks:

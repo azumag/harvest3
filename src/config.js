@@ -9,6 +9,9 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
+const mongoUrl = process.env.MONGO_URL;
+const mongoDbName = process.env.MONGO_DB_NAME;
+
 const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
 const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Discord Webhook URL
@@ -43,6 +46,10 @@ const bitflyerMinTradeAmounts = {
 
 // 設定パラメータ
 const config = {
+  // MongoDB設定
+  mongoUrl: mongoUrl,
+  mongoDbName: mongoDbName,
+
   // 共通設定
   amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
   profitMargin: 0.003,  // 目標利益率（取引料を考慮）
@@ -141,6 +148,8 @@ const config = {
 
 module.exports = {
   BBApiKey,
+  mongoUrl,
+  mongoDbName,
   BBApiSecret,
   BFApiKey,
   BFApiSecret,
