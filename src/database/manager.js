@@ -95,7 +95,7 @@ async function updateFilledTrades(exchange, symbol) {
         value: trade.cost || trade.amount * trade.price,
         orderId: trade.order,
         orderType: trade.type || 'market',
-        fee: trade.fee ? trade.fee.cost : undefined,
+        fee: trade.fee ? trade.fee.cost : 0,
         tradeId: trade.id,
         timestamp: now,
       }

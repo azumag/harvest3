@@ -73,11 +73,13 @@ async function updateTradeSummary(trade) {
     await client.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
     await client.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+    await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
   } else if (trade.side === 'sell') {
     // 売り注文の場合
     await client.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalSellValue', trade.value);
     await client.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+    await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
     
     // 実現損益を計算（売りの場合のみ更新）
     // 単純化のため、売った分の平均購入コストを計算
