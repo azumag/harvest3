@@ -96,6 +96,34 @@ async function updateTradeSummary(trade) {
   
 }
 
+async function getTradeSummaries(exchangeId) {
+  const keys = await client.keys(`summary:trade:${exchangeId}:*`);
+  const summaries = [];
+
+  for (const key of keys) {
+    const summary = await client.hGetAll(key);
+    if (Object.keys(summary).length > 0) {
+      summaries.push({
+        exchangeId,
+        symbol: key.split(':')[3],
+        strategyKey: key.split(':')[4],
+        buyAmount: parseFloat(summary.buyAmount || 0),
+        sellAmount: parseFloat(summary.sellAmount || 0),
+        totalBuyCost: parseFloat(summary.totalBuyCost || 0),
+        totalSellValue: parseFloat(summary.totalSellValue || 0),
+        netPosition: parseFloat(summary.netPosition || 0),
+        totalFee: parseFloat(summary.totalFee || 0),
+        realizedPnL: parseFloat(summary.realizedPnL || 0),
+        createdAt: parseInt(summary.createdAt || 0),
+        updatedAt: parseInt(summary.updatedAt || 0)
+      });
+    }
+  }
+
+  return summaries;
+
+}
+
 /**
  * 約定サマリーを取得する関数
  * @param {Object} filters - フィルター条件（exchangeId, symbol, strategyKey）
@@ -200,4 +228,5 @@ module.exports = {
   getStrategyParametersRedis,
   getTradeSummaryTimestamp,
   updateTradeSummaryTimestamp,
+  getTradeSummaries,
 };

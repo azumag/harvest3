@@ -4,7 +4,8 @@ const {
   getStrategyParametersRedis, saveStrategyParametersRedis,
   getCurrentOrderPairRedis, setCurrentOrderPairRedis,
   getTradeSummaryTimestamp,
-  updateTradeSummaryTimestamp
+  updateTradeSummaryTimestamp,
+  getTradeSummaries,
 } = require('./redisDatabase');
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
@@ -102,7 +103,9 @@ async function updateFilledTrades(exchange, symbol) {
 
       try {
         await addTradeMongoDB(_trade);
+        console.log('_trade object:', _trade); // 追加
         await updateTradeSummary(_trade);
+        console.log('updateTradeSummary executed'); // 追加
         await updateTradeSummaryTimestamp(exchange.id, symbol, now);
       } catch (error) {
         console.error(`約定履歴の更新エラー (${exchange.id} ${symbol}):`, error);
@@ -230,5 +233,6 @@ module.exports = {
   saveStrategyParameters,
   getCurrentOrderPair,
   setCurrentOrderPair,
-  getOrderStrategyKeyByOrderId
+  getOrderStrategyKeyByOrderId,
+  getTradeSummaries,
 };

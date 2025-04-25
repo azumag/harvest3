@@ -159,37 +159,6 @@
     docker compose down
     ```
 
-## ユーティリティスクリプト
-
-プロジェクトには、データ管理やメンテナンスに役立つ以下のユーティリティスクリプトが含まれています。
-
--   **ポジション解消コマンド (`src/closeAllPositions.js`):** ボットが作成したすべてのポジションを成行で売却し、ポジションを解消します。
-    -   すべての取引所: `npm run close-all`
-    -   BitBankのみ: `npm run close-bb`
-    -   BitFlyerのみ: `npm run close-bf`
-    -   Dockerで実行する場合: `docker compose exec bot node src/closeAllPositions.js [--bitbank | --bitflyer]`
-    -   **注意:** このコマンドは一度実行すると、対象取引所のJPY以外の全資産が成行で売却されます。実行前に必ず確認してください。
-
--   **約定サマリー更新スクリプト (`scripts/updateFilledSummary.js`):** Redisに保存されている約定履歴を基に、取引所、通貨ペア、戦略ごとの約定サマリーを再計算し、最新化します。
-    ```bash
-    npm run update-summary
-    ```
-
--   **netPosition修正スクリプト (`scripts/fixNetPositions.js`):** Redisに保存されているfilledSummaryのnetPositionが0以下になっている場合に、その値を0に修正します。
-    ```bash
-    npm run fix-net-positions
-    ```
-
--   **重複約定履歴修正スクリプト (`scripts/fixDuplicateFilledHistory.js`):** Redisに保存されている約定履歴から重複エントリを削除し、必要に応じてtradeIdやハッシュ値を修正・追加します。
-    ```bash
-    npm run fix-duplicate-history
-    ```
-
--   **マーケットメイキングクリーンアップスクリプト (`scripts/mmClean.js`):** マーケットメイキング戦略に関連する注文ペアをRedisから取得し、取引所に対して注文キャンセルを試み、必要に応じて成行でポジションを解消し、最後にRedisの注文ペア情報をクリーンアップします。
-    ```bash
-    npm run mm-clean
-    ```
-
 ## レポート機能
 
 Discord Webhookが設定されている場合、以下のレポートが送信されます。

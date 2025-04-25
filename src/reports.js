@@ -1,168 +1,148 @@
 const { postResultToDiscord, postErrorToDiscord } = require('./notifications');
-const { tradeRecords } = require('./redisTradeRecords');
-const strategies = require('../strategies');
+const { exchangeBB, exchangeBF } = require('./config');
+const { getTradeSummaries } = require('./database/manager');
+const { initializeDB } = require('./database/dbConfig');
+const { report } = require('./api/redis-routes');
 
-/**
- * 総JPY評価額を計算する関数（トレード履歴のみから計算）
- * @param {Object} exchange - 取引所オブジェクト
- * @returns {Number} - 総JPY評価額
- */
-async function calculateTotalJPYValue(exchange) {
-  // トレード履歴から損益を計算する
-  const exchangeId = exchange.id;
-  let totalJPYValue = 0;
-  
-  // JPY残高を取得
-  try {
-    const balance = await exchange.fetchBalance();
-    totalJPYValue = balance.total['JPY'] || 0;
-  } catch (error) {
-    console.error('JPY残高の取得に失敗しました:', error);
-    await postErrorToDiscord(`JPY残高の取得に失敗しました: ${error.message}`);
+// レポートを投稿するためのタイマー設定
+setInterval(() => {
+  const now = new Date();
+  if (now.getMinutes() === 0) { // 時間ごと
+    main();
   }
-  
-  // トレード記録から損益を計算
-  if (tradeRecords[exchangeId]) {
-    for (const symbol in tradeRecords[exchangeId]) {
-      for (const strategyKey in tradeRecords[exchangeId][symbol]) {
-        const record = tradeRecords[exchangeId][symbol][strategyKey];
-        // 実現損益のみを計算（評価額は計算しない）
-        const profit = record.totalSellValue - record.totalBuyCost;
-        totalJPYValue += profit;
-      }
-    }
-  }
-  
-  return totalJPYValue; // トレード履歴から計算した総JPY評価額を返す
+}, 60000);
+
+async function main() {
+  // 初期レポートを投稿
+  await postReport(exchangeBB);
+  await postReport(exchangeBF);
 }
 
-/**
- * 総資産レポートを投稿する関数
- * @param {Object} exchange - 取引所オブジェクト
- */
+main();
+
 async function postReport(exchange) {
-  const totalJPYValue = await calculateTotalJPYValue(exchange);
-  postResultToDiscord(`=== TOTAL: ${exchange.id} ${totalJPYValue} ===`);
-}
+  await initializeDB();
 
-/**
- * 戦略と銘柄ごとの損益レポートを計算する関数
- * @param {Object} exchange - 取引所オブジェクト
- * @returns {String} - レポート文字列
- */
-async function calculateStrategyProfitReport(exchange) {
-  const exchangeId = exchange.id;
-  if (!tradeRecords[exchangeId]) {
-    return `${exchangeId}の取引記録がありません。`;
-  }
-  
-  let report = `=== ${exchangeId} 戦略・銘柄別損益レポート ===\n`;
-  
-  // 戦略タイプごとの集計 - 初期化を確認
-  const strategyTypeTotals = {};
-  for (const type in strategies.STRATEGY_TYPES) {
-    const typeValue = strategies.STRATEGY_TYPES[type];
-    strategyTypeTotals[typeValue] = 0;
-    console.log(`戦略タイプ初期化: ${type} => ${typeValue}`);
-  }
-  
-  // 各銘柄ごとに処理
-  for (const symbol in tradeRecords[exchangeId]) {
-    report += `\n【${symbol}】\n`;
-    let symbolTotal = 0;
-    
-    // 各戦略ごとに処理
-    for (const strategyKey in tradeRecords[exchangeId][symbol]) {
-      const record = tradeRecords[exchangeId][symbol][strategyKey];
-      
-      // デバッグ情報を追加
-      console.log(`デバッグ: ${symbol} ${strategyKey}`, {
-        totalBuyCost: record.totalBuyCost,
-        totalSellValue: record.totalSellValue,
-        profit: record.totalSellValue - record.totalBuyCost
+  // 全体資産計算レポート
+  const totalAssetReport = await calculateTotalAssets(exchange).then(report => {
+    let reportMessage = `# 全体資産計算レポート (${report.exchange})\n`;
+    reportMessage += `**合計資産 (JPY):** ${report.totalAssetsJPY.toLocaleString()} JPY\n\n`;
+    reportMessage += `**資産詳細:**\n`;
+
+    if (report.assets && report.assets.length > 0) {
+      report.assets.forEach(asset => {
+        reportMessage += `- ${asset.currency}: ${asset.amount.toFixed(8)} (${asset.valueJPY.toLocaleString()} JPY)\n`;
       });
-      
-      // 損益計算
-      const totalBuy = record.totalBuyCost;
-      const totalSell = record.totalSellValue;
-      const profit = totalSell - totalBuy;
-      
-      // 実現損益のみを総損益とする
-      const totalProfit = profit;
-      
-      // 戦略名と戦略タイプを取得 - ここでのデバッグを強化
-      let strategyName = strategyKey;
-      let strategyType = 'unknown';
-      
-      if (strategies.STRATEGIES && strategies.STRATEGIES[strategyKey]) {
-        strategyName = strategies.STRATEGIES[strategyKey].name || strategyKey;
-        strategyType = strategies.STRATEGIES[strategyKey].type || 'unknown';
-        console.log(`戦略情報: ${strategyKey} => 名前:${strategyName}, タイプ:${strategyType}`);
-      } else {
-        console.log(`警告: 戦略情報が見つかりません: ${strategyKey}`);
+    } else {
+      reportMessage += "資産情報はありません。\n";
+    }
+
+    return reportMessage;
+  })
+  await postResultToDiscord(totalAssetReport);
+
+  const tradeSummaryReport = await getTradeSummaries(exchange.id).then(summaries => {
+    let reportMessage = `# ${exchange.name || '不明な取引所'} トレードサマリー\n\n`;
+
+    if (!summaries || summaries.length === 0) {
+      reportMessage += "トレードサマリーはありません。\n";
+    } else {
+      // 戦略ごとにグループ化
+      const summariesByStrategy = summaries.reduce((acc, summary) => {
+        const strategy = summary.strategyKey || '不明な戦略';
+        if (!acc[strategy]) {
+          acc[strategy] = [];
+        }
+        acc[strategy].push(summary);
+        return acc;
+      }, {});
+
+      for (const strategy in summariesByStrategy) {
+        // 戦略ごとの合計を計算
+        const strategyTotalPnL = summariesByStrategy[strategy].reduce((sum, s) => sum + s.realizedPnL, 0);
+        const strategyTotalFee = summariesByStrategy[strategy].reduce((sum, s) => sum + s.totalFee, 0);
+        const strategyNetResult = strategyTotalPnL - strategyTotalFee;
+
+        reportMessage += `## ${strategy} (計: ${strategyTotalPnL.toLocaleString()} JPY, Fee: ${strategyTotalFee.toLocaleString()} JPY, = ${strategyNetResult.toLocaleString()} JPY)\n`;
+        summariesByStrategy[strategy].forEach(summary => {
+          reportMessage += `**${summary.symbol}**\n`;
+          reportMessage += `- Position: ${summary.netPosition.toFixed(8)}\n`;
+          reportMessage += `- PnL: ${summary.realizedPnL.toLocaleString()} JPY\n`;
+          reportMessage += `- Fee: ${summary.totalFee.toLocaleString()} JPY\n`;
+        });
+        reportMessage += '\n';
       }
+    }
+
+    return reportMessage;
+
+  });
+
+  await postResultToDiscord(tradeSummaryReport);
+}
+
+async function calculateTotalAssets(exchange) {
+  try {
+    // 残高情報を取得
+    const balanceResult = await exchange.fetchBalance();
+    const balance = balanceResult.total;
+
+    // 合計資産を計算
+    let totalAssets = 0;
+    let assetDetails = [];
+    
+    // 残高オブジェクトの各通貨について処理
+    for (const currency in balance) {
+      const amount = balance[currency];
       
-      // 戦略タイプの合計に加算 - ここでのチェックを強化
-      if (strategyType && strategyTypeTotals[strategyType] !== undefined) {
-        strategyTypeTotals[strategyType] += totalProfit;
-        console.log(`戦略タイプ集計: ${strategyType} += ${totalProfit}`);
-      } else {
-        console.log(`警告: 戦略タイプが不明または未定義: ${strategyType}`);
+      // 量が0より大きい場合のみ計算に含める
+      if (amount > 0) {
+        let value;
+        
+        // 基準通貨（JPY）の場合はそのまま加算
+        if (currency === 'JPY') {
+          value = amount;
+        } else {
+          // それ以外の通貨はJPYに換算して加算
+          const symbol = `${currency}/JPY`;
+          try {
+            console.log('Fetching ticker for symbol:', symbol);
+            const ticker = await exchange.fetchTicker(symbol);
+            console.log('Ticker response:', ticker);
+            const price = ticker.last; // または ticker.close など、適切な価格フィールドを選択
+            value = amount * price;
+          } catch (e) {
+            console.error(`${symbol}の価格取得に失敗しました:`, e);
+            continue;
+          }
+        }
+        
+        // 合計に加算
+        totalAssets += value;
+        
+        // 詳細情報を追加
+        assetDetails.push({
+          currency,
+          amount,
+          valueJPY: Math.round(value),
+        });
       }
-      
-      // レポートに追加
-      report += `  ${strategyName}: ${totalProfit.toFixed(2)} JPY`;
-      if (record.netPosition > 0) {
-        report += ` (保有: ${record.netPosition} ${symbol.split('/')[0]})`;
-      }
-      report += '\n';
-      
-      symbolTotal += totalProfit;
     }
     
-    report += `  銘柄合計: ${symbolTotal.toFixed(2)} JPY\n`;
+    // 結果を返す
+    return {
+      timestamp: new Date().toISOString(),
+      exchange: exchange.name || '不明な取引所',
+      totalAssetsJPY: Math.round(totalAssets),
+      assets: assetDetails,
+    };
+  } catch (error) {
+    console.error('資産計算中にエラーが発生しました:', error);
+    await postErrorToDiscord(`資産計算中にエラーが発生しました: ${error.message}`);
+    return {
+      timestamp: new Date().toISOString(),
+      exchange: exchange.name || '不明な取引所',
+      error: error.message,
+    };
   }
-  
-  // 戦略タイプごとの合計をデバッグ表示
-  console.log('戦略タイプごとの集計結果:', strategyTypeTotals);
-  
-  // 戦略タイプごとの合計を追加
-  report += '\n【戦略タイプ別合計】\n';
-  for (const type in strategyTypeTotals) {
-    // 戦略タイプの日本語名を取得
-    let typeName = type;
-    switch (type) {
-      case strategies.STRATEGY_TYPES.TREND_FOLLOWING:
-        typeName = 'トレンドフォロー';
-        break;
-      case strategies.STRATEGY_TYPES.MEAN_REVERSION:
-        typeName = '逆張り';
-        break;
-      case strategies.STRATEGY_TYPES.ARBITRAGE:
-        typeName = 'アービトラージ';
-        break;
-      case strategies.STRATEGY_TYPES.HIGH_FREQUENCY:
-        typeName = '高頻度取引';
-        break;
-    }
-    report += `  ${typeName}: ${strategyTypeTotals[type].toFixed(2)} JPY\n`;
-  }
-  
-  return report;
 }
-
-/**
- * 戦略と銘柄ごとの損益レポートを投稿する関数
- * @param {Object} exchange - 取引所オブジェクト
- */
-async function postStrategyProfitReport(exchange) {
-  const report = await calculateStrategyProfitReport(exchange);
-  await postResultToDiscord(report);
-}
-
-module.exports = {
-  calculateTotalJPYValue,
-  postReport,
-  calculateStrategyProfitReport,
-  postStrategyProfitReport
-};

@@ -1,4 +1,24 @@
 services:
+
+  reporter:
+    image: harvest3-bot-image
+    container_name: harvest3-reporter
+    restart: always
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./scripts:/usr/src/app/scripts
+      - ./test:/usr/src/app/test
+      - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
+    command: npm run reporter
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
+      - mongodb
+
   redis:
     image: redis:7-alpine
     container_name: harvest3-redis
