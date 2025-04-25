@@ -109,6 +109,7 @@ async function main() {
   } catch (error) {
     console.error('処理エラー:', error);
   } finally {
+    process.exit(0);
   }
 }
 

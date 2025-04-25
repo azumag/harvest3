@@ -8,6 +8,9 @@ const {
   getTradeSummaries,
 } = require('./redisDatabase');
 
+// このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
+// また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
+
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
   return await getCurrentOrderPairRedis(exchange.id, symbol, strategyKey);
 }
@@ -15,6 +18,23 @@ async function getCurrentOrderPair(exchange, symbol, strategyKey) {
 async function setCurrentOrderPair(exchange, symbol, strategyKey, orderPair) {
   return await setCurrentOrderPairRedis(exchange.id, symbol, strategyKey, orderPair);
 }
+
+async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
+  // 未約定の注文を取得
+  const openOrders = await exchange.fetchOpenOrders(symbol);
+
+  // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
+  const buyOrderAmounts = await Promise.all(
+    openOrders.map(async (order) => {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      // buy only
+      return (strategyKey === _strategyKey && order.side === 'buy') ? order.amount : 0;
+    })
+  );
+  const totalAmount = buyOrderAmounts.reduce((sum, amount) => sum + amount, 0);
+
+  return totalAmount;
+};
 
 async function getRealizedPnL(exchange, symbol, strategyKey) {
   // 約定を更新
@@ -235,4 +255,6 @@ module.exports = {
   setCurrentOrderPair,
   getOrderStrategyKeyByOrderId,
   getTradeSummaries,
+  getTradeCurrentPosition,
+  getCurrentOrderPosition
 };
