@@ -12,7 +12,7 @@ async function getTradeSummary(req, res) {
     // サマリー情報を取得
     const summaryData = await getAllTradeSummaries();
 
-    console.log({summaryData})
+    // console.log({summaryData})
     
     // 結果をJSON形式で返す
     res.json(summaryData);
