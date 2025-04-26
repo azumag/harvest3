@@ -194,7 +194,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
                       
                       // 取引記録を更新（実際の約定価格を使用）
                       // updateTradeRecord(exchange.id, symbol, formattedAmount, midPrice, 'sell', order.id, 'limit');
-                      addOrder(exchange.id, symbol, strategyKey, 'sell', formattedAmount, midPrice, order.id, 'limit');
+                      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, midPrice, order.id, 'limit');
 
                       postOrderToDiscord(`[HFT] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
                       
@@ -425,19 +425,15 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
       // JPY残高が設定以下の場合、購入注文をスキップ
       if (availableFunds <= safetyJPYAmount && sellAmount <= 0) {
         console.log(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
-        if (postOrderToDiscord) {
-          await postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
-        }
+        postOrderToDiscord(`JPY残高不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 残高: ${availableFunds}`);
       } else if (availableFunds >= buyPrice * buyAmount) {
         // await orderCheckCancel(exchange, symbol, cancelOrderThreshold, postOrderToDiscord);
         console.log(`購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
-        if (postOrderToDiscord) {
-          await postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
-        }
+        postOrderToDiscord(`* 注文: ${exchange.name}: 購入価格: ${buyPrice}, 売却価格: ${sellPrice} (${symbol}), 取引量: ${buyAmount}`);
         const buyOrder = await exchange.createLimitBuyOrder(symbol, buyAmount, buyPrice);
         
         // 取引記録を更新
-        addOrder(exchange.id, symbol, buyOrder.id, 'buy', buyPrice, buyAmount, 'Scalping');
+        addOrder(exchange, symbol, buyOrder.id, 'buy', buyPrice, buyAmount, 'Scalping');
       } else {
         console.log(`資金不足のため、購入注文をスキップします: ${symbol}: ${exchange.name}, 資金: ${availableFunds}, 購入価格: ${buyPrice}, 取引量: ${buyAmount}`);
         if (postOrderToDiscord) {
@@ -454,7 +450,7 @@ async function scalpingStrategy(exchange, symbol, spreadHistory, options = {}) {
         const sellOrder = await exchange.createLimitSellOrder(symbol, sellAmount, sellPrice);
         
         // 取引記録を更新
-        addOrder(exchange.id, symbol, sellOrder.id, 'sell', sellPrice, sellAmount, 'Scalping');
+        addOrder(exchange, symbol, sellOrder.id, 'sell', sellPrice, sellAmount, 'Scalping');
       } else {
         console.log(`資産不足のため、売却注文をスキップします: ${symbol}: ${exchange.name}, 資産: ${availableQuoteCurrency}, 売却量: ${sellAmount}`);
         if (postOrderToDiscord) {
@@ -574,7 +570,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, formattedAmount, m
 
     console.log(`HFT買い注文実行: ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);
 
-    addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, midPrice, order.id, 'limit');
+    addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, midPrice, order.id, 'limit');
 
     if (options.postOrderToDiscord) {
       options.postOrderToDiscord(`[HFT] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${midPrice}, 数量: ${formattedAmount}, 変動: ${priceChange.toFixed(2)}%`);

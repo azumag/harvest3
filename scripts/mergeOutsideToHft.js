@@ -38,11 +38,22 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
     totalSellValue: parseFloat(hftSummary.totalSellValue || 0) + parseFloat(outsideSummary.totalSellValue || 0),
     netPosition: parseFloat(hftSummary.netPosition || 0) + parseFloat(outsideSummary.netPosition || 0),
     totalFee: parseFloat(hftSummary.totalFee || 0) + parseFloat(outsideSummary.totalFee || 0),
-    realizedPnL: parseFloat(hftSummary.realizedPnL || 0) + parseFloat(outsideSummary.realizedPnL || 0),
     createdAt: hftSummary.createdAt, // HFTの作成日時を維持
     updatedAt: hftSummary.updatedAt // HFTの更新日時を維持
   };
-  
+
+  // realizedPnL を正確に計算して追加
+  if (mergedSummary.buyAmount > mergedSummary.sellAmount) {
+    // 購入量 > 売却量の場合、売った分だけの購入コストを計算
+    const avgBuyPrice = mergedSummary.totalBuyCost / mergedSummary.buyAmount;
+    const soldCost = mergedSummary.sellAmount * avgBuyPrice;
+    // 実現損益 = 売りの総額 - 売った分の購入コスト
+    mergedSummary.realizedPnL = mergedSummary.totalSellValue - soldCost;
+  } else {
+    // 購入分はすべて売却済みと考える
+    mergedSummary.realizedPnL = mergedSummary.totalSellValue - mergedSummary.totalBuyCost;
+  }
+
   // マージ結果をログ出力
   console.log(`  マージ内容:`);
   console.log(`  - buyAmount: ${hftSummary.buyAmount || 0} + ${outsideSummary.buyAmount || 0} = ${mergedSummary.buyAmount}`);
@@ -51,19 +62,24 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
 
   const hftKey = `summary:trade:${hftSummary.exchangeId}:${hftSummary.symbol}:HFT`;
   const outsideKey = `summary:trade:${outsideSummary.exchangeId}:${outsideSummary.symbol}:OUTSIDE`;
+
+
   
   // HFTサマリーを更新
-  await client.hSet(hftKey, {
-    buyAmount: mergedSummary.buyAmount,
-    sellAmount: mergedSummary.sellAmount,
-    totalBuyCost: mergedSummary.totalBuyCost,
-    totalSellValue: mergedSummary.totalSellValue,
-    netPosition: mergedSummary.netPosition,
-    totalFee: mergedSummary.totalFee,
-    realizedPnL: mergedSummary.realizedPnL,
+  // Redisに保存する前にfloat値を小数点以下8桁に丸める
+  const dataToSave = {
+    buyAmount: parseFloat(mergedSummary.buyAmount.toFixed(8)),
+    sellAmount: parseFloat(mergedSummary.sellAmount.toFixed(8)),
+    totalBuyCost: parseFloat(mergedSummary.totalBuyCost.toFixed(8)),
+    totalSellValue: parseFloat(mergedSummary.totalSellValue.toFixed(8)),
+    netPosition: parseFloat(mergedSummary.netPosition.toFixed(8)),
+    totalFee: parseFloat(mergedSummary.totalFee.toFixed(8)),
+    realizedPnL: parseFloat(mergedSummary.realizedPnL.toFixed(8)),
     createdAt: mergedSummary.createdAt,
     updatedAt: mergedSummary.updatedAt
-  });
+  };
+
+  await client.hSet(hftKey, dataToSave);
   
   // OUTSIDEサマリーを削除
   await client.del(outsideKey);

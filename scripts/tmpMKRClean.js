@@ -17,10 +17,12 @@ async function main() {
     // 各取引所の処理
     const exchange = exchangeBB;
     const symbol = 'MKR/JPY';
+    const amount = 0.01;
+    const price = 193612;
         
     try {
         const order = await exchange.createLimitSellOrder(symbol, 0.01, 193612, { postOnly: true });
-        updateTradeRecord(exchange.id, symbol, 0.01, 193612, 'sell', 'HFT', order.id, 'limit');
+        updateTradeRecord(exchange.id, symbol, amount, price, 'sell', 'HFT', order.id, 'limit');
     } catch (err) {
         console.error(`  修正エラー:`, err);
 

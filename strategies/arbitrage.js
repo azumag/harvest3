@@ -220,7 +220,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
               postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeAId} - ${symbol} - 価格: ${buyPriceA}, 数量: ${adjustedAmountA}`);
             }
             
-            addOrder(exchangeAId, symbol, strategyKey, 'buy', adjustedAmountA, buyPriceA, buyOrderA.id, 'limit');
+            addOrder(exchangeA, symbol, strategyKey, 'buy', adjustedAmountA, buyPriceA, buyOrderA.id, 'limit');
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
             if (postErrorToDiscord) {
@@ -263,7 +263,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             }
             
             // 取引記録を更新
-            addOrder(exchangeAId, symbol, strategyKey, 'sell', adjustedAmountA, sellPriceA, sellOrderA.id, 'limit');
+            addOrder(exchangeA, symbol, strategyKey, 'sell', adjustedAmountA, sellPriceA, sellOrderA.id, 'limit');
           } catch (error) {
             console.error(`売り注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
             if (postErrorToDiscord) {
@@ -310,7 +310,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
               postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeBId} - ${symbol} - 価格: ${buyPriceB}, 数量: ${adjustedAmountB}`);
             }
             
-            addOrder(exchangeBId, symbol, strategyKey, 'buy', adjustedAmountB, buyPriceB, buyOrderB.id, 'limit');
+            addOrder(exchangeB, symbol, strategyKey, 'buy', adjustedAmountB, buyPriceB, buyOrderB.id, 'limit');
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
             if (postErrorToDiscord) {
@@ -351,7 +351,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
               postOrderToDiscord(`[アービトラージ] 売り注文実行: ${exchangeBId} - ${symbol} - 価格: ${sellPriceB}, 数量: ${adjustedAmountB}`);
             }
             
-            addOrder(exchangeBId, symbol, strategyKey, 'sell', adjustedAmountB, sellPriceB, sellOrderB.id, 'limit');
+            addOrder(exchangeB, symbol, strategyKey, 'sell', adjustedAmountB, sellPriceB, sellOrderB.id, 'limit');
           } catch (error) {
             console.error(`売り注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
             if (postErrorToDiscord) {
