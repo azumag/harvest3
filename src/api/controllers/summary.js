@@ -1,7 +1,7 @@
 /**
  *取引の集計サマリーを取得するコントローラー
  */
-const { getTradeSummaries } = require('../../database/manager');
+const { getAllTradeSummaries } = require('../../database/manager');
 
 /**
  * 取引の集計サマリーを取得するコントローラー
@@ -9,11 +9,10 @@ const { getTradeSummaries } = require('../../database/manager');
  */
 async function getTradeSummary(req, res) {
   try {
-    // 期間パラメータを取得
-    const { exchangeId } = req.query;
-    
     // サマリー情報を取得
-    const summaryData = await getTradeSummaries(exchangeId);
+    const summaryData = await getAllTradeSummaries();
+
+    console.log({summaryData})
     
     // 結果をJSON形式で返す
     res.json(summaryData);

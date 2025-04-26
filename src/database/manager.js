@@ -8,6 +8,7 @@ const {
   getTradeSummaries,
   initialize,
   getTradeKeys,
+  getAllTradeSummaries
 } = require('./redisDatabase');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
@@ -268,4 +269,5 @@ module.exports = {
   getCurrentOrderPosition,
   initializeDB,
   getTradeKeys,
+  getAllTradeSummaries
 };
