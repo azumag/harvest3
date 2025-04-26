@@ -7,23 +7,7 @@ const router = express.Router();
 const { getTradeKeyList } = require('./controllers/exchanges');
 const { getTradeSummary } = require('./controllers/summary');
 
-// const { getHistory } = require('./controllers/redis-history');
-// const { getFilledHistory } = require('./controllers/redis-filled-history');
-// const { getPositions } = require('./controllers/redis-positions');
-// const { getOrderPairs } = require('./controllers/redis-order-pairs');
-// const { getCurrentOrderPairs } = require('./controllers/redis-current-order-pairs');
-// const { eventsHandler } = require('./controllers/redis-events');
-// const { getStrategySignals } = require('./controllers/redis-strategy-signals');
-// const { getOhlcv } = require('./controllers/redis-ohlcv');
-// const { getStrategiesList } = require('./controllers/redis-strategies');
-// const { getSymbolsList } = require('./controllers/redis-symbols');
-// const { addEventListner } = require('./database-events');
-// const { sendEventToAll } = require('./controllers/redis-events');
-
-// イベントリスナーを登録
-// addEventListner((event) => {
-//   sendEventToAll(event);
-// });
+// const { getOhlcv } = require('./controllers/ohlcv');
 
 // // 取引履歴API
 // router.get('/history', getHistory);

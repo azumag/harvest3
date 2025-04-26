@@ -1,4 +1,14 @@
-const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId, connectDB } = require('./mongoDatabase');
+// Import MongoDB related functions
+const { 
+  addTradeMongoDB, 
+  addSignalMongoDB, 
+  addOrderMongoDB, 
+  getOrderByOrderId, 
+  connectDB,
+  listOrders,
+  listTrades,
+  listSignals,
+} = require('./mongoDatabase');
 const { 
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
@@ -269,5 +279,8 @@ module.exports = {
   getCurrentOrderPosition,
   initializeDB,
   getTradeKeys,
-  getAllTradeSummaries
+  getAllTradeSummaries,
+  listOrders,
+  listTrades,
+  listSignals,
 };
