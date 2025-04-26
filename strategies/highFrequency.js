@@ -139,7 +139,7 @@ async function highFrequencyTrading(exchange, symbol, interval, priceThreshold, 
 
                   // console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
 
-                  // 今まで買った量
+                  //　この戦略で約定し残っている量（買った量ー売った量）
                   const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey)
 
                   // 今注文に出している買い量

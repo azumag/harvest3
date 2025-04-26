@@ -1,5 +1,6 @@
 const { updateTradeSummaryTimestamp, initialize } = require('../src/database/redisDatabase');
 const { exchangeBB } = require('../src/config');
+const { pro } = require('ccxt');
 
 async function main() {
   // Redis初期化
@@ -28,6 +29,7 @@ async function main() {
     // 必要に応じてRedisクライアントを閉じる処理を追加
     // redisDatabase.js に close 関数があればそれを使う
     // なければ、スクリプト終了時に自動的に閉じることを期待する
+    process.exit(0);
   }
 }
 
