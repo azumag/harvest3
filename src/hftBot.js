@@ -5,7 +5,7 @@ const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { runStrategy } = require('./strategyRunner');
 const { getMarketParameters, sleep } = require('./utils');
 
-const { initializeDB } = require('./database/dbConfig');
+const { initializeDB } = require('./database/manager');
 
 /**
  * 高頻度取引（HFT）ボットを起動する関数

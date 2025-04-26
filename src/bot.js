@@ -7,7 +7,7 @@ const { runStrategy, runArbitrageStrategy, runStrategies } = require('./strategy
 // const { getMarketParameters, updateFilledTrades, sleep } = require('./utils');
 const { sleep } = require('./utils');
 const { updateFilledTrades } = require('./database/manager');
-const { initializeDB } = require('./database/dbConfig');
+const { initializeDB } = require('./database/manager');
 
 const strategies = require('../strategies');
 

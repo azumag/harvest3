@@ -217,6 +217,48 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   }
 }
 
+/**
+ * トレード情報のキーを取得する
+ * @returns {Promise<Array>} 取引所の情報の配列
+ */
+async function getTradeKeys() {
+  try {
+    const key = 'summary:trade:*';
+    const exchangesKeys = await client.keys(key);
+
+    // 取得キーを分解してJSONに構造化
+    const exchanges = {};
+    
+    for (const key of exchangesKeys) {
+      const parts = key.split(':');
+      if (parts.length >= 5) {
+      const exchangeId = parts[2];
+      const symbol = parts[3];
+      const strategyKey = parts[4];
+      
+      if (!exchanges[exchangeId]) {
+        exchanges[exchangeId] = {};
+      }
+      
+      if (!exchanges[exchangeId][symbol]) {
+        exchanges[exchangeId][symbol] = [];
+      }
+      
+      if (!exchanges[exchangeId][symbol].includes(strategyKey)) {
+        exchanges[exchangeId][symbol].push(strategyKey);
+      }
+      }
+    }
+
+    console.log(exchanges);
+
+    return JSON.stringify(exchanges);
+  } catch (error) {
+    console.error('取引所情報の取得に失敗しました:', error);
+    return [];
+  }
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
@@ -229,4 +271,5 @@ module.exports = {
   getTradeSummaryTimestamp,
   updateTradeSummaryTimestamp,
   getTradeSummaries,
+  getTradeKeys,
 };

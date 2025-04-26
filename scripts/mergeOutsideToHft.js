@@ -5,7 +5,7 @@
  */
 
 // 必要なモジュールをインポート
-const { initializeDB } = require('../src/database/dbConfig');
+const { initializeDB } = require('../src/database/manager');
 const { getTradeSummaries } = require('../src/database/manager');
 const { exchangeBB, exchangeBF } = require('../src/config');
 const { client } = require('../src/database/redisClient');

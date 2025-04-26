@@ -1,21 +1,19 @@
 /**
- * Redis版の取引の集計サマリーを取得するコントローラー
+ *取引の集計サマリーを取得するコントローラー
  */
-const { getTradeSummary } = require('../../redisDatabase');
+const { getTradeSummaries } = require('../../database/manager');
 
 /**
  * 取引の集計サマリーを取得するコントローラー
  * 
- * クエリパラメータ:
- * - period: 期間 (daily, weekly, monthly, yearly, all) (デフォルト: all)
  */
-async function getSummary(req, res) {
+async function getTradeSummary(req, res) {
   try {
     // 期間パラメータを取得
-    const { period = 'all' } = req.query;
+    const { exchangeId } = req.query;
     
     // サマリー情報を取得
-    const summaryData = await getTradeSummary(period);
+    const summaryData = await getTradeSummaries(exchangeId);
     
     // 結果をJSON形式で返す
     res.json(summaryData);
@@ -26,5 +24,5 @@ async function getSummary(req, res) {
 }
 
 module.exports = {
-  getSummary
+  getTradeSummary
 };

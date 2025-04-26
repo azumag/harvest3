@@ -1,4 +1,4 @@
-const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId } = require('./mongoDatabase');
+const { addTradeMongoDB, addSignalMongoDB, addOrderMongoDB, getOrderByOrderId, connectDB } = require('./mongoDatabase');
 const { 
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
@@ -6,10 +6,19 @@ const {
   getTradeSummaryTimestamp,
   updateTradeSummaryTimestamp,
   getTradeSummaries,
+  initialize,
+  getTradeKeys,
 } = require('./redisDatabase');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
+
+async function initializeDB() {
+  // MongoDBとRedisの初期化を行う
+  await initialize();
+  await connectDB();
+}
+
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
   return await getCurrentOrderPairRedis(exchange.id, symbol, strategyKey);
@@ -256,5 +265,7 @@ module.exports = {
   getOrderStrategyKeyByOrderId,
   getTradeSummaries,
   getTradeCurrentPosition,
-  getCurrentOrderPosition
+  getCurrentOrderPosition,
+  initializeDB,
+  getTradeKeys,
 };
