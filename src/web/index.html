@@ -29,30 +29,59 @@
                             </div>
                         </div>
                         <div id="summary-container" class="d-none">
-                            <!-- 取引所別サマリー -->
-                            <div class="mb-4">
-                                <h6 class="border-bottom pb-2">取引所別サマリー</h6>
-                                <div id="exchange-summary-container" class="summary-cards row"></div>
-                            </div>
-                            
-                            <!-- 戦略別サマリー -->
-                            <div class="mb-4">
-                                <h6 class="border-bottom pb-2">戦略別サマリー</h6>
-                                <div id="strategy-summary-container" class="summary-cards row"></div>
-                            </div>
-                            
-                            <!-- 注文ペアサマリー -->
-                            <div class="mb-4">
-                                <h6 class="border-bottom pb-2 d-flex justify-content-between align-items-center">
-                                    <span>注文ペアサマリー</span>
-                                    <div class="d-flex align-items-center">
-                                        <label for="order-pair-symbol-filter" class="me-2 small">銘柄:</label>
-                                        <select id="order-pair-symbol-filter" class="form-select form-select-sm" style="width: auto;">
-                                            <option value="all">すべて表示</option>
-                                        </select>
+                            <!-- タブヘッダー -->
+                            <ul class="nav nav-tabs" id="summaryTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="exchange-tab" data-bs-toggle="tab" data-bs-target="#exchange-tab-pane" type="button" role="tab" aria-controls="exchange-tab-pane" aria-selected="true">取引所別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="symbol-tab" data-bs-toggle="tab" data-bs-target="#symbol-tab-pane" type="button" role="tab" aria-controls="symbol-tab-pane" aria-selected="false">銘柄別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="strategy-tab" data-bs-toggle="tab" data-bs-target="#strategy-tab-pane" type="button" role="tab" aria-controls="strategy-tab-pane" aria-selected="false">戦略別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="order-pairs-tab" data-bs-toggle="tab" data-bs-target="#order-pairs-tab-pane" type="button" role="tab" aria-controls="order-pairs-tab-pane" aria-selected="false">注文ペア</button>
+                                </li>
+                            </ul>
+                            <!-- タブコンテンツ -->
+                            <div class="tab-content" id="summaryTabsContent">
+                                <!-- 取引所別サマリーペイン -->
+                                <div class="tab-pane fade show active" id="exchange-tab-pane" role="tabpanel" aria-labelledby="exchange-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="exchange-summary-container" class="summary-cards row"></div>
                                     </div>
-                                </h6>
-                                <div id="order-pairs-summary-container" class="summary-cards row"></div>
+                                </div>
+                                <!-- 銘柄別サマリーペイン -->
+                                <div class="tab-pane fade" id="symbol-tab-pane" role="tabpanel" aria-labelledby="symbol-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="symbol-summary-container" class="summary-cards row"></div>
+                                    </div>
+                                </div>
+                                <!-- 戦略別サマリーペイン -->
+                                <div class="tab-pane fade" id="strategy-tab-pane" role="tabpanel" aria-labelledby="strategy-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="strategy-summary-container" class="summary-cards row"></div>
+                                    </div>
+                                </div>
+                                <!-- 注文ペアサマリーペイン -->
+                                <div class="tab-pane fade" id="order-pairs-tab-pane" role="tabpanel" aria-labelledby="order-pairs-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <!-- 注文ペアサマリーの既存HTMLをここに戻す -->
+                                        <div class="mb-4">
+                                            <h6 class="border-bottom pb-2 d-flex justify-content-between align-items-center">
+                                                <span>注文ペアサマリー</span>
+                                                <div class="d-flex align-items-center">
+                                                    <label for="order-pair-symbol-filter" class="me-2 small">銘柄:</label>
+                                                    <select id="order-pair-symbol-filter" class="form-select form-select-sm" style="width: auto;">
+                                                        <option value="all">すべて表示</option>
+                                                    </select>
+                                                </div>
+                                            </h6>
+                                            <div id="order-pairs-summary-container" class="summary-cards row"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
