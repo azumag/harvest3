@@ -291,7 +291,18 @@ async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) 
   targetDate.setHours(0, 0, 0, 0);
   const since = targetDate.getTime();
   
-  return await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+  const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+  if (ohlcv.length < limit) {
+    // limit より少ないデータしか取得できなかった場合、前日のデータを結合する
+    targetDate.setDate(targetDate.getDate() - 1);
+    const sincePrev = targetDate.getTime();
+    const ohlcvPrev = await exchange.fetchOHLCV(symbol, timeframe, sincePrev, limit - ohlcv.length);
+    // 取得したデータを結合
+    const combinedOHLCV = ohlcvPrev.concat(ohlcv);
+    return combinedOHLCV;
+  } else {
+    return ohlcv;
+  }
 }
 
 module.exports = {
