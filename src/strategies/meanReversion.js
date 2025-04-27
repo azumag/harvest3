@@ -17,7 +17,7 @@ const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
  */
 async function meanReversionStrategy(exchange, symbol, strategyKey, config, marketParameters) {
 
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { period = 20, deviationThreshold = 3, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
 
