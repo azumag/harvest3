@@ -8,6 +8,7 @@ const {
   listOrders,
   listTrades,
   listSignals,
+  countSignals, // countSignals をインポートに追加
 } = require('./mongoDatabase');
 const { 
   getTradeSummary, updateTradeSummary, 
@@ -286,4 +287,5 @@ module.exports = {
   listOrders,
   listTrades,
   listSignals,
+  countSignals, // countSignals をエクスポートに追加
 };

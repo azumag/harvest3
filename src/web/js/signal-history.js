@@ -84,79 +84,92 @@ $(document).ready(function() {
     }
 
     // シグナル履歴データをロードしてDataTablesに表示
-    function loadSignals() { // loadOrders から loadSignals に変更
-        const exchange = $('#filter-exchange').val();
-        const symbol = $('#filter-symbol').val();
-        const side = $('#filter-side').val();
-        const startDate = $('#filter-start-date').val();
-        const endDate = $('#filter-end-date').val();
+    // DataTablesを初期化
+    // サーバーサイド処理に変更
+    signalsTable = $('#signals-table').DataTable({
+        processing: true, // 処理中の表示
+        serverSide: true, // サーバーサイド処理を有効化
+        pageLength: 50, // 1ページあたりの表示件数を50に設定
+        ajax: {
+            url: '/api/signals', // APIエンドポイント
+            type: 'GET',
+            data: function (d) {
+                // DataTablesが送信するパラメータ(d)にフィルタ条件を追加
+                const exchange = $('#filter-exchange').val();
+                const symbol = $('#filter-symbol').val();
+                const side = $('#filter-side').val();
+                const startDate = $('#filter-start-date').val();
+                const endDate = $('#filter-end-date').val();
 
-        const params = new URLSearchParams();
-        if (exchange) params.append('exchange', exchange);
-        // 銘柄フィルタが空文字列の場合はフィルタリングしない
-        if (symbol !== '') {
-            if (symbol) params.append('symbol', symbol);
-        }
-        if (side) params.append('side', side);
-        if (startDate) params.append('startDate', startDate);
-        if (endDate) params.append('endDate', endDate);
+                if (exchange) d.exchange = exchange;
+                if (symbol !== '') { // 銘柄フィルタが空文字列の場合はフィルタリングしない
+                    if (symbol) d.symbol = symbol;
+                }
+                if (side) d.side = side;
+                if (startDate) d.startDate = startDate;
+                if (endDate) d.endDate = endDate;
 
-        // APIエンドポイントからデータを取得 (orders から signals に変更)
-        fetch(`/api/signals?${params.toString()}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // DataTablesを初期化またはデータをクリアして追加
-                if (signalsTable) { // ordersTable から signalsTable に変更
-                    signalsTable.destroy(); // ordersTable から signalsTable に変更
-                }
-                signalsTable = $('#signals-table').DataTable({ // ordersTable から signalsTable に変更, #orders-table から #signals-table に変更
-                    data: data,
-                    columns: [
-                        { data: 'symbol' }, // 取引所カラムを削除
-                        { data: 'strategy' }, // strategy カラムを追加
-                        { data: 'side' },
-                        { data: 'price' },
-                        { // detail をJSON整形して表示
-                            data: 'detail',
-                            render: function(data) {
-                                return '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-                            }
-                        },
-                        {
-                            data: 'timestamp',
-                            render: function(data) {
-                                // タイムスタンプを読める形式に変換 (ミリ秒を想定)
-                                const date = new Date(data);
-                                return date.toLocaleString(); // または好みの形式にフォーマット
-                            }
-                        }
-                    ],
-                    order: [[5, 'desc']] // タイムスタンプで降順ソート (カラム数が変わったためインデックスを調整)
-                });
-            })
-            .catch(error => {
-                console.error('Error loading signals:', error); // orders から signals に変更
+                // DataTablesのページング、ソート、検索パラメータはdに自動的に含まれる
+                // d.start: 表示するレコードの開始インデックス
+                // d.length: 1ページあたりの表示件数
+                // d.order: ソート情報
+                // d.search: 検索ボックスの情報 (今回は使用しないが含めておく)
+
+                return d;
+            },
+            dataSrc: function (json) {
+                // APIからのレスポンスデータをDataTablesが期待する形式に変換
+                // バックエンドは { data: [...], recordsTotal: N, recordsFiltered: M } 形式を想定
+                json.recordsTotal = json.recordsTotal;
+                json.recordsFiltered = json.recordsFiltered;
+                return json.data; // データ配列を返す
+            },
+            error: function (xhr, error, thrown) {
+                console.error('DataTables Ajax error:', thrown);
                 // エラーメッセージを表示するなどの処理
-            });
-    }
+                alert('データの取得に失敗しました。');
+            }
+        },
+        columns: [
+            { data: 'symbol' },
+            { data: 'strategy' },
+            { data: 'side' },
+            { data: 'price' },
+            { // detail をJSON整形して表示
+                data: 'detail',
+                render: function(data) {
+                    return '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                }
+            },
+            {
+                data: 'timestamp',
+                render: function(data) {
+                    // タイムスタンプを読める形式に変換 (ミリ秒を想定)
+                    const date = new Date(data);
+                    return date.toLocaleString(); // または好みの形式にフォーマット
+                }
+            }
+        ],
+        order: [[5, 'desc']] // タイムスタンプで降順ソート (カラム数が変わったためインデックスを調整)
+    });
 
     // フィルタ適用ボタンのクリックイベント
     $('#apply-filter').on('click', function() {
-        loadSignals(); // loadOrders から loadSignals に変更
+        // DataTablesにデータを再読み込みさせる
+        signalsTable.ajax.reload();
     });
 
     // 取引所変更時に銘柄リストを更新
     $('#filter-exchange').on('change', function() {
         const selectedExchange = $(this).val();
         loadSymbols(selectedExchange);
+        // 取引所変更時もデータを再読み込み
+        signalsTable.ajax.reload();
     });
 
     // 初期ロード
     loadFilterOptions();
-    loadSignals(); // loadOrders から loadSignals に変更
+    // DataTablesはserverSide: trueの場合、初期化時に自動的にajaxリクエストを送信するため、
+    // ここでの signalsTable.ajax.reload() や loadSignals() の呼び出しは不要
+    // loadSignals(); // 削除またはコメントアウト
 });

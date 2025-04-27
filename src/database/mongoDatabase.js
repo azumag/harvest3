@@ -243,18 +243,43 @@ async function listTrades(filter = {}, options = {}) {
 }
 
 /**
- * signalsコレクションからデータをリスト取得する
+ * signalsコレクションからデータをリスト取得する (ページング対応)
  * @param {Object} filter - フィルタ条件
- * @param {Object} options - クエリオプション (例: { limit: 10, sort: { timestamp: -1 } })
+ * @param {number} skip - スキップする件数
+ * @param {number} limit - 取得する件数
+ * @param {Object} sort - ソート条件 (例: { timestamp: -1 })
  * @returns {Promise<Array>} シグナルデータの配列
  */
-async function listSignals(filter = {}, options = {}) {
+async function listSignals(filter = {}, skip = 0, limit = 0, sort = { timestamp: -1 }) {
   await connectDB();
   try {
-    const signals = await module.exports.signalsCollection.find(filter, options).toArray();
+    let query = module.exports.signalsCollection.find(filter).sort(sort);
+    if (skip > 0) {
+      query = query.skip(skip);
+    }
+    if (limit > 0) {
+      query = query.limit(limit);
+    }
+    const signals = await query.toArray();
     return signals;
   } catch (error) {
     console.error('Error listing signals:', error);
+    throw error;
+  }
+}
+
+/**
+ * signalsコレクションの総件数を取得する
+ * @param {Object} filter - フィルタ条件
+ * @returns {Promise<number>} シグナルデータの総件数
+ */
+async function countSignals(filter = {}) {
+  await connectDB();
+  try {
+    const count = await module.exports.signalsCollection.countDocuments(filter);
+    return count;
+  } catch (error) {
+    console.error('Error counting signals:', error);
     throw error;
   }
 }
@@ -353,7 +378,8 @@ module.exports = {
   addSignalMongoDB,
   listOrders,
   listTrades,
-  listSignals,
+  listSignals, // ページング対応版
+  countSignals, // 総件数取得関数を追加
   getOrderByOrderId,
   getTradeByTradeId,
   getSignalById,

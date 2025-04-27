@@ -1,8 +1,12 @@
-const { listSignals } = require('../../database/manager');
+const { listSignals, countSignals } = require('../../database/manager'); // countSignals をインポートに追加
 
 const getSignals = async (req, res) => {
     try {
-        const { exchange, symbol, side, startDate, endDate } = req.query;
+        const { exchange, symbol, side, startDate, endDate, start, length } = req.query; // ページングパラメータを追加
+
+        // ページングパラメータを数値に変換
+        const skip = parseInt(start) || 0;
+        const limit = parseInt(length) || 10; // デフォルトは10件とする
         
         const filter = {};
         if (exchange) filter.exchange = exchange;
@@ -25,8 +29,19 @@ const getSignals = async (req, res) => {
             }
         }
 
-        const signals = await listSignals(filter);
-        res.json(signals);
+        // フィルタリングされたシグナルデータを取得 (ページング適用)
+        const signals = await listSignals(filter, skip, limit, { timestamp: -1 }); // skip, limit, sort を追加
+
+        // フィルタリング条件に一致するシグナルデータの総件数を取得
+        const totalFiltered = await countSignals(filter);
+
+        // DataTablesが期待する形式でレスポンスを返す
+        res.json({
+            data: signals,
+            recordsTotal: totalFiltered, // フィルタリングなしの総件数 (今回はフィルタリング後と同じとする)
+            recordsFiltered: totalFiltered // フィルタリング後の総件数
+        });
+
     } catch (error) {
         console.error('Error fetching signals:', error);
         res.status(500).json({ error: 'Failed to fetch signals' });
