@@ -11,8 +11,6 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLC
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
-const globalConfig = require('../config').config;
-
 /**
  * 平均回帰戦略
  * 価格が移動平均線から大きく乖離した場合に、平均に戻ると予測して取引

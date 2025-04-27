@@ -14,13 +14,6 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
-const mongoUrl = process.env.MONGO_URL;
-const mongoDbName = process.env.MONGO_DB_NAME;
-
-const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
-const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
-const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Discord Webhook URL
-
 const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
     secret: BBApiSecret,
@@ -51,30 +44,51 @@ const bitflyerMinTradeAmounts = {
 
 // 設定パラメータ
 const config = {
-  // MongoDB設定
-  mongoUrl: mongoUrl,
-  mongoDbName: mongoDbName,
 
-  // 共通設定
-  amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
-  profitMargin: 0.003,  // 目標利益率（取引料を考慮）
-  maxHistoryLength: 100,  // スプレッド履歴の最大長
-  tradePercentage: 0.01,  // 資金の%で取引
-  sellPercentage: 0.1,   // 売却時の資金の%
-  tradeCost: 0.0012, // 手数料暫定（bitbank)
-  cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
-  safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
-  amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
+  global: {
+    // 共通設定
+    amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
+    profitMargin: 0.003,  // 目標利益率（取引料を考慮）
+    maxHistoryLength: 100,  // スプレッド履歴の最大長
+    tradePercentage: 0.01,  // 資金の%で取引
+    sellPercentage: 0.1,   // 売却時の資金の%
+    tradeCost: 0.0012, // 手数料暫定（bitbank)
+    cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
+    safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
+    amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
 
-  // 除外シンボル
-  excludeSymbols: [
-    'ELF/',
-    'MATIC/',
-    'RNDR/',
-  ],
+    // 除外シンボル
+    excludeSymbols: [
+      'ELF/',
+      'MATIC/',
+      'RNDR/',
+    ],
+  },
   
   // 戦略固有の設定
   strategies: {
+
+    MA_LONG: {
+      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '1h',
+      function: maStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    // 高頻度取引戦略
+    HFT: {
+      enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
+      interval: 100,
+      priceThreshold: 0.001,
+      maxOrdersPerMinute: 100,
+      amount: 0.0001,
+      orderBookDepth: 15,
+      function: highFrequencyTrading,
+      exchanges: [exchangeBB],
+    },
+
     // トレンドフォロー戦略
     MA: {
       enabled: process.env.STRATEGY_MA_ENABLED === 'true',
@@ -84,6 +98,17 @@ const config = {
       function: maStrategy,
       exchanges: [exchangeBB]
     },
+
+    MA_SHORT: {
+      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '5m',
+      function: maStrategy,
+      exchanges: [exchangeBB]
+    },
+
+
 
     MACD: {
       enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
@@ -95,12 +120,52 @@ const config = {
       exchanges: [exchangeBB]
     },
 
+    MACD_SHORT: {
+      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
+      ohlcvInterval: '5m',
+      function: macdStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    MACD_LONG: {
+      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
+      ohlcvInterval: '1h',
+      function: macdStrategy,
+      exchanges: [exchangeBB]
+    },
+
     RSI: {
       enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
       ohlcvInterval: '15m',
+      function: rsiStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    RSI_SHORT: {
+      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '5m',
+      function: rsiStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    RSI_LONG: {
+      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '1h',
       function: rsiStrategy,
       exchanges: [exchangeBB]
     },
@@ -122,12 +187,39 @@ const config = {
       function: bollingerBandsStrategy,
       exchanges: [exchangeBB]
     },
+
+    BOLLINGER_BANDS_LONG: {
+      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '1h',
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
+    },
     
     // 逆張り戦略
     MEAN_REVERSION: {
       enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
       period: 20,
       ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    MEAN_REVERSION_SHORT: {
+      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
+      period: 20,
+      ohlcvInterval: '5m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    MEAN_REVERSION_LONG: {
+      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
+      period: 20,
+      ohlcvInterval: '1h',
       deviationThreshold: 3,
       function: meanReversionStrategy,
       exchanges: [exchangeBB]
@@ -142,6 +234,26 @@ const config = {
       function: oscillatorStrategy,
       exchanges: [exchangeBB]
     },
+
+    OSCILLATOR_SHORT: {
+      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
+      period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: '5m',
+      function: oscillatorStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    OSCILLATOR_LONG: {
+      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
+      period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: '1h',
+      function: oscillatorStrategy,
+      exchanges: [exchangeBB]
+    },
     
     // アービトラージ戦略
     // INTER_EXCHANGE_ARBITRAGE: {
@@ -150,18 +262,6 @@ const config = {
     //   function: interExchangeArbitrage,
     //   exchanges: [exchangeBB, exchangeBF],
     // },
-    
-    // 高頻度取引戦略
-    HFT: {
-      enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-      interval: 100,
-      priceThreshold: 0.001,
-      maxOrdersPerMinute: 100,
-      amount: 0.0001,
-      orderBookDepth: 15,
-      function: highFrequencyTrading,
-      exchanges: [exchangeBB],
-    },
 
     // SCALPING: {
     //   enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true',
@@ -208,14 +308,9 @@ const config = {
 
 module.exports = {
   BBApiKey,
-  mongoUrl,
-  mongoDbName,
   BBApiSecret,
   BFApiKey,
   BFApiSecret,
-  discordErrorWebhookUrl,
-  discordOrderWebhookUrl,
-  discordResultWebhookUrl,
   exchangeBB,
   exchangeBF,
   bitflyerMinTradeAmounts,

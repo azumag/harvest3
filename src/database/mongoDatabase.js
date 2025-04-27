@@ -1,5 +1,9 @@
 const { MongoClient, ObjectId } = require('mongodb');
-const { mongoUrl, mongoDbName } = require('../config');
+const dotenv = require('dotenv');
+dotenv.config();
+
+const mongoUrl = process.env.MONGO_URL;
+const mongoDbName = process.env.MONGO_DB_NAME;
 
 // MongoDB接続オプションを追加
 const mongoOptions = {
@@ -18,6 +22,7 @@ let db;
 async function connectDB() {
   if (!client || !client.topology || !client.topology.isConnected()) {
     try {
+      console.log({mongoDbName, mongoUrl});
       client = new MongoClient(mongoUrl, mongoOptions);
       await client.connect();
       db = client.db(mongoDbName);

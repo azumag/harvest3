@@ -7,9 +7,9 @@ const { formattedAvailableAmount,
   getTradeCurrentPosition, getCurrentOrderPosition
  } = require("../database/manager");
 
-const globalConfig = require('../config').config;
-
 const { postErrorToDiscord, postOrderToDiscord } = require('../notifications');
+
+const priceCache = {};
 
 /**
  * 高頻度取引戦略
@@ -17,9 +17,11 @@ const { postErrorToDiscord, postOrderToDiscord } = require('../notifications');
  */
 async function highFrequencyTrading(exchange, symbol, strategyKey, config, marketParameters) {
 
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { interval, priceThreshold, amount, orderBookDepth } = config;
   const { pricePrecision, amountPrecision } = marketParameters;
+
+  const cacheKey = `${exchange.id}_${symbol}_${strategyKey}`;
 
   try {
     
@@ -32,8 +34,8 @@ async function highFrequencyTrading(exchange, symbol, strategyKey, config, marke
     // 最小取引量
     const baseMinTradeAmount = amount
     
-    // 前回の価格を保存
-    let previousPrice = null;
+    // 前回の価格
+    let previousPrice = priceCache[cacheKey] ? priceCache[cacheKey] : null;
     
     console.log(`高頻度取引を開始: ${symbol} - 間隔: ${interval}ms, 閾値: ${priceThreshold}%, 最小取引量: ${baseMinTradeAmount}`);
  
@@ -184,10 +186,10 @@ async function highFrequencyTrading(exchange, symbol, strategyKey, config, marke
       }
       
       // 現在の価格を保存
-      previousPrice = midPrice;
+      priceCache[cacheKey] = midPrice;
       
       // 次の取引まで待機
-      await new Promise(resolve => setTimeout(resolve, interval));
+      // await new Promise(resolve => setTimeout(resolve, interval));
     } catch (error) {
       console.error(`HFT処理中にエラーが発生しました: ${symbol}`, error);
       await postErrorToDiscord(`[HFT] エラー: ${exchange.id} - ${symbol} - ${error.message}`);

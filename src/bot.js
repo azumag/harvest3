@@ -4,7 +4,7 @@ const { postErrorToDiscord } = require('./notifications');
 const { sleep } = require('./utils');
 const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchange } = require('./utils');
+const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./utils');
 
 /**
  * ボットを起動する関数
@@ -52,8 +52,8 @@ async function startBot() {
     // }
   
     while (true) {
-      const symbolsByExchange = await getSymbolsByExchange();
-      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange);
+      const symbolsByExchange = await getSymbolsByExchange(config);
+      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
       
       for (const strategyKey of Object.keys(config.strategies)) {
         const strategy = config.strategies[strategyKey];
@@ -67,8 +67,8 @@ async function startBot() {
               const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
               try {
                 await updateFilledTrades(exchange, symbol);
-                await runStrategy(exchange, symbol, strategyKey, marketParametersBySymbol);
-                await sleep(1000);
+                await runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol);
+                // await sleep(300);
               } catch (error) {
                 console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
                 await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
@@ -79,7 +79,7 @@ async function startBot() {
           console.log(`戦略 ${strategyKey} が無効です`);
         }
       }
-      await sleep(5000);
+      await sleep(1000);
     }
     
   } catch (error) {
@@ -96,11 +96,11 @@ async function startBot() {
  * @param {String} strategyKey - 戦略のキー
  * @param {Object} marketParametersBySymbol - 通貨ペアごとの市場パラメータ
  */
-async function runStrategy(exchange, symbol, strategyKey, marketParametersBySymbol) {
+async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol) {
   try {
 
     // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
-    const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey);
+    const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
 
     return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol)
   } catch (error) {

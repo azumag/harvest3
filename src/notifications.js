@@ -1,5 +1,8 @@
 const axios = require('axios');
-const { discordErrorWebhookUrl, discordOrderWebhookUrl, discordResultWebhookUrl } = require('./config');
+
+const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
+const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
+const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Discord Webhook URL
 
 /**
  * エラーメッセージをDiscordに投稿する関数

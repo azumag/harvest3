@@ -13,7 +13,6 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../datab
 const { addOrder, fetchOHLCVData } = require('../database/manager');
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
-const globalConfig = require('../config').config;
 
 /**
  * 移動平均線クロス戦略
@@ -21,7 +20,7 @@ const globalConfig = require('../config').config;
  */
 async function maStrategy(exchange, symbol, strategyKey, config, marketParameters) {
 
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { shortPeriod = 5, longPeriod = 20, amount, ohlcvInterval } = config;
   const { amountPrecision, minTradeAmount, } = marketParameters;
 
@@ -183,7 +182,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
  */
 async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters) {
 
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
 
@@ -343,7 +342,7 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
  * RSIが指定された閾値を下回ったら買い、上回ったら売り
  */
 async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters) {
-  const { tradePercentage } = globalConfig; 
+  const { tradePercentage } = config; 
   const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
   try {
@@ -499,16 +498,10 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
 /**
  * ボリンジャーバンド戦略
  * 価格がバンドの上限に達したら売り、下限に達したら買い
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} period - 期間
- * @param {Number} stdDev - 標準偏差の乗数
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
 async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, marketParameters) {
 
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { period = 20, stdDev = 2, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
 

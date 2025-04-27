@@ -202,7 +202,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
     }
     
     await client.hSet(key, stringifiedParams);
-    console.log(`戦略パラメータを保存しました: ${key}`);
+    // console.log(`戦略パラメータを保存しました: ${key}`);
     return true;
   } catch (error) {
     console.error(`戦略パラメータの保存中にエラーが発生しました: ${key}`, error);
@@ -227,11 +227,9 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
       // Redisにパラメータが存在する場合、数値型に変換して返す
       const parsedParams = {};
       for (const [paramKey, value] of Object.entries(params)) {
-        // 数値に変換できるものは変換
-        const numValue = parseFloat(value);
-        parsedParams[paramKey] = isNaN(numValue) ? value : numValue;
+        parsedParams[paramKey] = value
       }
-      console.log(`戦略パラメータをRedisから読み出しました: ${key}`);
+      // console.log(`戦略パラメータをRedisから読み出しました: ${key}`);
       return parsedParams;
     } else {
       // Redisにパラメータが存在しない場合
