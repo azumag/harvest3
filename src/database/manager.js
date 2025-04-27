@@ -8,8 +8,9 @@ const {
   listOrders,
   listTrades,
   listSignals,
-  countSignals, // countSignals をインポートに追加
+  countSignals,
 } = require('./mongoDatabase');
+
 const { 
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
@@ -115,7 +116,7 @@ async function updateFilledTrades(exchange, symbol) {
     // 取引所から約定履歴を取得
     // 最終チェック時間からの約定履歴を取得
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
-    console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+    // console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
     
     let processedCount = 0;
     let strategyKey = 'OUTSIDE';
@@ -155,7 +156,9 @@ async function updateFilledTrades(exchange, symbol) {
       processedCount++;
     }
     
-    console.log(`${exchange.id} ${symbol} ${strategyKey}: ${processedCount}件の約定を記録しました`);
+    if (processedCount > 0) {
+      console.log(`${exchange.id} ${symbol} ${strategyKey}: ${processedCount}件の約定を記録しました`);
+    }
     return processedCount;
   } catch (error) {
     console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} :`, error);
@@ -291,7 +294,19 @@ async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) 
   targetDate.setHours(0, 0, 0, 0);
   const since = targetDate.getTime();
   
-  return await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+  // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${since} ${limit}`);
+  const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+  if (ohlcv.length < limit) {
+    // limit より少ないデータしか取得できなかった場合、前日のデータを結合する
+    targetDate.setDate(targetDate.getDate() - 1);
+    const sincePrev = targetDate.getTime();
+    const ohlcvPrev = await exchange.fetchOHLCV(symbol, timeframe, sincePrev, limit - ohlcv.length);
+    // 取得したデータを結合
+    const combinedOHLCV = ohlcvPrev.concat(ohlcv);
+    return combinedOHLCV;
+  } else {
+    return ohlcv;
+  }
 }
 
 module.exports = {

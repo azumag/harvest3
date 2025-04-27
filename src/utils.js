@@ -1,5 +1,63 @@
 const { postErrorToDiscord } = require('./notifications');
-const { bitflyerMinTradeAmounts } = require('./config');
+const { getStrategyParameters, saveStrategyParameters } = require('./database/manager');
+
+async function getMarketParametersByExchangeSymbol(symbolByExchange, config) {
+  const exchanges = Object.keys(symbolByExchange);
+  const marketParametersByExchange = {};
+
+  for (const exchangeId of exchanges) {
+    const symbols = symbolByExchange[exchangeId];
+    const exchangeInstance = config.exchanges[exchangeId].instance;
+    for (const symbol of symbols) {
+      const params = await getMarketParameters(exchangeInstance, symbol);
+      const { minTradeAmount, pricePrecision, amountPrecision } = params;
+
+      marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+      marketParametersByExchange[exchangeId][symbol] = {
+        minTradeAmount,
+        pricePrecision,
+        amountPrecision,
+      };
+
+      console.log(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータを取得しました:`, params)
+      await sleep(300);
+    }
+  }
+
+  return marketParametersByExchange;
+}
+
+async function getStrategyConfig(exchange, symbol, strategyKey, config) {
+  // configからデフォルトの戦略設定を取得
+  const defaultConfig = config.strategies[strategyKey];
+    
+  if (!defaultConfig || !defaultConfig.enabled) {
+    return null;
+  }
+
+  // データベースから戦略パラメータを取得
+  const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
+
+  const strategyConfig = (() => {
+    if (dbParams) {
+      // デフォルト設定とデータベースのパラメータをマージ（データベース優先）
+      return { ...(config.global), ...defaultConfig, ...dbParams };
+    } else {
+      // DBにパラメータがない場合はデフォルト設定を使用
+      // デフォルト設定をDBに保存
+      // Create a clean config without functions and exchanges property
+      const configToSave = Object.fromEntries(
+        Object.entries(defaultConfig).filter(([key, value]) => 
+          typeof value !== 'function' && key !== 'exchanges'
+        )
+      );
+      saveStrategyParameters(exchange.id, symbol, strategyKey, configToSave);
+      return { ...(config.global), ...defaultConfig };
+    }
+  })();
+
+  return strategyConfig;
+}
  
 /**
  * 加重平均を計算する関数
@@ -73,9 +131,7 @@ async function getMarketParameters(exchange, symbol) {
     return null;
   }
   
-  const minTradeAmount = (exchange.id === 'bitflyer' && bitflyerMinTradeAmounts && bitflyerMinTradeAmounts[symbol])
-    ? bitflyerMinTradeAmounts[symbol]
-    : (market.limits?.amount?.min || 0.0001);
+  const minTradeAmount = (market.limits?.amount?.min || 0.0001);
     
   let pricePrecision = market.precision ? market.precision.price : undefined;
   
@@ -134,12 +190,36 @@ async function getMarketParameters(exchange, symbol) {
   return { minTradeAmount, pricePrecision, amountPrecision };
 }
 
+async function getSymbolsByExchange(config) {
+  const exchanges = Object.keys(config.exchanges);
+  const symbolsByExchange = {};
+
+  for (const exchange of exchanges) {
+    const exchangeInstance = config.exchanges[exchange].instance;
+    const markets = await exchangeInstance.loadMarkets();
+
+    // 除外シンボル
+    const symbols = Object.keys(markets).filter(symbol =>
+      symbol.endsWith('/JPY') 
+        && !config.global.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
+    );
+
+    symbolsByExchange[exchange] = symbols;
+    console.log(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
+  }
+
+  return symbolsByExchange;
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = {
+  getSymbolsByExchange,
   weightedAverage,
   fetchTotal,
   getMarketParameters,
-  sleep
+  sleep,
+  getStrategyConfig,
+  getMarketParametersByExchangeSymbol
 };

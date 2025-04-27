@@ -9,28 +9,25 @@ const {
   calculateBollingerBands,
 } = require('./indicators');
 
-// const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
-const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../src/database/manager');
-const { addOrder, fetchOHLCVData } = require('../src/database/manager');
+const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../database/manager');
+const { addOrder, fetchOHLCVData } = require('../database/manager');
+
+const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
 /**
  * 移動平均線クロス戦略
  * 短期移動平均線が長期移動平均線を上抜けたら買い、下抜けたら売り
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} shortPeriod - 短期移動平均線の期間
- * @param {Number} longPeriod - 長期移動平均線の期間
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, amount, options = {}) {
-  const strategyKey = 'MA';
+async function maStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+
+  const { tradePercentage } = config;
+  const { shortPeriod = 5, longPeriod = 20, amount, ohlcvInterval } = config;
+  const { amountPrecision, minTradeAmount, } = marketParameters;
+
   try {
-    // オプションから値を取得
-    const { amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01 } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', longPeriod + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, longPeriod + 10);
     if (ohlcv.length < longPeriod) {
       return;
     }
@@ -168,8 +165,8 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     };
   } catch (error) {
     console.error(`移動平均線戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[MA戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[MA戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'MA Cross',
@@ -182,22 +179,18 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 /**
  * MACD戦略
  * MACDがシグナルラインを上抜けたら買い、下抜けたら売り
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} fastPeriod - 短期EMAの期間
- * @param {Number} slowPeriod - 長期EMAの期間
- * @param {Number} signalPeriod - シグナルラインの期間
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, options = {}) {
-  const strategyKey = 'MACD';
+async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+
+  const { tradePercentage } = config;
+  const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
+  const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', slowPeriod + signalPeriod + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, slowPeriod + signalPeriod + 10);
     if (ohlcv.length < slowPeriod+signalPeriod) {
       return;
     }
@@ -333,8 +326,8 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     };
   } catch (error) {
     console.error(`MACD戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[MACD戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[MACD戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'MACD',
@@ -347,26 +340,18 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 /**
  * RSI戦略
  * RSIが指定された閾値を下回ったら買い、上回ったら売り
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} period - RSIの期間
- * @param {Number} oversoldThreshold - 買いシグナルの閾値（デフォルト30）
- * @param {Number} overboughtThreshold - 売りシグナルの閾値（デフォルト70）
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, options = {}) {
-  const strategyKey = 'RSI';
+async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+  const { tradePercentage } = config; 
+  const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
+  const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
   try {
-    // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10);
     if (ohlcv.length < period) {
       return;
     }
-
     
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -446,10 +431,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
           postOrderToDiscord(`[RSI戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
-        // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
@@ -470,7 +452,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'RSI', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
       
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -502,8 +484,8 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     };
   } catch (error) {
     console.error(`RSI戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[RSI戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[RSI戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'RSI',
@@ -516,21 +498,17 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
 /**
  * ボリンジャーバンド戦略
  * 価格がバンドの上限に達したら売り、下限に達したら買い
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} period - 期間
- * @param {Number} stdDev - 標準偏差の乗数
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2, amount, options = {}) {
-  const strategyKey = 'BOLLINGER_BANDS';
+async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+
+  const { tradePercentage } = config;
+  const { period = 20, stdDev = 2, amount, ohlcvInterval } = config;
+  const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+
   try {
-    // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10);
     if (ohlcv.length < period) {
       return;
     }
@@ -597,7 +575,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'BOLLINGER_BANDS')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey)
       
       // 利用可能な資金の割合に基づいて取引量を計算
       // const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
@@ -640,8 +618,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       const availableAsset = balance.free[quoteCurrency];
 
       // 取引記録から買った量を取得
-      // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'BOLLINGER_BANDS', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
       
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -677,8 +654,8 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     };
   } catch (error) {
     console.error(`ボリンジャーバンド戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[BB戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[BB戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'Bollinger Bands',
