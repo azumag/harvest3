@@ -84,15 +84,22 @@ const OhlcPlugin = {
     }
 };
 
-// Chart.js Financial拡張のコントローラ・エレメントをregister
-if (window.CandlestickController && window.OhlcController && window.FinancialElement && window.FinancialScale) {
-    Chart.register(
-        window.CandlestickController,
-        window.OhlcController,
-        window.FinancialElement,
-        window.FinancialScale
-    );
-}
+// Chart.js Financial拡張のコントローラ・エレメントのregisterは不要（CDNで自動登録されるため）
+// const CandlestickController = Chart.CandlestickController || window.CandlestickController;
+// const OhlcController = Chart.OhlcController || window.OhlcController;
+// const FinancialElement = Chart.FinancialElement || window.FinancialElement;
+// const FinancialScale = Chart.FinancialScale || window.FinancialScale;
+// const PointController = Chart.PointController || window.PointController;
+// const PointElement = Chart.PointElement || window.PointElement;
+
+// Chart.register(
+//     CandlestickController,
+//     OhlcController,
+//     FinancialElement,
+//     FinancialScale,
+//     PointController,
+//     PointElement
+// );
 // カスタムOhlcPluginのregisterは不要なので削除
 // Chart.register(OhlcPlugin);
 // console.log('Chart.js registered plugins:', Chart.plugins);
@@ -117,17 +124,9 @@ function initializeDatepickers() {
         locale: 'ja',
         maxDate: 'today'
     };
-    
     flatpickr('#filter-start-date', datepickerConfig);
-    flatpickr('#filter-end-date', datepickerConfig);
-    
-    // デフォルトでは昨日から今日までの期間を設定
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-    
-    document.getElementById('filter-end-date').value = formatDate(today);
-    document.getElementById('filter-start-date').value = formatDate(yesterday);
+    // filter-end-dateの初期化は不要
+    document.getElementById('filter-start-date').value = '';
 }
 
 /**
@@ -286,51 +285,44 @@ async function fetchDataAndRenderChart() {
     const strategy = document.getElementById('filter-strategy').value;
     const timeframe = document.getElementById('filter-timeframe').value;
     const startDate = document.getElementById('filter-start-date').value;
-    const endDate = document.getElementById('filter-end-date').value;
     const limit = document.getElementById('filter-limit').value;
-    
+    // endDateは使わない
+
     // 必須フィールドの検証
     if (!exchange || !symbol) {
         showError('取引所と銘柄を選択してください');
         return;
     }
-    
+
     // ローディング表示
     showLoading(true);
     hideError();
-    
+
     try {
-        console.log('fetchDataAndRenderChart - Fetching OHLCV data...'); // ログ追加
+        console.log('fetchDataAndRenderChart - Fetching OHLCV data...');
         // ロウソク足データの取得
-        const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, endDate);
-        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.'); // ログ追加
-        
-        // データフォーマットの詳細なデバッグ
+        const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate);
+        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.');
         if (ohlcvData.length > 0) {
             console.log('OHLCV data sample [0]:', ohlcvData[0]);
             console.log('OHLCV data sample [last]:', ohlcvData[ohlcvData.length - 1]);
         }
-        
         // 戦略シグナルデータの取得 (戦略が選択されている場合)
         let signalData = [];
         if (strategy) {
-            console.log('fetchDataAndRenderChart - Fetching signal data...'); // ログ追加
-            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate, endDate);
-            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.'); // ログ追加
+            console.log('fetchDataAndRenderChart - Fetching signal data...');
+            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate);
+            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.');
         }
-        
-        // データが取得できたかチェック
         if (ohlcvData.length === 0) {
-            console.log('fetchDataAndRenderChart - No OHLCV data received.'); // ログ追加
+            console.log('fetchDataAndRenderChart - No OHLCV data received.');
             showNoDataMessage(true);
             showLoading(false);
             return;
         }
-        
-        console.log('fetchDataAndRenderChart - Rendering chart...'); // ログ追加
-        // チャートの描画
+        console.log('fetchDataAndRenderChart - Rendering chart...');
         renderChart(ohlcvData, signalData);
-        console.log('fetchDataAndRenderChart - Chart rendered.'); // ログ追加
+        console.log('fetchDataAndRenderChart - Chart rendered.');
         showNoDataMessage(false);
     } catch (error) {
         console.error('データ取得中にエラーが発生しました:', error);
@@ -343,34 +335,25 @@ async function fetchDataAndRenderChart() {
 /**
  * ロウソク足データの取得
  */
-async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, endTime) {
+async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
     try {
         // 日付をミリ秒のタイムスタンプに変換
         let startTime = startDate ? new Date(startDate).getTime() : undefined;
-        let endTimeMs = endTime ? new Date(endTime).getTime() + (24 * 60 * 60 * 1000 - 1) : undefined; // 終了日の終わり (23:59:59.999)
-        
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
             exchange,
             symbol,
-            interval: timeframe,
-            limit
+            interval: timeframe
         });
-        
+        if (limit) params.append('limit', limit);
         if (startTime) params.append('startTime', startTime);
-        // endTimeはcxxtでは通常使用しないが、APIが対応している場合に備えてコメントアウト
-        // if (endTimeMs) params.append('endTime', endTimeMs);
-        
         // APIリクエスト
         const response = await fetch(`/api/ohlcv?${params.toString()}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
-        
         const data = await response.json();
         console.log('fetchOhlcvData - Raw data:', data);
-        
-        // データ形式の詳細な検証（データの最初と最後の項目を表示）
         if (data && data.length > 0) {
             console.log('Data type check:', {
                 isArray: Array.isArray(data),
@@ -380,7 +363,6 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, end
                 timestampType: data[0] ? typeof data[0][0] : null
             });
         }
-        
         return data;
     } catch (error) {
         console.error('ロウソク足データの取得に失敗しました:', error);
@@ -423,7 +405,7 @@ async function fetchStrategySignals(exchange, symbol, strategy, startDate, endDa
 
 /**
  * チャートの描画
- * @param {Array} ohlcvData - ロウソク足データ
+ * @param {Array} ohlcvData - ロウソく足データ
  * @param {Array} signalData - 戦略シグナルデータ
  */
 function renderChart(ohlcvData, signalData) {
@@ -444,7 +426,7 @@ function renderChart(ohlcvData, signalData) {
         ohlc: ohlcDataset,
         signals: signalDatasets
     });
-    new Chart(ctx, {
+    const chart = new Chart(ctx, {
         type: 'candlestick',
         data: {
             datasets: [
@@ -464,9 +446,9 @@ function renderChart(ohlcvData, signalData) {
                 x: {
                     type: 'time',
                     time: {
-                        unit: 'day',
-                        tooltipFormat: 'yyyy/MM/dd',
-                        displayFormats: { day: 'MM/dd' }
+                        unit: 'hour',
+                        tooltipFormat: 'dd HH:mm',
+                        displayFormats: { day: 'dd HH:mm' }
                     },
                     title: { display: true, text: '日付' }
                 },
@@ -476,11 +458,57 @@ function renderChart(ohlcvData, signalData) {
                 }
             },
             plugins: {
-                legend: { display: true, position: 'top' }
+                legend: { display: true, position: 'top' },
+                annotation: { annotations: {} }
             }
         }
     });
+    // シグナルアノテーションを追加
+    addSignalsToChart(chart, signalData);
     console.log('renderChart - ohlcDataset type:', ohlcDataset.type);
+}
+
+/**
+ * シグナルデータをChart.jsアノテーションとして追加
+ */
+function addSignalsToChart(chart, signalData) {
+    if (!chart || !signalData || signalData.length === 0) return;
+    // Chart.jsアノテーションプラグインが有効か確認
+    if (!chart.options.plugins.annotation) {
+        chart.options.plugins.annotation = { annotations: {} };
+    }
+    const annotations = {};
+    signalData.forEach((signal, idx) => {
+        if (!signal.side || !signal.timestamp || !signal.price) return;
+        const isBuy = signal.side === 'buy';
+        annotations[`signal-${idx}`] = {
+            type: 'point',
+            xValue: signal.timestamp,
+            yValue: signal.price,
+            backgroundColor: isBuy ? 'rgba(40,167,69,1)' : 'rgba(220,53,69,1)',
+            borderColor: 'white',
+            borderWidth: 2,
+            radius: 10,
+            pointStyle: isBuy ? 'triangle' : 'triangle-down',
+            yAdjust: isBuy ? 10 : -10,
+            label: {
+                display: false
+            },
+            tooltip: {
+                enabled: true,
+                callbacks: {
+                    title: () => (isBuy ? '買いシグナル' : '売りシグナル'),
+                    label: () => [
+                        `時間: ${new Date(signal.timestamp).toLocaleString('ja-JP')}`,
+                        `価格: ${signal.price}`,
+                        `戦略: ${signal.strategy || ''}`
+                    ]
+                }
+            }
+        };
+    });
+    chart.options.plugins.annotation.annotations = annotations;
+    chart.update();
 }
 
 function prepareOhlcDataset(ohlcvData) {
@@ -509,27 +537,23 @@ function prepareOhlcDataset(ohlcvData) {
 function prepareSignalDatasets(signalData) {
     if (!Array.isArray(signalData) || signalData.length === 0) return [];
     // buy/sellで色分け
-    const buySignals = signalData.filter(s => s.signalType === 'buy');
-    const sellSignals = signalData.filter(s => s.signalType === 'sell');
+    const buySignals = signalData.filter(s => s.side === 'buy');
+    const sellSignals = signalData.filter(s => s.side === 'sell');
     const buyDataset = buySignals.length > 0 ? {
         label: 'Buyシグナル',
         type: 'scatter',
-        data: buySignals.map(s => ({ x: s.x || s.timestamp, y: s.y || s.price })),
-        pointBackgroundColor: 'green',
+        data: buySignals.map(s => ({ x: s.timestamp, y: s.price })),
+        backgroundColor: 'green',
         pointRadius: 6,
-        showLine: false,
-        yAxisID: 'y',
-        xAxisID: 'x',
+        showLine: false
     } : null;
     const sellDataset = sellSignals.length > 0 ? {
         label: 'Sellシグナル',
         type: 'scatter',
-        data: sellSignals.map(s => ({ x: s.x || s.timestamp, y: s.y || s.price })),
-        pointBackgroundColor: 'red',
+        data: sellSignals.map(s => ({ x: s.timestamp, y: s.price })),
+        backgroundColor: 'red',
         pointRadius: 6,
-        showLine: false,
-        yAxisID: 'y',
-        xAxisID: 'x',
+        showLine: false
     } : null;
     return [buyDataset, sellDataset].filter(Boolean);
 }
@@ -573,4 +597,9 @@ function showNoDataMessage(show) {
     } else {
         noDataElement.classList.add('d-none');
     }
+}
+
+// Chart.js v4 CDN環境で全ての標準コントローラ・エレメントを一括登録
+if (window.Chart && Chart.registerables) {
+    Chart.register(...Chart.registerables);
 }

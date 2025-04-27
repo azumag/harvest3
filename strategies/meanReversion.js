@@ -9,7 +9,7 @@ const {
 
 // const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 // const { addStrategySignal } = require('../src/redisDatabase');
-const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder } = require('../src/database/manager');
+const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../src/database/manager');
 
 /**
  * 平均回帰戦略
@@ -28,7 +28,11 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    if (ohlcv.length < period) {
+      console.log(`平均回帰戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
+      return;
+    }
 
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -63,7 +67,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     if (signalType !== 'none') {
       // 戦略シグナルを保存
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,
@@ -207,7 +211,10 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    if (ohlcv.length < period) {
+      return;
+    }
 
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -242,7 +249,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     if (signalType !== 'none') {
       // 戦略シグナルを保存
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,

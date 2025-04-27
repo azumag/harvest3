@@ -194,7 +194,7 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
         timestamp
     };
     
-    console.log('Adding signal with exchange:', exchange); // ログを追加
+    // console.log('Adding signal with exchange:', exchange); // ログを追加
     console.log('Signal object to be saved:', signal); // ログを追加
 
     return await addSignalMongoDB(signal);
@@ -264,10 +264,38 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     
     // エラー時は安全のために0を返す（より厳格な対応）
     return 0;
+  } 
+}
+
+/**
+ * OHLCVデータ取得の共通関数
+ * @param {Object} exchange - ccxtの取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {String} timeframe - 例: '15m'
+ * @param {Number} since - ミリ秒のタイムスタンプ
+ * @param {Number} limit - データ数
+ * @returns {Promise<Array>} OHLCV配列
+ */
+async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) {
+  const now = new Date();
+  const hour = now.getHours();
+  const targetDate = new Date(now);
+  
+  // bitbank 用設定
+  // 現在時刻が9時より前なら前日の日付を設定
+  if (hour < 9) {
+    targetDate.setDate(targetDate.getDate() - 1);
   }
+  
+  // targetDateを当日の0:00に設定
+  targetDate.setHours(0, 0, 0, 0);
+  const since = targetDate.getTime();
+  
+  return await exchange.fetchOHLCV(symbol, timeframe, since, limit);
 }
 
 module.exports = {
+  fetchOHLCVData,
   updateFilledTrades,
   formattedAvailableAmount,
   getRealizedPnL,

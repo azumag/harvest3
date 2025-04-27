@@ -65,7 +65,10 @@ async function startBot() {
         try {
           const markets = await exchange.loadMarkets();
           const symbols = Object.keys(markets).filter(symbol =>
-            symbol.endsWith('/JPY') && !symbol.startsWith('ELF/') // ELF 除外
+            symbol.endsWith('/JPY') 
+              && !symbol.startsWith('ELF/')
+              && !symbol.startsWith('MATIC/') 
+              && !symbol.startsWith('RNDR/') 
               // && symbol !== 'BTC/JPY' // BTC/JPYを除外
           );
           
