@@ -55,30 +55,53 @@ async function startBot() {
       const symbolsByExchange = await getSymbolsByExchange(config);
       const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
       
+      // 戦略ごとに並列実行するための配列
+      const strategyPromises = [];
+      
       for (const strategyKey of Object.keys(config.strategies)) {
         const strategy = config.strategies[strategyKey];
         if (strategy.enabled) {
           console.log(`戦略 ${strategyKey} が有効です`);
           
-          for (const exchange of strategy.exchanges) {
-            const symbols = symbolsByExchange[exchange.id];
-
-            for (const symbol of symbols) {
-              const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
-              try {
-                await updateFilledTrades(exchange, symbol);
-                await runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol);
-                // await sleep(300);
-              } catch (error) {
-                console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
-                await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+          // 戦略ごとの処理をPromiseとして配列に追加
+          strategyPromises.push((async () => {
+            try {
+              for (const exchange of strategy.exchanges) {
+                const symbols = symbolsByExchange[exchange.id];
+                const symbolPromises = [];
+                
+                for (const symbol of symbols) {
+                  const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
+                  
+                  // シンボルごとの処理をPromiseに追加
+                  symbolPromises.push((async () => {
+                    try {
+                      await updateFilledTrades(exchange, symbol);
+                      return runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol);
+                    } catch (error) {
+                      console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
+                      await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+                      return null;
+                    }
+                  })());
+                }
+                
+                // この取引所の全シンボルを並列処理
+                await Promise.all(symbolPromises);
               }
+            } catch (error) {
+              console.error(`戦略 ${strategyKey} の実行中にエラーが発生しました: ${error.message}`);
+              await postErrorToDiscord(`戦略 ${strategyKey} でエラー: ${error.message}`).catch(() => {});
             }
-          }
+          })());
         } else {
           console.log(`戦略 ${strategyKey} が無効です`);
         }
       }
+      
+      // すべての戦略を並列実行
+      await Promise.all(strategyPromises);
+      
       await sleep(1000);
     }
     

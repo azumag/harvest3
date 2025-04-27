@@ -196,7 +196,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
  */
 async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketParameters) {
   
-  const { tradePercentage } = globalConfig;
+  const { tradePercentage } = config;
   const { period = 14, oversoldThreshold = 20, overboughtThreshold = 80, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
 
