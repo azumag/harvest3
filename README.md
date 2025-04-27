@@ -172,16 +172,18 @@ Discord Webhookが設定されている場合、以下のレポートが送信�
 
 ```javascript
 const config = {
-  // 共通設定
-  amount: 0.0001,          // 注文するBTCの量（固定値、tradePercentageが優先される）
-  profitMargin: 0.003,     // 目標利益率（取引料を考慮）
-  maxHistoryLength: 100,   // スプレッド履歴の最大長
-  tradePercentage: 0.01,   // 資金の%で取引 (購入時)
-  sellPercentage: 0.1,    // 資金の%で取引 (売却時)
-  tradeCost: 0.0012,       // 手数料暫定（bitbank)
-  cancelOrderThreshold: 10,// 一銘柄ごとの注文限度数
-  safetyJPYAmount: 2000,   // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
-  amountPrecision: 8,      // 取引量の小数点以下の桁数（デフォルト値）
+  global: {
+      // 共通設定
+      amount: 0.0001,          // 注文するBTCの量（固定値、tradePercentageが優先される）
+      profitMargin: 0.003,     // 目標利益率（取引料を考慮）
+      maxHistoryLength: 100,   // スプレッド履歴の最大長
+      tradePercentage: 0.01,   // 資金の%で取引 (購入時)
+      sellPercentage: 0.1,    // 資金の%で取引 (売却時)
+      tradeCost: 0.0012,       // 手数料暫定（bitbank)
+      cancelOrderThreshold: 10,// 一銘柄ごとの注文限度数
+      safetyJPYAmount: 2000,   // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
+      amountPrecision: 8,      // 取引量の小数点以下の桁数（デフォルト値）
+  },
 
   // 戦略固有の設定
   strategies: {
