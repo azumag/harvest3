@@ -11,7 +11,7 @@ const {
 
 // const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../src/database/manager');
-const { addOrder } = require('../src/database/manager');
+const { addOrder, fetchOHLCVData } = require('../src/database/manager');
 
 /**
  * 移動平均線クロス戦略
@@ -30,7 +30,10 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     const { amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01 } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, longPeriod + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', longPeriod + 10);
+    if (ohlcv.length < longPeriod) {
+      return;
+    }
     
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -194,7 +197,10 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, slowPeriod + signalPeriod + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', slowPeriod + signalPeriod + 10);
+    if (ohlcv.length < slowPeriod+signalPeriod) {
+      return;
+    }
     
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -356,7 +362,11 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    if (ohlcv.length < period) {
+      return;
+    }
+
     
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -520,7 +530,10 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    if (ohlcv.length < period) {
+      return;
+    }
     
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
