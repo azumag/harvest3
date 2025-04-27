@@ -9,8 +9,9 @@ const { getTradeSummary } = require('./controllers/summary');
 const { getOrders } = require('./controllers/orders');
 const tradesController = require('./controllers/trades');
 const signalsController = require('./controllers/signals');
+const { getStrategiesList } = require('./controllers/strategies');
 
-// const { getOhlcv } = require('./controllers/ohlcv');
+const { getOhlcv } = require('./controllers/ohlcv');
 
 // // 取引履歴API
 // router.get('/history', getHistory);
@@ -46,7 +47,7 @@ router.get('/signals', signalsController.getSignals);
 // router.get('/strategy-signals', getStrategySignals);
 
 // // ローソク足データAPI
-// router.get('/ohlcv', getOhlcv);
+router.get('/ohlcv', getOhlcv);
 
 // 取引キー一覧取得API
 router.get('/trade-keys', getTradeKeyList);
@@ -57,8 +58,8 @@ router.get('/exchanges', getExchanges);
 // 銘柄一覧API
 router.get('/symbols', getSymbols);
 
-// // 戦略一覧API
-// router.get('/strategies', getStrategiesList);
+// 戦略一覧API
+router.get('/strategies', getStrategiesList);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {
