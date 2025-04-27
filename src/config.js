@@ -112,6 +112,7 @@ const config = {
       interval: 100,
       priceThreshold: 0.001,
       maxOrdersPerMinute: 100,
+      amount: 0.0001
     },
     SCALPING: {
       enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'
@@ -136,12 +137,14 @@ const config = {
     'bitbank': {
       apiKey: BBApiKey,
       secret: BBApiSecret,
-      module: 'bitbank'
+      module: 'bitbank',
+      instance: exchangeBB,
     },
     'bitflyer': {
       apiKey: BFApiKey,
       secret: BFApiSecret,
-      module: 'bitflyer'
+      module: 'bitflyer',
+      instance: exchangeBF,
     }
   }
 };

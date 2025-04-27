@@ -8,8 +8,6 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     gcc \
-    sqlite3 \
-    libsqlite3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -27,7 +25,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # better-sqlite3を正しいアーキテクチャ向けにビルド
-RUN npm install --build-from-source=better-sqlite3
+RUN npm install 
 
 # アプリケーションのソースコードをコピー（node_modulesを除外）
 COPY src/ ./src/

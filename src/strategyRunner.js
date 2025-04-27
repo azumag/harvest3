@@ -3,7 +3,8 @@ const { config, bitflyerMinTradeAmounts } = require('./config');
 const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { getMarketParameters } = require('./utils');
-const { getStrategyParameters, saveStrategyParameters } = require('./redisDatabase'); // getStrategyParametersをインポート
+// const { getStrategyParameters, saveStrategyParameters } = require('./redisDatabase'); // getStrategyParametersをインポート
+const { getStrategyParameters, saveStrategyParameters } = require('./database/manager');
 
 /**
  * 指定された戦略を実行する関数
@@ -39,43 +40,36 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     // 戦略に応じたパラメータを設定
     const params = [];
     
-    // updateTradeRecordに戦略キーを渡すラッパー関数
-    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side, orderId, orderType) => {
-      updateTradeRecord(exchangeId, symbol, amount, price, side, strategyKey, orderId, orderType);
-    };
-    
     switch (strategyKey) {
       case 'MA':
-        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.shortPeriod, strategyConfig.longPeriod, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'MACD':
-        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.fastPeriod, strategyConfig.slowPeriod, strategyConfig.signalPeriod, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'RSI':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'BOLLINGER_BANDS':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.stdDev, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'MEAN_REVERSION':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.deviationThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage});
         break;
       case 'OSCILLATOR':
-        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.period, strategyConfig.oversoldThreshold, strategyConfig.overboughtThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'INTER_EXCHANGE_ARBITRAGE':
         // アービトラージは複数の取引所を必要とするため、別途処理
         // アービトラージ戦略のパラメータは runArbitrageStrategy で処理するため、ここではスキップ
         return null;
       case 'HFT':
-        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage, updateTradeRecord: updateTradeRecordWithStrategy, tradeRecords });
+        params.push(exchange, symbol, strategyConfig.interval, strategyConfig.priceThreshold, strategyConfig.amount, { ...options, tradePercentage: strategyConfig.tradePercentage });
         break;
       case 'MARKET_MAKING':
         params.push(exchange, symbol, strategyConfig.rangePeriod, strategyConfig.rangeThreshold, strategyConfig.spreadWidth, strategyConfig.amount, {
           ...options,
           tradePercentage: strategyConfig.tradePercentage,
-          updateTradeRecord: updateTradeRecordWithStrategy,
-          tradeRecords,
           reorderInterval: strategyConfig.reorderInterval,
           maxPositionCount: strategyConfig.maxPositionCount,
           adjustmentValue: strategyConfig.adjustmentValue
@@ -84,8 +78,6 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
       case 'INYO':
         params.push(exchange, symbol, {
           ...options,
-          updateTradeRecord: updateTradeRecordWithStrategy,
-          tradeRecords
         });
         break;
       // case 'SCALPING':
@@ -97,7 +89,7 @@ async function runStrategy(strategyKey, exchange, symbol, options = {}) {
     }
     
     // 戦略を実行
-    return await strategies.executeStrategy(strategyKey, params);
+    return strategies.executeStrategy(strategyKey, params);
   } catch (error) {
     console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
     if (options.postErrorToDiscord) {
@@ -137,11 +129,6 @@ async function runArbitrageStrategy(exchanges, symbol, options = {}) {
         return defaultConfig;
       }
     })();
-    
-    // updateTradeRecordに戦略キーを渡すラッパー関数
-    const updateTradeRecordWithStrategy = (exchangeId, symbol, amount, price, side, orderId, orderType) => {
-      updateTradeRecord(exchangeId, symbol, amount, price, side, 'INTER_EXCHANGE_ARBITRAGE', orderId, orderType);
-    };
     
     const params = [
       exchanges,
@@ -201,7 +188,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     // 移動平均線戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     // runStrategy関数内でパラメータ読み込みを行うため、ここではenabledチェックのみ
     if (config.strategies.MA.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('MA', exchange, symbol, commonOptions);
+      const result = runStrategy('MA', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.MA.enabled && exchange.id === 'bitflyer') {
       console.log(`移動平均線戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -209,7 +196,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // MACD戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.MACD.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('MACD', exchange, symbol, commonOptions);
+      const result = runStrategy('MACD', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.MACD.enabled && exchange.id === 'bitflyer') {
       console.log(`MACD戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -217,7 +204,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // RSI戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.RSI.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('RSI', exchange, symbol, commonOptions);
+      const result = runStrategy('RSI', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.RSI.enabled && exchange.id === 'bitflyer') {
       console.log(`RSI戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -225,7 +212,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // ボリンジャーバンド戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.BOLLINGER_BANDS.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('BOLLINGER_BANDS', exchange, symbol, commonOptions);
+      const result = runStrategy('BOLLINGER_BANDS', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.BOLLINGER_BANDS.enabled && exchange.id === 'bitflyer') {
       console.log(`ボリンジャーバンド戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -234,7 +221,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     // 逆張り戦略
     // 平均回帰戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.MEAN_REVERSION.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('MEAN_REVERSION', exchange, symbol, commonOptions);
+      const result = runStrategy('MEAN_REVERSION', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.MEAN_REVERSION.enabled && exchange.id === 'bitflyer') {
       console.log(`平均回帰戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -242,7 +229,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // オシレーター戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.OSCILLATOR.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('OSCILLATOR', exchange, symbol, commonOptions);
+      const result = runStrategy('OSCILLATOR', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.OSCILLATOR.enabled && exchange.id === 'bitflyer') {
       console.log(`オシレーター戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -250,13 +237,13 @@ async function runStrategies(exchange, symbol, options = {}) {
     
     // 高頻度取引戦略
     if (config.strategies.SCALPING.enabled) {
-      const result = await runStrategy('SCALPING', exchange, symbol, commonOptions);
+      const result = runStrategy('SCALPING', exchange, symbol, commonOptions);
       if (result) results.push(result);
     }
     
     // 陰陽戦略: bitflyerではfetchOHLCVがサポートされていないため実行しない
     if (config.strategies.INYO.enabled && exchange.id !== 'bitflyer') {
-      const result = await runStrategy('INYO', exchange, symbol, commonOptions);
+      const result = runStrategy('INYO', exchange, symbol, commonOptions);
       if (result) results.push(result);
     } else if (config.strategies.INYO.enabled && exchange.id === 'bitflyer') {
       console.log(`陰陽戦略はbitflyerではサポートされていないためスキップします: ${symbol}`);
@@ -265,7 +252,7 @@ async function runStrategies(exchange, symbol, options = {}) {
     return results;
   } catch (error) {
     console.error(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id}`, error);
-    await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id} - ${error.message}`);
+    postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${symbol} ${exchange.id} - ${error.message}`);
     return [];
   }
 }

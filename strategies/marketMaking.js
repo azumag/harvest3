@@ -1,7 +1,7 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
-const { updateFilledTrades, getRealizedPnL } = require('../src/utils.js');
-const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
+// const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
+const { updateFilledTrades, getRealizedPnL, getCurrentOrderPair, setCurrentOrderPair} = require('../src/database/manager');
 
 /**
  * 保存された orderPairs 配列から activeOrders オブジェクトを再構築する
@@ -16,10 +16,10 @@ function rebuildActiveOrders(orderPairs) {
   // ここでは単純に配列の最後に見つかった未約定注文を最新とする
   for (const pair of orderPairs) {
     if (pair.buyOrder && !pair.buyFilled) {
-      activeBuy = pair.buyOrder; // 上書きしていく
+      activeBuy = pair.buyOrder;
     }
     if (pair.sellOrder && !pair.sellFilled) {
-      activeSell = pair.sellOrder; // 上書きしていく
+      activeSell = pair.sellOrder; 
     }
   }
 
@@ -122,7 +122,7 @@ class MarketMakingStrategy {
   async _postOrder(message) {
     if (this.options.postOrderToDiscord) {
       try {
-        await this.options.postOrderToDiscord(`[MM] ${this.exchange.id} - ${this.symbol}: ${message}`);
+        this.options.postOrderToDiscord(`[MM] ${this.exchange.id} - ${this.symbol}: ${message}`);
       } catch (error) {
         console.error(`${this.symbol}: Discordへの注文投稿中にエラー:`, error);
       }
@@ -140,7 +140,7 @@ class MarketMakingStrategy {
     console.error(`[MM Error] ${this.exchange.id} - ${this.symbol}: ${errorMessage}`, error || '');
     if (this.options.postErrorToDiscord) {
       try {
-        await this.options.postErrorToDiscord(`[MM Error] ${this.exchange.id} - ${this.symbol}: ${errorMessage}`);
+        this.options.postErrorToDiscord(`[MM Error] ${this.exchange.id} - ${this.symbol}: ${errorMessage}`);
       } catch (discordError) {
         console.error('Discordへのエラー投稿中にエラー:', discordError);
       }
@@ -155,13 +155,8 @@ class MarketMakingStrategy {
    * @param {Number} amount - 量
    */
   _updateTradeRecord(side, price, amount, orderId, orderType) {
-    if (this.options.updateTradeRecord) {
-      try {
-        this.options.updateTradeRecord(this.exchange.id, this.symbol, amount, price, side, orderId, orderType);
-      } catch (error) {
-        console.error(`${this.symbol}: 取引記録の更新中にエラー:`, error);
-      }
-    }
+    addOrder(this.exchange, this.symbol, 'MARKET_MAKING', side, amount, price, orderId, orderType);
+
     // ポジション数の簡易更新 (より正確な管理が必要な場合あり)
     if (side === 'buy') {
       this.currentPositions += amount;
@@ -281,7 +276,7 @@ class MarketMakingStrategy {
                 pair[filledKey] = true;
                 // 約定した場合、ポジション数を更新 (取引記録更新時に行われている場合は不要かも)
                 // this._updatePositionOnFill(side, order.amount);
-                await updateFilledTrades(this.exchange, this.symbol);
+                updateFilledTrades(this.exchange, this.symbol);
                 
                 return; // 約定したので以降の処理は不要
             }
@@ -615,17 +610,15 @@ class MarketMakingStrategy {
       // 取引量を更新（常に最新の注文の量に合わせる）
       currentPair.amount = amount;
 
-
-      await this._postOrder(`${side}注文発注: 価格 ${price}, 量 ${amount}, ID ${order.id}`);
+      this._postOrder(`${side}注文発注: 価格 ${price}, 量 ${amount}, ID ${order.id}`);
 
     } catch (error) {
-      await this._postError(`${side}注文の発注中にエラーが発生しました`, error);
+      this._postError(`${side}注文の発注中にエラーが発生しました`, error);
       // エラー発生時に activeOrders をクリアすべきか検討
       if (side === 'buy') this.activeOrders.buy = null;
       else this.activeOrders.sell = null;
     }
   }
-
 
   /**
    * 戦略のメインループを開始する

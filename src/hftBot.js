@@ -2,14 +2,16 @@
 const { exchangeBB, exchangeBF, bitflyerMinTradeAmounts } = require('./config');
 const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
-const { postReport, postStrategyProfitReport } = require('./reports');
 const { runStrategy } = require('./strategyRunner');
 const { getMarketParameters, sleep } = require('./utils');
+
+const { initializeDB } = require('./database/manager');
 
 /**
  * 高頻度取引（HFT）ボットを起動する関数
  */
 async function startHFTBot() {
+  initializeDB();
   try {
     // const exchanges = [exchangeBB, exchangeBF];
     const exchanges = [exchangeBB];
@@ -55,18 +57,6 @@ async function startHFTBot() {
     await postErrorToDiscord(errorMessage);
   }
 }
-
-// // レポートを投稿するためのタイマー設定
-// setInterval(() => {
-//   const now = new Date();
-//   if (now.getMinutes() === 0) { // 時間ごと
-    
-//     // 戦略と銘柄ごとの損益レポート
-//     postStrategyProfitReport(exchangeBB);
-//     postStrategyProfitReport(exchangeBF);
-//   }
-// }, 60000); // 1分ごとにチェック
-
 
 // ボットを起動
 console.log('高頻度取引（HFT）ボットを起動します...');

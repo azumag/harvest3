@@ -1,5 +1,5 @@
 const { MongoClient, ObjectId } = require('mongodb');
-const { mongoUrl, mongoDbName } = require('./config');
+const { mongoUrl, mongoDbName } = require('../config');
 
 // MongoDB接続オプションを追加
 const mongoOptions = {
@@ -23,6 +23,9 @@ async function connectDB() {
       db = client.db(mongoDbName);
       console.log('MongoDBに接続しました');
 
+      // 必要なコレクションが存在するか確認し、存在しない場合は作成
+      await ensureCollectionsExist();
+
       // コレクションの参照を取得
       module.exports.ordersCollection = db.collection('orders');
       module.exports.tradesCollection = db.collection('trades');
@@ -35,6 +38,32 @@ async function connectDB() {
       console.error('MongoDB接続エラー:', error);
       throw error;
     }
+  }
+}
+
+/**
+ * 必要なコレクションが存在するか確認し、存在しない場合は作成する
+ */
+async function ensureCollectionsExist() {
+  try {
+    // 既存のコレクション一覧を取得
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(c => c.name);
+    
+    // 必要なコレクションのリスト
+    const requiredCollections = ['orders', 'trades', 'signals'];
+    
+    // 存在しないコレクションを作成
+    for (const name of requiredCollections) {
+      if (!collectionNames.includes(name)) {
+        console.log(`コレクション ${name} が存在しないため作成します`);
+        await db.createCollection(name);
+        console.log(`コレクション ${name} を作成しました`);
+      }
+    }
+  } catch (error) {
+    console.error('コレクション確認/作成エラー:', error);
+    throw error;
   }
 }
 
@@ -52,39 +81,71 @@ async function closeDB() {
 
 /**
  * コレクションにインデックスを作成する
+ * 既に存在するインデックスは再作成しない
  */
 async function createIndexes() {
   try {
-    // ordersコレクションのインデックス
-    await module.exports.ordersCollection.createIndex({ orderId: 1 }, { unique: true });
-    await module.exports.ordersCollection.createIndex({ orderedAt: 1 });
-    await module.exports.ordersCollection.createIndex({ orderedAt: -1 });
-
-    // tradesコレクションのインデックス
-    await module.exports.tradesCollection.createIndex({ orderId: 1 });
-    await module.exports.tradesCollection.createIndex({ tradeId: 1 }, { unique: true });
-    await module.exports.tradesCollection.createIndex({ filledAt: 1 });
-    await module.exports.tradesCollection.createIndex({ filledAt: -1 });
-
-    // signalsコレクションのインデックス
-    await module.exports.signalsCollection.createIndex({ timestamp: 1 });
-    await module.exports.signalsCollection.createIndex({ timestamp: -1 });
-
-    console.log('MongoDBインデックスを作成しました');
+    // 各コレクションのインデックス作成処理
+    await createCollectionIndexesIfNotExist('orders', [
+      { key: { orderId: 1 }, options: { unique: true } },
+      { key: { orderedAt: 1 }, options: {} },
+      { key: { orderedAt: -1 }, options: {} }
+    ]);
+    
+    await createCollectionIndexesIfNotExist('trades', [
+      { key: { orderId: 1 }, options: {} },
+      { key: { tradeId: 1 }, options: { unique: true } },
+      { key: { filledAt: 1 }, options: {} },
+      { key: { filledAt: -1 }, options: {} }
+    ]);
+    
+    await createCollectionIndexesIfNotExist('signals', [
+      { key: { timestamp: 1 }, options: {} },
+      { key: { timestamp: -1 }, options: {} }
+    ]);
+    
+    console.log('MongoDBインデックスの確認/作成が完了しました');
   } catch (error) {
     console.error('MongoDBインデックス作成エラー:', error);
-    // インデックス作成失敗をより明示的に通知するか、
-    // 重要なインデックスが作成できない場合はエラーを投げることを検討
-    // throw new Error(`重要なインデックスの作成に失敗しました: ${error.message}`);
   }
 }
 
+/**
+ * 指定されたコレクションに、必要なインデックスが存在しない場合のみ作成する
+ * @param {string} collectionName - コレクション名
+ * @param {Array} indexSpecs - インデックス定義の配列
+ */
+async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
+  const collection = db.collection(collectionName);
+  
+  // 既存のインデックスを取得
+  const existingIndexes = await collection.listIndexes().toArray();
+  const existingIndexMap = new Map();
+  
+  // 既存インデックス情報をマップに格納
+  existingIndexes.forEach(index => {
+    // インデックス名をキーとする
+    existingIndexMap.set(JSON.stringify(index.key), index);
+  });
+  
+  // 必要なインデックスを確認し、存在しない場合のみ作成
+  for (const spec of indexSpecs) {
+    const indexKey = JSON.stringify(spec.key);
+    
+    if (!existingIndexMap.has(indexKey)) {
+      console.log(`コレクション ${collectionName} にインデックスを作成: ${indexKey}`);
+      await collection.createIndex(spec.key, spec.options);
+    } else {
+      console.log(`コレクション ${collectionName} のインデックスが既に存在: ${indexKey}`);
+    }
+  }
+}
 
 /**
  * ordersコレクションにデータを追加する
  * @param {Object} orderData - 注文データ
  */
-async function addOrder(orderData) {
+async function addOrderMongoDB(orderData) {
   await connectDB();
   try {
     const result = await module.exports.ordersCollection.insertOne(orderData);
@@ -119,11 +180,11 @@ async function addOrdersBulk(ordersData) {
  * tradesコレクションにデータを追加する
  * @param {Object} tradeData - 約定データ
  */
-async function addTrade(tradeData) {
+async function addTradeMongoDB(tradeData) {
   await connectDB();
   try {
     const result = await module.exports.tradesCollection.insertOne(tradeData);
-    // console.log('Trade added:', result.insertedId);
+    console.log('Trade added:', result.insertedId);
     return result;
   } catch (error) {
     console.error('Error adding trade:', error);
@@ -135,7 +196,7 @@ async function addTrade(tradeData) {
  * signalsコレクションにデータを追加する
  * @param {Object} signalData - シグナルデータ
  */
-async function addSignal(signalData) {
+async function addSignalMongoDB(signalData) {
   await connectDB();
   try {
     const result = await module.exports.signalsCollection.insertOne(signalData);
@@ -182,18 +243,43 @@ async function listTrades(filter = {}, options = {}) {
 }
 
 /**
- * signalsコレクションからデータをリスト取得する
+ * signalsコレクションからデータをリスト取得する (ページング対応)
  * @param {Object} filter - フィルタ条件
- * @param {Object} options - クエリオプション (例: { limit: 10, sort: { timestamp: -1 } })
+ * @param {number} skip - スキップする件数
+ * @param {number} limit - 取得する件数
+ * @param {Object} sort - ソート条件 (例: { timestamp: -1 })
  * @returns {Promise<Array>} シグナルデータの配列
  */
-async function listSignals(filter = {}, options = {}) {
+async function listSignals(filter = {}, skip = 0, limit = 0, sort = { timestamp: -1 }) {
   await connectDB();
   try {
-    const signals = await module.exports.signalsCollection.find(filter, options).toArray();
+    let query = module.exports.signalsCollection.find(filter).sort(sort);
+    if (skip > 0) {
+      query = query.skip(skip);
+    }
+    if (limit > 0) {
+      query = query.limit(limit);
+    }
+    const signals = await query.toArray();
     return signals;
   } catch (error) {
     console.error('Error listing signals:', error);
+    throw error;
+  }
+}
+
+/**
+ * signalsコレクションの総件数を取得する
+ * @param {Object} filter - フィルタ条件
+ * @returns {Promise<number>} シグナルデータの総件数
+ */
+async function countSignals(filter = {}) {
+  await connectDB();
+  try {
+    const count = await module.exports.signalsCollection.countDocuments(filter);
+    return count;
+  } catch (error) {
+    console.error('Error counting signals:', error);
     throw error;
   }
 }
@@ -286,19 +372,20 @@ function setupGracefulShutdown() {
 module.exports = {
   connectDB,
   closeDB,
-  addOrder,
+  addOrderMongoDB,
   addOrdersBulk,
-  addTrade,
-  addSignal,
+  addTradeMongoDB,
+  addSignalMongoDB,
   listOrders,
   listTrades,
-  listSignals,
+  listSignals, // ページング対応版
+  countSignals, // 総件数取得関数を追加
   getOrderByOrderId,
   getTradeByTradeId,
   getSignalById,
-  // コレクション参照はconnectDB後に設定される
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
-  setupGracefulShutdown
+  setupGracefulShutdown,
+  connectDB
 };

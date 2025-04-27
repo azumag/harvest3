@@ -3,11 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>取引データ閲覧 - 分析</title>
+    <title>分析 - 取引データ閲覧</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- カスタムCSS -->
     <link href="css/style.css" rel="stylesheet">
+    <!-- データテーブル -->
+    <link href="https://cdn.datatables.net/1.13.1/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <!-- Datepicker CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 </head>
 <body>
     <!-- ナビゲーションバーコンテナ -->
@@ -15,246 +19,108 @@
 
     <!-- メインコンテンツ -->
     <div class="container-fluid mt-4">
-        <!-- 期間選択 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">期間選択</h5>
-                        <div class="btn-group" role="group" aria-label="期間選択">
-                            <button type="button" class="btn btn-primary period-btn" data-period="daily">日次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="weekly">週次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="monthly">月次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="all">全期間</button>
-                        </div>
+        <h2>分析</h2>
+
+        <!-- フィルタエリア -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">フィルタ</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="filter-exchange" class="form-label">取引所</label>
+                        <select id="filter-exchange" class="form-select">
+                            <option value="">取引所を選択</option>
+                            <!-- 取引所オプションはJSで動的に追加 -->
+                        </select>
                     </div>
+                    <div class="col-md-3">
+                        <label for="filter-symbol" class="form-label">銘柄</label>
+                        <select id="filter-symbol" class="form-select">
+                            <option value="">銘柄を選択</option>
+                            <!-- 銘柄オプションはJSで動的に追加 -->
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-strategy" class="form-label">戦略</label>
+                        <select id="filter-strategy" class="form-select">
+                            <option value="">戦略を選択</option>
+                            <!-- 戦略オプションはJSで動的に追加、または静的に設定 -->
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-timeframe" class="form-label">時間足</label>
+                        <select id="filter-timeframe" class="form-select">
+                            <option value="1m">1分</option>
+                            <option value="5m">5分</option>
+                            <option value="15m" selected>15分</option>
+                            <option value="30m">30分</option>
+                            <option value="1h">1時間</option>
+                            <option value="4h">4時間</option>
+                            <option value="1d">1日</option>
+                            <option value="1w">1週間</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                        <label for="filter-start-date" class="form-label">開始日</label>
+                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-end-date" class="form-label">終了日</label>
+                        <input type="text" id="filter-end-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-limit" class="form-label">表示数</label>
+                        <select id="filter-limit" class="form-select">
+                            <option value="50">50件</option>
+                            <option value="100" selected>100件</option>
+                            <option value="200">200件</option>
+                            <option value="500">500件</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button id="apply-filter" class="btn btn-primary">表示</button>
                 </div>
             </div>
         </div>
 
-        <!-- 時系列取引グラフ -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">時系列取引グラフ</h5>
-                        <div class="chart-container" style="position: relative; height:400px;">
-                            <canvas id="time-series-chart"></canvas>
-                        </div>
-                        <div class="mt-3">
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="show-buy-trades" checked>
-                                <label class="form-check-label" for="show-buy-trades">買い取引</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="show-sell-trades" checked>
-                                <label class="form-check-label" for="show-sell-trades">売り取引</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="show-cumulative-pnl" checked>
-                                <label class="form-check-label" for="show-cumulative-pnl">累積損益</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 戦略別と取引所別のパフォーマンス比較 -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">戦略別パフォーマンス</h5>
-                        <div class="chart-container" style="position: relative; height:300px;">
-                            <canvas id="strategy-performance-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">取引所別パフォーマンス</h5>
-                        <div class="chart-container" style="position: relative; height:300px;">
-                            <canvas id="exchange-performance-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 取引量分析 -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">時間帯別取引量</h5>
-                        <div class="chart-container" style="position: relative; height:300px;">
-                            <canvas id="hourly-volume-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">取引サイズ分布</h5>
-                        <div class="chart-container" style="position: relative; height:300px;">
-                            <canvas id="trade-size-distribution-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 取引所・銘柄選択とろうそく足チャート -->
-        <div class="row mb-4">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-body">
+        <!-- チャート表示エリア -->
+        <div class="card">
+            <div class="card-body">
                 <h5 class="card-title">チャート</h5>
-                <!-- チャート選択部分に時間範囲セレクターを追加 -->
-                <div class="row mb-3">
-                  <div class="col-md-3">
-                    <label for="exchange-select" class="form-label">取引所</label>
-                    <select id="exchange-select" class="form-select"></select>
-                  </div>
-                  <div class="col-md-3">
-                    <label for="symbol-select" class="form-label">銘柄</label>
-                    <select id="symbol-select" class="form-select"></select>
-                  </div>
-                  <div class="col-md-3">
-                    <label for="strategy-select" class="form-label">戦略</label>
-                    <select id="strategy-select" class="form-select"></select>
-                  </div>
-                  <!-- <div class="col-md-3">
-                    <label for="time-range-select" class="form-label">時間範囲</label>
-                    <select id="time-range-select" class="form-select">
-                      <option value="last_100">最新100件</option>
-                      <option value="last_24h">過去24時間</option>
-                      <option value="last_7d">過去7日間</option>
-                      <option value="last_30d">過去30日間</option>
-                      <option value="custom">カスタム範囲</option>
-                    </select>
-                  </div> -->
+                <div id="chart-container" style="height: 600px;">
+                    <canvas id="ohlcvChart" width="1200" height="600"></canvas>
                 </div>
-
-                <!-- カスタム日時範囲セレクター（初期状態では非表示） -->
-                <!-- <div class="row mb-3" id="custom-date-range" style="display: none;">
-                  <div class="col-md-6">
-                    <label for="start-date" class="form-label">開始日時</label>
-                    <input type="datetime-local" id="start-date" class="form-control">
-                  </div>
-                  <div class="col-md-6">
-                    <label for="end-date" class="form-label">終了日時</label>
-                    <input type="datetime-local" id="end-date" class="form-control">
-                  </div>
-                </div> -->
-
-                <!-- 時間足選択ボタングループ -->
-                <div class="row mb-3">
-                  <div class="col-12">
-                    <div class="btn-group" role="group" aria-label="時間足選択">
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1m">1分足</button>
-                      <button type="button" class="btn btn-primary interval-btn" data-interval="5m">5分足</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="15m">15分足</button>
-                      <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1h">1時間足</button>
-                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="4h">4時間足</button> -->
-                      <!-- <button type="button" class="btn btn-outline-primary interval-btn" data-interval="1d">日足</button> -->
+                <div id="chart-loading" class="text-center py-3 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">読み込み中...</span>
                     </div>
-                    <!-- <button id="apply-date-range" class="btn btn-success ms-2">適用</button> -->
-                  </div>
                 </div>
-                <div class="chart-container" style="position: relative; height:400px;">
-                  <canvas id="ohlc-chart"></canvas>
+                <div id="chart-error" class="alert alert-danger mt-3 d-none">
+                    データを取得できませんでした。入力条件を確認してください。
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 詳細な統計情報 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">統計サマリー</h5>
-                        <div class="table-responsive">
-                            <table class="table table-striped" id="stats-table">
-                                <thead>
-                                    <tr>
-                                        <th>項目</th>
-                                        <th>全体</th>
-                                        <th>買い取引</th>
-                                        <th>売り取引</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="stats-table-body">
-                                    <!-- APIから取得したデータがここに表示されます -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div id="no-data-message" class="alert alert-info mt-3 d-none">
+                    選択した条件のデータが見つかりません。
                 </div>
             </div>
         </div>
+
     </div>
 
     <!-- JavaScript ライブラリ -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Chart.js - index.htmlと同じバージョンを使用 -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script> -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
-
-    <!-- プラグインの読み込み確認スクリプト -->
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        if (typeof Chart !== 'undefined') {
-          console.log('Chart.jsが正常に読み込まれました');
-          
-          // アノテーションプラグインの確認
-          setTimeout(() => {
-            console.log('登録されているプラグイン:', Chart.registry.plugins);
-            
-            // 修正: オブジェクトと配列の両方に対応
-            let hasAnnotation = false;
-            
-            if (Chart.registry.plugins) {
-              if (Chart.registry.plugins.items) {
-                // itemsがオブジェクトの場合
-                if (typeof Chart.registry.plugins.items === 'object' && !Array.isArray(Chart.registry.plugins.items)) {
-                  hasAnnotation = Object.values(Chart.registry.plugins.items).some(p => 
-                    p.id === 'annotation' || (p.id && p.id.includes('annotation')));
-                } 
-                // itemsが配列の場合
-                else if (Array.isArray(Chart.registry.plugins.items)) {
-                  hasAnnotation = Chart.registry.plugins.items.some(p => 
-                    p.id === 'annotation' || (p.id && p.id.includes('annotation')));
-                }
-              } else {
-                // registryの構造が異なる場合、直接チェック
-                hasAnnotation = Object.values(Chart.registry.plugins).some(p => 
-                  p.id === 'annotation' || (p.id && p.id.includes('annotation')));
-              }
-            }
-            
-            console.log('アノテーションプラグイン登録状態:', hasAnnotation ? '成功' : '失敗');
-          }, 500);
-        } else {
-          console.error('Chart.jsの読み込みに失敗しました');
-        }
-      });
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@2.0.2/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.0.0/dist/chartjs-adapter-luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
 
     <!-- カスタムJavaScript -->
     <script src="js/navbar.js"></script>
-    <script src="js/realtime.js"></script>
     <script src="js/analysis.js"></script>
 </body>
 </html>

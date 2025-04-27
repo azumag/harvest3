@@ -3,7 +3,9 @@ const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 const fetch = require('node-fetch');
-const { apiRoutes, databaseEvents, initialize } = require('../dbConfig');
+const { initializeDB } = require('../database/manager');
+const router = require('./routes');
+
 require('dotenv').config();
 console.log('環境変数 USE_LOCALTUNNEL:', process.env.USE_LOCALTUNNEL);
 console.log('localtunnelモジュールを読み込む前...');
@@ -32,7 +34,7 @@ app.use(morgan('dev'));
 app.use(express.static(path.join(__dirname, '../web')));
 
 // APIルート
-app.use('/api', apiRoutes);
+app.use('/api', router);
 
 // メインHTMLルート
 app.get('/', (req, res) => {
@@ -53,7 +55,7 @@ app.listen(PORT, async () => {
   
   // データベースの初期化
   try {
-    await initialize();
+    await initializeDB();
     console.log('データベースが正常に初期化されました');
   } catch (error) {
     console.error('データベース初期化エラー:', error);

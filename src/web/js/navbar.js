@@ -17,8 +17,8 @@ $(document).ready(function() {
             activeNavId = 'nav-dashboard';
         } else if (pageName === 'positions.html') {
             activeNavId = 'nav-positions';
-        } else if (pageName === 'history.html') {
-            activeNavId = 'nav-history';
+        } else if (pageName === 'order-history.html') {
+            activeNavId = 'nav-order-history';
         } else if (pageName === 'filled-history.html') {
             activeNavId = 'nav-filled-history';
         } else if (pageName === 'order-pairs.html') {

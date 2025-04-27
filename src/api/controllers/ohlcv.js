@@ -53,13 +53,17 @@ async function getOhlcv(req, res) {
 
     console.log(`[API /ohlcv] Fetching OHLCV for ${exchange} ${symbol} ${interval} limit=${limitInt} startTime=${startTimeMs}`); // endTimeMsを除去
     // OHLCVデータを取得
+    console.log(`[API /ohlcv] Calling fetchOHLCV with symbol=${symbol}, interval=${interval}, startTime=${startTimeMs}, limit=${limitInt}`);
     const ohlcv = await exchangeInstance.fetchOHLCV(symbol, interval, startTimeMs, limitInt); // endTimeMsを除去
 
+    console.log(`[API /ohlcv] fetchOHLCV returned:`, ohlcv);
     console.log(`[API /ohlcv] Successfully fetched ${ohlcv.length} OHLCV data points.`);
     // 取得したOHLCVデータをJSONで返す
     res.json(ohlcv);
   } catch (error) {
     console.error(`[API /ohlcv] Error processing request for ${exchange} ${symbol}:`, error); // エラーログ強化
+    // エラーオブジェクト全体をログに出力
+    console.error(`[API /ohlcv] Full error object:`, error);
     if (error instanceof ccxt.BadSymbol) {
       return res.status(400).json({ error: `Invalid symbol: ${symbol} for exchange: ${exchange}` });
     }

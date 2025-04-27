@@ -1,7 +1,7 @@
 /**
  * Redis版の取引記録を管理するモジュール
  */
-const { addTrade, getTradeRecordsAsObject } = require('./redisDatabase');
+const { addTrade, getTradeRecordsAsObject } = require('./database/redisDatabase'); // パスを修正
 
 /**
  * 取引記録を更新する関数

@@ -3,11 +3,9 @@
  */
 
 // モジュールのインポート
-const { exchangeBB, exchangeBF } = require('./config');
-const { updateTradeRecord, tradeRecords } = require('./redisTradeRecords');
-const { getMarketParameters, sleep } = require('./utils');
-const { client, initRedisClient } = require('./redisClient');
-const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
+const { exchangeBB, exchangeBF } = require('../src/config');
+const { getMarketParameters, sleep } = require('../src/utils');
+const { postErrorToDiscord, postOrderToDiscord } = require('../src/notifications');
 
 /**
  * 指定された取引所の全ポジションを成行で売却する関数
@@ -67,7 +65,7 @@ async function closeAllPositions(exchange) {
         const formattedAmount = parseFloat(amount.toFixed(amountPrecision));
         
         console.log(`${symbol} を成行で売却します。数量: ${formattedAmount}`);
-        await postOrderToDiscord(`[INFO] ${exchange.id}: ${symbol} を成行で売却します。数量: ${formattedAmount}`);
+        postOrderToDiscord(`[INFO] ${exchange.id}: ${symbol} を成行で売却します。数量: ${formattedAmount}`);
         
         // 成行売り注文を作成
         const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
@@ -92,9 +90,6 @@ async function closeAllPositions(exchange) {
         
         console.log(`${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
         await postOrderToDiscord(`[SUCCESS] ${exchange.id}: ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
-        
-        // 取引記録を更新
-        updateTradeRecord(exchange.id, symbol, formattedAmount, executedPrice, 'sell', 'CLOSE_ALL', order.id, 'market');
         
         soldCount++;
       } catch (error) {
@@ -173,8 +168,6 @@ if (args.includes('--help') || args.includes('-h')) {
 // メイン処理
 async function main() {
   try {
-    // Redisクライアントを初期化
-    await initRedisClient();
     
     if (args.includes('--bitbank') || args.includes('-bb')) {
       console.log('BitBankのポジションのみを解消します...');

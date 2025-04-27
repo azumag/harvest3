@@ -22,19 +22,28 @@ body {
     font-style: italic;
 }
 
-/* ポジションカード */
-.position-card {
-    border-radius: 10px;
-    margin-bottom: 15px;
-    border-left: 5px solid #0d6efd;
+/* 共通スタイル */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f8f9fa;
 }
 
-.position-card.positive {
-    border-left-color: #198754;
+/* カード内のローディングスピナー表示用 */
+.card-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
 }
 
-.position-card.negative {
-    border-left-color: #dc3545;
+/* データなし表示用 */
+.no-data-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100px; /* 高さを調整 */
+    color: #6c757d;
+    font-style: italic;
 }
 
 /* 取引履歴テーブル */
@@ -63,26 +72,101 @@ body {
 
 .summary-card .card-body {
     flex: 1;
-    display: flex;
-    flex-direction: column;
 }
 
 .summary-card .card-title {
     margin-bottom: 15px;
 }
 
-/* ポジションコンテナ */
-#positions-container {
-    flex: 1;
-    overflow-y: auto;
-    max-height: 600px; /* 300pxから600pxに増加 */
+/* 新しいサマリー表示用のスタイル */
+.summary-cards.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -0.75rem; /* Bootstrapのrowの負のマージンを調整 */
+    margin-left: -0.75rem;  /* Bootstrapのrowの負のマージンを調整 */
 }
 
-/* グラフの高さ調整 */
-#profitChart {
-    height: 300px !important;
-    max-height: 300px;
+.summary-cards .col-md-6,
+.summary-cards .col-lg-4,
+.summary-cards .col-12 {
+    padding-right: 0.75rem; /* Bootstrapのcolのパディングを調整 */
+    padding-left: 0.75rem;  /* Bootstrapのcolのパディングを調整 */
+    margin-bottom: 1.5rem; /* カード間の下マージン */
 }
+
+.summary-cards .card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+
+.summary-cards .card-header {
+    background-color: #e9ecef;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.summary-cards .card-header h6 {
+    margin-bottom: 0;
+}
+
+.summary-cards .card-body {
+    padding: 1rem;
+}
+
+.summary-cards .table {
+    margin-bottom: 0;
+}
+
+.summary-cards .table td {
+    padding: 0.3rem 0.5rem;
+    border-top: none;
+    border-bottom: none;
+}
+
+.summary-cards .table tr:last-child td {
+    font-weight: bold;
+}
+
+.summary-cards .text-success {
+    color: #198754 !important;
+}
+
+.summary-cards .text-danger {
+    color: #dc3545 !important;
+}
+
+/* 注文ペアカードの固有スタイル */
+.order-pair-card .card-header {
+    background-color: #f8f9fa; /* 背景色を少し明るく */
+}
+
+.order-pair-card .price-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.order-pair-card .buy-price {
+    color: #198754;
+    font-size: 0.9rem;
+}
+
+.order-pair-card .sell-price {
+    color: #dc3545;
+    font-size: 0.9rem;
+}
+
+.order-pair-card .status .badge {
+    font-size: 0.75rem;
+}
+
+.order-pair-card .metadata {
+    color: #6c757d;
+    font-size: 0.75rem;
+    border-top: 1px solid #e9ecef;
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
+}
+
 
 /* リアルタイム更新インジケーター */
 #realtime-status .badge {
@@ -103,30 +187,6 @@ body {
     100% {
         opacity: 1;
     }
-}
-
-/* サマリーテーブル */
-.summary-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.summary-table th, .summary-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.summary-table th {
-    text-align: left;
-    font-weight: 600;
-}
-
-.summary-table .profit {
-    color: #198754;
-}
-
-.summary-table .loss {
-    color: #dc3545;
 }
 
 /* フィルターフォーム */
@@ -166,108 +226,6 @@ body {
         padding-left: 10px;
         padding-right: 10px;
     }
-}
-
-/* ポジショングループスタイル */
-.position-group {
-    border: 1px solid #e9ecef;
-    border-radius: 0.25rem;
-    margin-bottom: 0.5rem;
-}
-
-.position-group-header {
-    padding: 0.5rem;
-    background-color: #f8f9fa;
-    cursor: pointer;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.position-group-header h6 {
-    margin-bottom: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-/* ポジションコンテナタブ内表示用 */
-.positions-container {
-    max-height: 350px;
-    overflow-y: auto;
-    padding-right: 5px;
-}
-
-/* ページネーション改善 */
-#positions-pagination {
-    overflow-x: auto;
-    padding-bottom: 5px;
-}
-
-#positions-pagination .pagination {
-    flex-wrap: nowrap;
-    white-space: nowrap;
-    margin-bottom: 0;
-}
-
-/* 注文ペアカード用のスタイル */
-.order-pairs-cards {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  padding: 0.5rem 0;
-  gap: 1rem;
-}
-
-.order-pair-card {
-  min-width: 270px;
-  margin-bottom: 0.5rem;
-  flex: 0 0 auto;
-  border: 1px solid #dee2e6;
-  border-radius: 0.25rem;
-  padding: 0.75rem;
-  background-color: #f8f9fa;
-  position: relative;
-}
-
-.order-pair-card h6 {
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.order-pair-card .price-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
-}
-
-.order-pair-card .price-label {
-  color: #6c757d;
-}
-
-.order-pair-card .buy-price {
-  color: #198754;
-}
-
-.order-pair-card .sell-price {
-  color: #dc3545;
-}
-
-.order-pair-card .status {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  margin-top: 0.5rem;
-}
-
-.order-pair-card .metadata {
-  color: #6c757d;
-  font-size: 0.75rem;
-  margin-top: 0.5rem;
-  border-top: 1px solid #e9ecef;
-  padding-top: 0.5rem;
 }
 
 /* シグナル詳細モーダル */

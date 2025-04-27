@@ -1,4 +1,24 @@
 services:
+
+  reporter:
+    image: harvest3-bot-image
+    container_name: harvest3-reporter
+    restart: always
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./scripts:/usr/src/app/scripts
+      - ./test:/usr/src/app/test
+      - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
+    command: npm run reporter
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
+      - mongodb
+
   redis:
     image: redis:7-alpine
     container_name: harvest3-redis
@@ -67,27 +87,27 @@ services:
       - redis
       - mongodb
 
-  mm:
-    image: harvest3-bot-image
-    container_name: market_making_bot
-    restart: always
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run start-mm
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-      - mongodb
+  # mm:
+  #   image: harvest3-bot-image
+  #   container_name: market_making_bot
+  #   restart: always
+  #   volumes:
+  #     - ./src:/usr/src/app/src
+  #     - ./strategies:/usr/src/app/strategies
+  #     - ./scripts:/usr/src/app/scripts
+  #     - ./test:/usr/src/app/test
+  #     - ./data:/usr/src/app/data  # データベースファイル用のボリューム
+  #     - ./bot.js:/usr/src/app/bot.js
+  #     - ./package.json:/usr/src/app/package.json
+  #     - .env:/usr/src/app/.env
+  #   command: npm run start-mm
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #   networks:
+  #     - harvest-network
+  #   depends_on:
+  #     - redis
+  #     - mongodb
 
   web-ui:
     container_name: trade_viewer
@@ -101,7 +121,7 @@ services:
       - ./src:/usr/src/app/src
       - ./data:/usr/src/app/data
       - ./package.json:/usr/src/app/package.json
-      - ./package-lock.json:/usr/src/app/package-lock.json # package-lockも追加
+      - ./package-lock.json:/usr/src/app/package-lock.json
       - .env:/usr/src/app/.env
     depends_on:
       - redis

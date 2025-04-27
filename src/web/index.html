@@ -17,190 +17,78 @@
 
     <!-- メインコンテンツ -->
     <div class="container-fluid mt-4">
-        <!-- 期間選択 -->
+        <!-- 取引サマリーセクション -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card">
+                <div class="card summary-card">
                     <div class="card-body">
-                        <h5 class="card-title">期間選択</h5>
-                        <div class="btn-group" role="group" aria-label="期間選択">
-                            <button type="button" class="btn btn-primary period-btn" data-period="daily">日次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="weekly">週次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="monthly">月次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="yearly">年次</button>
-                            <button type="button" class="btn btn-outline-primary period-btn" data-period="all">全期間</button>
+                        <h5 class="card-title">取引サマリー</h5>
+                        <div id="summary-loading" class="text-center py-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">読み込み中...</span>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- サマリー情報 -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card summary-card">
-                    <div class="card-body">
-                        <h5 class="card-title">累積損益グラフ</h5>
-                        <canvas id="profitChart"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card summary-card">
-                    <div class="card-body">
-                        <h5 class="card-title">現在のポジション <a href="positions.html" class="btn btn-sm btn-outline-primary float-end">詳細を表示</a></h5>
-                        
-                        <!-- タブナビゲーション -->
-                        <ul class="nav nav-tabs mb-3" id="positionTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="exchange-tab" data-bs-toggle="tab" data-bs-target="#exchange-content" type="button" role="tab" aria-controls="exchange-content" aria-selected="true">取引所別</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="symbol-tab" data-bs-toggle="tab" data-bs-target="#symbol-content" type="button" role="tab" aria-controls="symbol-content" aria-selected="false">通貨別</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="strategy-tab" data-bs-toggle="tab" data-bs-target="#strategy-content" type="button" role="tab" aria-controls="strategy-content" aria-selected="false">戦略別</button>
-                            </li>
-                        </ul>
-                        
-                        <!-- タブコンテンツ -->
-                        <div class="tab-content" id="positionsTabContent">
-                            <!-- 取引所別タブコンテンツ -->
-                            <div class="tab-pane fade show active" id="exchange-content" role="tabpanel" aria-labelledby="exchange-tab">
-                                <div id="positions-container-exchange" class="positions-container">
-                                    <div class="text-center py-3">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">読み込み中...</span>
-                                        </div>
+                        <div id="summary-container" class="d-none">
+                            <!-- タブヘッダー -->
+                            <ul class="nav nav-tabs" id="summaryTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="exchange-tab" data-bs-toggle="tab" data-bs-target="#exchange-tab-pane" type="button" role="tab" aria-controls="exchange-tab-pane" aria-selected="true">取引所別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="symbol-tab" data-bs-toggle="tab" data-bs-target="#symbol-tab-pane" type="button" role="tab" aria-controls="symbol-tab-pane" aria-selected="false">銘柄別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="strategy-tab" data-bs-toggle="tab" data-bs-target="#strategy-tab-pane" type="button" role="tab" aria-controls="strategy-tab-pane" aria-selected="false">戦略別</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="order-pairs-tab" data-bs-toggle="tab" data-bs-target="#order-pairs-tab-pane" type="button" role="tab" aria-controls="order-pairs-tab-pane" aria-selected="false">注文ペア</button>
+                                </li>
+                            </ul>
+                            <!-- タブコンテンツ -->
+                            <div class="tab-content" id="summaryTabsContent">
+                                <!-- 取引所別サマリーペイン -->
+                                <div class="tab-pane fade show active" id="exchange-tab-pane" role="tabpanel" aria-labelledby="exchange-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="exchange-summary-container" class="summary-cards row"></div>
                                     </div>
                                 </div>
-                            </div>
-                            
-                            <!-- 通貨別タブコンテンツ -->
-                            <div class="tab-pane fade" id="symbol-content" role="tabpanel" aria-labelledby="symbol-tab">
-                                <div id="positions-container-symbol" class="positions-container">
-                                    <div class="text-center py-3">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">読み込み中...</span>
-                                        </div>
+                                <!-- 銘柄別サマリーペイン -->
+                                <div class="tab-pane fade" id="symbol-tab-pane" role="tabpanel" aria-labelledby="symbol-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="symbol-summary-container" class="summary-cards row"></div>
                                     </div>
                                 </div>
-                            </div>
-                            
-                            <!-- 戦略別タブコンテンツ -->
-                            <div class="tab-pane fade" id="strategy-content" role="tabpanel" aria-labelledby="strategy-tab">
-                                <div id="positions-container-strategy" class="positions-container">
-                                    <div class="text-center py-3">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">読み込み中...</span>
+                                <!-- 戦略別サマリーペイン -->
+                                <div class="tab-pane fade" id="strategy-tab-pane" role="tabpanel" aria-labelledby="strategy-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <div id="strategy-summary-container" class="summary-cards row"></div>
+                                    </div>
+                                </div>
+                                <!-- 注文ペアサマリーペイン -->
+                                <div class="tab-pane fade" id="order-pairs-tab-pane" role="tabpanel" aria-labelledby="order-pairs-tab" tabindex="0">
+                                    <div class="mt-3">
+                                        <!-- 注文ペアサマリーの既存HTMLをここに戻す -->
+                                        <div class="mb-4">
+                                            <h6 class="border-bottom pb-2 d-flex justify-content-between align-items-center">
+                                                <span>注文ペアサマリー</span>
+                                                <div class="d-flex align-items-center">
+                                                    <label for="order-pair-symbol-filter" class="me-2 small">銘柄:</label>
+                                                    <select id="order-pair-symbol-filter" class="form-select form-select-sm" style="width: auto;">
+                                                        <option value="all">すべて表示</option>
+                                                    </select>
+                                                </div>
+                                            </h6>
+                                            <div id="order-pairs-summary-container" class="summary-cards row"></div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- 以前の共通コンテナは非表示にしておく -->
-                        <div id="positions-container" style="display: none;">
-                        </div>
-                        
-                        <!-- ページネーションは不要になるため非表示 -->
-                        <div id="positions-pagination" class="mt-2" style="display: none;">
-                            <!-- ページネーションコントロールがここに表示されます -->
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 取引所別/戦略別サマリー -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card summary-card">
-                    <div class="card-body">
-                        <h5 class="card-title">取引所別サマリー</h5>
-                        <div id="exchange-summary-container">
-                            <div class="text-center py-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">読み込み中...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card summary-card">
-                    <div class="card-body">
-                        <h5 class="card-title">戦略別サマリー</h5>
-                        <div id="strategy-summary-container">
-                            <div class="text-center py-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">読み込み中...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 注文ペアサマリー -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title d-flex justify-content-between align-items-center">
-                            <span>注文ペアサマリー</span>
-                            <div class="d-flex align-items-center">
-                                <label for="symbol-filter" class="me-2">銘柄:</label>
-                                <select id="symbol-filter" class="form-select form-select-sm" style="width: auto;">
-                                    <option value="all">すべて表示</option>
-                                    <!-- 銘柄オプションは動的に生成 -->
-                                </select>
-                            </div>
-                        </h5>
-                        <div id="order-pairs-summary-container" class="order-pairs-cards">
-                            <div class="text-center py-5">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">読み込み中...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 最近の取引 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">最近の取引</h5>
-                        <div class="table-responsive">
-                            <table id="recent-trades-table" class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>日時</th>
-                                        <th>取引所</th>
-                                        <th>銘柄</th>
-                                        <th>戦略</th>
-                                        <th>取引方向</th>
-                                        <th>数量</th>
-                                        <th>価格</th>
-                                        <th>金額</th>
-                                        <th>手数料</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- APIから取得したデータがここに表示されます -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- JavaScript ライブラリ -->
@@ -212,7 +100,7 @@
 
     <!-- カスタムJavaScript -->
     <script src="js/navbar.js"></script>
-    <script src="js/realtime.js"></script>
+    <!-- <script src="js/realtime.js"></script> -->
     <script>
       // Chart.jsが読み込まれたか確認
       document.addEventListener('DOMContentLoaded', function() {

@@ -1,6 +1,6 @@
 # 暗号通貨取引ボット (harvest3)
 
-このプロジェクトは、複数の取引戦略を実装した暗号通貨取引ボット (`harvest3`) です。ccxtライブラリを使用して、複数の取引所（bitbank、bitflyer）に接続し、自動取引を行います。**Redis**データベースを使用して取引記録、ポジション、イベントなどを永続化・管理し、Web UIを通じてリアルタイムな状態監視や履歴確認が可能です。
+このプロジェクトは、複数の取引戦略を実装した暗号通貨取引ボット (`harvest3`) です。ccxtライブラリを使用して、複数の取引所（bitbank、bitflyer）に接続し、自動取引を行います。**Redis**データベースを使用してリアルタイムな取引記録、ポジション、イベントなどを管理し、**MongoDB**データベースを使用して注文、約定、シグナルなどの履歴データを永続化します。Web UIを通じてリアルタイムな状態監視や履歴確認が可能です。
 
 ## 主な機能
 
@@ -8,7 +8,7 @@
 -   複数の取引所 (Bitbank, Bitflyer) に対応
 -   環境変数による柔軟な設定変更
 -   Discordへの通知機能 (エラー、注文、損益レポート)
--   Redisデータベースによるデータ永続化
+-   **Redis** および **MongoDB** データベースによるデータ永続化と管理
 -   Web UIによるリアルタイム監視と履歴表示
 -   Dockerによる簡単なデプロイと実行
 
@@ -54,6 +54,8 @@
 -   Docker および Docker Compose (Dockerで実行する場合)
 -   BitbankとBitflyerのAPIキー
 -   Discord Webhook URL (通知機能を利用する場合)
+-   **Redis サーバー**
+-   **MongoDB サーバー**
 
 ### インストール
 
@@ -71,7 +73,7 @@
     ```bash
     cp .env.example .env
     ```
-    `.env`ファイルを編集して、APIキーとDiscord Webhook URLを設定します。
+    `.env`ファイルを編集して、APIキー、Discord Webhook URL、**およびデータベース接続情報**を設定します。
 
     ```dotenv
     # 取引所APIキー
@@ -87,6 +89,10 @@
 
     # Redis接続URL (Docker Composeを使用しない場合や、外部Redisサーバーを使用する場合に設定)
     REDIS_URL=redis://localhost:6379
+
+    # MongoDB接続設定 (Docker Composeを使用しない場合や、外部MongoDBサーバーを使用する場合に設定)
+    MONGO_URL=mongodb://localhost:27017
+    MONGO_DB_NAME=harvest3
 
     # 戦略の有効/無効フラグ (任意、デフォルトはconfig.jsの値)
     # 例: STRATEGY_MA_ENABLED=true
@@ -120,7 +126,7 @@
 
 `docker-compose.yml` を使用して、各サービスをコンテナとして実行できます。
 
--   **すべてのサービス (bot, hft, mm, web-ui) を起動:**
+-   **すべてのサービス (bot, hft, mm, web-ui, redis, mongo) を起動:**
     ```bash
     docker compose up -d
     ```
@@ -137,6 +143,12 @@
 
     # Web UIのみ起動 (通常は他のボットと併用)
     docker compose up -d web-ui
+
+    # Redisサーバーのみ起動
+    docker compose up -d redis
+
+    # MongoDBサーバーのみ起動
+    docker compose up -d mongo
     ```
 -   **ログの確認:**
     ```bash
@@ -146,44 +158,6 @@
     ```bash
     docker compose down
     ```
-
-## ポジション解消コマンド
-
-ボットが作成したすべてのポジションを成行で売却し、ポジションを解消するコマンド (`src/closeAllPositions.js`) が用意されています。
-
-### 通常実行
-
-```bash
-# ヘルプを表示
-node src/closeAllPositions.js --help
-
-# すべての取引所のポジションを解消
-npm run close-all
-
-# BitBankのポジションのみを解消
-npm run close-bb
-
-# BitFlyerのポジションのみを解消
-npm run close-bf
-```
-
-### Dockerでの実行
-
-```bash
-# ヘルプを表示
-docker compose exec bot node src/closeAllPositions.js --help
-
-# すべての取引所のポジションを解消
-docker compose exec bot node src/closeAllPositions.js
-
-# BitBankのポジションのみを解消
-docker compose exec bot node src/closeAllPositions.js --bitbank
-
-# BitFlyerのポジションのみを解消
-docker compose exec bot node src/closeAllPositions.js --bitflyer
-```
-
-**注意:** このコマンドは一度実行すると、対象取引所のJPY以外の全資産が成行で売却されます。実行前に必ず確認してください。
 
 ## レポート機能
 
@@ -226,17 +200,27 @@ const config = {
 
 ## データベース
 
-このボットは取引記録、ポジション情報、イベントなどの永続化とリアルタイムな状態管理に **Redis** を使用しています。Redisサーバーへの接続情報は `.env` ファイルまたは環境変数で設定します。
+このボットは、データの種類に応じて **Redis** と **MongoDB** の両方のデータベースを利用します。
+
+-   **Redis:** リアルタイムな取引記録、現在のポジション情報、イベント通知、各種サマリー情報など、高速な読み書きやPub/Sub機能が活用されるデータに使用されます。これらのデータは主にボットの現在の状態監視やリアルタイムなWeb UI表示に利用されます。
+-   **MongoDB:** 注文履歴 (`orders`)、約定履歴 (`trades`)、戦略シグナル (`signals`) など、永続的に保存し、後から詳細な分析や履歴確認を行うためのデータに使用されます。
+
+データベースサーバーへの接続情報は `.env` ファイルまたは環境変数で設定します。
 
 **主な利用方法:**
 
--   **取引履歴:** 実行された取引の詳細を保存します。
--   **約定履歴:** 約定した取引の情報を保存します。
--   **ポジション管理:** 現在保有しているポジションの情報をリアルタイムで管理します。
--   **イベント通知:** 注文の作成、更新、キャンセルなどのイベントを Pub/Sub 機能を利用してリアルタイムに配信します。Web UI などで利用されます。
--   **サマリー情報:** 各取引所や戦略ごとの損益、資産状況などのサマリー情報を保存します。
+-   **Redis:**
+    -   取引履歴 (リアルタイム)
+    -   約定履歴 (リアルタイム)
+    -   ポジション管理 (リアルタイム)
+    -   イベント通知 (Pub/Sub)
+    -   サマリー情報 (リアルタイム損益、資産状況など)
+-   **MongoDB:**
+    -   注文履歴 (`orders` コレクション)
+    -   約定履歴 (`trades` コレクション)
+    -   戦略シグナル (`signals` コレクション)
 
-**注意:** Dockerを使用している場合、Redisのデータは通常ボリューム (`redis-data`) に永続化されるように設定されています。これにより、コンテナを再作成してもデータは保持されます。
+**注意:** Dockerを使用している場合、RedisおよびMongoDBのデータは通常ボリュームに永続化されるように設定されています (`docker-compose.yml` を参照)。これにより、コンテナを再作成してもデータは保持されます。
 
 ## Web UI
 
@@ -246,19 +230,19 @@ Web UIが実装されており、Webブラウザからボットの状態を監�
 
 -   **ダッシュボード (`/`)**: 現在のサマリー情報（総資産、損益など）。
 -   **ポジション (`/positions.html`)**: 現在保有しているポジションの状況（通貨ペア、数量、平均取得価格、評価損益など）をリアルタイムで確認できます。
--   **取引履歴 (`/history.html`)**: ボットが実行した注文の履歴（作成、更新、キャンセルなど）を確認できます。
--   **約定履歴 (`/filled-history.html`)**: 実際に約定した取引の履歴を詳細に確認できます。フィルタリングやソートも可能です。
+-   **取引履歴 (`/history.html`)**: ボットが実行した注文の履歴（作成、更新、キャンセルなど）を確認できます。**MongoDBに保存された履歴も表示される可能性があります。**
+-   **約定履歴 (`/filled-history.html`)**: 実際に約定した取引の履歴を詳細に確認できます。フィルタリングやソートも可能です。**MongoDBに保存された履歴も表示される可能性があります。**
 -   **分析 (`/analysis.html`)**: 損益グラフや取引統計など、ボットのパフォーマンスを分析するための情報を提供します。 (現在開発中または機能限定の可能性あり)
 -   **リアルタイムイベント**: Web UI は Redis Pub/Sub を通じてバックエンドからのイベント（ポジション更新、新規約定など）をリアルタイムに受信し、表示を更新します。APIエンドポイント (`/api/redis-events` など) 経由で Server-Sent Events (SSE) として配信されます。
 
 ### 使い方
 
-1.  **Redisサーバー**が起動していることを確認します。Docker Compose を使用している場合は、通常 `web-ui` サービスと一緒に起動されます。
+1.  **Redisサーバー** および **MongoDBサーバー** が起動していることを確認します。Docker Compose を使用している場合は、通常 `web-ui` サービスと一緒に起動されます。
 2.  ボット (例: `bot`, `hft`, `mm` のいずれか) と Web UI サーバー (`web-ui` または `npm run start-web`) を起動します。
     ```bash
-    # Dockerの場合 (Redisも同時に起動)
+    # Dockerの場合 (Redis, MongoDBも同時に起動)
     docker compose up -d bot web-ui
-    # または 通常実行の場合 (別々のターミナルで、事前にRedisが起動している必要あり)
+    # または 通常実行の場合 (別々のターミナルで、事前にRedisとMongoDBが起動している必要あり)
     # npm start
     # npm run start-web
     ```
@@ -285,6 +269,7 @@ Web UIが実装されており、Webブラウザからボットの状態を監�
 -   APIキーは他人に漏れないように厳重に管理してください。
 -   レポート機能やWeb UIの表示は参考情報であり、実際の損益と完全に一致しない場合があります。
 -   戦略ごとの損益は、その戦略が行った取引のみを対象としており、手数料や他の要因は考慮されていない場合があります。
+-   **MongoDBのデータ永続化設定を確認し、必要に応じてボリューム設定などを適切に行ってください。**
 
 ## ライセンス
 

@@ -8,11 +8,10 @@ const {
   calculateRSI,
   calculateBollingerBands,
 } = require('./indicators');
-const { orderCheckCancel } = require('./highFrequency');
-const { config } = require('../src/config');
 
-const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
-const { addStrategySignal } = require('../src/redisDatabase');
+// const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
+const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../src/database/manager');
+const { addOrder } = require('../src/database/manager');
 
 /**
  * 移動平均線クロス戦略
@@ -25,9 +24,10 @@ const { addStrategySignal } = require('../src/redisDatabase');
  * @param {Object} options - その他のオプション
  */
 async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, amount, options = {}) {
+  const strategyKey = 'MA';
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
+    const { amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01 } = options;
 
     // 過去のローソク足データを取得
     const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, longPeriod + 10);
@@ -66,10 +66,10 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
-      addStrategySignal(
+      addSignal(
         exchange.id,
         symbol,
-        'MA',
+        strategyKey,
         signalType,
         currentPrice,
         strategyResults
@@ -81,7 +81,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       // 買いシグナル
       console.log(`移動平均線クロス（上抜け）: ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[MA戦略] 買いシグナル: ${exchange.id} - ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
+        postOrderToDiscord(`[MA戦略] 買いシグナル: ${exchange.id} - ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
       }
       
       // 利用可能な資金を確認
@@ -89,7 +89,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MA')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey)
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -107,13 +107,10 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MA戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[MA戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
-        // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
@@ -124,7 +121,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
       // 売りシグナル
       console.log(`移動平均線クロス（下抜け）: ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[MA戦略] 売りシグナル: ${exchange.id} - ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
+        postOrderToDiscord(`[MA戦略] 売りシグナル: ${exchange.id} - ${symbol} - 短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`);
       }
       
       // 利用可能な資産を確認
@@ -134,7 +131,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MA', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
 
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -143,13 +140,11 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MA戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[MA戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         if (postOrderToDiscord) {
@@ -193,6 +188,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
  * @param {Object} options - その他のオプション
  */
 async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, options = {}) {
+  const strategyKey = 'MACD';
   try {
     // オプションから値を取得
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
@@ -233,10 +229,10 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
-      addStrategySignal(
+      addSignal(
         exchange.id,
         symbol,
-        'MACD',
+        strategyKey,
         signalType,
         currentPrice,
         strategyResults
@@ -256,7 +252,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MACD')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey);
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -277,10 +273,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
           await postOrderToDiscord(`[MACD戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
-        // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
@@ -301,7 +294,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
 
       // 取引記録から買った量を取得
       // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MACD', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
 
       if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
@@ -310,17 +303,14 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MACD戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[MACD戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
-        // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MACD戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+          postOrderToDiscord(`[MACD戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         }
       }
     } else {
@@ -360,6 +350,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
  * @param {Object} options - その他のオプション
  */
 async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, options = {}) {
+  const strategyKey = 'RSI';
   try {
     // オプションから値を取得
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
@@ -401,10 +392,10 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
-      addStrategySignal(
+      addSignal(
         exchange.id,
         symbol,
-        'RSI',
+        strategyKey,
         signalType,
         currentPrice,
         strategyResults
@@ -424,7 +415,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'RSI')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey)
       
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -442,7 +433,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[RSI戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[RSI戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         // 取引記録を更新
@@ -452,14 +443,14 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[RSI戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          postOrderToDiscord(`[RSI戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         }
       }
     } else if (sellSignal) {
       // 売りシグナル
       console.log(`RSI売りシグナル: ${symbol} - RSI: ${currentRSI} (閾値: ${overboughtThreshold})`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[RSI戦略] 売りシグナル: ${exchange.id} - ${symbol} - RSI: ${currentRSI} (閾値: ${overboughtThreshold})`);
+        postOrderToDiscord(`[RSI戦略] 売りシグナル: ${exchange.id} - ${symbol} - RSI: ${currentRSI} (閾値: ${overboughtThreshold})`);
       }
       
       // 利用可能な資産を確認
@@ -478,17 +469,14 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[RSI戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[RSI戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
-        // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[RSI戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+          postOrderToDiscord(`[RSI戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         }
       }
     } else {
@@ -526,6 +514,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
  * @param {Object} options - その他のオプション
  */
 async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2, amount, options = {}) {
+  const strategyKey = 'BOLLINGER_BANDS';
   try {
     // オプションから値を取得
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
@@ -572,10 +561,10 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
-      addStrategySignal(
+      addSignal(
         exchange.id,
         symbol,
-        'BOLLINGER_BANDS',
+        strategyKey,
         signalType,
         currentPrice,
         strategyResults
@@ -587,7 +576,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
       // 買いシグナル
       console.log(`ボリンジャーバンド買いシグナル: ${symbol} - 価格: ${currentPrice}, 下限: ${currentLower}`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[BB戦略] 買いシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 下限: ${currentLower}`);
+        postOrderToDiscord(`[BB戦略] 買いシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 下限: ${currentLower}`);
       }
       
       // 利用可能な資金を確認
@@ -614,24 +603,22 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
         // 指値注文に変更
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[BB戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[BB戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[BB戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          postOrderToDiscord(`[BB戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
         }
       }
     } else if (sellSignal) {
       // 売りシグナル
       console.log(`ボリンジャーバンド売りシグナル: ${symbol} - 価格: ${currentPrice}, 上限: ${currentUpper}`);
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[BB戦略] 売りシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 上限: ${currentUpper}`);
+        postOrderToDiscord(`[BB戦略] 売りシグナル: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 上限: ${currentUpper}`);
       }
       
       // 利用可能な資産を確認
@@ -650,17 +637,15 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
         // 指値注文に変更
         const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[BB戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+          postOrderToDiscord(`[BB戦略] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         // 取引記録を更新
-        if (updateTradeRecord) {
-          updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', order.id, 'limit');
-        }
+        addOrder(exchange.id, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit');
       } else {
         console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[BB戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+          postOrderToDiscord(`[BB戦略] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
         }
       }
     } else {
