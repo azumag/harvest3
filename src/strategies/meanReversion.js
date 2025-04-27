@@ -263,7 +263,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
 
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'OSCILLATOR')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey)
 
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -305,11 +305,10 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
 
-      // 取引記録から買った量を取得
-      // tradeRecordsパラメータを追加し、awaitを使用
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'OSCILLATOR', amountPrecision);
+      // 売れる量を取得
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
       
-      if (availableAsset >= formattedAmount) {
+      if (availableAsset >= formattedAmount && formattedAmount > 0) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
         // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
