@@ -5,55 +5,97 @@
 
 // API経由で戦略リストを取得するように修正されたため、静的なリストは削除
 
-// カスタムOHLCチャートコントローラーの定義
-class OhlcChartController extends Chart.controllers.bar {
-    // コントローラーのIDを静的に定義
-    static id = 'ohlc';
-
-    draw() {
-        // 元のbarチャートの描画ロジックを呼び出す（オプション）
-        // super.draw();
-
-        // カスタム描画ロジック
-        const ctx = this.chart.ctx;
-        const meta = this.getMeta();
-        console.log('OhlcChartController.draw - meta.data:', meta.data); // ログ追加
-
-        meta.data.forEach((element, index) => {
-            const dataset = this.getDataset();
-            const dataPoint = dataset.data[index];
-            console.log(`OhlcChartController.draw - dataPoint[${index}]:`, dataPoint); // ログ追加
-            const x = element.x;
-            const yScale = this.chart.scales[meta.yAxisID];
-            const width = element.width; // Chart.jsが計算したバーの幅を使用
-
-            // ロウソク足の本体（矩形）を描画
-            const yOpen = yScale.getPixelForValue(dataPoint.o);
-            const yClose = yScale.getPixelForValue(dataPoint.c);
-            const height = Math.abs(yClose - yOpen);
-
-            ctx.fillStyle = dataPoint.c >= dataPoint.o ? 'green' : 'red';
-            ctx.fillRect(x - width / 2, Math.min(yOpen, yClose), width, height);
-
-            // ヒゲ（高値と安値）を描画
-            ctx.strokeStyle = dataPoint.c >= dataPoint.o ? 'green' : 'red';
-            ctx.lineWidth = 1; // ヒゲの線の太さ
-            ctx.beginPath();
-            // 上ヒゲ
-            ctx.moveTo(x, yScale.getPixelForValue(dataPoint.h));
-            ctx.lineTo(x, Math.min(yOpen, yClose));
-            // 下ヒゲ
-            ctx.moveTo(x, Math.max(yOpen, yClose));
-            ctx.lineTo(x, yScale.getPixelForValue(dataPoint.l));
-            ctx.stroke();
+// Chart.jsでのカスタムプラグイン実装
+// OHLCチャートを実装するプラグイン
+const OhlcPlugin = {
+    id: 'ohlcPlugin',
+    beforeDatasetsDraw: (chart, args, options) => {
+        // この時点では何もせず、データセットを非表示にしない
+        console.log('OhlcPlugin - beforeDatasetsDraw called');
+    },
+    afterDatasetsDraw: (chart, args, options) => {
+        console.log('OhlcPlugin - afterDatasetsDraw called');
+        const { ctx } = chart;
+        
+        // データセットごとに処理
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+            // OHLCデータセットのみ処理
+            if (dataset.ohlcData === true) {
+                console.log('OhlcPlugin - Processing OHLC dataset:', datasetIndex);
+                
+                if (!dataset.data || dataset.data.length === 0) {
+                    console.warn('OhlcPlugin - No data points');
+                    return;
+                }
+                
+                const xScale = chart.scales.x;
+                const yScale = chart.scales.y;
+                
+                if (!xScale || !yScale) {
+                    console.warn('OhlcPlugin - Scales not available');
+                    return;
+                }
+                
+                // 各データポイントの処理
+                dataset.data.forEach((dataPoint, index) => {
+                    if (!dataPoint || !('o' in dataPoint) || !('h' in dataPoint) ||
+                        !('l' in dataPoint) || !('c' in dataPoint)) {
+                        console.warn(`OhlcPlugin - Invalid dataPoint at index ${index}:`, dataPoint);
+                        return;
+                    }
+                    // X座標の計算
+                    const xValue = dataPoint.x; // タイムスタンプ
+                    const xPixel = xScale.getPixelForValue(xValue);
+                    // Y座標の計算
+                    const yOpen = yScale.getPixelForValue(dataPoint.o);
+                    const yHigh = yScale.getPixelForValue(dataPoint.h);
+                    const yLow = yScale.getPixelForValue(dataPoint.l);
+                    const yClose = yScale.getPixelForValue(dataPoint.c);
+                    // デバッグログ追加
+                    console.log(`Candle[${index}] x=${xValue} xPixel=${xPixel} o=${dataPoint.o} yOpen=${yOpen} h=${dataPoint.h} yHigh=${yHigh} l=${dataPoint.l} yLow=${yLow} c=${dataPoint.c} yClose=${yClose}`);
+                    // chartAreaのデバッグ
+                    if (index === 0) {
+                        console.log('chartArea:', chart.chartArea);
+                        console.log('xScale:', xScale);
+                        console.log('yScale:', yScale);
+                    }
+                    // ...既存の描画処理...
+                    const isRising = dataPoint.c >= dataPoint.o;
+                    const candleColor = isRising ? 'magenta' : 'cyan';
+                    const totalBars = dataset.data.length;
+                    const defaultWidth = 12;
+                    const chartWidth = chart.chartArea.right - chart.chartArea.left;
+                    const barWidth = Math.min(defaultWidth, chartWidth / totalBars * 0.8);
+                    ctx.fillStyle = candleColor;
+                    ctx.strokeStyle = candleColor;
+                    const rectTop = Math.min(yOpen, yClose);
+                    const rectHeight = Math.abs(yClose - yOpen);
+                    ctx.fillRect(xPixel - barWidth / 2, rectTop, barWidth, rectHeight);
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(xPixel, yHigh);
+                    ctx.lineTo(xPixel, Math.min(yOpen, yClose));
+                    ctx.moveTo(xPixel, Math.max(yOpen, yClose));
+                    ctx.lineTo(xPixel, yLow);
+                    ctx.stroke();
+                });
+            }
         });
     }
-}
+};
 
-// カスタムコントローラーをChart.jsに登録
-// 静的なidプロパティを使用
-Chart.register({ ohlc: OhlcChartController }); // カスタムコントローラーの登録方法を修正
-console.log('Chart.js registered controllers:', Chart.controllers); // ログ追加
+// Chart.js Financial拡張のコントローラ・エレメントをregister
+if (window.CandlestickController && window.OhlcController && window.FinancialElement && window.FinancialScale) {
+    Chart.register(
+        window.CandlestickController,
+        window.OhlcController,
+        window.FinancialElement,
+        window.FinancialScale
+    );
+}
+// カスタムOhlcPluginのregisterは不要なので削除
+// Chart.register(OhlcPlugin);
+// console.log('Chart.js registered plugins:', Chart.plugins);
  
 document.addEventListener('DOMContentLoaded', function() {
     // Flatpickrの初期化 (日付選択)
@@ -263,6 +305,12 @@ async function fetchDataAndRenderChart() {
         const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, endDate);
         console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.'); // ログ追加
         
+        // データフォーマットの詳細なデバッグ
+        if (ohlcvData.length > 0) {
+            console.log('OHLCV data sample [0]:', ohlcvData[0]);
+            console.log('OHLCV data sample [last]:', ohlcvData[ohlcvData.length - 1]);
+        }
+        
         // 戦略シグナルデータの取得 (戦略が選択されている場合)
         let signalData = [];
         if (strategy) {
@@ -320,7 +368,19 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, end
         }
         
         const data = await response.json();
-        console.log('fetchOhlcvData - Raw data:', data); // ログ追加
+        console.log('fetchOhlcvData - Raw data:', data);
+        
+        // データ形式の詳細な検証（データの最初と最後の項目を表示）
+        if (data && data.length > 0) {
+            console.log('Data type check:', {
+                isArray: Array.isArray(data),
+                firstItem: data[0],
+                firstItemType: typeof data[0],
+                firstTimestamp: data[0] ? data[0][0] : null,
+                timestampType: data[0] ? typeof data[0][0] : null
+            });
+        }
+        
         return data;
     } catch (error) {
         console.error('ロウソク足データの取得に失敗しました:', error);
@@ -373,16 +433,19 @@ function renderChart(ohlcvData, signalData) {
     if (chartInstance) {
         chartInstance.destroy();
     }
-    
     // ロウソク足データの整形
     const ohlcDataset = prepareOhlcDataset(ohlcvData);
     // シグナルデータの整形
     const signalDatasets = prepareSignalDatasets(signalData);
-    
     // チャートの作成
     const ctx = chartElement.getContext('2d');
+    // デバッグログ
+    console.log('renderChart - Creating chart with datasets:', {
+        ohlc: ohlcDataset,
+        signals: signalDatasets
+    });
     new Chart(ctx, {
-        type: 'ohlc', // カスタムOHLCチャートタイプを使用
+        type: 'candlestick',
         data: {
             datasets: [
                 ohlcDataset,
@@ -392,143 +455,83 @@ function renderChart(ohlcvData, signalData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'nearest',
+                intersect: false
+            },
             scales: {
                 x: {
                     type: 'time',
                     time: {
-                        unit: 'day', // 必要に応じて時間足に合わせて変更
-                        displayFormats: {
-                            day: 'MM/dd' // 必要に応じて時間足に合わせて変更
-                        }
+                        unit: 'day',
+                        tooltipFormat: 'yyyy/MM/dd',
+                        displayFormats: { day: 'MM/dd' }
                     },
-                    title: {
-                        display: true,
-                        text: '日付'
-                    }
+                    title: { display: true, text: '日付' }
                 },
                 y: {
                     position: 'right',
-                    title: {
-                        display: true,
-                        text: '価格'
-                    }
+                    title: { display: true, text: '価格' }
                 }
             },
             plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const dataset = context.dataset;
-                            const dataIndex = context.dataIndex;
-
-                            if (dataset.type === 'ohlc') {
-                                const data = dataset.data[dataIndex];
-                                return [
-                                    `始値: ${data.o}`,
-                                    `高値: ${data.h}`,
-                                    `安値: ${data.l}`,
-                                    `終値: ${data.c}`
-                                ];
-                            } else if (dataset.type === 'signal') {
-                                const data = dataset.data[dataIndex];
-                                return [
-                                    `${data.side === 'buy' ? '買いシグナル' : '売りシグナル'}`,
-                                    `価格: ${data.price}`
-                                ];
-                            }
-                            return context.formattedValue;
-                        }
-                    }
-                },
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
+                legend: { display: true, position: 'top' }
             }
         }
     });
-    console.log('renderChart - ohlcDataset type:', ohlcDataset.type); // ログ追加
+    console.log('renderChart - ohlcDataset type:', ohlcDataset.type);
 }
 
-/**
- * ロウソク足データセットの準備
- */
 function prepareOhlcDataset(ohlcvData) {
-    // CCXT形式のOHLCVデータから必要なデータを抽出して整形
-    const formattedData = ohlcvData.map(candle => {
-        // CCXT OHLCV形式: [timestamp, open, high, low, close, volume]
-        const [timestamp, open, high, low, close] = candle;
-
+    if (!Array.isArray(ohlcvData) || ohlcvData.length === 0) {
+        console.warn('prepareOhlcDataset - Empty or invalid ohlcvData:', ohlcvData);
         return {
-            x: timestamp, // タイムスタンプ (ミリ秒)
-            o: open,      // 始値
-            h: high,      // 高値
-            l: low,       // 安値
-            c: close,     // 終値
+            label: 'ロウソク足 (データなし)',
+            data: [],
+            type: 'candlestick',
         };
-    });
-    console.log('prepareOhlcDataset - Formatted data:', formattedData); // ログ追加
-
+    }
+    // 公式拡張形式に変換
+    const formatted = ohlcvData.map(item => ({
+        x: item[0], o: item[1], h: item[2], l: item[3], c: item[4]
+    }));
+    console.log('prepareOhlcDataset - First formatted data item:', formatted[0]);
+    console.log('prepareOhlcDataset - Total formatted items:', formatted.length);
     return {
-        label: 'ロウソク足',
-        data: formattedData,
-        type: 'ohlc' // ロウソク足チャートタイプを指定
-        // カスタムOHLCコントローラーが描画を担当するため、ここでは描画関連の設定は不要
+        label: 'ローソク足',
+        data: formatted,
+        type: 'candlestick',
+        color: { up: '#26a69a', down: '#ef5350', unchanged: '#ccc' }
     };
 }
 
-/**
- * シグナルデータセットの準備
- */
 function prepareSignalDatasets(signalData) {
-    // 買いシグナルと売りシグナルを分離
-    const buySignals = signalData.filter(signal => signal.side === 'buy');
-    const sellSignals = signalData.filter(signal => signal.side === 'sell');
-    
-    // 買いシグナルのデータセット
-    const buyDataset = {
-        label: '買いシグナル',
-        type: 'signal', // カスタムタイプ識別用
-        data: buySignals.map(signal => ({
-            x: signal.timestamp,
-            y: signal.price,
-            side: 'buy',
-            price: signal.price,
-            details: signal.details || '',
-            timestamp: signal.timestamp
-        })),
-        pointStyle: 'triangle',
-        pointRadius: 10,
-        pointBackgroundColor: 'rgba(0, 255, 0, 0.5)',
-        pointBorderColor: 'green',
-        showLine: false
-    };
-    
-    // 売りシグナルのデータセット
-    const sellDataset = {
-        label: '売りシグナル',
-        type: 'signal', // カスタムタイプ識別用
-        data: sellSignals.map(signal => ({
-            x: signal.timestamp,
-            y: signal.price,
-            side: 'sell',
-            price: signal.price,
-            details: signal.details || '',
-            timestamp: signal.timestamp
-        })),
-        pointStyle: 'triangle',
-        pointRadius: 10,
-        pointRotation: 180, // 三角形を反転
-        pointBackgroundColor: 'rgba(255, 0, 0, 0.5)',
-        pointBorderColor: 'red',
-        showLine: false
-    };
-    
-    // データが存在するデータセットのみを返す
-    return [
-        ...(buySignals.length > 0 ? [buyDataset] : []),
-        ...(sellSignals.length > 0 ? [sellDataset] : [])
-    ];
+    if (!Array.isArray(signalData) || signalData.length === 0) return [];
+    // buy/sellで色分け
+    const buySignals = signalData.filter(s => s.signalType === 'buy');
+    const sellSignals = signalData.filter(s => s.signalType === 'sell');
+    const buyDataset = buySignals.length > 0 ? {
+        label: 'Buyシグナル',
+        type: 'scatter',
+        data: buySignals.map(s => ({ x: s.x || s.timestamp, y: s.y || s.price })),
+        pointBackgroundColor: 'green',
+        pointRadius: 6,
+        showLine: false,
+        yAxisID: 'y',
+        xAxisID: 'x',
+    } : null;
+    const sellDataset = sellSignals.length > 0 ? {
+        label: 'Sellシグナル',
+        type: 'scatter',
+        data: sellSignals.map(s => ({ x: s.x || s.timestamp, y: s.y || s.price })),
+        pointBackgroundColor: 'red',
+        pointRadius: 6,
+        showLine: false,
+        yAxisID: 'y',
+        xAxisID: 'x',
+    } : null;
+    return [buyDataset, sellDataset].filter(Boolean);
 }
 
 /**
