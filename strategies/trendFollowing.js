@@ -67,7 +67,7 @@ async function maStrategy(exchange, symbol, shortPeriod = 5, longPeriod = 20, am
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,
@@ -230,7 +230,7 @@ async function macdStrategy(exchange, symbol, fastPeriod = 12, slowPeriod = 26, 
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,
@@ -393,7 +393,7 @@ async function rsiStrategy(exchange, symbol, period = 14, oversoldThreshold = 30
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,
@@ -562,7 +562,7 @@ async function bollingerBandsStrategy(exchange, symbol, period = 20, stdDev = 2,
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,

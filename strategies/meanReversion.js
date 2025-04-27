@@ -28,7 +28,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await exchange.fetchOHLCV(symbol, '1h', undefined, period + 10);
+    const ohlcv = await exchange.fetchOHLCV(symbol, '15m', undefined, period + 10);
 
     // 終値の配列を作成
     const closes = ohlcv.map(candle => candle[4]);
@@ -63,7 +63,7 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     if (signalType !== 'none') {
       // 戦略シグナルを保存
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,
@@ -242,7 +242,7 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     if (signalType !== 'none') {
       // 戦略シグナルを保存
       addSignal(
-        exchange.id,
+        exchange,
         symbol,
         strategyKey,
         signalType,

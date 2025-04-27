@@ -194,7 +194,7 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
         timestamp
     };
     
-    console.log('Adding signal with exchange:', exchange); // ログを追加
+    // console.log('Adding signal with exchange:', exchange); // ログを追加
     console.log('Signal object to be saved:', signal); // ログを追加
 
     return await addSignalMongoDB(signal);
