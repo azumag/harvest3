@@ -117,11 +117,16 @@ $(document).ready(function() {
                 signalsTable = $('#signals-table').DataTable({ // ordersTable から signalsTable に変更, #orders-table から #signals-table に変更
                     data: data,
                     columns: [
-                        { data: 'exchange' },
-                        { data: 'symbol' },
+                        { data: 'symbol' }, // 取引所カラムを削除
+                        { data: 'strategy' }, // strategy カラムを追加
                         { data: 'side' },
                         { data: 'price' },
-                        { data: 'detail' }, // detail を追加
+                        { // detail をJSON整形して表示
+                            data: 'detail',
+                            render: function(data) {
+                                return '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                            }
+                        },
                         {
                             data: 'timestamp',
                             render: function(data) {
