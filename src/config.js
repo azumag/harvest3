@@ -137,12 +137,14 @@ const config = {
     'bitbank': {
       apiKey: BBApiKey,
       secret: BBApiSecret,
-      module: 'bitbank'
+      module: 'bitbank',
+      instance: exchangeBB,
     },
     'bitflyer': {
       apiKey: BFApiKey,
       secret: BFApiSecret,
-      module: 'bitflyer'
+      module: 'bitflyer',
+      instance: exchangeBF,
     }
   }
 };

@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { getTradeKeyList } = require('./controllers/exchanges');
+const { getTradeKeyList, getExchanges, getSymbols } = require('./controllers/exchanges');
 const { getTradeSummary } = require('./controllers/summary');
 const { getOrders } = require('./controllers/orders');
 
@@ -43,11 +43,14 @@ router.get('/orders', getOrders);
 // 取引キー一覧取得API
 router.get('/trade-keys', getTradeKeyList);
 
+// 取引所一覧API
+router.get('/exchanges', getExchanges);
+
+// 銘柄一覧API
+router.get('/symbols', getSymbols);
+
 // // 戦略一覧API
 // router.get('/strategies', getStrategiesList);
-
-// // 銘柄一覧API
-// router.get('/symbols', getSymbolsList);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {
