@@ -89,7 +89,7 @@ async function closeAllPositions(exchange) {
         }
         
         console.log(`${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
-        postOrderToDiscord(`[SUCCESS] ${exchange.id}: ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
+        await postOrderToDiscord(`[SUCCESS] ${exchange.id}: ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
         
         soldCount++;
       } catch (error) {
