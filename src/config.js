@@ -2,6 +2,11 @@ const ccxt = require('ccxt');
 const dotenv = require('dotenv');
 dotenv.config(); // .envファイルから環境変数を読み込む
 
+// strategies 
+const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./strategies/trendFollowing');
+const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/meanReversion');
+const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
+
 // APIキーとシークレットを設定
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
@@ -60,6 +65,13 @@ const config = {
   cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
   safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
   amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
+
+  // 除外シンボル
+  excludeSymbols: [
+    'ELF/',
+    'MATIC/',
+    'RNDR/',
+  ],
   
   // 戦略固有の設定
   strategies: {
@@ -67,44 +79,77 @@ const config = {
     MA: {
       enabled: process.env.STRATEGY_MA_ENABLED === 'true',
       shortPeriod: 5,
-      longPeriod: 20
+      longPeriod: 20,
+      ohlcvInterval: '15m',
+      function: maStrategy,
+      exchanges: [exchangeBB]
     },
+
     MACD: {
       enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
       fastPeriod: 12,
       slowPeriod: 26,
-      signalPeriod: 9
+      signalPeriod: 9,
+      ohlcvInterval: '15m',
+      function: macdStrategy,
+      exchanges: [exchangeBB]
     },
+
     RSI: {
       enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
       period: 14,
       oversoldThreshold: 30,
-      overboughtThreshold: 70
+      overboughtThreshold: 70,
+      ohlcvInterval: '15m',
+      function: rsiStrategy,
+      exchanges: [exchangeBB]
     },
+
     BOLLINGER_BANDS: {
       enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
       period: 20,
-      stdDev: 2
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    BOLLINGER_BANDS_SHORT: {
+      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '5m',
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
     },
     
     // 逆張り戦略
     MEAN_REVERSION: {
       enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
       period: 20,
-      deviationThreshold: 3
+      ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
+      exchanges: [exchangeBB]
     },
+
     OSCILLATOR: {
       enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
       period: 20,
-      oversoldThreshold: 80,
-      overboughtThreshold: 80 
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: '15m',
+      function: oscillatorStrategy,
+      exchanges: [exchangeBB]
     },
     
     // アービトラージ戦略
-    INTER_EXCHANGE_ARBITRAGE: {
-      enabled: process.env.STRATEGY_ARBITRAGE_ENABLED === 'true',
-      minProfitPercent: 1.0
-    },
+    // INTER_EXCHANGE_ARBITRAGE: {
+    //   enabled: process.env.STRATEGY_ARBITRAGE_ENABLED === 'true',
+    //   minProfitPercent: 1.0,
+    //   function: interExchangeArbitrage,
+    //   exchanges: [exchangeBB, exchangeBF],
+    // },
     
     // 高頻度取引戦略
     HFT: {
@@ -112,27 +157,39 @@ const config = {
       interval: 100,
       priceThreshold: 0.001,
       maxOrdersPerMinute: 100,
-      amount: 0.0001
-    },
-    SCALPING: {
-      enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true'
-    },
-    
-    // マーケットメイキング戦略
-    MARKET_MAKING: {
-      enabled: process.env.STRATEGY_MARKET_MAKING_ENABLED === 'true',
-      rangePeriod: 300000, // レンジ判定期間（ミリ秒）: 5分
-      rangeThreshold: 1.0, // レンジ判定閾値（%）: 1%
-      spreadWidth: 0.5, // スプレッド幅（%）: 0.5%
-      reorderInterval: 60000, // 再発注間隔（ミリ秒）: 1分
-      maxPositionCount: 4, // 最大ポジション数
-      adjustmentValue: 0 // 微調整値
+      amount: 0.0001,
+      orderBookDepth: 15,
+      function: highFrequencyTrading,
+      exchanges: [exchangeBB],
     },
 
-    INYO: {
-      enabled: process.env.STRATEGY_INYO_ENABLED === 'true'
-    },
+    // SCALPING: {
+    //   enabled: process.env.STRATEGY_SCALPING_ENABLED === 'true',
+    //   function: scalpingStrategy,
+    //   exchanges: [exchangeBB],
+    // },
+    
+    // マーケットメイキング戦略
+    // MARKET_MAKING: {
+    //   enabled: process.env.STRATEGY_MARKET_MAKING_ENABLED === 'true',
+    //   rangePeriod: 300000, // レンジ判定期間（ミリ秒）: 5分
+    //   rangeThreshold: 1.0, // レンジ判定閾値（%）: 1%
+    //   spreadWidth: 0.5, // スプレッド幅（%）: 0.5%
+    //   reorderInterval: 60000, // 再発注間隔（ミリ秒）: 1分
+    //   maxPositionCount: 4, // 最大ポジション数
+    //   adjustmentValue: 0, // 微調整値,
+    //   function: passiveMarketMaking,
+    //   exchanges: [exchangeBB],
+    // },
+
+    // INYO: {
+    //   enabled: process.env.STRATEGY_INYO_ENABLED === 'true',
+    //   function: inyoStrategy,
+    //   exchanges: [exchangeBB],
+    // },
+
   },
+
   exchanges: {
     'bitbank': {
       apiKey: BBApiKey,

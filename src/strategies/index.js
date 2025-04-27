@@ -4,12 +4,6 @@
 
 // 各戦略モジュールをインポート
 const { calculateSMA, calculateEMA, calculateMACD, calculateRSI, calculateBollingerBands } = require('./indicators');
-const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./trendFollowing');
-const { meanReversionStrategy, oscillatorStrategy } = require('./meanReversion');
-const { interExchangeArbitrage } = require('./arbitrage');
-const { highFrequencyTrading, scalpingStrategy, orderCheckCancel } = require('./highFrequency');
-const { passiveMarketMaking } = require('./marketMaking');
-const { inyoStrategy } = require('./inyo');
 
 // 戦略の種類を定義
 const STRATEGY_TYPES = {

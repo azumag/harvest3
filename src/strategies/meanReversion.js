@@ -7,28 +7,27 @@ const {
   calculateBollingerBands,
 } = require('./indicators');
 
-// const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
-// const { addStrategySignal } = require('../src/redisDatabase');
-const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../src/database/manager');
+const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../database/manager');
+
+const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
+
+const globalConfig = require('../config').config;
 
 /**
  * 平均回帰戦略
  * 価格が移動平均線から大きく乖離した場合に、平均に戻ると予測して取引
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} period - 移動平均線の期間
- * @param {Number} deviationThreshold - 乖離率の閾値（%）
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function meanReversionStrategy(exchange, symbol, period = 20, deviationThreshold = 3, amount, options = {}) {
-  const strategyKey = 'MEAN_REVERSION';
+async function meanReversionStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+
+  const { tradePercentage } = globalConfig;
+  const { period = 20, deviationThreshold = 3, ohlcvInterval } = config;
+  const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+
   try {
     // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10);
     if (ohlcv.length < period) {
       console.log(`平均回帰戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
       return;
@@ -182,8 +181,8 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
     };
   } catch (error) {
     console.error(`平均回帰戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      options.postErrorToDiscord(`[平均回帰戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      postErrorToDiscord(`[平均回帰戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'Mean Reversion',
@@ -196,22 +195,17 @@ async function meanReversionStrategy(exchange, symbol, period = 20, deviationThr
 /**
  * オシレーター系指標を利用した逆張り戦略
  * RSIが極端な値を示した場合に、反転を予測して取引
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {Number} period - RSIの期間
- * @param {Number} oversoldThreshold - 買いシグナルの閾値（デフォルト20）
- * @param {Number} overboughtThreshold - 売りシグナルの閾値（デフォルト80）
- * @param {Number} amount - 取引量
- * @param {Object} options - その他のオプション
  */
-async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThreshold = 20, overboughtThreshold = 80, amount, options = {}) {
-  const strategyKey = 'OSCILLATOR';
+async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+  
+  const { tradePercentage } = globalConfig;
+  const { period = 14, oversoldThreshold = 20, overboughtThreshold = 80, amount, ohlcvInterval } = config;
+  const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
+
   try {
-    // オプションから値を取得
-    const { pricePrecision, amountPrecision, minTradeAmount, postOrderToDiscord, tradePercentage = 0.01, sellPercentage = 0.1, updateTradeRecord, tradeRecords } = options;
 
     // 過去のローソク足データを取得
-    const ohlcv = await fetchOHLCVData(exchange, symbol, '15m', period + 10);
+    const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10);
     if (ohlcv.length < period) {
       return;
     }
@@ -349,8 +343,8 @@ async function oscillatorStrategy(exchange, symbol, period = 14, oversoldThresho
     };
   } catch (error) {
     console.error(`オシレーター戦略でエラーが発生しました: ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'Oscillator',

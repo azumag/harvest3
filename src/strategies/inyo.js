@@ -3,8 +3,8 @@
  * 過去の１分足のローソク足をみて、陰線が２連続なら売り、陽線が2連続なら買い
  */
 
-const { config } = require('../src/config');
-const { orderCheckCancel } = require('./highFrequency');
+const { config } = require('../config');
+const { orderCheckCancel } = require('./highFrequencyTrading');
 
 /**
  * 陰陽戦略

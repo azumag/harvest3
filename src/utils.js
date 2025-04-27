@@ -1,5 +1,55 @@
 const { postErrorToDiscord } = require('./notifications');
 const { bitflyerMinTradeAmounts } = require('./config');
+
+async function getMarketParametersByExchange(symbolByExchange) {
+  const exchanges = Object.keys(symbolByExchange);
+  const marketParametersByExchange = {};
+
+  for (const exchangeId of exchanges) {
+    const symbols = symbolByExchange[exchangeId];
+    for (const symbol of symbols) {
+      const params = await getMarketParameters(exchange, symbol);
+      const { minTradeAmount, pricePrecision, amountPrecision } = params;
+
+      marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+      marketParametersByExchange[exchangeId][symbol] = {
+        minTradeAmount,
+        pricePrecision,
+        amountPrecision,
+      };
+
+      await sleep(300);
+    }
+  }
+
+  return marketParametersByExchange;
+}
+
+async function getStrategyConfig(exchange, symbol, strategyKey) {
+  // configからデフォルトの戦略設定を取得
+  const defaultConfig = config.strategies[strategyKey];
+    
+  if (!defaultConfig || !defaultConfig.enabled) {
+    return null;
+  }
+
+  // データベースから戦略パラメータを取得
+  const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
+
+  const strategyConfig = (() => {
+    if (dbParams) {
+      // デフォルト設定とデータベースのパラメータをマージ（データベース優先）
+      return { ...defaultConfig, ...dbParams };
+    } else {
+      // DBにパラメータがない場合はデフォルト設定を使用
+      // デフォルト設定をDBに保存
+      saveStrategyParameters(exchange.id, symbol, strategyKey, defaultConfig);
+      return defaultConfig;
+    }
+  })();
+
+  return strategyConfig;
+}
  
 /**
  * 加重平均を計算する関数
@@ -134,12 +184,34 @@ async function getMarketParameters(exchange, symbol) {
   return { minTradeAmount, pricePrecision, amountPrecision };
 }
 
+async function getSymbolsByExchange() {
+  const exchanges = config.exchanges;
+  const symbolsByExchange = {};
+
+  for (const exchange of exchanges) {
+    const markets = await exchange.loadMarkets();
+
+    // 除外シンボル
+    const symbols = Object.keys(markets).filter(symbol =>
+      symbol.endsWith('/JPY') 
+        && !config.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
+    );
+
+    symbolsByExchange[exchange.id] = symbols;
+  }
+
+  return symbolsByExchange;
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = {
+  getSymbolsByExchange,
   weightedAverage,
   fetchTotal,
   getMarketParameters,
-  sleep
+  sleep,
+  getStrategyConfig,
+  getMarketParametersByExchange
 };
