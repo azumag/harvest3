@@ -43,7 +43,8 @@ $(document).ready(function() {
                     // 選択された取引所の銘柄リストを取得
                     loadSymbols(exchanges[0]);
                     // 最初の取引所で履歴を検索
-                    loadSignals(); // loadOrders から loadSignals に変更
+                    // DataTablesがサーバーサイドモードで初期化時に自動的にデータを読み込むため、ここでは不要
+                    // loadSignals(); // loadOrders から loadSignals に変更 - 削除
                 }
             })
             .catch(error => {
