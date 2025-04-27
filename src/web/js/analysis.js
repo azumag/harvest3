@@ -121,13 +121,13 @@ function initializeDatepickers() {
     flatpickr('#filter-start-date', datepickerConfig);
     flatpickr('#filter-end-date', datepickerConfig);
     
-    // デフォルトでは1ヶ月前から今日までの期間を設定
+    // デフォルトでは昨日から今日までの期間を設定
     const today = new Date();
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
     
     document.getElementById('filter-end-date').value = formatDate(today);
-    document.getElementById('filter-start-date').value = formatDate(oneMonthAgo);
+    document.getElementById('filter-start-date').value = formatDate(yesterday);
 }
 
 /**
