@@ -109,10 +109,12 @@ $(document).ready(function() {
                 return response.json();
             })
             .then(data => {
-                // DataTablesを初期化またはデータをクリアして追加
+                console.log('APIから取得した生データ:', data); // デバッグ用ログ
                 if (ordersTable) {
                     ordersTable.destroy();
                 }
+                console.log('DataTablesに渡すデータ:', data); // デバッグ用ログ
+                console.log('DataTables初期化直前'); // デバッグ用ログ
                 ordersTable = $('#orders-table').DataTable({
                     data: data,
                     columns: [
@@ -123,20 +125,21 @@ $(document).ready(function() {
                         { data: 'amount' },
                         { data: 'orderId' },
                         { data: 'orderType' },
+                        { data: 'strategy' }, 
                         {
                             data: 'timestamp',
                             render: function(data) {
-                                // タイムスタンプを読める形式に変換 (ミリ秒を想定)
                                 const date = new Date(data);
-                                return date.toLocaleString(); // または好みの形式にフォーマット
+                                return date.toLocaleString();
                             }
                         }
                     ],
-                    order: [[7, 'desc']] // タイムスタンプで降順ソート
+                    order: [[8, 'desc']] // タイムスタンプで降順ソート（カラム数が増えたのでインデックス修正）
                 });
             })
             .catch(error => {
                 console.error('Error loading orders:', error);
+                console.error('API応答処理中にエラーが発生しました:', error); // デバッグ用ログ
                 // エラーメッセージを表示するなどの処理
             });
     }

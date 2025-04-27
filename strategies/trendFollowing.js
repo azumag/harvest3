@@ -11,7 +11,7 @@ const {
 
 // const { formattedAvailableAmount, getRealizedPnL } = require('../src/utils');
 const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../src/database/manager');
-const { addOrder } = require('../src/database/mongoDatabase');
+const { addOrder } = require('../src/database/manager');
 
 /**
  * 移動平均線クロス戦略
