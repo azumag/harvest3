@@ -127,35 +127,42 @@ function calculateRSI(prices, period = 14) {
     losses.push(change < 0 ? -change : 0);
   }
   
-  // 最初のRSIを計算
-  for (let i = 0; i < prices.length; i++) {
-    if (i < period) {
-      result.push(null);
-      continue;
-    }
+  // 最初のperiod日分はnullを追加
+  for (let i = 0; i < period; i++) {
+    result.push(null);
+  }
+  
+  // 初回のRSI計算（period日目）
+  let avgGain = 0;
+  let avgLoss = 0;
+  
+  // 最初のperiod日間の平均を計算
+  for (let i = 0; i < period; i++) {
+    avgGain += gains[i];
+    avgLoss += losses[i];
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  
+  // 初回のRSIを計算して追加
+  const firstRs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+  const firstRsi = 100 - (100 / (1 + firstRs));
+  result.push({
+    rsi: firstRsi,
+    avgGain: avgGain,
+    avgLoss: avgLoss
+  });
+  
+  // 残りの日数分のRSIを計算
+  for (let i = period + 1; i < prices.length; i++) {
+    // スムージング計算（現在処理中のインデックスに対応する値）
+    const currentGain = gains[i - 1];
+    const currentLoss = losses[i - 1];
     
-    // 平均上昇幅と平均下落幅を計算
-    let avgGain = 0;
-    let avgLoss = 0;
+    avgGain = (result[i - 1].avgGain * (period - 1) + currentGain) / period;
+    avgLoss = (result[i - 1].avgLoss * (period - 1) + currentLoss) / period;
     
-    if (i === period) {
-      // 最初の平均は単純平均
-      for (let j = 0; j < period; j++) {
-        avgGain += gains[j];
-        avgLoss += losses[j];
-      }
-      avgGain /= period;
-      avgLoss /= period;
-    } else {
-      // それ以降はスムージング
-      avgGain = (result[i - 1].avgGain * (period - 1) + gains[i - 1]) / period;
-      avgLoss = (result[i - 1].avgLoss * (period - 1) + losses[i - 1]) / period;
-    }
-    
-    // RS = 平均上昇幅 / 平均下落幅
     const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    
-    // RSI = 100 - (100 / (1 + RS))
     const rsi = 100 - (100 / (1 + rs));
     
     result.push({
