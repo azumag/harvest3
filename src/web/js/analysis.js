@@ -124,17 +124,9 @@ function initializeDatepickers() {
         locale: 'ja',
         maxDate: 'today'
     };
-    
     flatpickr('#filter-start-date', datepickerConfig);
-    flatpickr('#filter-end-date', datepickerConfig);
-    
-    // デフォルトでは昨日から今日までの期間を設定
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-    
-    document.getElementById('filter-end-date').value = formatDate(today);
-    document.getElementById('filter-start-date').value = formatDate(yesterday);
+    // filter-end-dateの初期化は不要
+    document.getElementById('filter-start-date').value = '';
 }
 
 /**
@@ -293,51 +285,44 @@ async function fetchDataAndRenderChart() {
     const strategy = document.getElementById('filter-strategy').value;
     const timeframe = document.getElementById('filter-timeframe').value;
     const startDate = document.getElementById('filter-start-date').value;
-    const endDate = document.getElementById('filter-end-date').value;
     const limit = document.getElementById('filter-limit').value;
-    
+    // endDateは使わない
+
     // 必須フィールドの検証
     if (!exchange || !symbol) {
         showError('取引所と銘柄を選択してください');
         return;
     }
-    
+
     // ローディング表示
     showLoading(true);
     hideError();
-    
+
     try {
-        console.log('fetchDataAndRenderChart - Fetching OHLCV data...'); // ログ追加
+        console.log('fetchDataAndRenderChart - Fetching OHLCV data...');
         // ロウソク足データの取得
-        const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, endDate);
-        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.'); // ログ追加
-        
-        // データフォーマットの詳細なデバッグ
+        const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate);
+        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.');
         if (ohlcvData.length > 0) {
             console.log('OHLCV data sample [0]:', ohlcvData[0]);
             console.log('OHLCV data sample [last]:', ohlcvData[ohlcvData.length - 1]);
         }
-        
         // 戦略シグナルデータの取得 (戦略が選択されている場合)
         let signalData = [];
         if (strategy) {
-            console.log('fetchDataAndRenderChart - Fetching signal data...'); // ログ追加
-            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate, endDate);
-            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.'); // ログ追加
+            console.log('fetchDataAndRenderChart - Fetching signal data...');
+            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate);
+            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.');
         }
-        
-        // データが取得できたかチェック
         if (ohlcvData.length === 0) {
-            console.log('fetchDataAndRenderChart - No OHLCV data received.'); // ログ追加
+            console.log('fetchDataAndRenderChart - No OHLCV data received.');
             showNoDataMessage(true);
             showLoading(false);
             return;
         }
-        
-        console.log('fetchDataAndRenderChart - Rendering chart...'); // ログ追加
-        // チャートの描画
+        console.log('fetchDataAndRenderChart - Rendering chart...');
         renderChart(ohlcvData, signalData);
-        console.log('fetchDataAndRenderChart - Chart rendered.'); // ログ追加
+        console.log('fetchDataAndRenderChart - Chart rendered.');
         showNoDataMessage(false);
     } catch (error) {
         console.error('データ取得中にエラーが発生しました:', error);
@@ -350,34 +335,18 @@ async function fetchDataAndRenderChart() {
 /**
  * ロウソク足データの取得
  */
-async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, endTime) {
+async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
     try {
         // 日付をミリ秒のタイムスタンプに変換
         let startTime = startDate ? new Date(startDate).getTime() : undefined;
-        let endTimeMs;
-        if (endTime) {
-            // 今日の日付（YYYY-MM-DD）
-            const todayStr = formatDate(new Date());
-            if (endTime === todayStr) {
-                // 今日なら現在時刻
-                endTimeMs = Date.now();
-            } else {
-                // それ以外はその日の23:59:59.999
-                endTimeMs = new Date(endTime).getTime() + (24 * 60 * 60 * 1000 - 1);
-            }
-        } else {
-            endTimeMs = undefined;
-        }
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
             exchange,
             symbol,
-            interval: timeframe,
-            limit
+            interval: timeframe
         });
+        if (limit) params.append('limit', limit);
         if (startTime) params.append('startTime', startTime);
-        // endTimeはcxxtでは通常使用しないが、APIが対応している場合に備えてコメントアウト
-        // if (endTimeMs) params.append('endTime', endTimeMs);
         // APIリクエスト
         const response = await fetch(`/api/ohlcv?${params.toString()}`);
         if (!response.ok) {
@@ -385,7 +354,6 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate, end
         }
         const data = await response.json();
         console.log('fetchOhlcvData - Raw data:', data);
-        // データ形式の詳細な検証（データの最初と最後の項目を表示）
         if (data && data.length > 0) {
             console.log('Data type check:', {
                 isArray: Array.isArray(data),

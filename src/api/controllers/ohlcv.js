@@ -7,7 +7,7 @@ const ccxt = require('ccxt'); // ccxtをインポート
  * @param {Object} res - Expressレスポンスオブジェクト
  */
 async function getOhlcv(req, res) {
-  const { exchange, symbol, interval, limit = 100, startTime, endTime } = req.query;
+  const { exchange, symbol, interval, limit, startTime, endTime } = req.query;
   console.log(`[API /ohlcv] Request received:`, req.query); // リクエストログ追加
 
   try {
@@ -49,7 +49,7 @@ async function getOhlcv(req, res) {
     // startTime と endTime が指定されていればミリ秒単位の数値に変換
     const startTimeMs = startTime ? parseInt(startTime, 10) : undefined;
     const endTimeMs = endTime ? parseInt(endTime, 10) : undefined; // endTimeMsはccxt標準では使わないことが多い
-    const limitInt = parseInt(limit, 10);
+    const limitInt = limit === '' ? undefined : parseInt(limit, 10);
 
     console.log(`[API /ohlcv] Fetching OHLCV for ${exchange} ${symbol} ${interval} limit=${limitInt} startTime=${startTimeMs}`); // endTimeMsを除去
     // OHLCVデータを取得

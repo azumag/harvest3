@@ -63,18 +63,15 @@
                 </div>
                 <div class="row g-3 mt-1">
                     <div class="col-md-3">
-                        <label for="filter-start-date" class="form-label">開始日</label>
-                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
-                    </div>
-                    <div class="col-md-3">
-                        <label for="filter-end-date" class="form-label">終了日</label>
-                        <input type="text" id="filter-end-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
+                        <label for="filter-start-date" class="form-label">基準日</label>
+                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD" value="">
                     </div>
                     <div class="col-md-3">
                         <label for="filter-limit" class="form-label">表示数</label>
                         <select id="filter-limit" class="form-select">
+                            <option value="">指定なし</option>
                             <option value="50">50件</option>
-                            <option value="100" selected>100件</option>
+                            <option value="100">100件</option>
                             <option value="200">200件</option>
                             <option value="500">500件</option>
                         </select>
