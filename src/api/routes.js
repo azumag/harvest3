@@ -7,6 +7,8 @@ const router = express.Router();
 const { getTradeKeyList, getExchanges, getSymbols } = require('./controllers/exchanges');
 const { getTradeSummary } = require('./controllers/summary');
 const { getOrders } = require('./controllers/orders');
+const tradesController = require('./controllers/trades');
+const signalsController = require('./controllers/signals');
 
 // const { getOhlcv } = require('./controllers/ohlcv');
 
@@ -24,6 +26,12 @@ router.get('/trade-summary', getTradeSummary);
 
 // 注文履歴API
 router.get('/orders', getOrders);
+
+// 約定履歴API
+router.get('/trades', tradesController.getTrades);
+
+// シグナル履歴API
+router.get('/signals', signalsController.getSignals);
 
 // イベントストリームAPI
 // router.get('/events', eventsHandler);
