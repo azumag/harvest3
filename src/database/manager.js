@@ -20,7 +20,8 @@ const {
   getTradeSummaries,
   initialize,
   getTradeKeys,
-  getAllTradeSummaries
+  getAllTradeSummaries, // コンマを追加
+  getAllStrategyParametersRedis, // 新しい関数をインポート
 } = require('./redisDatabase');
 
 const { fetchOHLCVData } = require('./exchangeAPI');
@@ -229,6 +230,14 @@ async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
   return await saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params);
 }
 
+/**
+ * 全ての戦略パラメータを読み出す関数
+ * @returns {Promise<Object>} キー（params:exchangeId:symbol:strategyKey）とパラメータオブジェクトのマップ
+ */
+async function getAllStrategyParameters() {
+  return await getAllStrategyParametersRedis();
+}
+
 // 購入量ー売り注文量を計算
 async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision) {
   try {
@@ -290,6 +299,7 @@ module.exports = {
   initializeDB,
   getTradeKeys,
   getAllTradeSummaries,
+  getAllStrategyParameters, // 新しい関数をエクスポート
   listOrders,
   listTrades,
   listSignals,

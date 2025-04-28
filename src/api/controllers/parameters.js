@@ -1,7 +1,7 @@
 /**
  * 戦略パラメータ関連のコントローラー
  */
-const { getStrategyParameters, saveStrategyParameters } = require('../../database/manager');
+const { getStrategyParameters, saveStrategyParameters, getAllStrategyParameters } = require('../../database/manager'); // getAllStrategyParameters をインポート
 
 /**
  * 戦略パラメータを取得するコントローラー
@@ -96,7 +96,26 @@ async function updateParameters(req, res) {
   }
 }
 
+/**
+ * 全ての戦略パラメータを取得するコントローラー
+ * @param {Object} req - リクエストオブジェクト
+ * @param {Object} res - レスポンスオブジェクト
+ */
+async function getAllParameters(req, res) {
+  try {
+    const allParams = await getAllStrategyParameters();
+    return res.json(allParams);
+  } catch (error) {
+    console.error('全てのパラメータ取得中にエラーが発生しました:', error);
+    return res.status(500).json({
+      error: '全てのパラメータの取得に失敗しました。',
+      message: error.message
+    });
+  }
+}
+
 module.exports = {
   getParameters,
-  updateParameters
+  updateParameters,
+  getAllParameters, // 新しい関数をエクスポート
 };

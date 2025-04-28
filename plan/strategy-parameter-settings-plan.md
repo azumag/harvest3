@@ -1,88 +1,71 @@
-# 戦略パラメータ設定ページ実装計画
+# 戦略パラメータ設定ページ改修計画
 
 ## 概要
 
-本計画は、取引戦略のパラメータをウェブUIから設定・更新できるページを`src/web`配下に追加することを目的とする。バックエンドは既存の`src/database/manager.js`の関数を利用し、パラメータの取得と更新を行うAPIエンドポイントを新規に実装する。フロントエンドは、銘柄別および戦略別のタブ切り替えUIを持つページを新規に作成し、パラメータの表示・編集機能を提供する。
+戦略パラメータ設定ページ (`src/web/js/parameter-settings.js`) において、現在の取引所、銘柄、戦略を順次取得してからパラメータを取得する方法から、全パラメータを一括で取得する方法に変更する。
+そのために、`src/database/redisDatabase.js` に全パラメータ一括取得関数を作成し、`src/database/manager.js` を経由してフロントエンドから利用できるようにする。
+また、取得したパラメータのキー名 (`params:取引所ID:銘柄:戦略キー`) から取引所ID、銘柄、戦略キーを抽出する処理を実装する。
 
-## 計画詳細
+## 計画ステップ
 
-1.  **バックエンドAPIの実装:**
-    *   `src/api/controllers/parameters.js` を新規作成し、戦略パラメータの取得および保存のためのAPIエンドポイントのロジックを実装する。
-    *   `src/database/manager.js` の `getStrategyParameters` および `saveStrategyParameters` 関数を利用する。
-    *   パラメータ取得API (`GET /api/parameters`) は、クエリパラメータとして `exchangeId`, `symbol`, `strategyKey` を受け取り、対応するパラメータをJSON形式で返却する。
-    *   パラメータ更新API (`POST /api/parameters`) は、リクエストボディとして `exchangeId`, `symbol`, `strategyKey`, および更新するパラメータオブジェクトを受け取り、`saveStrategyParameters` を呼び出す。
-    *   `src/api/routes.js` に、パラメータ取得 (`GET /api/parameters`) およびパラメータ更新 (`POST /api/parameters`) のルーティングを追加し、新しいコントローラ関数を紐づける。
-    *   必要に応じて、取引所、銘柄、戦略のリストを取得するための既存API (`/api/exchanges`, `/api/symbols`, `/api/strategies`) を利用するか、新規にエンドポイントを作成する。
+1.  **`src/database/redisDatabase.js` に全パラメータ取得関数を作成:**
+    *   Redisから `params:*` のパターンで全てのパラメータキーを取得します。
+    *   取得した各キーに対応するパラメータをRedisから取得し、キーとパラメータのペアのリストまたはオブジェクトとして返します。
+    *   関数名を `getAllStrategyParametersRedis` とする。
 
-2.  **フロントエンドUIの実装:**
-    *   `src/web/parameter-settings.html` を新規作成する。既存のHTMLファイル (`src/web/index.html` など) を参考に、Bootstrapを使用した基本的なページ構造とナビゲーションバーコンテナ (`#navbar-container`) を含める。
-    *   ページ内に、Bootstrapのタブコンポーネントを使用して、銘柄別と戦略別のタブ切り替えUIを実装する。
-    *   各タブ内に、選択された銘柄または戦略に対応するパラメータを表示・編集するためのフォームまたはテーブル構造を実装する。パラメータの構造は動的に変わる可能性があるため、取得したパラメータオブジェクトを元にフォーム要素を動的に生成するJavaScriptロジックが必要となる。
-    *   パラメータの変更をローカルで保持する仕組みを実装する。
-    *   パラメータの入力値を検証するクライアントサイドのバリデーションを実装する（任意）。
-    *   パラメータをバックエンドに保存するためのボタンを設置する。
-    *   `src/web/js/parameter-settings.js` を新規作成し、以下のロジックを実装する。
-        *   ページのロード時またはユーザー操作に応じて、取引所、銘柄、戦略のリストを取得するAPIを呼び出し、UI上のドロップダウンなどを生成・更新する。
-        *   銘柄または戦略の選択が変更されたら、対応するパラメータを取得するAPI (`GET /api/parameters`) を呼び出し、取得したパラメータをUIに表示する関数を呼び出す。
-        *   保存ボタンのクリックイベントリスナーを設定し、現在のパラメータ設定を更新するAPI (`POST /api/parameters`) を呼び出す。
-        *   API呼び出し中はローディング表示を行い、完了後には成功または失敗のフィードバックをユーザーに表示する。
+2.  **`src/database/manager.js` に新しい関数を追加:**
+    *   `redisDatabase` で作成した全パラメータ取得関数 (`getAllStrategyParametersRedis`) をインポートします。
+    *   その関数を呼び出す新しい関数 (`getAllStrategyParameters`) を `manager.js` に作成し、エクスポートします。これにより、データベースアクセスが一元管理されます。
 
-3.  **ナビゲーションバーへの追加:**
-    *   `src/web/navbar.html` に、新しいパラメータ設定ページ (`parameter-settings.html`) へのナビゲーションリンクを追加する。
-    *   `src/web/js/navbar.js` に、新しいページにいる場合に該当ナビゲーションリンクがアクティブになるようにロジックを追加する。
+3.  **APIエンドポイントの追加/修正:**
+    *   `src/web/js/parameter-settings.js` からバックエンドのデータベース関数を直接呼び出すことはできないため、全パラメータを取得するための新しいAPIエンドポイントを作成します。
+    *   `src/api/routes.js` に新しいGETエンドポイント（例: `/api/all-parameters`）を追加します。
+    *   `src/api/controllers/parameters.js` に新しいコントローラー関数を作成し、その中で `manager.js` の新しい全パラメータ取得関数 (`getAllStrategyParameters`) を呼び出し、結果をJSON形式で返します。
 
-## 技術スタック
+4.  **`src/web/js/parameter-settings.js` の修正:**
+    *   `loadAllParameters` 関数内の、取引所、銘柄、戦略を順次取得し、各パラメータを個別にfetchしている既存の処理を削除またはコメントアウトします。
+    *   新しく作成したAPIエンドポイント（`/api/all-parameters`）をfetchして、全パラメータデータを一括で取得します。
+    *   取得したデータはキー（例: `params:bitflyer:ETH/BTC:OSCILLATOR_LONG`）とパラメータオブジェクトのマップ形式になっていると想定されます。
+    *   取得したデータの各キーを `:` で分割し、取引所ID、銘柄、戦略キーを抽出します。
+    *   抽出した取引所ID、銘柄、戦略キー、および対応するパラメータオブジェクトを `displayParameterForm` 関数に渡して、画面に表示します。
+    *   エラーハンドリングを適切に実装します。
 
-*   **バックエンド:** Node.js, Express, `src/database/manager.js` (Redis/MongoDB)
-*   **フロントエンド:** HTML, CSS (Bootstrap), JavaScript, Fetch API
-
-## 想定されるUIフロー
-
-1.  ユーザーがナビゲーションバーから「パラメータ設定」ページに遷移する。
-2.  ページが表示され、取引所、銘柄、戦略を選択するためのドロップダウンが表示される。
-3.  ユーザーが取引所、銘柄、戦略を選択する。
-4.  選択に応じて、対応するパラメータがバックエンドから取得され、編集可能なフォームとして表示される（銘柄別タブの場合は選択した銘柄の全戦略パラメータ、戦略別タブの場合は選択した戦略の全銘柄パラメータ）。
-5.  ユーザーがパラメータの値を変更する。
-6.  ユーザーが「保存」ボタンをクリックする。
-7.  変更されたパラメータがバックエンドに送信され、データベースに保存される。
-8.  保存結果（成功/失敗）がユーザーに通知される。
-
-## Mermaid図
+## 計画フロー
 
 ```mermaid
 graph TD
-    A[ユーザー] --> B(ブラウザ);
-    B --> C[パラメータ設定ページ表示要求];
-    C --> D[src/web/parameter-settings.html];
-    D --> E[src/web/js/parameter-settings.js];
-    E --> F[API呼び出し: /api/parameters (GET)];
-    F --> G[src/api/routes.js];
-    G --> H[src/api/controllers/parameters.js];
-    H --> I[src/database/manager.js::getStrategyParameters];
-    I --> J[Redis/MongoDB];
-    J --> I;
-    I --> H;
-    H --> G;
-    G --> F;
-    F --> E[パラメータ表示];
-    E --> K[ユーザーによるパラメータ編集];
-    K --> L[保存ボタンクリック];
-    L --> M[API呼び出し: /api/parameters (POST)];
-    M --> G[src/api/routes.js];
-    G --> H[src/api/controllers/parameters.js];
-    H --> N[src/database/manager.js::saveStrategyParameters];
-    N --> J[Redis/MongoDB];
-    J --> N;
-    N --> H;
-    H --> G;
-    G --> M;
-    M --> E[保存成功/失敗表示];
+    A[ユーザー要求: パラメータ一括取得] --> B[計画立案];
 
-    E --> O[API呼び出し: /api/exchanges, /api/symbols, /api/strategies];
-    O --> G;
-    G --> P[対応するコントローラ];
-    P --> Q[データベース/設定ファイル];
-    Q --> P;
-    P --> G;
-    G --> O;
-    O --> E[ドロップダウン生成];
+    B --> C[ステップ1: redisDatabase.js修正];
+    C --> C1[getAllStrategyParametersRedis関数作成];
+    C1 --> C2[client.keys('params:*')でキー取得];
+    C2 --> C3[各キーでhGetAll実行];
+    C3 --> C4[キーとパラメータのマップを返す];
+    C4 --> C5[getAllStrategyParametersRedisをエクスポート];
+
+    B --> D[ステップ2: manager.js修正];
+    D --> D1[redisDatabaseから新関数インポート];
+    D1 --> D2[getAllStrategyParameters関数作成];
+    D2 --> D3[redisDatabaseの新関数を呼び出す];
+    D3 --> D4[getAllStrategyParametersをエクスポート];
+
+    B --> E[ステップ3: APIエンドpoint追加/修正];
+    E --> E1[src/api/routes.jsにGET /api/all-parameters追加];
+    E1 --> E2[src/api/controllers/parameters.jsに新コントローラー作成];
+    E2 --> E3[コントローラーでmanager.getAllStrategyParameters呼び出し];
+    E3 --> E4[結果をJSONで返す];
+
+    B --> F[ステップ4: parameter-settings.js修正];
+    F --> F1[loadAllParameters関数修正];
+    F1 --> F2[取引所/戦略取得部分削除];
+    F2 --> F3[新API /api/all-parameters をfetch];
+    F3 --> F4[取得データ（キーとパラメータ）をループ];
+    F4 --> F5[キーを':'で分割し、exchangeId, symbol, strategyKey抽出];
+    F5 --> F6[displayParameterFormを呼び出し];
+    F6 --> F7[エラーハンドリング];
+
+    B --> G[ステップ5: 計画提示];
+    G --> H{ユーザー承認};
+    H -- はい --> I[ステップ6: コード実装];
+    I --> J[ステップ7: 完了報告];
+    H -- いいえ --> B;

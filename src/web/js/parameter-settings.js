@@ -21,15 +21,15 @@ async function loadAllParameters() {
     try {
         showLoading();
 
-        // 取引所一覧を取得
-        const exchangesResponse = await fetch('/api/exchanges');
-        const exchanges = await exchangesResponse.json();
+        // 全パラメータを一括で取得
+        const response = await fetch('/api/all-parameters');
 
-        // 戦略一覧を取得
-        const strategiesResponse = await fetch('/api/strategies');
-        const strategies = await strategiesResponse.json();
+        if (!response.ok) {
+            throw new Error('全パラメータの取得に失敗しました');
+        }
 
-        // 各取引所、銘柄、戦略の組み合わせでパラメータを取得して表示
+        const allParameters = await response.json();
+
         const symbolContainer = document.getElementById('by-symbol');
         const strategyContainer = document.getElementById('by-strategy');
         symbolContainer.innerHTML = ''; // コンテナをクリア
@@ -37,80 +37,43 @@ async function loadAllParameters() {
 
         let hasParameters = false;
 
-        for (const exchangeId of exchanges) { // exchange を exchangeId に変更
-            // 銘柄一覧を取得
-            const symbolsResponse = await fetch(`/api/symbols?exchange=${exchangeId}`); // exchangeId を exchange に変更
-            
-            if (!symbolsResponse.ok) {
-                 throw new Error(`${exchangeId} の銘柄一覧取得に失敗しました`);
+        // 取得した全パラメータをループして表示
+        for (const paramKey in allParameters) {
+            if (allParameters.hasOwnProperty(paramKey)) {
+                const params = allParameters[paramKey];
+                // キー名から取引所ID、銘柄、戦略キーを抽出
+                const parts = paramKey.split(':');
+                if (parts.length === 4 && parts[0] === 'params') {
+                    const exchangeId = parts[1];
+                    const symbol = parts[2];
+                    const strategyKey = parts[3];
+
+                    // 銘柄別タブに表示
+                    const symbolHeader = document.createElement('h4');
+                    symbolHeader.textContent = `${exchangeId} - ${symbol} - ${strategyKey}`;
+                    symbolHeader.className = 'mt-4 mb-3';
+                    symbolContainer.appendChild(symbolHeader);
+                    displayParameterForm(exchangeId, symbol, strategyKey, params, symbolContainer);
+                    hasParameters = true;
+
+                    // 戦略別タブに表示
+                    const strategyHeader = document.createElement('h4');
+                    strategyHeader.textContent = `${exchangeId} - ${strategyKey} - ${symbol}`;
+                    strategyHeader.className = 'mt-4 mb-3';
+                    strategyContainer.appendChild(strategyHeader);
+                    displayParameterForm(exchangeId, symbol, strategyKey, params, strategyContainer);
+                    hasParameters = true;
+                } else {
+                    console.warn(`不正なパラメータキー形式が見つかりました: ${paramKey}`);
+                }
             }
-
-            const symbols = await symbolsResponse.json();
-
-            // symbols が配列であることを確認
-            if (!Array.isArray(symbols)) {
-                console.error(`${exchange.id} の銘柄一覧が配列ではありません:`, symbols);
-                throw new Error(`${exchange.id} の銘柄一覧の形式が不正です`);
-            }
-
-            for (const symbol of symbols) {
-                for (const strategyKey of strategies) {
-                    try {
-                        // symbolをエンコードしてURLに含める
-                        const encodedSymbol = encodeURIComponent(symbol);
-                        const response = await fetch(`/api/parameters?exchangeId=${exchangeId}&symbol=${encodedSymbol}&strategyKey=${strategyKey}`);
-                        
-                        if (response.status === 404) {
-                            // パラメータが存在しない場合はスキップ
-                            continue;
-                        }
-                        
-                        if (!response.ok) {
-                            throw new Error(`${exchangeId}:${symbol}:${strategyKey}のパラメータ取得に失敗しました`);
-                        }
-                        
-                        const data = await response.json();
- 
-                         // 銘柄別タブに表示
-                         const symbolHeader = document.createElement('h4');
-                         // 取引所名を取得するために、exchanges 配列から対応する取引所オブジェクトを見つける必要がある
-                         // ただし、/api/exchanges は ID の配列を返すため、ここでは ID をそのまま使用する
-                         symbolHeader.textContent = `${exchangeId} - ${symbol} - ${strategyKey}`; // strategy.name || strategy.key を strategyKey に変更
-                         symbolHeader.className = 'mt-4 mb-3';
-                         symbolContainer.appendChild(symbolHeader);
-                         displayParameterForm(exchangeId, symbol, strategyKey, data.params, symbolContainer);
-                         hasParameters = true;
- 
-                         // 戦略別タブに表示
-                         const strategyHeader = document.createElement('h4');
-                         strategyHeader.textContent = `${exchangeId} - ${strategyKey} - ${symbol}`; // strategy.name || strategy.key を strategyKey に変更
-                         strategyHeader.className = 'mt-4 mb-3';
-                         strategyContainer.appendChild(strategyHeader);
-                         displayParameterForm(exchangeId, symbol, strategyKey, data.params, strategyContainer);
-                         hasParameters = true;
- 
-                     } catch (error) {
-                         console.error(`${exchangeId}:${symbol}:${strategyKey}のパラメータ読み込み中にエラーが発生しました:`, error); // strategy.key を strategyKey に変更
- 
-                         const errorCard = document.createElement('div');
-                         errorCard.className = 'card mb-3 border-danger';
-                         errorCard.innerHTML = `
-                             <div class="card-body text-danger">
-                                 <p>エラー: ${exchangeId}:${symbol}:${strategyKey}のパラメータの読み込みに失敗しました。</p> // strategy.key を strategyKey に変更
-                             </div>
-                         `;
-                         symbolContainer.appendChild(errorCard);
-                         strategyContainer.appendChild(errorCard.cloneNode(true)); // 戦略別タブにも同じエラーを表示
-                     }
-                 }
-             }
-         }
+        }
 
         if (hasParameters) {
             document.getElementById('save-btn').disabled = false;
         } else {
-             symbolContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
-             strategyContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
+            symbolContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
+            strategyContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
         }
 
 

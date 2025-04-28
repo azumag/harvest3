@@ -263,6 +263,35 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
 }
 
 /**
+ * 全ての戦略パラメータを取得する関数
+ * Redisから 'params:*' のパターンで全てのキーを取得し、対応するパラメータを返します。
+ * @returns {Promise<Object>} キー（params:exchangeId:symbol:strategyKey）とパラメータオブジェクトのマップ
+ */
+async function getAllStrategyParametersRedis() {
+  try {
+    const keys = await client.keys('params:*');
+    const allParams = {};
+
+    for (const key of keys) {
+      const params = await client.hGetAll(key);
+      if (Object.keys(params).length > 0) {
+        const parsedParams = {};
+        for (const [paramKey, value] of Object.entries(params)) {
+          parsedParams[paramKey] = parseParamValue(value);
+        }
+        allParams[key] = parsedParams;
+      }
+    }
+
+    console.log(`全ての戦略パラメータを取得しました (${Object.keys(allParams).length}件)`);
+    return allParams;
+  } catch (error) {
+    console.error('全ての戦略パラメータの読み出し中にエラーが発生しました:', error);
+    return {}; // エラー時は空のオブジェクトを返す
+  }
+}
+
+/**
  * トレード情報のキーを取得する
  * @returns {Promise<Array>} 取引所の情報の配列
  */
@@ -318,4 +347,5 @@ module.exports = {
   getTradeSummaries,
   getAllTradeSummaries,
   getTradeKeys,
+  getAllStrategyParametersRedis, // 新しい関数を追加
 };
