@@ -1,5 +1,6 @@
 const { postErrorToDiscord } = require('./notifications');
-const { getStrategyParameters, saveStrategyParameters } = require('./database/manager');
+const { getStrategyParameters, saveStrategyParameters,
+   getTradeCurrentPosition, getCurrentOrderPosition } = require('./database/manager');
 
 async function getMarketParametersByExchangeSymbol(symbolByExchange, config) {
   const exchanges = Object.keys(symbolByExchange);
@@ -211,6 +212,57 @@ async function getSymbolsByExchange(config) {
   return symbolsByExchange;
 }
 
+/**
+ * 買い注文が実行可能かどうかを資金とポジション制限に基づいてチェックする
+ * @param {Object} exchange - ccxtの取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @param {Number} midPrice - 現在の中間価格
+ * @param {Number} formattedAmount - 注文数量
+ * @param {Number} availableFunds - 利用可能な資金
+ * @param {Number} tradePercentage - 取引に使用する資金の割合
+ * @param {Number} realizedPnL - 実現した損益
+ * @param {Number} baseMinTradeAmount - 最小取引量
+ * @returns {Object} - {allowed: boolean, reason: string}
+ */
+async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount) {
+  // この戦略で約定し残っている量（買った量ー売った量）
+  const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+
+  // 今注文に出している買い量
+  const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
+
+  // 可能購入量限度を計算
+  const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / price;
+
+  // Calculate required funds for the potential buy order
+  const requiredFunds = price * formattedAmount;
+  
+  // Check if available funds are sufficient
+  if (availableFunds < requiredFunds || formattedAmount <= 0) {
+    return {
+      allowed: false,
+      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
+    };
+  }
+  
+  // Calculate total position after the potential order
+  const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
+  
+  // Determine if a buy order is allowed based on position limits
+  // Allow buy if total position is within maxBuyAmount OR if maxBuyAmount is less than baseMinTradeAmount
+  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount || maxBuyAmount < baseMinTradeAmount;
+  
+  if (!isBuyAllowed) {
+    return {
+      allowed: false,
+      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmount}`
+    };
+  }
+  
+  return { allowed: true };
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -221,5 +273,6 @@ module.exports = {
   getMarketParameters,
   sleep,
   getStrategyConfig,
-  getMarketParametersByExchangeSymbol
+  getMarketParametersByExchangeSymbol,
+  checkBuyOrderAllowance,
 };

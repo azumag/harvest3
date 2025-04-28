@@ -11,6 +11,8 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLC
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
+const { checkBuyOrderAllowance } = require('../utils');
+
 /**
  * 平均回帰戦略
  * 価格が移動平均線から大きく乖離した場合に、平均に戻ると予測して取引
@@ -87,7 +89,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       const availableFunds = balance.free[baseCurrency];
 
       // 損益を取得
-      const realizedPnL = await getRealizedPnL(exchange, symbol, 'MEAN_REVERSION')
+      const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey);
 
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -98,11 +100,21 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
 
-      if (availableFunds >= currentPrice * formattedAmount) {
+      // 買い注文が許可されるかチェック
+      const allowanceCheck = await checkBuyOrderAllowance(
+        exchange, 
+        symbol, 
+        strategyKey, 
+        currentPrice, 
+        formattedAmount, 
+        availableFunds, 
+        tradePercentage, 
+        realizedPnL,
+        minTradeAmount
+      );
+
+      if (allowanceCheck.allowed) {
         // 買い注文を作成
-        // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-        // 指値注文に変更
         const params = { 'post_only': true };
         const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
@@ -112,9 +124,9 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
         // 取引記録を更新
         addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
-        console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(allowanceCheck.reason);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[平均回帰戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[平均回帰戦略] ${allowanceCheck.reason}`);
         }
       }
     } else if (sellSignal) {
@@ -129,7 +141,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       const quoteCurrency = symbol.split('/')[0];
       const availableAsset = balance.free[quoteCurrency];
 
-      const formattedAmount = await formattedAvailableAmount(exchange, symbol, 'MEAN_REVERSION', amountPrecision);
+      const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
 
       if (formattedAmount < minTradeAmount) {
         console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
@@ -293,11 +305,20 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
         // 最小精度（0.0001）を下回らないようにする
         formattedAmount = Math.max(formattedAmount, 0.0001);
 
-        if (availableFunds >= currentPrice * formattedAmount) {
+        const allowanceCheck = await checkBuyOrderAllowance(
+          exchange, 
+          symbol, 
+          strategyKey, 
+          currentPrice, 
+          formattedAmount, 
+          availableFunds, 
+          tradePercentage, 
+          realizedPnL,
+          minTradeAmount
+        );
+
+        if (allowanceCheck.allowed) {
           // 買い注文を作成
-          // 注文数をチェックし、必要に応じて古い注文をキャンセル
-          // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-          // 指値注文に変更
           const params = { 'post_only': true };
           const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
           if (postOrderToDiscord) {
@@ -307,9 +328,9 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
           // 取引記録を更新
           addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
         } else {
-          console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          console.log(allowanceCheck.reason);
           if (postOrderToDiscord) {
-            postOrderToDiscord(`[オシレーター戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+            postOrderToDiscord(`[オシレーター戦略] ${allowanceCheck.reason}`);
           }
         }
       } else if (sellSignal) {

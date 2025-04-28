@@ -14,6 +14,8 @@ const { addOrder, fetchOHLCVData } = require('../database/manager');
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
+const { checkBuyOrderAllowance } = require('../utils');
+
 /**
  * 移動平均線クロス戦略
  * 短期移動平均線が長期移動平均線を上抜けたら買い、下抜けたら売り
@@ -100,21 +102,32 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      if (availableFunds >= currentPrice * formattedAmount) {
+      // 買い注文が許可されるかチェック
+      const allowanceCheck = await checkBuyOrderAllowance(
+        exchange, 
+        symbol, 
+        strategyKey, 
+        currentPrice, 
+        formattedAmount, 
+        availableFunds, 
+        tradePercentage, 
+        realizedPnL,
+        minTradeAmount
+      );
+
+      if (allowanceCheck.allowed) {
         // 買い注文を作成
-        // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-        // 指値注文に変更
-        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
+        const params = { 'post_only': true };
+        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           postOrderToDiscord(`[MA戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
-        console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(allowanceCheck.reason);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MA戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[MA戦略] ${allowanceCheck.reason}`);
         }
       }
     } else if (crossDown) {
@@ -262,21 +275,32 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      if (availableFunds >= currentPrice * formattedAmount) {
+      // 買い注文が許可されるかチェック
+      const allowanceCheck = await checkBuyOrderAllowance(
+        exchange, 
+        symbol, 
+        strategyKey, 
+        currentPrice, 
+        formattedAmount, 
+        availableFunds, 
+        tradePercentage, 
+        realizedPnL,
+        minTradeAmount
+      );
+
+      if (allowanceCheck.allowed) {
         // 買い注文を作成
-        // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-        // 指値注文に変更
-        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
+        const params = { 'post_only': true };
+        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[MACD戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
-        console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(allowanceCheck.reason);
         if (postOrderToDiscord) {
-          await postOrderToDiscord(`[MACD戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[MACD戦略] ${allowanceCheck.reason}`);
         }
       }
     } else if (crossDown) {
@@ -421,21 +445,32 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      if (availableFunds >= currentPrice * formattedAmount) {
+      // 買い注文が許可されるかチェック
+      const allowanceCheck = await checkBuyOrderAllowance(
+        exchange, 
+        symbol, 
+        strategyKey, 
+        currentPrice, 
+        formattedAmount, 
+        availableFunds, 
+        tradePercentage, 
+        realizedPnL,
+        minTradeAmount
+      );
+
+      if (allowanceCheck.allowed) {
         // 買い注文を作成
-        // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-        // 指値注文に変更
-        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
+        const params = { 'post_only': true };
+        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           postOrderToDiscord(`[RSI戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
         
         addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
-        console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(allowanceCheck.reason);
         if (postOrderToDiscord) {
-          postOrderToDiscord(`[RSI戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          await postOrderToDiscord(`[RSI戦略] ${allowanceCheck.reason}`);
         }
       }
     } else if (sellSignal) {
@@ -587,12 +622,22 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       // 最小精度（0.0001）を下回らないようにする
       formattedAmount = Math.max(formattedAmount, 0.0001);
       
-      if (availableFunds >= currentPrice * formattedAmount) {
+      const allowanceCheck = await checkBuyOrderAllowance(
+        exchange, 
+        symbol, 
+        strategyKey, 
+        currentPrice, 
+        formattedAmount, 
+        availableFunds, 
+        tradePercentage, 
+        realizedPnL,
+        minTradeAmount
+      );
+
+      if (allowanceCheck.allowed) {
         // 買い注文を作成
-        // 注文数をチェックし、必要に応じて古い注文をキャンセル
-        // await orderCheckCancel(exchange, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-        // 指値注文に変更
-        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, { 'post_only': true });
+        const params = { 'post_only': true };
+        const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
         if (postOrderToDiscord) {
           postOrderToDiscord(`[BB戦略] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
         }
@@ -600,9 +645,9 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
         // 取引記録を更新
         addOrder(exchange.id, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
       } else {
-        console.log(`資金不足のため注文をスキップ: ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+        console.log(allowanceCheck.reason);
         if (postOrderToDiscord) {
-          postOrderToDiscord(`[BB戦略] 資金不足のため買い注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${currentPrice * formattedAmount}, 利用可能: ${availableFunds}`);
+          postOrderToDiscord(`[BB戦略] ${allowanceCheck.reason}`);
         }
       }
     } else if (sellSignal) {

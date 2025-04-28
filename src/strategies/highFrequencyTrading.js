@@ -4,10 +4,11 @@
 
 const { formattedAvailableAmount, 
   getRealizedPnL, getOrderStrategyKeyByOrderId, addOrder,
-  getTradeCurrentPosition, getCurrentOrderPosition
  } = require("../database/manager");
 
 const { postErrorToDiscord, postOrderToDiscord } = require('../notifications');
+
+const { checkBuyOrderAllowance } = require('../utils');
 
 const priceCache = {};
 
@@ -107,40 +108,25 @@ async function highFrequencyTrading(exchange, symbol, strategyKey, config, marke
               // 最小取引量を下回らないようにする
               formattedAmount = Math.max(formattedAmount, baseMinTradeAmount);
 
-              // console.log({symbol, maxBuyAmount, tradeAmount, precisionToUse, formattedAmount});
-
-              //　この戦略で約定し残っている量（買った量ー売った量）
-              const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey)
-
-              // 今注文に出している買い量
-              const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
-
-              // 可能購入量限度を計
-              const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / midPrice;
-
-              // Calculate required funds for the potential buy order
-              const requiredFunds = midPrice * formattedAmount;
-              
-              // Check if available funds are sufficient
-              if (availableFunds < requiredFunds) {
-                  console.log(`資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`);
-                  return; // Early return if funds are insufficient
-              }
-              
-              // Calculate total position after the potential order
-              const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
-              
-              // Determine if a buy order is allowed based on position limits
-              // Allow buy if total position is within maxBuyAmount OR if maxBuyAmount is less than baseMinTradeAmount
-              const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount || maxBuyAmount < baseMinTradeAmount;
+              // 買い注文が可能かチェック
+              const orderCheck = await checkBuyOrderAllowance(
+                exchange, 
+                symbol, 
+                strategyKey, 
+                midPrice, 
+                formattedAmount, 
+                availableFunds, 
+                tradePercentage, 
+                realizedPnL, 
+                baseMinTradeAmount
+              );
               
               // Execute buy order if allowed
-              if (isBuyAllowed) {
-                  await executeBuyOrder(exchange, symbol, strategyKey, formattedAmount, midPrice, priceChange);
+              if (orderCheck.allowed) {
+                await executeBuyOrder(exchange, symbol, strategyKey, formattedAmount, midPrice, priceChange);
               } else {
-                console.log(`買い注文が許可されていません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入量: ${maxBuyAmount}`);
+                console.log(orderCheck.reason);
               }
-              // If not allowed, no action is needed as insufficient funds were already handled.
             }
           } else {
             // 売り圧力が強い場合は売り注文を実行

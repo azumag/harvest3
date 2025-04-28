@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>戦略パラメータ設定 - Harvest</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <div id="navbar-container"></div>
+
+    <div class="container mt-4">
+        <h1>戦略パラメータ設定</h1>
+        
+        <!-- タブコンテナ -->
+        <ul class="nav nav-tabs" id="paramTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="by-symbol-tab" data-bs-toggle="tab" data-bs-target="#by-symbol" type="button" role="tab">銘柄別</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="by-strategy-tab" data-bs-toggle="tab" data-bs-target="#by-strategy" type="button" role="tab">戦略別</button>
+            </li>
+        </ul>
+
+        <!-- タブコンテンツ -->
+        <div class="tab-content mt-3" id="paramTabsContent">
+            <!-- 銘柄別タブ -->
+            <div class="tab-pane fade show active" id="by-symbol" role="tabpanel">
+                <!-- フィルタ部分を完全に分離 -->
+                <div class="symbol-filter-section mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="mb-0">
+                                <input type="text" id="symbol-filter" class="form-control" placeholder="銘柄名でフィルタ...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- パラメータ表示部分 -->
+                <div class="symbol-params-section">
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="symbol-params-container">
+                                <p class="text-muted">取引所と銘柄を選択してください。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 戦略別タブ -->
+            <div class="tab-pane fade" id="by-strategy" role="tabpanel">
+                <!-- フィルタ部分を完全に分離 -->
+                <div class="strategy-filter-section mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="mb-0">
+                                <input type="text" id="strategy-filter" class="form-control" placeholder="戦略名でフィルタ...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- パラメータ表示部分 -->
+                <div class="strategy-params-section">
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="strategy-params-container">
+                                <p class="text-muted">取引所と戦略を選択してください。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- フィードバック表示エリア -->
+        <div id="feedback-container" class="position-fixed top-0 start-0 w-100 p-3 d-flex justify-content-center" style="z-index: 1050; pointer-events: none;">
+            <!-- ここにアラートメッセージを表示 -->
+        </div>
+    </div>
+
+    <!-- ローディング表示 -->
+    <div id="loading-overlay" class="d-none">
+        <div class="spinner-border text-light" role="status">
+            <span class="visually-hidden">読み込み中...</span>
+        </div>
+    </div>
+
+    <!-- 保存ボタン (右下に固定) -->
+    <div class="position-fixed bottom-0 end-0 p-3">
+        <button id="save-btn" class="btn btn-primary" disabled>パラメータを保存</button>
+    </div>
+
+    <!-- スクリプト -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/parameter-settings.js"></script>
+</body>
+</html>

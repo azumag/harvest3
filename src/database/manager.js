@@ -20,8 +20,11 @@ const {
   getTradeSummaries,
   initialize,
   getTradeKeys,
-  getAllTradeSummaries
+  getAllTradeSummaries, // コンマを追加
+  getAllStrategyParametersRedis, // 新しい関数をインポート
 } = require('./redisDatabase');
+
+const { fetchOHLCVData } = require('./exchangeAPI');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -227,6 +230,14 @@ async function saveStrategyParameters(exchangeId, symbol, strategyKey, params) {
   return await saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params);
 }
 
+/**
+ * 全ての戦略パラメータを読み出す関数
+ * @returns {Promise<Object>} キー（params:exchangeId:symbol:strategyKey）とパラメータオブジェクトのマップ
+ */
+async function getAllStrategyParameters() {
+  return await getAllStrategyParametersRedis();
+}
+
 // 購入量ー売り注文量を計算
 async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision) {
   try {
@@ -270,46 +281,6 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
   } 
 }
 
-/**
- * OHLCVデータ取得の共通関数
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {String} timeframe - 例: '15m'
- * @param {Number} since - ミリ秒のタイムスタンプ
- * @param {Number} limit - データ数
- * @returns {Promise<Array>} OHLCV配列
- */
-async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) {
-  const now = new Date();
-  const hour = now.getHours();
-  const targetDate = new Date(now);
-  
-  // bitbank 用設定
-  // 現在時刻が9時より前なら前日の日付を設定
-  if (hour < 9) {
-    targetDate.setDate(targetDate.getDate() - 1);
-  }
-  
-  // targetDateを当日の0:00に設定
-  targetDate.setHours(0, 0, 0, 0);
-  const since = targetDate.getTime();
-  
-  // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${since} ${limit}`);
-  const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
-  if (ohlcv.length < limit) {
-    // limit より少ないデータしか取得できなかった場合、前日のデータを結合する
-    targetDate.setDate(targetDate.getDate() - 1);
-    const sincePrev = targetDate.getTime();
-    const ohlcvPrev = await exchange.fetchOHLCV(symbol, timeframe, sincePrev, limit - ohlcv.length);
-    console.log(`fetchOHLCVData: 前日のデータを取得: ${symbol} ${timeframe} ${limit} ${ohlcv.length} + ${ohlcvPrev.length}件`);
-    // 取得したデータを結合
-    const combinedOHLCV = ohlcvPrev.concat(ohlcv);
-    return combinedOHLCV;
-  } else {
-    return ohlcv;
-  }
-}
-
 module.exports = {
   fetchOHLCVData,
   updateFilledTrades,
@@ -328,6 +299,7 @@ module.exports = {
   initializeDB,
   getTradeKeys,
   getAllTradeSummaries,
+  getAllStrategyParameters, // 新しい関数をエクスポート
   listOrders,
   listTrades,
   listSignals,
