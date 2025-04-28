@@ -23,6 +23,8 @@ const {
   getAllTradeSummaries
 } = require('./redisDatabase');
 
+const { fetchOHLCVData } = require('./exchangeAPI');
+
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
 
@@ -268,68 +270,6 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     // エラー時は安全のために0を返す（より厳格な対応）
     return 0;
   } 
-}
-
-/**
- * OHLCVデータ取得の共通関数
- * @param {Object} exchange - ccxtの取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {String} timeframe - 例: '15m'
- * @param {Number} since - ミリ秒のタイムスタンプ
- * @param {Number} limit - データ数
- * @returns {Promise<Array>} OHLCV配列
- */
-async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) {
-  const now = new Date();
-  const hour = now.getHours();
-  let targetDate = new Date(now);
-  
-  // bitbank 用設定
-  // 現在時刻が9時より前なら前日の日付を設定
-  if (hour < 9) {
-    targetDate.setDate(targetDate.getDate() - 1);
-  }
-  
-  // targetDateを当日の0:00に設定
-  targetDate.setHours(0, 0, 0, 0);
-  let since = targetDate.getTime();
-  
-  // まず現在の日付でデータを取得
-  let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
-  let allData = [...ohlcv];
-  let remainingLimit = limit - allData.length;
-  
-  // limitに達するまで過去に遡ってデータを取得
-  while (remainingLimit > 0) {
-    // 前日の日付に設定
-    targetDate.setDate(targetDate.getDate() - 1);
-    since = targetDate.getTime();
-    
-    // 残りの必要データ数分を取得
-    const prevData = await exchange.fetchOHLCV(symbol, timeframe, since, remainingLimit);
-    
-    // データが取得できなかった場合はループ終了
-    if (prevData.length === 0) {
-      console.log(`fetchOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
-      break;
-    }
-    
-    console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${prevData.length}件`);
-    
-    // 新しいデータを先頭に追加
-    allData = prevData.concat(allData);
-    
-    // 残りの必要データ数を更新
-    remainingLimit = limit - allData.length;
-    
-    // API制限を考慮して少し待機（取引所によって調整が必要）
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  
-  // console.log(`fetchOHLCVData: 合計${allData.length}件のデータを取得しました: ${symbol} ${timeframe}`);
-  
-  // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
-  return allData.slice(-limit);
 }
 
 module.exports = {
