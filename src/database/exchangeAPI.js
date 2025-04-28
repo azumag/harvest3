@@ -88,7 +88,6 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
     const prevYear = year.toString();
     
     try {
-      console.log(`Bitbank API: ${prevYear}年のデータを取得: ${pair} ${candleType}`);
       const prevYearData = await fetchBitbankOHLCV(pair, candleType, prevYear, limit - allData.length);
       
       // データが取得できなかった場合はループ終了
@@ -99,6 +98,7 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
       
       // 新しいデータを時系列順に結合
       allData = [...prevYearData, ...allData];
+      console.log(`Bitbank API: ${prevYear}年のデータを取得: ${pair} ${candleType} ${allData.length}`);
       
       // API制限を考慮して少し待機
       await waitForAPILimit();
