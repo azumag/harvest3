@@ -115,65 +115,74 @@ function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 
  * @param {Number} period - 期間（デフォルト14）
  * @returns {Array} - RSIの配列
  */
-function calculateRSI(prices, period = 14) {
-  const result = [];
-  const gains = [];
-  const losses = [];
-  
-  // 価格変動を計算
-  for (let i = 1; i < prices.length; i++) {
-    const change = prices[i] - prices[i - 1];
-    gains.push(change > 0 ? change : 0);
-    losses.push(change < 0 ? -change : 0);
+function calculateRSI(prices, period) {
+  if (!prices || prices.length < period + 1) {
+    return [];
   }
   
-  // 最初のperiod日分はnullを追加
-  for (let i = 0; i < period; i++) {
-    result.push(null);
-  }
-  
-  // 初回のRSI計算（period日目）
-  let avgGain = 0;
-  let avgLoss = 0;
-  
-  // 最初のperiod日間の平均を計算
-  for (let i = 0; i < period; i++) {
-    avgGain += gains[i];
-    avgLoss += losses[i];
-  }
-  avgGain /= period;
-  avgLoss /= period;
-  
-  // 初回のRSIを計算して追加
-  const firstRs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-  const firstRsi = 100 - (100 / (1 + firstRs));
-  result.push({
-    rsi: firstRsi,
-    avgGain: avgGain,
-    avgLoss: avgLoss
-  });
-  
-  // 残りの日数分のRSIを計算
-  for (let i = period + 1; i < prices.length; i++) {
-    // スムージング計算（現在処理中のインデックスに対応する値）
-    const currentGain = gains[i - 1];
-    const currentLoss = losses[i - 1];
+  try {
+    const result = [];
+    const gains = [];
+    const losses = [];
     
-    avgGain = (result[i - 1].avgGain * (period - 1) + currentGain) / period;
-    avgLoss = (result[i - 1].avgLoss * (period - 1) + currentLoss) / period;
+    // 価格変動を計算
+    for (let i = 1; i < prices.length; i++) {
+      const change = prices[i] - prices[i - 1];
+      gains.push(change > 0 ? change : 0);
+      losses.push(change < 0 ? -change : 0);
+    }
     
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    const rsi = 100 - (100 / (1 + rs));
+    // 最初のperiod日分はnullを追加
+    for (let i = 0; i < period; i++) {
+      result.push(null);
+    }
     
+    // 初回のRSI計算（period日目）
+    let avgGain = 0;
+    let avgLoss = 0;
+    
+    // 最初のperiod日間の平均を計算
+    for (let i = 0; i < period; i++) {
+      avgGain += gains[i];
+      avgLoss += losses[i];
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    
+    // 初回のRSIを計算して追加
+    const firstRs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const firstRsi = 100 - (100 / (1 + firstRs));
     result.push({
-      rsi: rsi,
+      rsi: firstRsi,
       avgGain: avgGain,
       avgLoss: avgLoss
     });
+    
+    // 残りの日数分のRSIを計算
+    for (let i = period + 1; i < prices.length; i++) {
+      // スムージング計算（現在処理中のインデックスに対応する値）
+      const currentGain = gains[i - 1];
+      const currentLoss = losses[i - 1];
+      
+      avgGain = (result[i - 1].avgGain * (period - 1) + currentGain) / period;
+      avgLoss = (result[i - 1].avgLoss * (period - 1) + currentLoss) / period;
+      
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      const rsi = 100 - (100 / (1 + rs));
+      
+      result.push({
+        rsi: rsi,
+        avgGain: avgGain,
+        avgLoss: avgLoss
+      });
+    }
+    
+    // RSI値のみの配列を返す
+    return result.map(item => item === null ? null : item.rsi);
+  } catch (error) {
+    console.error('RSI計算エラー:', error);
+    return [];  // エラー時は空の配列を返す
   }
-  
-  // RSI値のみの配列を返す
-  return result.map(item => item === null ? null : item.rsi);
 }
 
 /**
