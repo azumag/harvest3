@@ -10,6 +10,7 @@ const { getOrders } = require('./controllers/orders');
 const tradesController = require('./controllers/trades');
 const signalsController = require('./controllers/signals');
 const { getStrategiesList } = require('./controllers/strategies');
+const { getParameters, updateParameters } = require('./controllers/parameters');
 
 const { getOhlcv } = require('./controllers/ohlcv');
 
@@ -60,6 +61,10 @@ router.get('/symbols', getSymbols);
 
 // 戦略一覧API
 router.get('/strategies', getStrategiesList);
+
+// 戦略パラメータAPI
+router.get('/parameters', getParameters);
+router.post('/parameters', updateParameters);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {

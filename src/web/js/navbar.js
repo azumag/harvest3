@@ -27,6 +27,8 @@ $(document).ready(function() {
             activeNavId = 'nav-analysis';
         } else if (pageName === 'signal-history.html') {
             activeNavId = 'nav-signal-history';
+        } else if (pageName === 'parameter-settings.html') {
+            activeNavId = 'nav-parameter-settings';
         }
         
         // アクティブなナビゲーション項目にactiveクラスを追加
