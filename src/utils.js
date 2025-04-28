@@ -239,7 +239,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   const requiredFunds = price * formattedAmount;
   
   // Check if available funds are sufficient
-  if (availableFunds < requiredFunds && formattedAmount <= 0) {
+  if (availableFunds < requiredFunds || formattedAmount <= 0) {
     return {
       allowed: false,
       reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
