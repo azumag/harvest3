@@ -210,29 +210,49 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
   }
 }
 
-/**
- * 戦略パラメータを読み出す関数
- * データベースに存在しない場合はnullを返す
- * @param {String} exchangeId - 取引所ID
- * @param {String} symbol - 通貨ペア
- * @param {String} strategyKey - 戦略キー
- * @returns {Promise<Object|null>} 戦略パラメータオブジェクト、またはnull
- */
+// 型変換用のヘルパー関数
+// TODO: use zod
+function parseParamValue(value) {
+  // null/undefined チェック
+  if (value === null || value === undefined || value === 'null') {
+    return null;
+  }
+  
+  // 真偽値チェック
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  
+  // 数値チェック
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return Number(value);
+  }
+  
+  // JSON オブジェクト/配列チェック
+  if ((value.startsWith('{') && value.endsWith('}')) || 
+      (value.startsWith('[') && value.endsWith(']'))) {
+    try {
+      return JSON.parse(value);
+    } catch (e) {
+      // パースに失敗した場合は元の文字列を返す
+    }
+  }
+  
+  // その他は文字列として扱う
+  return value;
+}
+
 async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     const params = await client.hGetAll(key);
     
     if (Object.keys(params).length > 0) {
-      // Redisにパラメータが存在する場合、数値型に変換して返す
       const parsedParams = {};
       for (const [paramKey, value] of Object.entries(params)) {
-        parsedParams[paramKey] = value
+        parsedParams[paramKey] = parseParamValue(value);
       }
-      // console.log(`戦略パラメータをRedisから読み出しました: ${key}`);
       return parsedParams;
     } else {
-      // Redisにパラメータが存在しない場合
       console.log(`戦略パラメータがRedisに存在しません: ${key}`);
       return null;
     }
