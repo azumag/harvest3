@@ -28,10 +28,24 @@
         <div class="tab-content mt-3" id="paramTabsContent">
             <!-- 銘柄別タブ -->
             <div class="tab-pane fade show active" id="by-symbol" role="tabpanel">
-                <div class="card">
-                    <div class="card-body">
-                        <div id="symbol-params-container">
-                            <p class="text-muted">取引所と銘柄を選択してください。</p>
+                <!-- フィルタ部分を完全に分離 -->
+                <div class="symbol-filter-section mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="mb-0">
+                                <input type="text" id="symbol-filter" class="form-control" placeholder="銘柄名でフィルタ...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- パラメータ表示部分 -->
+                <div class="symbol-params-section">
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="symbol-params-container">
+                                <p class="text-muted">取引所と銘柄を選択してください。</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -39,23 +53,32 @@
             
             <!-- 戦略別タブ -->
             <div class="tab-pane fade" id="by-strategy" role="tabpanel">
-                <div class="card">
-                    <div class="card-body">
-                        <div id="strategy-params-container">
-                            <p class="text-muted">取引所と戦略を選択してください。</p>
+                <!-- フィルタ部分を完全に分離 -->
+                <div class="strategy-filter-section mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="mb-0">
+                                <input type="text" id="strategy-filter" class="form-control" placeholder="戦略名でフィルタ...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- パラメータ表示部分 -->
+                <div class="strategy-params-section">
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="strategy-params-container">
+                                <p class="text-muted">取引所と戦略を選択してください。</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 保存ボタン -->
-        <div class="mt-4">
-            <button id="save-btn" class="btn btn-primary" disabled>パラメータを保存</button>
-        </div>
-
         <!-- フィードバック表示エリア -->
-        <div id="feedback-container" class="mt-3">
+        <div id="feedback-container" class="position-fixed top-0 start-0 w-100 p-3 d-flex justify-content-center" style="z-index: 1050; pointer-events: none;">
             <!-- ここにアラートメッセージを表示 -->
         </div>
     </div>
@@ -65,6 +88,11 @@
         <div class="spinner-border text-light" role="status">
             <span class="visually-hidden">読み込み中...</span>
         </div>
+    </div>
+
+    <!-- 保存ボタン (右下に固定) -->
+    <div class="position-fixed bottom-0 end-0 p-3">
+        <button id="save-btn" class="btn btn-primary" disabled>パラメータを保存</button>
     </div>
 
     <!-- スクリプト -->

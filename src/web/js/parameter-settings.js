@@ -10,174 +10,9 @@ let activeTab = 'by-symbol'; // アクティブなタブ
 // DOMが読み込まれたら実行
 document.addEventListener('DOMContentLoaded', () => {
   // 初期化
-  loadAllParameters(); // 全パラメータを読み込むように変更
   setupEventListeners();
 });
 
-/**
- * 全ての戦略パラメータを読み込む
- * BootstrapのCollapseコンポーネントを使用して銘柄別/戦略別に折りたたみ表示を実装
- */
-async function loadAllParameters() {
-  try {
-    showLoading();
-
-    const response = await fetch('/api/all-parameters');
-
-    if (!response.ok) {
-      throw new Error('全パラメータの取得に失敗しました');
-    }
-
-    const allParameters = await response.json();
-
-    const symbolContainer = document.getElementById('by-symbol');
-    const strategyContainer = document.getElementById('by-strategy');
-    symbolContainer.innerHTML = ''; // コンテナをクリア
-    strategyContainer.innerHTML = ''; // コンテナをクリア
-
-    let hasParameters = false;
-
-    // パラメータを銘柄別、戦略別に整理
-    const bySymbol = {};
-    const byStrategy = {};
-
-    for (const paramKey in allParameters) {
-      if (allParameters.hasOwnProperty(paramKey)) {
-        const params = allParameters[paramKey];
-        // グローバル変数に初期パラメータを保存
-        currentParams[paramKey] = { ...params };
-        const parts = paramKey.split(':');
-        if (parts.length === 4 && parts[0] === 'params') {
-          const exchangeId = parts[1];
-          const symbol = parts[2];
-          const strategyKey = parts[3];
-
-          if (!bySymbol[exchangeId]) bySymbol[exchangeId] = {};
-          if (!bySymbol[exchangeId][symbol]) bySymbol[exchangeId][symbol] = {};
-          if (!bySymbol[exchangeId][symbol][strategyKey]) bySymbol[exchangeId][symbol][strategyKey] = {};
-          bySymbol[exchangeId][symbol][strategyKey] = params;
-
-          if (!byStrategy[exchangeId]) byStrategy[exchangeId] = {};
-          if (!byStrategy[exchangeId][strategyKey]) byStrategy[exchangeId][strategyKey] = {};
-          if (!byStrategy[exchangeId][strategyKey][symbol]) byStrategy[exchangeId][strategyKey][symbol] = {};
-          byStrategy[exchangeId][strategyKey][symbol] = params;
-
-          hasParameters = true;
-        } else {
-          console.warn(`不正なパラメータキー形式が見つかりました: ${paramKey}`);
-        }
-      }
-    }
-
-    // 銘柄別タブの表示
-    for (const exchangeId in bySymbol) {
-      if (bySymbol.hasOwnProperty(exchangeId)) {
-        for (const symbol in bySymbol[exchangeId]) {
-          if (bySymbol[exchangeId].hasOwnProperty(symbol)) {
-            const strategyParamsMap = bySymbol[exchangeId][symbol]; // この銘柄の全戦略パラメータ
-            const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
-
-            // カードコンテナ (銘柄ごと)
-            const card = document.createElement('div');
-            card.className = 'card mb-3';
-            symbolContainer.appendChild(card);
-
-            // カードヘッダー (Collapseトリガー)
-            const cardHeader = document.createElement('div');
-            cardHeader.className = 'card-header';
-            card.appendChild(cardHeader);
-
-            const headerButton = document.createElement('button');
-            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
-            headerButton.type = 'button';
-            headerButton.setAttribute('data-bs-toggle', 'collapse');
-            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
-            headerButton.setAttribute('aria-expanded', 'false');
-            headerButton.setAttribute('aria-controls', collapseId);
-            headerButton.textContent = `${exchangeId} - ${symbol}`;
-            cardHeader.appendChild(headerButton);
-
-            // Collapse コンテンツ (カードボディ)
-            const collapseDiv = document.createElement('div');
-            collapseDiv.className = 'collapse';
-            collapseDiv.id = collapseId;
-            card.appendChild(collapseDiv);
-
-            const cardBody = document.createElement('div');
-            cardBody.className = 'card-body';
-            collapseDiv.appendChild(cardBody);
-
-            // パラメータテーブルを表示
-            displayParameterTable(exchangeId, symbol, null, strategyParamsMap, cardBody, 'symbol');
-          }
-        }
-      }
-    }
-
-
-    // 戦略別タブの表示
-    for (const exchangeId in byStrategy) {
-      if (byStrategy.hasOwnProperty(exchangeId)) {
-        for (const strategyKey in byStrategy[exchangeId]) {
-          if (byStrategy[exchangeId].hasOwnProperty(strategyKey)) {
-            const symbolParamsMap = byStrategy[exchangeId][strategyKey]; // この戦略の全銘柄パラメータ
-            const collapseId = `collapse-strategy-${exchangeId}-${strategyKey}`;
-
-            // カードコンテナ (戦略ごと)
-            const card = document.createElement('div');
-            card.className = 'card mb-3';
-            strategyContainer.appendChild(card);
-
-            // カードヘッダー (Collapseトリガー)
-            const cardHeader = document.createElement('div');
-            cardHeader.className = 'card-header';
-            card.appendChild(cardHeader);
-
-            const headerButton = document.createElement('button');
-            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
-            headerButton.type = 'button';
-            headerButton.setAttribute('data-bs-toggle', 'collapse');
-            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
-            headerButton.setAttribute('aria-expanded', 'false');
-            headerButton.setAttribute('aria-controls', collapseId);
-            headerButton.textContent = `${exchangeId} - ${strategyKey}`;
-            cardHeader.appendChild(headerButton);
-
-            // Collapse コンテンツ (カードボディ)
-            const collapseDiv = document.createElement('div');
-            collapseDiv.className = 'collapse';
-            collapseDiv.id = collapseId;
-            card.appendChild(collapseDiv);
-
-            const cardBody = document.createElement('div');
-            cardBody.className = 'card-body';
-            collapseDiv.appendChild(cardBody);
-
-            // パラメータテーブルを表示
-            displayParameterTable(exchangeId, null, strategyKey, symbolParamsMap, cardBody, 'strategy');
-          }
-        }
-      }
-    }
-
-
-    if (!hasParameters) {
-      symbolContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
-      strategyContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
-    }
-
-    hideLoading();
-  } catch (error) {
-    console.error('全パラメータの読み込み中にエラーが発生しました:', error);
-    showFeedback('エラー: 全パラメータの読み込みに失敗しました。', 'danger');
-    hideLoading();
-  }
-}
-
-
-/**
- * イベントリスナーの設定
- */
 function setupEventListeners() {
   // タブ切り替え時
   document.querySelectorAll('#paramTabs button').forEach(tab => {
@@ -224,6 +59,7 @@ function setupEventListeners() {
     // 保存ボタンを有効化
     document.getElementById('save-btn').disabled = false;
   });
+
 }
 
 
@@ -309,13 +145,6 @@ function displayParameterTable(exchangeId, symbol, strategyKey, paramsMap, conta
 
   containerElement.innerHTML = tableHtml;
 
-  // Bootstrap ツールチップの初期化
-  const tooltipTriggerList = [].slice.call(containerElement.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  tooltipTriggerList.map(function (tooltipTriggerEl) {
-    // ツールチップのオプションでHTMLを許可する (必要に応じて)
-    // return new bootstrap.Tooltip(tooltipTriggerEl, { html: true });
-    return new bootstrap.Tooltip(tooltipTriggerEl);
-  });
 }
 
 
@@ -465,24 +294,6 @@ async function saveParameters() {
   }
 }
 
-/**
- * パラメータ表示をクリアする (この関数はもう使用されないが、念のため残しておくか、削除を検討)
- */
-function clearParamsDisplay() {
-  // フィルタがなくなったため、この関数は不要になる可能性が高い
-  // 必要に応じて削除または修正
-  document.getElementById('by-symbol').innerHTML = '<p class="text-muted">パラメータを読み込み中...</p>';
-  document.getElementById('by-strategy').innerHTML = '<p class="text-muted">パラメータを読み込み中...</p>';
-  document.getElementById('save-btn').disabled = true;
-
-  // 変更追跡をリセット
-  modifiedParams = {};
-}
-
-
-/**
- * ローディング表示の表示
- */
 function showLoading() {
   document.getElementById('loading-overlay').classList.remove('d-none');
 }
@@ -499,31 +310,273 @@ function hideLoading() {
  * @param {string} message - 表示するメッセージ
  * @param {string} type - アラートタイプ（success, danger, warning, info）
  */
-function showFeedback(message, type = 'info') {
-  const feedbackContainer = document.getElementById('feedback-container');
-
-  // 新しいアラートを作成
-  const alert = document.createElement('div');
-  alert.className = `alert alert-${type} alert-dismissible fade show`;
-  alert.innerHTML = `
-    ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="閉じる"></button>
-  `;
-
-  // 既存のアラートを削除
-  feedbackContainer.querySelectorAll('.alert').forEach(existingAlert => {
-    existingAlert.remove();
-  });
-
-  // 新しいアラートを追加
-  feedbackContainer.appendChild(alert);
-
-  // 5秒後に自動的に閉じる (success の場合のみ)
-  if (type === 'success') {
-      setTimeout(() => {
-        if (alert.parentNode) {
-          bootstrap.Alert.getOrCreateInstance(alert).close();
+function showFeedback(message, type = "success") {
+    console.log("Showing feedback:", message, type);
+    
+    // type="error" が指定された場合は "danger" に変換（Bootstrap の命名規則に合わせる）
+    const alertClass = type === "success" ? "alert-success" : 
+                      (type === "error" ? "alert-danger" : 
+                      (type === "warning" ? "alert-warning" : "alert-info"));
+    
+    // アラートHTML要素の作成
+    const alertHTML = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // フィードバックコンテナにアラートを追加
+    const feedbackContainer = document.getElementById("feedback-container");
+    if (!feedbackContainer) {
+        console.error("フィードバックコンテナが見つかりません");
+        return;
+    }
+    
+    // アラートを追加
+    feedbackContainer.innerHTML = alertHTML;
+    
+    // スクロールしてアラートを表示範囲内に
+    feedbackContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+    
+    // 自動的に消える処理
+    setTimeout(function() {
+        const alertElement = feedbackContainer.querySelector('.alert');
+        if (alertElement) {
+            // Bootstrap 5のアラート閉じる機能を使用
+            try {
+                const bsAlert = bootstrap.Alert.getOrCreateInstance(alertElement);
+                bsAlert.close();
+            } catch (err) {
+                console.error("アラートを閉じる際にエラーが発生しました:", err);
+                // フォールバックとして要素を直接削除
+                alertElement.remove();
+            }
         }
-      }, 5000);
-  }
+    }, 5000);
 }
+
+$(document).ready(function() {
+    // フィルタリング機能をセットアップ
+    setupFilters();
+    
+    // パラメータデータ読み込み・表示処理
+    loadParameterData();
+    
+    // その他の初期化処理
+    // ...existing code...
+
+    // フィルタ機能のセットアップ - アプリケーション起動時に1回だけ呼び出される
+    function setupFilters() {
+        // 銘柄フィルタ
+        $('#symbol-filter').off('input').on('input', function() {
+            filterSymbols($(this).val().toLowerCase());
+        });
+        
+        // 戦略フィルタ
+        $('#strategy-filter').off('input').on('input', function() {
+            filterStrategies($(this).val().toLowerCase());
+        });
+    }
+    
+    // 銘柄フィルタリング関数
+    function filterSymbols(filterText) {
+        console.log('Filtering symbols by:', filterText);
+        $('.symbol-item').each(function() {
+            // カード内のテキストから検索 (data属性がない場合のフォールバック)
+            const itemText = $(this).text().toLowerCase();
+            const symbolName = $(this).data('symbol-name') || itemText;
+            
+            if (symbolName.toLowerCase().includes(filterText)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+    
+    // 戦略フィルタリング関数
+    function filterStrategies(filterText) {
+        console.log('Filtering strategies by:', filterText);
+        $('.strategy-item').each(function() {
+            // カード内のテキストから検索 (data属性がない場合のフォールバック)
+            const itemText = $(this).text().toLowerCase();
+            const strategyName = $(this).data('strategy-name') || itemText;
+            
+            if (strategyName.toLowerCase().includes(filterText)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+    
+    // パラメータデータの読み込みと表示 - 重要: symbol-params-container と strategy-params-container の中身だけを更新する
+    async function loadParameterData() { // async キーワードを追加
+        try {
+            showLoading();
+
+            const response = await fetch('/api/all-parameters');
+
+            if (!response.ok) {
+                throw new Error('全パラメータの取得に失敗しました');
+            }
+
+            const allParameters = await response.json();
+
+            const symbolContainer = document.getElementById('by-symbol');
+            const strategyContainer = document.getElementById('by-strategy');
+            symbolContainer.innerHTML = ''; // コンテナをクリア
+            strategyContainer.innerHTML = ''; // コンテナをクリア
+
+            let hasParameters = false;
+
+            // パラメータを銘柄別、戦略別に整理
+            const bySymbol = {};
+            const byStrategy = {};
+
+            for (const paramKey in allParameters) {
+                if (allParameters.hasOwnProperty(paramKey)) {
+                    const params = allParameters[paramKey];
+                    // グローバル変数に初期パラメータを保存
+                    currentParams[paramKey] = { ...params };
+                    const parts = paramKey.split(':');
+                    if (parts.length === 4 && parts[0] === 'params') {
+                        const exchangeId = parts[1];
+                        const symbol = parts[2];
+                        const strategyKey = parts[3];
+
+                        if (!bySymbol[exchangeId]) bySymbol[exchangeId] = {};
+                        if (!bySymbol[exchangeId][symbol]) bySymbol[exchangeId][symbol] = {};
+                        if (!bySymbol[exchangeId][symbol][strategyKey]) bySymbol[exchangeId][symbol][strategyKey] = {};
+                        bySymbol[exchangeId][symbol][strategyKey] = params;
+
+                        if (!byStrategy[exchangeId]) byStrategy[exchangeId] = {};
+                        if (!byStrategy[exchangeId][strategyKey]) byStrategy[exchangeId][strategyKey] = {};
+                        if (!byStrategy[exchangeId][strategyKey][symbol]) byStrategy[exchangeId][strategyKey][symbol] = {};
+                        byStrategy[exchangeId][strategyKey][symbol] = params;
+
+                        hasParameters = true;
+                    } else {
+                        console.warn(`不正なパラメータキー形式が見つかりました: ${paramKey}`);
+                    }
+                }
+            }
+
+            // 銘柄別タブの表示
+            for (const exchangeId in bySymbol) {
+                if (bySymbol.hasOwnProperty(exchangeId)) {
+                    for (const symbol in bySymbol[exchangeId]) {
+                        if (bySymbol[exchangeId].hasOwnProperty(symbol)) {
+                            const strategyParamsMap = bySymbol[exchangeId][symbol]; // この銘柄の全戦略パラメータ
+                            const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+                            // カードコンテナ (銘柄ごと) - symbol-item クラスと data-symbol-name を追加
+                            const card = document.createElement('div');
+                            card.className = 'card mb-3 symbol-item'; // クラス追加
+                            card.setAttribute('data-symbol-name', symbol); // データ属性追加
+                            symbolContainer.appendChild(card);
+
+                            // カードヘッダー (Collapseトリガー)
+                            const cardHeader = document.createElement('div');
+                            cardHeader.className = 'card-header';
+                            card.appendChild(cardHeader);
+
+                            const headerButton = document.createElement('button');
+                            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
+                            headerButton.type = 'button';
+                            headerButton.setAttribute('data-bs-toggle', 'collapse');
+                            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
+                            headerButton.setAttribute('aria-expanded', 'false');
+                            headerButton.setAttribute('aria-controls', collapseId);
+                            headerButton.textContent = `${exchangeId} - ${symbol}`;
+                            cardHeader.appendChild(headerButton);
+
+                            // Collapse コンテンツ (カードボディ)
+                            const collapseDiv = document.createElement('div');
+                            collapseDiv.className = 'collapse';
+                            collapseDiv.id = collapseId;
+                            card.appendChild(collapseDiv);
+
+                            const cardBody = document.createElement('div');
+                            cardBody.className = 'card-body';
+                            collapseDiv.appendChild(cardBody);
+
+                            // パラメータテーブルを表示
+                            displayParameterTable(exchangeId, symbol, null, strategyParamsMap, cardBody, 'symbol');
+                        }
+                    }
+                }
+            }
+
+
+            // 戦略別タブの表示
+            for (const exchangeId in byStrategy) {
+                if (byStrategy.hasOwnProperty(exchangeId)) {
+                    for (const strategyKey in byStrategy[exchangeId]) {
+                        if (byStrategy[exchangeId].hasOwnProperty(strategyKey)) {
+                            const symbolParamsMap = byStrategy[exchangeId][strategyKey]; // この戦略の全銘柄パラメータ
+                            const collapseId = `collapse-strategy-${exchangeId}-${strategyKey}`;
+
+                            // カードコンテナ (戦略ごと) - strategy-item クラスと data-strategy-name を追加
+                            const card = document.createElement('div');
+                            card.className = 'card mb-3 strategy-item'; // クラス追加
+                            card.setAttribute('data-strategy-name', strategyKey); // データ属性追加
+                            strategyContainer.appendChild(card);
+
+                            // カードヘッダー (Collapseトリガー)
+                            const cardHeader = document.createElement('div');
+                            cardHeader.className = 'card-header';
+                            card.appendChild(cardHeader);
+
+                            const headerButton = document.createElement('button');
+                            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
+                            headerButton.type = 'button';
+                            headerButton.setAttribute('data-bs-toggle', 'collapse');
+                            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
+                            headerButton.setAttribute('aria-expanded', 'false');
+                            headerButton.setAttribute('aria-controls', collapseId);
+                            headerButton.textContent = `${exchangeId} - ${strategyKey}`;
+                            cardHeader.appendChild(headerButton);
+
+                            // Collapse コンテンツ (カードボディ)
+                            const collapseDiv = document.createElement('div');
+                            collapseDiv.className = 'collapse';
+                            collapseDiv.id = collapseId;
+                            card.appendChild(collapseDiv);
+
+                            const cardBody = document.createElement('div');
+                            cardBody.className = 'card-body';
+                            collapseDiv.appendChild(cardBody);
+
+                            // パラメータテーブルを表示
+                            displayParameterTable(exchangeId, null, strategyKey, symbolParamsMap, cardBody, 'strategy');
+                        }
+                    }
+                }
+            }
+
+
+            if (!hasParameters) {
+                symbolContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
+                strategyContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
+            }
+
+            // パラメータ表示完了後にツールチップを初期化
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+
+            hideLoading();
+        } catch (error) {
+            console.error('全パラメータの読み込み中にエラーが発生しました:', error);
+            showFeedback('エラー: 全パラメータの読み込みに失敗しました。', 'danger');
+            hideLoading();
+        }
+    }
+    
+    // その他の既存コード
+    // ...existing code...
+});
