@@ -282,7 +282,7 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) {
   const now = new Date();
   const hour = now.getHours();
-  const targetDate = new Date(now);
+  let targetDate = new Date(now);
   
   // bitbank 用設定
   // 現在時刻が9時より前なら前日の日付を設定
@@ -292,22 +292,44 @@ async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) 
   
   // targetDateを当日の0:00に設定
   targetDate.setHours(0, 0, 0, 0);
-  const since = targetDate.getTime();
+  let since = targetDate.getTime();
   
-  // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${since} ${limit}`);
-  const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
-  if (ohlcv.length < limit) {
-    // limit より少ないデータしか取得できなかった場合、前日のデータを結合する
+  // まず現在の日付でデータを取得
+  let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+  let allData = [...ohlcv];
+  let remainingLimit = limit - allData.length;
+  
+  // limitに達するまで過去に遡ってデータを取得
+  while (remainingLimit > 0) {
+    // 前日の日付に設定
     targetDate.setDate(targetDate.getDate() - 1);
-    const sincePrev = targetDate.getTime();
-    const ohlcvPrev = await exchange.fetchOHLCV(symbol, timeframe, sincePrev, limit - ohlcv.length);
-    console.log(`fetchOHLCVData: 前日のデータを取得: ${symbol} ${timeframe} ${limit} ${ohlcv.length} + ${ohlcvPrev.length}件`);
-    // 取得したデータを結合
-    const combinedOHLCV = ohlcvPrev.concat(ohlcv);
-    return combinedOHLCV;
-  } else {
-    return ohlcv;
+    since = targetDate.getTime();
+    
+    // 残りの必要データ数分を取得
+    const prevData = await exchange.fetchOHLCV(symbol, timeframe, since, remainingLimit);
+    
+    // データが取得できなかった場合はループ終了
+    if (prevData.length === 0) {
+      console.log(`fetchOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
+      break;
+    }
+    
+    console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${prevData.length}件`);
+    
+    // 新しいデータを先頭に追加
+    allData = prevData.concat(allData);
+    
+    // 残りの必要データ数を更新
+    remainingLimit = limit - allData.length;
+    
+    // API制限を考慮して少し待機（取引所によって調整が必要）
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
+  
+  // console.log(`fetchOHLCVData: 合計${allData.length}件のデータを取得しました: ${symbol} ${timeframe}`);
+  
+  // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
+  return allData.slice(-limit);
 }
 
 module.exports = {
