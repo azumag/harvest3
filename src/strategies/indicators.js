@@ -116,7 +116,11 @@ function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 
  * @returns {Array} - RSIの配列
  */
 function calculateRSI(prices, period) {
-  if (!prices || prices.length < period + 1) {
+  console.log(`calculateRSI called with prices.length: ${prices ? prices.length : 'null'}, period: ${period}`);
+  
+  // 最低限、period分のデータがあれば計算可能に修正（+1の条件を削除）
+  if (!prices || prices.length < period) {
+    console.log('calculateRSI: Not enough data');
     return [];
   }
   
@@ -148,10 +152,12 @@ function calculateRSI(prices, period) {
     }
     avgGain /= period;
     avgLoss /= period;
-    
+    console.log(`calculateRSI: Initial avgGain: ${avgGain}, avgLoss: ${avgLoss}`);
+
     // 初回のRSIを計算して追加
     const firstRs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     const firstRsi = 100 - (100 / (1 + firstRs));
+    console.log(`calculateRSI: First RSI calculated: ${firstRsi}, avgGain: ${avgGain}, avgLoss: ${avgLoss}. result length before push: ${result.length}`);
     result.push({
       rsi: firstRsi,
       avgGain: avgGain,
@@ -160,12 +166,22 @@ function calculateRSI(prices, period) {
     
     // 残りの日数分のRSIを計算
     for (let i = period + 1; i < prices.length; i++) {
+      console.log(`calculateRSI: Smoothing loop i: ${i}`);
       // スムージング計算（現在処理中のインデックスに対応する値）
       const currentGain = gains[i - 1];
       const currentLoss = losses[i - 1];
       
-      avgGain = (result[i - 1].avgGain * (period - 1) + currentGain) / period;
-      avgLoss = (result[i - 1].avgLoss * (period - 1) + currentLoss) / period;
+      // 前のインデックスの結果が存在することを確認
+      const prevIndex = result.length - 1;
+      if (prevIndex < 0 || !result[prevIndex]) {
+        console.log(`calculateRSI: Skipping calculation at i=${i} because previous result is not available.`);
+        continue;
+      }
+      
+      console.log(`calculateRSI: Smoothing calculation at i=${i}, prevIndex=${prevIndex}. result[prevIndex]: ${JSON.stringify(result[prevIndex])}, currentGain: ${currentGain}, currentLoss: ${currentLoss}`);
+
+      avgGain = (result[prevIndex].avgGain * (period - 1) + currentGain) / period;
+      avgLoss = (result[prevIndex].avgLoss * (period - 1) + currentLoss) / period;
       
       const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
       const rsi = 100 - (100 / (1 + rs));
@@ -178,6 +194,7 @@ function calculateRSI(prices, period) {
     }
     
     // RSI値のみの配列を返す
+    console.log(`calculateRSI: Final result length: ${result.length}`);
     return result.map(item => item === null ? null : item.rsi);
   } catch (error) {
     console.error('RSI計算エラー:', error);
