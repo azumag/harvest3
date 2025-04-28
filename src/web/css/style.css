@@ -238,3 +238,285 @@ body {
 .signal-detail .table th {
   width: 30%;
 }
+/* パラメータ設定ページ用スタイル */
+.param-card .card-body form .d-flex {
+    /* パラメータ名と入力フィールドのコンテナ */
+    align-items: center;
+}
+
+.param-card .card-body form .d-flex label {
+    /* パラメータ名のラベル */
+    flex-shrink: 0; /* 縮小しない */
+    min-width: 150px; /* 最小幅を設定 */
+    margin-right: 10px; /* ラベルと入力フィールドの間隔 */
+}
+
+.param-card .card-body form .d-flex .form-control,
+.param-card .card-body form .d-flex .form-check {
+    /* 入力フィールドとチェックボックスコンテナ */
+    flex-grow: 1; /* 残りのスペースを埋める */
+}
+
+.param-card .card-body form .d-flex small {
+    /* JSON入力時の補足テキスト */
+    flex-basis: 100%; /* 幅を100%にして次の行に表示 */
+    margin-top: 5px;
+}
+
+/* 折りたたみヘッダーのスタイル */
+.btn-link {
+    font-weight: bold;
+    color: #007bff; /* Bootstrapのプライマリカラーに合わせる */
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    text-align: left;
+}
+
+.btn-link:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+/* 折りたたみコンテンツのスタイル */
+.collapse.show {
+    /* 展開時のスタイル */
+    margin-bottom: 1rem;
+}
+
+.collapse .card-body {
+    /* 折りたたみ内のカードボディ */
+    padding: 1rem;
+}
+
+/* 銘柄/戦略ヘッダーのスタイル */
+.tab-pane h4 {
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 10px;
+}
+
+.tab-pane h6 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+/* 折りたたみヘッダーをカードのように見せるスタイル */
+.card-header {
+    background-color: #f8f9fa; /* カードヘッダーの背景色 */
+    border-bottom: 1px solid rgba(0, 0, 0, .125); /* カードヘッダーの下線 */
+    padding: 0; /* ボタンでパディングを調整するためリセット */
+}
+
+.card-header .btn-link {
+    font-weight: bold;
+    color: #495057; /* 文字色を濃いめに */
+    text-decoration: none;
+    padding: 0.75rem 1.25rem; /* Bootstrapのカードヘッダーの標準パディング */
+    text-align: left;
+    width: 100%; /* 親要素の幅いっぱいに広げる */
+    position: relative; /* 疑似要素のためにpositionを設定 */
+}
+
+.card-header .btn-link:hover {
+    color: #343a40;
+    text-decoration: none; /* ホバー時の下線を削除 */
+    background-color: rgba(0, 0, 0, .03); /* ホバー時の背景色 */
+}
+
+/* 折りたたみアイコン（下向き矢印） */
+.card-header .btn-link::after {
+    content: '\25BC'; /* 下向き三角のUnicode */
+    font-size: 0.8em;
+    margin-left: 10px;
+    transition: transform 0.2s ease-in-out;
+    position: absolute;
+    right: 1.25rem; /* 右端からの位置 */
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* 展開時のアイコン（上向き矢印） */
+.card-header .btn-link:not(.collapsed)::after {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* Collapseコンテンツの上のボーダーを削除（カードボディにボーダーがあるため） */
+.collapse .card-body {
+    border-top: none;
+}
+
+/* 個別のパラメータフォームのカードに不要なスタイルがあれば調整 */
+.card-body .card.param-card {
+    border: none; /* 内側のカードのボーダーを削除 */
+    box-shadow: none; /* 内側のカードの影を削除 */
+    margin-bottom: 0.5rem; /* パラメータセット間のマージンを調整 */
+}
+
+.card-body .card.param-card .card-body {
+    padding: 0.5rem 0; /* 内側のカードボディのパディングを調整 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル調整 */
+.card-body > .card {
+    background-color: #ffffff; /* 背景色を白に */
+}
+
+.card-body > .card .card-body {
+    padding: 1rem; /* パディングを調整 */
+}
+
+.card-body > .card .card-title {
+    font-size: 1.1rem; /* タイトルを少し大きく */
+    margin-bottom: 1rem; /* タイトルの下マージン */
+    border-bottom: 1px solid #eee; /* タイトルの下に区切り線 */
+    padding-bottom: 0.5rem;
+}
+
+.card-body > .card .card-body form .d-flex {
+    margin-bottom: 0.5rem; /* パラメータ行間のマージンを調整 */
+}
+
+.card-body > .card .card-body form .d-flex label {
+    min-width: 180px; /* ラベルの最小幅を少し広げる */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル調整（影を追加） */
+.card-body > .card {
+    background-color: #ffffff; /* 背景色を白に */
+    border: 1px solid rgba(0, 0, 0, .125); /* カードのボーダー */
+    border-radius: 0.25rem; /* 角丸 */
+    margin-bottom: 1rem; /* カード間の下マージン */
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* わずかな影を追加 */
+}
+
+.card-body > .card .card-body {
+    padding: 1rem; /* パディングを調整 */
+}
+
+.card-body > .card .card-title {
+    font-size: 1.1rem; /* タイトルを少し大きく */
+    margin-bottom: 1rem; /* タイトルの下マージン */
+    border-bottom: 1px solid #eee; /* タイトルの下に区切り線 */
+    padding-bottom: 0.5rem;
+}
+
+.card-body > .card .card-body form .d-flex {
+    margin-bottom: 0.5rem; /* パラメータ行間のマージンを調整 */
+}
+
+.card-body > .card .card-body form .d-flex label {
+    flex-shrink: 0; /* 縮小しない */
+    min-width: 180px; /* ラベルの最小幅を少し広げる */
+    margin-right: 10px; /* ラベルと入力フィールドの間隔 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整 */
+.card-body > .card .card-body {
+    padding: 1.25rem; /* パディングを少し増やす */
+}
+
+.card-body > .card .card-title {
+    margin-bottom: 1.25rem; /* タイトルの下マージンを調整 */
+}
+
+.card-body > .card .card-body form .d-flex {
+    margin-bottom: 0.75rem; /* パラメータ行間のマージンを調整 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整（角丸、フォントウェイト） */
+.card-body > .card {
+    border-radius: 0.35rem; /* 角丸を少し大きく */
+}
+
+.card-body > .card .card-title {
+    font-weight: 700; /* タイトルを太字に */
+}
+
+.card-body > .card .card-body form .d-flex label {
+    font-weight: 500; /* ラベルのフォントウェイトを調整 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整（影を強調） */
+.card-body > .card {
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1); /* 影を少し強調 */
+}
+
+.card-body > .card .card-body {
+    padding: 1.25rem; /* パディングを維持 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整（ボーダー色、タイトル色） */
+.card-body > .card {
+    border-color: #cce5ff; /* ボーダー色を明るい青に */
+}
+
+.card-body > .card .card-title {
+    color: #0056b3; /* タイトル色を濃い青に */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整（影と角丸） */
+.card-body > .card {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); /* 影をさらに強調 */
+    border-radius: 0.5rem; /* 角丸をさらに大きく */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル微調整（ボーダー削除） */
+.card-body > .card {
+    border: none; /* ボーダーを削除 */
+}
+
+.card-body > .card .card-body {
+    padding: 1rem; /* パディングを調整 */
+}
+/* 個別の戦略/銘柄パラメータセットのカードスタイル再調整 */
+.card-body > .card {
+    background-color: #fff; /* 背景色を白に */
+    border: 1px solid rgba(0, 0, 0, .125); /* ボーダーを追加 */
+    border-radius: 0.25rem; /* 角丸 */
+    margin-bottom: 1rem; /* カード間の下マージン */
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* 影 */
+}
+
+.card-body > .card .card-body {
+    padding: 1rem; /* パディング */
+}
+
+.card-body > .card .card-title {
+    font-size: 1.1rem; /* タイトルサイズ */
+    font-weight: 700; /* タイトル太字 */
+    margin-bottom: 1rem; /* タイトルの下マージン */
+    border-bottom: 1px solid #eee; /* タイトルの下に区切り線 */
+    padding-bottom: 0.5rem;
+}
+
+.card-body > .card .card-body form .d-flex {
+    margin-bottom: 0.75rem; /* パラメータ行間のマージン */
+}
+
+.card-body > .card .card-body form .d-flex label {
+    flex-shrink: 0; /* 縮小しない */
+    min-width: 180px; /* ラベルの最小幅 */
+    margin-right: 10px; /* ラベルと入力フィールドの間隔 */
+    font-weight: 500; /* ラベルのフォントウェイト */
+}
+
+/* パラメータ設定ページのテーブルスタイル */
+.table-bordered th,
+.table-bordered td {
+    border: 1px solid #dee2e6;
+    vertical-align: middle;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table td {
+    min-width: 120px;
+}
+
+.table td .form-control {
+    min-width: 100px;
+}
+
+/* パラメータ設定ページのテーブルを水平スクロール可能に */
+#by-symbol .table-responsive,
+#by-strategy .table-responsive {
+    overflow-x: auto;
+    max-height: none; /* 縦スクロールは不要なため */
+}
