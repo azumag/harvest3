@@ -301,6 +301,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) 
     targetDate.setDate(targetDate.getDate() - 1);
     const sincePrev = targetDate.getTime();
     const ohlcvPrev = await exchange.fetchOHLCV(symbol, timeframe, sincePrev, limit - ohlcv.length);
+    console.log(`fetchOHLCVData: 前日のデータを取得: ${symbol} ${timeframe} ${limit} ${ohlcv.length} + ${ohlcvPrev.length}件`);
     // 取得したデータを結合
     const combinedOHLCV = ohlcvPrev.concat(ohlcv);
     return combinedOHLCV;
