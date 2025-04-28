@@ -68,6 +68,19 @@ const config = {
   // 戦略固有の設定
   strategies: {
 
+    // 高頻度取引戦略
+    HFT: {
+      // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
+      enabled: false,
+      interval: 100,
+      priceThreshold: 0.001,
+      maxOrdersPerMinute: 100,
+      amount: 0.0001,
+      orderBookDepth: 15,
+      function: highFrequencyTrading,
+      exchanges: [exchangeBB],
+    },
+
     OSCILLATOR: {
       enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
       period: 20,
@@ -78,17 +91,7 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    // 高頻度取引戦略
-    HFT: {
-      enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-      interval: 100,
-      priceThreshold: 0.001,
-      maxOrdersPerMinute: 100,
-      amount: 0.0001,
-      orderBookDepth: 15,
-      function: highFrequencyTrading,
-      exchanges: [exchangeBB],
-    },
+    
 
     MA_LONG: {
       enabled: process.env.STRATEGY_MA_ENABLED === 'true',
