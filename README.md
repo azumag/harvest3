@@ -251,16 +251,8 @@ Web UIが実装されており、Webブラウザからボットの状態を監�
 ### スクリーンショット
 
 ![Web UIのスクリーンショット](src/web/assets/screenshot.png)
-(スクリーンショットは `src/web/assets/screenshot.png` にあります。)
+![Web UIのスクリーンショット](src/web/assets/screenshot2.png)
 
-## テスト
-
-いくつかのテスト用スクリプトが用意されています。
-
--   **注文ステータス確認:**
-    ```bash
-    npm run check-order-status
-    ```
 
 ## 注意事項
 
