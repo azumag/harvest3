@@ -44,6 +44,8 @@ async function loadAllParameters() {
     for (const paramKey in allParameters) {
       if (allParameters.hasOwnProperty(paramKey)) {
         const params = allParameters[paramKey];
+        // グローバル変数に初期パラメータを保存
+        currentParams[paramKey] = { ...params };
         const parts = paramKey.split(':');
         if (parts.length === 4 && parts[0] === 'params') {
           const exchangeId = parts[1];
@@ -52,10 +54,12 @@ async function loadAllParameters() {
 
           if (!bySymbol[exchangeId]) bySymbol[exchangeId] = {};
           if (!bySymbol[exchangeId][symbol]) bySymbol[exchangeId][symbol] = {};
+          if (!bySymbol[exchangeId][symbol][strategyKey]) bySymbol[exchangeId][symbol][strategyKey] = {};
           bySymbol[exchangeId][symbol][strategyKey] = params;
 
           if (!byStrategy[exchangeId]) byStrategy[exchangeId] = {};
           if (!byStrategy[exchangeId][strategyKey]) byStrategy[exchangeId][strategyKey] = {};
+          if (!byStrategy[exchangeId][strategyKey][symbol]) byStrategy[exchangeId][strategyKey][symbol] = {};
           byStrategy[exchangeId][strategyKey][symbol] = params;
 
           hasParameters = true;
@@ -70,8 +74,8 @@ async function loadAllParameters() {
       if (bySymbol.hasOwnProperty(exchangeId)) {
         for (const symbol in bySymbol[exchangeId]) {
           if (bySymbol[exchangeId].hasOwnProperty(symbol)) {
-            const symbolParams = bySymbol[exchangeId][symbol];
-            const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`; // Collapse IDに使用可能な文字に変換
+            const strategyParamsMap = bySymbol[exchangeId][symbol]; // この銘柄の全戦略パラメータ
+            const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
             // カードコンテナ (銘柄ごと)
             const card = document.createElement('div');
@@ -84,7 +88,7 @@ async function loadAllParameters() {
             card.appendChild(cardHeader);
 
             const headerButton = document.createElement('button');
-            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed'; // collapsedクラスを初期状態で追加
+            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
             headerButton.type = 'button';
             headerButton.setAttribute('data-bs-toggle', 'collapse');
             headerButton.setAttribute('data-bs-target', `#${collapseId}`);
@@ -103,28 +107,8 @@ async function loadAllParameters() {
             cardBody.className = 'card-body';
             collapseDiv.appendChild(cardBody);
 
-            for (const strategyKey in symbolParams) {
-              if (symbolParams.hasOwnProperty(strategyKey)) {
-                const params = symbolParams[strategyKey];
-                // 個別の戦略パラメータセットをカードとして表示
-                const strategyCard = document.createElement('div');
-                strategyCard.className = 'card mb-2'; // 各戦略カード間のマージン
-                cardBody.appendChild(strategyCard);
-
-                const strategyCardBody = document.createElement('div');
-                strategyCardBody.className = 'card-body p-3'; // 内側のカードボディのパディング
-                strategyCard.appendChild(strategyCardBody);
-
-                // 戦略キーのヘッダー
-                const strategyHeader = document.createElement('h6');
-                strategyHeader.textContent = `${strategyKey}`;
-                strategyHeader.className = 'card-title mb-3'; // カードタイトルスタイル
-                strategyCardBody.appendChild(strategyHeader);
-
-                // パラメータフォームを表示
-                displayParameterForm(exchangeId, symbol, strategyKey, params, strategyCardBody, 'symbol');
-              }
-            }
+            // パラメータテーブルを表示
+            displayParameterTable(exchangeId, symbol, null, strategyParamsMap, cardBody, 'symbol');
           }
         }
       }
@@ -136,7 +120,7 @@ async function loadAllParameters() {
       if (byStrategy.hasOwnProperty(exchangeId)) {
         for (const strategyKey in byStrategy[exchangeId]) {
           if (byStrategy[exchangeId].hasOwnProperty(strategyKey)) {
-            const strategyParams = byStrategy[exchangeId][strategyKey];
+            const symbolParamsMap = byStrategy[exchangeId][strategyKey]; // この戦略の全銘柄パラメータ
             const collapseId = `collapse-strategy-${exchangeId}-${strategyKey}`;
 
             // カードコンテナ (戦略ごと)
@@ -150,7 +134,7 @@ async function loadAllParameters() {
             card.appendChild(cardHeader);
 
             const headerButton = document.createElement('button');
-            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed'; // collapsedクラスを初期状態で追加
+            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
             headerButton.type = 'button';
             headerButton.setAttribute('data-bs-toggle', 'collapse');
             headerButton.setAttribute('data-bs-target', `#${collapseId}`);
@@ -169,28 +153,8 @@ async function loadAllParameters() {
             cardBody.className = 'card-body';
             collapseDiv.appendChild(cardBody);
 
-            for (const symbol in strategyParams) {
-              if (strategyParams.hasOwnProperty(symbol)) {
-                const params = strategyParams[symbol];
-                // 個別の銘柄パラメータセットをカードとして表示
-                const symbolCard = document.createElement('div');
-                symbolCard.className = 'card mb-2'; // 各銘柄カード間のマージン
-                cardBody.appendChild(symbolCard);
-
-                const symbolCardBody = document.createElement('div');
-                symbolCardBody.className = 'card-body p-3'; // 内側のカードボディのパディング
-                symbolCard.appendChild(symbolCardBody);
-
-                // 銘柄のヘッダー
-                const symbolHeader = document.createElement('h6');
-                symbolHeader.textContent = `${symbol}`;
-                symbolHeader.className = 'card-title mb-3'; // カードタイトルスタイル
-                symbolCardBody.appendChild(symbolHeader);
-
-                // パラメータフォームを表示
-                displayParameterForm(exchangeId, symbol, strategyKey, params, symbolCardBody, 'strategy');
-              }
-            }
+            // パラメータテーブルを表示
+            displayParameterTable(exchangeId, null, strategyKey, symbolParamsMap, cardBody, 'strategy');
           }
         }
       }
@@ -225,77 +189,15 @@ function setupEventListeners() {
 
   // 保存ボタンクリック時
   document.getElementById('save-btn').addEventListener('click', saveParameters);
-}
 
-/**
- * パラメータのフォームを表示する
- * @param {string} exchangeId - 取引所ID
- * @param {string} symbol - 銘柄
- * @param {string} strategyKey - 戦略キー
- * @param {Object} params - パラメータオブジェクト
- * @param {HTMLElement} containerElement - 表示先のコンテナ要素
- * @param {string} viewType - 表示タイプ ('symbol' または 'strategy')
- */
-function displayParameterForm(exchangeId, symbol, strategyKey, params, containerElement, viewType = 'symbol') {
-  // パラメータをグローバル変数に保存
-  const paramKey = `${exchangeId}:${symbol}:${strategyKey}`;
-  currentParams[paramKey] = { ...params };
-
-  // パラメータフォームを作成
-  const formContainer = document.createElement('div'); // パラメータフォームのコンテナ
-  formContainer.setAttribute('data-param-key', paramKey);
-
-  // パラメータの名前を配列として取得
-  const paramNames = Object.keys(params);
-
-  // テーブル形式でフォームを作成
-  let formContent = `
-    <form id="form-${paramKey}">
-      <div class="table-responsive">
-        <table class="table table-sm table-bordered">
-          <thead>
-            <tr>
-              <th>${viewType === 'symbol' ? '戦略' : '銘柄'}</th>
-  `;
-
-  // パラメータ名をテーブルヘッダーに追加
-  paramNames.forEach(paramName => {
-    formContent += `<th>${paramName}</th>`;
-  });
-
-  formContent += `
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${viewType === 'symbol' ? strategyKey : symbol}</td>
-  `;
-
-  // パラメータ値をテーブルセルに追加
-  paramNames.forEach(paramName => {
-    const paramValue = params[paramName];
-    formContent += `<td>${createInputField(paramName, paramValue, paramKey)}</td>`;
-  });
-
-  formContent += `
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </form>
-  `;
-
-  formContainer.innerHTML = formContent;
-  containerElement.appendChild(formContainer);
-
-  // フォームフィールドの変更イベントリスナーを設定
-  const form = document.getElementById(`form-${paramKey}`);
-  form.addEventListener('change', function(e) {
+  // パラメータ変更時のイベントリスナー (イベント委譲を使用)
+  document.getElementById('paramTabsContent').addEventListener('change', function(e) {
     const input = e.target;
-    if (!input.hasAttribute('data-param-name')) return;
+    // data-param-key と data-param-name を持つ要素のみを対象とする
+    if (!input.matches('[data-param-key][data-param-name]')) return;
 
+    const paramKey = input.getAttribute('data-param-key');
     const paramName = input.getAttribute('data-param-name');
-    const paramKey = input.closest('form').id.substring(5); // "form-"の5文字を除去
 
     // 変更されたパラメータを追跡
     if (!modifiedParams[paramKey]) {
@@ -311,8 +213,9 @@ function displayParameterForm(exchangeId, symbol, strategyKey, params, container
     } else if (input.tagName === 'TEXTAREA') {
        try {
         value = JSON.parse(value);
-       } catch (e) {
+       } catch (err) {
         // JSONパースに失敗した場合は文字列として扱う
+        console.warn(`JSON parse error for ${paramKey} - ${paramName}: ${err.message}. Treating as string.`);
        }
     }
 
@@ -323,44 +226,143 @@ function displayParameterForm(exchangeId, symbol, strategyKey, params, container
   });
 }
 
+
+/**
+ * パラメータのテーブルを表示する
+ * @param {string} exchangeId - 取引所ID
+ * @param {string | null} symbol - 銘柄 (viewType='symbol'の場合)
+ * @param {string | null} strategyKey - 戦略キー (viewType='strategy'の場合)
+ * @param {Object} paramsMap - パラメータオブジェクトのマップ { rowKey: params }
+ * @param {HTMLElement} containerElement - 表示先のコンテナ要素
+ * @param {string} viewType - 表示タイプ ('symbol' または 'strategy')
+ */
+function displayParameterTable(exchangeId, symbol, strategyKey, paramsMap, containerElement, viewType) {
+  const formId = `form-${viewType}-${exchangeId}-${(symbol || strategyKey).replace(/[^a-zA-Z0-9]/g, '-')}`;
+  const rowIdentifierHeader = viewType === 'symbol' ? '戦略' : '銘柄';
+
+  // 全てのパラメータ名を取得し、ユニークにする
+  const allParamNames = new Set();
+  Object.values(paramsMap).forEach(params => {
+    Object.keys(params).forEach(name => allParamNames.add(name));
+  });
+  const sortedParamNames = Array.from(allParamNames).sort(); // パラメータ名をソート
+  const paramCount = sortedParamNames.length;
+
+  // テーブルHTMLを生成
+  let tableHtml = `
+    <form id="${formId}">
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered table-hover" style="width: 100%; table-layout: fixed;">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 15%;" data-bs-toggle="tooltip" data-bs-placement="top" title="${rowIdentifierHeader}">${rowIdentifierHeader}</th>
+  `;
+
+  // パラメータ名をテーブルヘッダーに追加
+  const columnWidth = paramCount > 0 ? Math.max(85 / paramCount, 8) : 10; // 最低でも8%の幅を確保
+
+  sortedParamNames.forEach(paramName => {
+    // ヘッダーセルに data-bs-toggle と data-bs-placement を追加
+    tableHtml += `<th style="width: ${columnWidth}%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-bs-toggle="tooltip" data-bs-placement="top" title="${paramName}">${paramName}</th>`;
+  });
+
+  tableHtml += `
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  // 各行（戦略または銘柄）を生成
+  for (const rowKey in paramsMap) {
+    if (paramsMap.hasOwnProperty(rowKey)) {
+      const params = paramsMap[rowKey];
+      const currentSymbol = viewType === 'symbol' ? symbol : rowKey;
+      const currentStrategyKey = viewType === 'symbol' ? rowKey : strategyKey;
+      const paramKey = `params:${exchangeId}:${currentSymbol}:${currentStrategyKey}`;
+
+      // 最初のセルに data-bs-toggle と data-bs-placement を追加
+      tableHtml += `<tr><td class="align-middle" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" data-bs-toggle="tooltip" data-bs-placement="top" title="${rowKey}">${rowKey}</td>`;
+
+      // 各パラメータの入力フィールドを生成
+      sortedParamNames.forEach(paramName => {
+        const paramValue = params.hasOwnProperty(paramName) ? params[paramName] : undefined; // パラメータが存在しない場合
+        // セルのパディングを完全に削除
+        tableHtml += `<td class="p-0 align-middle">`;
+        if (paramValue !== undefined) {
+          tableHtml += createInputField(paramName, paramValue, paramKey);
+        } else {
+          tableHtml += `<span class="text-muted d-block text-center">-</span>`; // 中央揃え
+        }
+        tableHtml += `</td>`;
+      });
+
+      tableHtml += `</tr>`;
+    }
+  }
+
+  tableHtml += `
+          </tbody>
+        </table>
+      </div>
+    </form>
+  `;
+
+  containerElement.innerHTML = tableHtml;
+
+  // Bootstrap ツールチップの初期化
+  const tooltipTriggerList = [].slice.call(containerElement.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function (tooltipTriggerEl) {
+    // ツールチップのオプションでHTMLを許可する (必要に応じて)
+    // return new bootstrap.Tooltip(tooltipTriggerEl, { html: true });
+    return new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+}
+
+
 /**
  * 入力フィールドのHTMLを生成
  * @param {string} paramName - パラメータ名
  * @param {any} paramValue - パラメータ値
- * @param {string} paramKey - パラメータキー（exchange:symbol:strategy）
+ * @param {string} paramKey - パラメータキー（params:exchange:symbol:strategy）
  * @returns {string} HTML文字列
  */
 function createInputField(paramName, paramValue, paramKey) {
   const type = typeof paramValue;
+  const inputId = `${paramKey}-${paramName}`.replace(/[^a-zA-Z0-9-]/g, '_'); // IDとして有効な文字のみ使用
   let inputHtml = '';
+
+  // data-param-key と data-param-name を追加
+  const dataAttributes = `data-param-key="${paramKey}" data-param-name="${paramName}"`;
+
+  // すべてのinputに適用する共通スタイル (border-box, width 100%, no border/margin/padding)
+  const commonStyles = "box-sizing: border-box; width: 100%; border: none; margin: 0; padding: 0.1rem 0.25rem; height: 100%; min-height: 1.8em;";
 
   if (type === 'boolean') {
     // 真偽値の場合はチェックボックス
     inputHtml = `
-      <div class="form-check">
-        <input type="checkbox" class="form-check-input" id="${paramKey}-${paramName}"
-               ${paramValue ? 'checked' : ''} data-param-name="${paramName}">
-        <label class="form-check-label" for="${paramKey}-${paramName}">有効</label>
+      <div class="d-flex justify-content-center align-items-center h-100">
+        <input type="checkbox" class="form-check-input m-auto" id="${inputId}"
+               ${paramValue ? 'checked' : ''} ${dataAttributes}>
       </div>
     `;
   } else if (type === 'number') {
     // 数値の場合は数値入力フィールド
     inputHtml = `
-      <input type="number" class="form-control form-control-sm" id="${paramKey}-${paramName}"
-             value="${paramValue}" step="any" data-param-name="${paramName}">
+      <input type="number" class="form-control-plaintext form-control-sm" id="${inputId}"
+             value="${paramValue}" step="any" style="${commonStyles}" ${dataAttributes}>
     `;
   } else if (type === 'object' && paramValue !== null) {
-    // オブジェクトまたは配列の場合はJSON表示
+    // オブジェクトまたは配列の場合はJSON表示 (TextArea)
     const jsonValue = JSON.stringify(paramValue, null, 2);
     inputHtml = `
-      <textarea class="form-control" id="${paramKey}-${paramName}"
-               rows="2" data-param-name="${paramName}">${jsonValue}</textarea>
+      <textarea class="form-control-plaintext form-control-sm" id="${inputId}"
+               rows="1" style="${commonStyles} font-size: 0.8em; resize: none; overflow: auto;" ${dataAttributes}>${jsonValue}</textarea>
     `;
   } else {
     // その他（文字列など）はテキスト入力フィールド
     inputHtml = `
-      <input type="text" class="form-control form-control-sm" id="${paramKey}-${paramName}"
-             value="${paramValue !== null ? paramValue : ''}" data-param-name="${paramName}">
+      <input type="text" class="form-control-plaintext form-control-sm" id="${inputId}"
+             value="${paramValue !== null ? paramValue : ''}" style="${commonStyles}" ${dataAttributes}>
     `;
   }
 
@@ -382,13 +384,17 @@ async function saveParameters() {
     let successCount = 0;
     let errorCount = 0;
     const errorDetails = [];
+    const updatedParamKeys = new Set(); // 更新されたキーを追跡
 
     // 変更された各パラメータセットを保存
-    for (const [paramKey, params] of Object.entries(modifiedParams)) {
-      const [exchangeId, symbol, strategyKey] = paramKey.split(':');
+    for (const [paramKey, changedValues] of Object.entries(modifiedParams)) {
+      const [prefix, exchangeId, symbol, strategyKey] = paramKey.split(':');
+      if (prefix !== 'params') continue; // キー形式チェック
 
-      // 現在のパラメータとマージ
-      const mergedParams = { ...currentParams[paramKey], ...params };
+      // 現在のパラメータと変更された値をマージ
+      // currentParams[paramKey] が存在しない場合も考慮 (念のため)
+      const baseParams = currentParams[paramKey] || {};
+      const mergedParams = { ...baseParams, ...changedValues };
 
       try {
         const response = await fetch('/api/parameters', {
@@ -398,7 +404,7 @@ async function saveParameters() {
           },
           body: JSON.stringify({
             exchangeId,
-            symbol,  // POSTリクエストのボディではエンコード不要
+            symbol,
             strategyKey,
             params: mergedParams
           })
@@ -406,40 +412,56 @@ async function saveParameters() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'パラメータの保存に失敗しました');
+          throw new Error(errorData.error || `パラメータの保存に失敗しました (HTTP ${response.status})`);
         }
 
         // 保存成功時は現在のパラメータを更新
         currentParams[paramKey] = { ...mergedParams };
-
+        updatedParamKeys.add(paramKey); // 更新されたキーを追加
         successCount++;
       } catch (error) {
-        console.error(`${exchangeId}:${symbol}:${strategyKey}のパラメータ保存中にエラーが発生:`, error);
+        console.error(`${paramKey} のパラメータ保存中にエラーが発生:`, error);
         errorCount++;
         errorDetails.push(`${exchangeId}:${symbol}:${strategyKey} - ${error.message}`);
       }
     }
 
+    // modifiedParamsから正常に更新されたキーを削除
+    updatedParamKeys.forEach(key => {
+      delete modifiedParams[key];
+    });
+
     // 保存結果のフィードバック
+    let message = '';
+    let type = 'info';
+
     if (errorCount === 0) {
-      showFeedback(`${successCount}件のパラメータセットが正常に保存されました。`, 'success');
-
-      // 変更追跡をリセット
+      message = `${successCount} 件のパラメータセットが正常に保存されました。`;
+      type = 'success';
+      // 変更追跡をリセット (エラーがなければ空のはず)
       modifiedParams = {};
-
       // 保存ボタンを無効化
       document.getElementById('save-btn').disabled = true;
     } else if (successCount > 0) {
-      showFeedback(`${successCount}件のパラメータセットが保存されましたが、${errorCount}件で保存中にエラーが発生しました。<br>${errorDetails.join('<br>')}`, 'warning');
+      message = `${successCount} 件のパラメータセットが保存されましたが、${errorCount} 件でエラーが発生しました。<br>${errorDetails.join('<br>')}`;
+      type = 'warning';
+       // エラーが残っている場合は保存ボタンを有効のままにする
+       document.getElementById('save-btn').disabled = false;
     } else {
-      showFeedback(`すべてのパラメータの保存に失敗しました。<br>${errorDetails.join('<br>')}`, 'danger');
+      message = `すべてのパラメータ (${errorCount}件) の保存に失敗しました。<br>${errorDetails.join('<br>')}`;
+      type = 'danger';
+       // エラーが残っている場合は保存ボタンを有効のままにする
+       document.getElementById('save-btn').disabled = false;
     }
+    showFeedback(message, type);
 
     hideLoading();
   } catch (error) {
-    console.error('パラメータの保存中にエラーが発生しました:', error);
-    showFeedback('エラー: パラメータの保存に失敗しました。', 'danger');
+    console.error('パラメータの保存処理全体でエラーが発生しました:', error);
+    showFeedback('エラー: パラメータの保存処理中に予期せぬエラーが発生しました。', 'danger');
     hideLoading();
+     // 予期せぬエラーの場合もボタンは有効のままにする
+     document.getElementById('save-btn').disabled = false;
   }
 }
 
@@ -496,15 +518,12 @@ function showFeedback(message, type = 'info') {
   // 新しいアラートを追加
   feedbackContainer.appendChild(alert);
 
-  // 5秒後に自動的に閉じる
-  setTimeout(() => {
-    if (alert.parentNode) {
-      alert.classList.remove('show');
+  // 5秒後に自動的に閉じる (success の場合のみ)
+  if (type === 'success') {
       setTimeout(() => {
         if (alert.parentNode) {
-          alert.remove();
+          bootstrap.Alert.getOrCreateInstance(alert).close();
         }
-      }, 150);
-    }
-  }, 5000);
+      }, 5000);
+  }
 }
