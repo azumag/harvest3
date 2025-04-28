@@ -9,7 +9,7 @@ const { getStrategyParameters, saveStrategyParameters } = require('../../databas
  * @param {Object} res - レスポンスオブジェクト
  */
 async function getParameters(req, res) {
-  const { exchangeId, symbol, strategyKey } = req.query;
+  let { exchangeId, symbol, strategyKey } = req.query;
 
   // 必須パラメータのチェック
   if (!exchangeId || !symbol || !strategyKey) {
@@ -19,6 +19,9 @@ async function getParameters(req, res) {
   }
 
   try {
+    // symbolが正しくデコードされていることを確認
+    symbol = decodeURIComponent(symbol);
+    
     const params = await getStrategyParameters(exchangeId, symbol, strategyKey);
     
     if (params === null) {
@@ -51,7 +54,7 @@ async function getParameters(req, res) {
  * @param {Object} res - レスポンスオブジェクト
  */
 async function updateParameters(req, res) {
-  const { exchangeId, symbol, strategyKey, params } = req.body;
+  let { exchangeId, symbol, strategyKey, params } = req.body;
 
   // 必須パラメータのチェック
   if (!exchangeId || !symbol || !strategyKey || !params || typeof params !== 'object') {
@@ -61,6 +64,14 @@ async function updateParameters(req, res) {
   }
 
   try {
+    // POSTリクエストのボディパラメータもデコードする
+    // JSON内のデータではエンコードされていない可能性が高いが、念のため処理を追加
+    try {
+      symbol = decodeURIComponent(symbol);
+    } catch (e) {
+      // すでにデコードされている場合はエラーになる可能性があるため、無視
+    }
+    
     const success = await saveStrategyParameters(exchangeId, symbol, strategyKey, params);
     
     if (!success) {

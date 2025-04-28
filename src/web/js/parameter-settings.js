@@ -54,20 +54,22 @@ async function loadAllParameters() {
             }
 
             for (const symbol of symbols) {
-                for (const strategyKey of strategies) { // strategy を strategyKey に変更
+                for (const strategyKey of strategies) {
                     try {
-                        const response = await fetch(`/api/parameters?exchangeId=${exchangeId}&symbol=${symbol}&strategyKey=${strategyKey}`); // strategy.key を strategyKey に変更
- 
-                         if (response.status === 404) {
-                             // パラメータが存在しない場合はスキップ
-                             continue;
-                         }
- 
-                         if (!response.ok) {
-                             throw new Error(`${exchangeId}:${symbol}:${strategyKey}のパラメータ取得に失敗しました`); // strategy.key を strategyKey に変更
-                         }
- 
-                         const data = await response.json();
+                        // symbolをエンコードしてURLに含める
+                        const encodedSymbol = encodeURIComponent(symbol);
+                        const response = await fetch(`/api/parameters?exchangeId=${exchangeId}&symbol=${encodedSymbol}&strategyKey=${strategyKey}`);
+                        
+                        if (response.status === 404) {
+                            // パラメータが存在しない場合はスキップ
+                            continue;
+                        }
+                        
+                        if (!response.ok) {
+                            throw new Error(`${exchangeId}:${symbol}:${strategyKey}のパラメータ取得に失敗しました`);
+                        }
+                        
+                        const data = await response.json();
  
                          // 銘柄別タブに表示
                          const symbolHeader = document.createElement('h4');
@@ -422,7 +424,7 @@ async function saveParameters() {
                     },
                     body: JSON.stringify({
                         exchangeId,
-                        symbol,
+                        symbol,  // POSTリクエストのボディではエンコード不要
                         strategyKey,
                         params: mergedParams
                     })
