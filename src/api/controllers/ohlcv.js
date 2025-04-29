@@ -14,7 +14,7 @@ async function getOhlcv(req, res) {
   try {
     if (!exchange || !symbol || !timeframe || !limit) {
       console.error('[API /ohlcv] Bad Request: Missing required parameters');
-      return res.status(400).json({ error: 'exchange, symbol, and interval are required' });
+      return res.status(400).json({ error: 'exchange, symbol, timeframe, and limit are required' });
     }
 
     const exchangeInstance = config.exchanges[exchange].instance;
