@@ -65,27 +65,27 @@ services:
       - redis
       - mongodb
 
-  hft:
-    image: harvest3-bot-image
-    container_name: hft_bot
-    restart: always
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run start-hft
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-      - mongodb
+  # hft:
+  #   image: harvest3-bot-image
+  #   container_name: hft_bot
+  #   restart: always
+  #   volumes:
+  #     - ./src:/usr/src/app/src
+  #     - ./strategies:/usr/src/app/strategies
+  #     - ./scripts:/usr/src/app/scripts
+  #     - ./test:/usr/src/app/test
+  #     - ./data:/usr/src/app/data  # データベースファイル用のボリューム
+  #     - ./bot.js:/usr/src/app/bot.js
+  #     - ./package.json:/usr/src/app/package.json
+  #     - .env:/usr/src/app/.env
+  #   command: npm run start-hft
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #   networks:
+  #     - harvest-network
+  #   depends_on:
+  #     - redis
+  #     - mongodb
 
   # mm:
   #   image: harvest3-bot-image
@@ -135,7 +135,6 @@ services:
       - harvest-network
     command: npm run start-web
 
-# ボリュームとネットワークの定義を追加
 volumes:
   redis_data:
     driver: local
