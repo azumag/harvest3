@@ -3,6 +3,10 @@
  * ロウソク足チャートと戦略シグナルを表示する
  */
 
+// グローバル変数
+let currentAnalysisParams = {}; // 現在表示中のパラメータ
+let modifiedAnalysisParams = {}; // 変更されたパラメータ
+
 // API経由で戦略リストを取得するように修正されたため、静的なリストは削除
 
 // Chart.jsでのカスタムプラグイン実装
@@ -296,11 +300,24 @@ function setupEventListeners() {
             if (filterStrategySelect) filterStrategySelect.value = strategy;
 
             // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
+            // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
             await fetchParameterDetailsAndSetSelects(exchange, symbol, strategy);
 
+            // 選択されたパラメータセットのパラメータを取得して表示
+            await fetchAndDisplayParameters(exchange, symbol, strategy);
+
             await fetchDataAndRenderChart();
+        } else {
+            // パラメータセットが選択されていない場合はパラメータ表示エリアをクリア
+            document.getElementById('analysis-params-container').innerHTML = '<p class="text-muted">パラメータセットを選択してください。</p>';
+            document.getElementById('save-analysis-params-btn').disabled = true;
+            currentAnalysisParams = {};
+            modifiedAnalysisParams = {};
         }
     });
+
+    // 保存ボタンクリック時のイベント
+    document.getElementById('save-analysis-params-btn').addEventListener('click', saveAnalysisParameters);
 
     // 取引所セレクトボックス変更時のイベント
     if (filterExchangeSelect) {
@@ -339,6 +356,179 @@ async function fetchDataAndRenderChart() {
     // ローディング表示
     // showLoading(true); // Re-enable loading display
     hideError();
+/**
+ * パラメータの入力フィールドを生成する
+ */
+function createInputField(key, value, type) {
+    // TODO: 型に応じた入力フィールドのバリデーションや、select/checkboxなどの対応
+    // 現状はtext入力のみ
+    let inputType = 'text';
+    let step = null;
+    if (type === 'number') {
+        inputType = 'number';
+        step = 'any'; // 小数点も許可
+    } else if (type === 'boolean') {
+        // booleanの場合はチェックボックスやドロップダウンなどが考えられるが、
+        // シンプルにtextで 'true'/'false' を入力させるか、別途対応が必要
+        // ここでは一旦textとしておく
+    }
+
+    return `<input type="${inputType}" class="form-control form-control-sm parameter-input" data-param-key="${key}" value="${value}" ${step ? `step="${step}"` : ''}>`;
+}
+
+/**
+ * パラメータをテーブル形式で表示する
+ */
+function displayAnalysisParameterTable(params, container) {
+    if (!params || Object.keys(params).length === 0) {
+        container.innerHTML = '<p class="text-muted">この戦略には設定可能なパラメータがありません。</p>';
+        return;
+    }
+
+    const tableHtml = `
+        <table class="table table-bordered table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>パラメータ名</th>
+                    <th>値</th>
+                    <th>型</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(params).map(([key, value]) => {
+                    const type = typeof value;
+                    return `
+                        <tr>
+                            <td>${key}</td>
+                            <td>${createInputField(key, value, type)}</td>
+                            <td>${type}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+
+    container.innerHTML = tableHtml;
+
+    // 入力フィールドの変更を監視
+    container.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', handleParameterInputChange);
+        input.addEventListener('change', handleParameterInputChange); // select用
+    });
+}
+
+/**
+ * パラメータ入力フィールドの変更を処理する
+ */
+function handleParameterInputChange() {
+    // 保存ボタンを有効化
+    document.getElementById('save-analysis-params').disabled = false;
+}
+
+/**
+ * パラメータを保存する
+ */
+async function saveAnalysisParameters() {
+    if (!currentParameterSet) {
+        console.warn('保存するパラメータセットが選択されていません。');
+        return;
+    }
+
+    const updatedParams = {};
+    let isValid = true;
+
+    // フォームから現在の値を取得
+    document.querySelectorAll('#parameter-settings-container .parameter-input').forEach(input => {
+        const key = input.dataset.paramKey;
+        let value = input.value;
+        const type = currentParameterSet.params && currentParameterSet.params.hasOwnProperty(key) ? typeof currentParameterSet.params[key] : 'string'; // 元の型を取得
+
+        // 型に応じた変換とバリデーション（簡易的）
+        if (type === 'number') {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+                isValid = false;
+                showError(`パラメータ "${key}" の値が無効です。数値を入力してください。`);
+                return; // forEachから抜ける
+            }
+            value = numValue;
+        } else if (type === 'boolean') {
+             // booleanの簡易的な処理
+             if (value.toLowerCase() === 'true') {
+                 value = true;
+             } else if (value.toLowerCase() === 'false') {
+                 value = false;
+             } else {
+                 isValid = false;
+                 showError(`パラメータ "${key}" の値が無効です。"true" または "false" を入力してください。`);
+                 return; // forEachから抜ける
+             }
+        }
+        // TODO: 他の型（例: 配列、オブジェクト）の対応
+
+        updatedParams[key] = value;
+    });
+
+    if (!isValid) {
+        // バリデーションエラーがあれば保存しない
+        return;
+    }
+
+    // 保存ボタンを無効化し、ローディング表示
+    document.getElementById('save-analysis-params').disabled = true;
+    showLoading();
+
+    try {
+        const response = await fetch('/api/parameters', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                exchangeId: currentParameterSet.exchangeId,
+                symbol: currentParameterSet.symbol,
+                strategyKey: currentParameterSet.strategyKey,
+                params: updatedParams
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `パラメータの保存に失敗しました (HTTP ${response.status})`);
+        }
+
+        // 保存成功のフィードバック
+        showFeedback('パラメータが正常に保存されました。', 'success');
+
+    } catch (error) {
+        console.error('パラメータの保存に失敗しました:', error);
+        showFeedback(`パラメータの保存に失敗しました: ${error.message}`, 'danger');
+        // エラー時は保存ボタンを再度有効化
+        document.getElementById('save-analysis-params').disabled = false;
+    } finally {
+        hideLoading(); // ローディング非表示
+    }
+}
+
+/**
+ * フィードバックの表示 (簡易版)
+ */
+function showFeedback(message, type = "success") {
+    const feedbackElement = document.getElementById('parameter-feedback'); // analysis.htmlにフィードバック表示エリアを追加する必要があるかもしれません
+    if (feedbackElement) {
+        feedbackElement.textContent = message;
+        feedbackElement.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
+        feedbackElement.classList.remove('d-none');
+        // 3秒後に非表示
+        setTimeout(() => {
+            feedbackElement.classList.add('d-none');
+        }, 3000);
+    } else {
+        // フィードバックエリアがない場合はアラートで代用
+        alert(`${type.toUpperCase()}: ${message}`);
+    }
+}
 
     try {
         // ロウソク足データの取得
@@ -702,6 +892,41 @@ function hideError() {
 function showError(message) {
     $('#chart-error').text(message || 'データを取得できませんでした。入力条件を確認してください。');
     $('#chart-error').removeClass('d-none');
+    // エラー表示時はフィードバックも表示
+    showFeedback(message, 'danger');
+}
+
+/**
+ * フィードバックの表示
+ * @param {string} message - 表示するメッセージ
+ * @param {string} type - アラートタイプ（success, danger, warning, info）
+ */
+function showFeedback(message, type = "success") {
+    console.log("Showing feedback:", message, type);
+
+    // Bootstrapのアラートクラス名に変換
+    const alertClass = type === "success" ? "alert-success" :
+                       (type === "danger" ? "alert-danger" :
+                       (type === "warning" ? "alert-warning" : "alert-info"));
+
+    // フィードバックを表示する要素（今回は #chart-error を再利用）
+    const feedbackElement = document.getElementById("chart-error");
+    if (!feedbackElement) {
+        console.error("フィードバック表示要素が見つかりません");
+        return;
+    }
+
+    // 既存のクラスをクリアし、新しいクラスとメッセージを設定
+    feedbackElement.className = `alert ${alertClass} mt-3`; // d-none は削除
+    feedbackElement.innerHTML = message; // HTMLとしてメッセージを設定
+
+    // スクロールして表示範囲内に
+    feedbackElement.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // 自動的に消える処理 (任意)
+    // setTimeout(function() {
+    //     feedbackElement.classList.add('d-none');
+    // }, 5000); // 5秒後に非表示
 }
 
 function showNoDataMessage() {
@@ -841,5 +1066,315 @@ async function fetchParameterDetailsAndSetSelects(exchange, symbol, strategy) {
         // エラー時はセレクトボックスの値をデフォルトに戻すか、エラー表示を検討
         if (filterTimeframeSelect) filterTimeframeSelect.value = '15m';
         if (filterLimitSelect) filterLimitSelect.value = '100';
+    }
+}
+
+/**
+ * パラメータセットの詳細を取得し、パラメータ表示エリアに表示する
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 銘柄
+ * @param {string} strategyKey - 戦略キー
+ */
+async function fetchAndDisplayParameters(exchangeId, symbol, strategyKey) {
+    const containerElement = document.getElementById('analysis-params-container');
+    if (!containerElement) {
+        console.error('パラメータ表示コンテナが見つかりません');
+        return;
+    }
+
+    containerElement.innerHTML = '<p class="text-muted">パラメータを取得中...</p>';
+    document.getElementById('save-analysis-params-btn').disabled = true;
+    currentAnalysisParams = {}; // 表示前にクリア
+    modifiedAnalysisParams = {}; // 表示前にクリア
+
+    try {
+        const response = await fetch(`/api/parameters?exchangeId=${encodeURIComponent(exchangeId)}&symbol=${encodeURIComponent(symbol)}&strategyKey=${encodeURIComponent(strategyKey)}`);
+
+        if (!response.ok) {
+            throw new Error('パラメータ詳細の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        const params = data.params || {}; // paramsが存在しない場合を考慮
+
+        // グローバル変数に現在のパラメータを保存
+        const paramKey = `params:${exchangeId}:${symbol}:${strategyKey}`;
+        currentAnalysisParams[paramKey] = { ...params };
+
+        // パラメータを表示
+        displayParameterTable(exchangeId, symbol, strategyKey, params, containerElement);
+
+        // パラメータが1つ以上あれば保存ボタンを有効化
+        if (Object.keys(params).length > 0) {
+             // 保存ボタンはパラメータ変更時に有効化するため、ここでは無効のまま
+             document.getElementById('save-analysis-params-btn').disabled = true;
+        } else {
+             document.getElementById('save-analysis-params-btn').disabled = true;
+        }
+
+
+    } catch (error) {
+        console.error('パラメータ詳細の取得と表示に失敗しました:', error);
+        containerElement.innerHTML = '<p class="text-danger">パラメータの取得に失敗しました。</p>';
+        document.getElementById('save-analysis-params-btn').disabled = true;
+    }
+}
+
+/**
+ * 分析ページのパラメータ表示エリアに単一のパラメータセットのテーブルを表示する
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 銘柄
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} params - パラメータオブジェクト
+ * @param {HTMLElement} containerElement - 表示先のコンテナ要素
+ */
+/**
+ * 入力フィールドのHTMLを生成
+ * @param {string} paramName - パラメータ名
+ * @param {any} paramValue - パラメータ値
+ * @param {string} paramKey - パラメータキー（params:exchange:symbol:strategy）
+ * @returns {string} HTML文字列
+ */
+function createInputField(paramName, paramValue, paramKey) {
+  const type = typeof paramValue;
+  const inputId = `${paramKey}-${paramName}`.replace(/[^a-zA-Z0-9-]/g, '_'); // IDとして有効な文字のみ使用
+  let inputHtml = '';
+
+  // data-param-key と data-param-name を追加
+  const dataAttributes = `data-param-key="${paramKey}" data-param-name="${paramName}"`;
+
+  // すべてのinputに適用する共通スタイル (border-box, width 100%, no border/margin/padding)
+  const commonStyles = "box-sizing: border-box; width: 100%; border: none; margin: 0; padding: 0.1rem 0.25rem; height: 100%; min-height: 1.8em;";
+
+  if (type === 'boolean') {
+    // 真偽値の場合はチェックボックス
+    inputHtml = `
+      <div class="d-flex justify-content-center align-items-center h-100">
+        <input type="checkbox" class="form-check-input m-auto" id="${inputId}"
+               ${paramValue ? 'checked' : ''} ${dataAttributes}>
+      </div>
+    `;
+  } else if (type === 'number') {
+    // 数値の場合は数値入力フィールド
+    inputHtml = `
+      <input type="number" class="form-control-plaintext form-control-sm" id="${inputId}"
+             value="${paramValue}" step="any" style="${commonStyles}" ${dataAttributes}>
+    `;
+  } else if (type === 'object' && paramValue !== null) {
+    // オブジェクトまたは配列の場合はJSON表示 (TextArea)
+    const jsonValue = JSON.stringify(paramValue, null, 2);
+    inputHtml = `
+      <textarea class="form-control-plaintext form-control-sm" id="${inputId}"
+               rows="1" style="${commonStyles} font-size: 0.8em; resize: none; overflow: auto;" ${dataAttributes}>${jsonValue}</textarea>
+    `;
+  } else {
+    // その他（文字列など）はテキスト入力フィールド
+    inputHtml = `
+      <input type="text" class="form-control-plaintext form-control-sm" id="${inputId}"
+             value="${paramValue !== null ? paramValue : ''}" style="${commonStyles}" ${dataAttributes}>
+    `;
+  }
+
+  return inputHtml;
+}
+
+/**
+ * パラメータのテーブルを表示する (analysis.js 用に調整)
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 銘柄
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} params - パラメータオブジェクト
+ * @param {HTMLElement} containerElement - 表示先のコンテナ要素
+ */
+function displayParameterTable(exchangeId, symbol, strategyKey, params, containerElement) {
+    const formId = `analysis-form-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}-${strategyKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    const paramKey = `params:${exchangeId}:${symbol}:${strategyKey}`;
+
+    // パラメータ名をソート
+    const sortedParamNames = Object.keys(params).sort();
+    const paramCount = sortedParamNames.length;
+
+    if (paramCount === 0) {
+        containerElement.innerHTML = '<p class="text-muted">このパラメータセットには設定可能なパラメータがありません。</p>';
+        document.getElementById('save-analysis-params-btn').disabled = true;
+        return;
+    }
+
+    // テーブルHTMLを生成
+    let tableHtml = `
+        <form id="${formId}">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover" style="width: 100%;">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 30%;">パラメータ名</th>
+                            <th>値</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+
+    // 各パラメータの入力フィールドを生成
+    sortedParamNames.forEach(paramName => {
+        const paramValue = params[paramName];
+        tableHtml += `<tr>`;
+        tableHtml += `<td class="align-middle" style="width: 30%;">${paramName}</td>`;
+        tableHtml += `<td class="p-0 align-middle">`; // パディングを削除
+        tableHtml += createInputField(paramName, paramValue, paramKey); // createInputFieldを呼び出し
+        tableHtml += `</td>`;
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += `
+                    </tbody>
+                </table>
+            </div>
+        </form>
+    `;
+
+    containerElement.innerHTML = tableHtml;
+
+    // ツールチップを有効化 (Bootstrapの機能)
+    const tooltipTriggerList = containerElement.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltipTriggerList.forEach(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+    // パラメータ変更時のイベントリスナーを設定 (イベント委譲)
+    const formElement = document.getElementById(formId);
+    if (formElement) {
+        formElement.addEventListener('change', handleParameterInputChange);
+    }
+}
+
+/**
+ * パラメータ入力フィールドの変更を処理するイベントリスナー
+ * @param {Event} e - changeイベントオブジェクト
+ */
+function handleParameterInputChange(e) {
+    const input = e.target;
+    // data-param-key と data-param-name を持つ要素のみを対象とする
+    if (!input.matches('[data-param-key][data-param-name]')) return;
+
+    const paramKey = input.getAttribute('data-param-key');
+    const paramName = input.getAttribute('data-param-name');
+
+    // 変更されたパラメータを追跡
+    if (!modifiedAnalysisParams[paramKey]) {
+        modifiedAnalysisParams[paramKey] = {};
+    }
+
+    // 入力値を適切な型に変換
+    let value = input.value;
+    if (input.type === 'number') {
+        value = parseFloat(value);
+    } else if (input.type === 'checkbox') {
+        value = input.checked;
+    } else if (input.tagName === 'TEXTAREA') {
+       try {
+        value = JSON.parse(value);
+       } catch (err) {
+        // JSONパースに失敗した場合は文字列として扱う
+        console.warn(`JSON parse error for ${paramKey} - ${paramName}: ${err.message}. Treating as string.`);
+       }
+    }
+
+    modifiedAnalysisParams[paramKey][paramName] = value;
+
+    // 保存ボタンを有効化
+    document.getElementById('save-analysis-params-btn').disabled = false;
+}
+
+/**
+ * パラメータを保存する
+ */
+async function saveAnalysisParameters() {
+    if (Object.keys(modifiedAnalysisParams).length === 0) {
+        showFeedback('変更されたパラメータがありません。', 'warning');
+        return;
+    }
+
+    try {
+        showLoading();
+
+        let successCount = 0;
+        let errorCount = 0;
+        const errorDetails = [];
+        const updatedParamKeys = new Set(); // 更新されたキーを追跡
+
+        // 変更された各パラメータセットを保存
+        for (const [paramKey, changedValues] of Object.entries(modifiedAnalysisParams)) {
+            const [prefix, exchangeId, symbol, strategyKey] = paramKey.split(':');
+            if (prefix !== 'params') continue; // キー形式チェック
+
+            // 現在のパラメータと変更された値をマージ
+            // currentAnalysisParams[paramKey] が存在しない場合も考慮 (念のため)
+            const baseParams = currentAnalysisParams[paramKey] || {};
+            const mergedParams = { ...baseParams, ...changedValues };
+
+            try {
+                const response = await fetch('/api/parameters', {
+                    method: 'PUT', // PUT リクエストに変更
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        exchangeId,
+                        symbol,
+                        strategyKey,
+                        params: mergedParams
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `パラメータの保存に失敗しました (HTTP ${response.status})`);
+                }
+
+                // 保存成功時は現在のパラメータを更新
+                currentAnalysisParams[paramKey] = { ...mergedParams };
+                updatedParamKeys.add(paramKey); // 更新されたキーを追加
+                successCount++;
+            } catch (error) {
+                console.error(`${paramKey} のパラメータ保存中にエラーが発生:`, error);
+                errorCount++;
+                errorDetails.push(`${exchangeId}:${symbol}:${strategyKey} - ${error.message}`);
+            }
+        }
+
+        // modifiedAnalysisParamsから正常に更新されたキーを削除
+        updatedParamKeys.forEach(key => {
+            delete modifiedAnalysisParams[key];
+        });
+
+        // 保存結果のフィードバック
+        let message = '';
+        let type = 'info';
+
+        if (errorCount === 0) {
+            message = `${successCount} 件のパラメータセットが正常に保存されました。`;
+            type = 'success';
+            // 変更追跡をリセット (エラーがなければ空のはず)
+            modifiedAnalysisParams = {};
+            // 保存ボタンを無効化
+            document.getElementById('save-analysis-params-btn').disabled = true;
+        } else if (successCount > 0) {
+            message = `${successCount} 件のパラメータセットが保存されましたが、${errorCount} 件でエラーが発生しました。<br>${errorDetails.join('<br>')}`;
+            type = 'warning';
+             // エラーが残っている場合は保存ボタンを有効のままにする
+             document.getElementById('save-analysis-params-btn').disabled = false;
+        } else {
+            message = `すべてのパラメータ (${errorCount}件) の保存に失敗しました。<br>${errorDetails.join('<br>')}`;
+            type = 'danger';
+             // エラーが残っている場合は保存ボタンを有効のままにする
+             document.getElementById('save-analysis-params-btn').disabled = false;
+        }
+        showFeedback(message, type);
+
+        hideLoading();
+    } catch (error) {
+        console.error('パラメータの保存処理全体でエラーが発生しました:', error);
+        showFeedback('エラー: パラメータの保存処理中に予期せぬエラーが発生しました。', 'danger');
+        hideLoading();
+         // 予期せぬエラーの場合もボタンは有効のままにする
+         document.getElementById('save-analysis-params-btn').disabled = false;
     }
 }

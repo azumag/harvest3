@@ -94,6 +94,16 @@
             </div>
         </div>
 
+        <!-- パラメータ表示・編集エリア -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">戦略パラメータ</h5>
+                <div id="analysis-params-container">
+                    <p class="text-muted">パラメータセットを選択してください。</p>
+                </div>
+            </div>
+        </div>
+
         <!-- チャート表示エリア -->
         <div class="card">
             <div class="card-body">
@@ -111,6 +121,11 @@
             </div>
         </div>
 
+    </div>
+
+    <!-- 保存ボタン (右下に固定) -->
+    <div class="position-fixed bottom-0 end-0 p-3">
+        <button id="save-analysis-params-btn" class="btn btn-primary" disabled>パラメータを保存</button>
     </div>
 
     <!-- JavaScript ライブラリ -->
