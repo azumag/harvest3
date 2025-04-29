@@ -104,16 +104,40 @@ const OhlcPlugin = {
 // Chart.register(OhlcPlugin);
 // console.log('Chart.js registered plugins:', Chart.plugins);
  
-document.addEventListener('DOMContentLoaded', function() {
+// 新しいセレクトボックス要素への参照
+let filterExchangeSelect;
+let filterSymbolSelect;
+let filterStrategySelect;
+let filterTimeframeSelect;
+let filterLimitSelect;
+
+document.addEventListener('DOMContentLoaded', async function() {
+
+    await loadParameterSets();
+
+    // セレクトボックス要素への参照を取得
+    filterExchangeSelect = document.getElementById('filter-exchange');
+    filterSymbolSelect = document.getElementById('filter-symbol');
+    filterStrategySelect = document.getElementById('filter-strategy');
+    filterTimeframeSelect = document.getElementById('filter-timeframe');
+    filterLimitSelect = document.getElementById('filter-limit');
+
     // Flatpickrの初期化 (日付選択)
     initializeDatepickers();
 
-    // ドロップダウンの初期化
-    initializeDropdowns();
-
     // イベントリスナーの設定
     setupEventListeners();
+
+    // 各セレクトボックスの初期データ読み込み
+    await loadParameterSets(); // パラメータセットの読み込みは残す
+    await fetchAndPopulateExchanges(); // 取引所リストの読み込み
+    await populateStrategies(); // 戦略リストの読み込み
+    // populateTimeframes(); // 時間足の静的設定
+    // populateLimits(); // 表示数の静的設定
+
+    // 取引所選択時の銘柄リスト更新イベントリスナーはsetupEventListeners内で設定
 });
+
 
 /**
  * Flatpickrを使用した日付選択の初期化
@@ -126,7 +150,8 @@ function initializeDatepickers() {
     };
     flatpickr('#filter-start-date', datepickerConfig);
     // filter-end-dateの初期化は不要
-    document.getElementById('filter-start-date').value = '';
+    // 今日の日付を基準日に設定
+    document.getElementById('filter-start-date').value = formatDate(new Date());
 }
 
 /**
@@ -139,27 +164,6 @@ function formatDate(date) {
     return `${year}-${month}-${day}`;
 }
 
-/**
- * ドロップダウンの初期化
- */
-async function initializeDropdowns() {
-    try {
-        // 取引所リストの取得と設定
-        await fetchAndPopulateExchanges();
-        
-        // 取引所が選択されたら、銘柄リストを取得して設定
-        const exchangeSelect = document.getElementById('filter-exchange');
-        exchangeSelect.addEventListener('change', async () => {
-            await fetchAndPopulateSymbols(exchangeSelect.value);
-        });
-        
-        // 戦略リストの設定 (APIから取得)
-        await populateStrategies();
-    } catch (error) {
-        console.error('ドロップダウンの初期化中にエラーが発生しました:', error);
-        showError('データの読み込みに失敗しました。ページを再読み込みしてください。');
-    }
-}
 
 /**
  * 取引所リストを取得し、ドロップダウンを設定
@@ -274,61 +278,92 @@ function setupEventListeners() {
     document.getElementById('apply-filter').addEventListener('click', async () => {
         await fetchDataAndRenderChart();
     });
-}
 
+    // パラメータセット選択時の処理
+    document.getElementById('filter-parameter-set').addEventListener('change', async function() {
+        if (this.value) {
+            const [exchange, symbol, strategy] = this.value.split(':');
+            
+            // 個別のセレクトボックスに値を自動設定
+            if (filterExchangeSelect) filterExchangeSelect.value = exchange;
+            // 銘柄は取引所選択イベントで自動的に読み込まれるため、ここでは値を設定するのみ
+            if (filterSymbolSelect) {
+                 // オプションがまだ読み込まれていない可能性があるので、少し待つか、
+                 // fetchAndPopulateSymbolsをawaitしてから値を設定する
+                 await fetchAndPopulateSymbols(exchange); // 銘柄リストを先に読み込む
+                 filterSymbolSelect.value = symbol;
+            }
+            if (filterStrategySelect) filterStrategySelect.value = strategy;
+
+            // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
+            await fetchParameterDetailsAndSetSelects(exchange, symbol, strategy);
+
+            await fetchDataAndRenderChart();
+        }
+    });
+
+    // 取引所セレクトボックス変更時のイベント
+    if (filterExchangeSelect) {
+        filterExchangeSelect.addEventListener('change', async function() {
+            await fetchAndPopulateSymbols(this.value);
+        });
+    }
+}
 /**
- * データを取得してチャートを描画
+ * データを取得してチャートを描画（更新版）
  */
 async function fetchDataAndRenderChart() {
-    const exchange = document.getElementById('filter-exchange').value;
-    const symbol = document.getElementById('filter-symbol').value;
-    const strategy = document.getElementById('filter-strategy').value;
-    const timeframe = document.getElementById('filter-timeframe').value;
-    const startDate = document.getElementById('filter-start-date').value;
-    const limit = document.getElementById('filter-limit').value;
-    // endDateは使わない
+    const parameterSetSelect = document.getElementById('filter-parameter-set');
 
-    // 必須フィールドの検証
-    if (!exchange || !symbol) {
-        showError('取引所と銘柄を選択してください');
+    if (!parameterSetSelect.value) {
+        showError('パラメータセットを選択してください');
         return;
     }
 
+    // 新しいセレクトボックスから値を取得
+    const exchange = filterExchangeSelect ? filterExchangeSelect.value : '';
+    const symbol = filterSymbolSelect ? filterSymbolSelect.value : '';
+    const strategy = filterStrategySelect ? filterStrategySelect.value : '';
+    const timeframe = filterTimeframeSelect ? filterTimeframeSelect.value : '1h'; // デフォルト値
+    const limit = filterLimitSelect ? filterLimitSelect.value : '100'; // デフォルト値
+
+    // 必須項目のチェック
+    if (!exchange || !symbol || !strategy) {
+        showError('取引所、銘柄、戦略を選択してください。');
+        return;
+    }
+
+    // 日付はデフォルトで現在時刻を使用
+    const startDate = document.getElementById('filter-start-date').value || formatDate(new Date());
+
     // ローディング表示
-    showLoading(true);
+    // showLoading(true); // Re-enable loading display
     hideError();
 
     try {
-        console.log('fetchDataAndRenderChart - Fetching OHLCV data...');
         // ロウソク足データの取得
         const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate);
-        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.');
-        if (ohlcvData.length > 0) {
-            console.log('OHLCV data sample [0]:', ohlcvData[0]);
-            console.log('OHLCV data sample [last]:', ohlcvData[ohlcvData.length - 1]);
-        }
-        // 戦略シグナルデータの取得 (戦略が選択されている場合)
+
+        // 戦略シグナルデータの取得
         let signalData = [];
         if (strategy) {
-            console.log('fetchDataAndRenderChart - Fetching signal data...');
-            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate);
-            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.');
+            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcvData);
         }
+
         if (ohlcvData.length === 0) {
-            console.log('fetchDataAndRenderChart - No OHLCV data received.');
             showNoDataMessage(true);
-            showLoading(false);
+            // showLoading(false);
+            hideLoading();
             return;
         }
-        console.log('fetchDataAndRenderChart - Rendering chart...');
+
         renderChart(ohlcvData, signalData);
-        console.log('fetchDataAndRenderChart - Chart rendered.');
         showNoDataMessage(false);
     } catch (error) {
         console.error('データ取得中にエラーが発生しました:', error);
         showError('データの取得に失敗しました。入力条件を確認してください。');
     } finally {
-        showLoading(false);
+        // showLoading(false);
     }
 }
 
@@ -337,21 +372,25 @@ async function fetchDataAndRenderChart() {
  */
 async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
     try {
+        showLoading();
+
         // 日付をミリ秒のタイムスタンプに変換
         let startTime = startDate ? new Date(startDate).getTime() : undefined;
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
             exchange,
             symbol,
-            interval: timeframe
+            timeframe
         });
         if (limit) params.append('limit', limit);
         if (startTime) params.append('startTime', startTime);
+
         // APIリクエスト
         const response = await fetch(`/api/ohlcv?${params.toString()}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
+
         const data = await response.json();
         console.log('fetchOhlcvData - Raw data:', data);
         if (data && data.length > 0) {
@@ -363,17 +402,20 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
                 timestampType: data[0] ? typeof data[0][0] : null
             });
         }
+        hideLoading();
         return data;
     } catch (error) {
         console.error('ロウソク足データの取得に失敗しました:', error);
         throw error;
+    } finally {
+        hideLoading();
     }
 }
 
 /**
  * 戦略シグナルデータの取得
  */
-async function fetchStrategySignals(exchange, symbol, strategy, startDate, endDate) {
+async function fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcData) {
     try {
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
@@ -381,8 +423,17 @@ async function fetchStrategySignals(exchange, symbol, strategy, startDate, endDa
             symbol
         });
         
-        if (startDate) params.append('startDate', startDate);
-        if (endDate) params.append('endDate', endDate);
+        if (ohlcData) {
+            // ロウソク足データから期間を取得
+            const startTimestamp = ohlcData[0][0];
+            const endTimestamp = ohlcData[ohlcData.length - 1][0];
+            params.append('startDate', new Date(startTimestamp));
+            params.append('endDate', new Date(endTimestamp));
+        } else if(startDate) {
+            params.append('endDate', startDate);
+        } else {
+            params.append('endDate', new Date().getTime());
+        }
         
         // APIリクエスト
         const response = await fetch(`/api/signals?${params.toString()}`);
@@ -485,11 +536,11 @@ function addSignalsToChart(chart, signalData) {
             type: 'point',
             xValue: signal.timestamp,
             yValue: signal.price,
-            backgroundColor: isBuy ? 'rgba(40,167,69,1)' : 'rgba(220,53,69,1)',
+            backgroundColor: isBuy ? 'rgb(42, 167, 40)' : 'rgb(220, 53, 53)',
             borderColor: 'white',
             borderWidth: 2,
             radius: 10,
-            pointStyle: isBuy ? 'triangle' : 'triangle-down',
+            pointStyle: isBuy ? 'triangle' : 'triangle',
             yAdjust: isBuy ? 10 : -10,
             label: {
                 display: false
@@ -544,7 +595,7 @@ function prepareSignalDatasets(signalData) {
         type: 'scatter',
         data: buySignals.map(s => ({ x: s.timestamp, y: s.price })),
         backgroundColor: 'green',
-        pointRadius: 6,
+        pointRadius: 0,
         showLine: false
     } : null;
     const sellDataset = sellSignals.length > 0 ? {
@@ -552,54 +603,243 @@ function prepareSignalDatasets(signalData) {
         type: 'scatter',
         data: sellSignals.map(s => ({ x: s.timestamp, y: s.price })),
         backgroundColor: 'red',
-        pointRadius: 6,
+        pointRadius: 0,
         showLine: false
     } : null;
     return [buyDataset, sellDataset].filter(Boolean);
 }
 
 /**
- * ローディング表示の制御
+ * パラメータセットを読み込み、セレクトボックスに表示する
  */
-function showLoading(show) {
-    const loading = document.getElementById('chart-loading');
-    if (show) {
-        loading.classList.remove('d-none');
-    } else {
-        loading.classList.add('d-none');
+async function loadParameterSets() {
+    try {
+        
+        const response = await fetch('/api/all-parameters');
+        
+        if (!response.ok) {
+            throw new Error('パラメータセットの取得に失敗しました');
+        }
+        
+        const allParameters = await response.json();
+        const parameterSetSelect = document.getElementById('filter-parameter-set');
+        
+        // セレクトボックスをクリア（最初のオプションは残す）
+        const defaultOption = parameterSetSelect.options[0];
+        parameterSetSelect.innerHTML = '';
+        parameterSetSelect.appendChild(defaultOption);
+        
+        // パラメータセット一覧を準備
+        const parameterSets = new Map(); // 重複を避けるためにMapを使用
+        
+        // パラメータをグループ化
+        for (const paramKey in allParameters) {
+            if (allParameters.hasOwnProperty(paramKey)) {
+                const parts = paramKey.split(':');
+                if (parts.length === 4 && parts[0] === 'params') {
+                    const exchangeId = parts[1];
+                    const symbol = parts[2];
+                    const strategyKey = parts[3];
+                    
+                    // パラメータセット名を作成 (例: binance:BTC/USDT:MovingAverageCrossover)
+                    const setName = `${exchangeId}:${symbol}:${strategyKey}`;
+                    const displayName = `${exchangeId} - ${symbol} - ${strategyKey}`;
+                    
+                    // 重複を避けつつ追加
+                    if (!parameterSets.has(setName)) {
+                        parameterSets.set(setName, displayName);
+                    }
+                }
+            }
+        }
+        
+        // セレクトボックスにオプションを追加（アルファベット順にソート）
+        const sortedSets = new Map([...parameterSets].sort((a, b) => a[1].localeCompare(b[1])));
+        
+        for (const [value, text] of sortedSets) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            parameterSetSelect.appendChild(option);
+        }
+        
+    } catch (error) {
+        console.error('パラメータセットの読み込み中にエラーが発生しました:', error);
+        showError('パラメータセットの読み込みに失敗しました');
+    } finally {
     }
 }
 
 /**
- * エラーメッセージの表示
+ * ローディング表示
  */
-function showError(message) {
-    const errorElement = document.getElementById('chart-error');
-    errorElement.textContent = message;
-    errorElement.classList.remove('d-none');
+function showLoading() {
+    const loadingElement = document.getElementById('chart-loading');
+    if (loadingElement) {
+        loadingElement.classList.remove('d-none');
+    }
 }
 
 /**
- * エラーメッセージの非表示
+ * ローディング非表示
+ */
+function hideLoading() {
+    const loadingElement = document.getElementById('chart-loading');
+    if (loadingElement) {
+        loadingElement.classList.add('d-none');
+    }
+}
+
+/**
+ * エラーメッセージと「データなし」メッセージを非表示にする
  */
 function hideError() {
-    const errorElement = document.getElementById('chart-error');
-    errorElement.classList.add('d-none');
+    $('#chart-error').addClass('d-none');
+    // $('#no-data-message').addClass('d-none');
+}
+
+// 対応する関数として、エラーを表示する関数も定義しておくと良いでしょう
+function showError(message) {
+    $('#chart-error').text(message || 'データを取得できませんでした。入力条件を確認してください。');
+    $('#chart-error').removeClass('d-none');
+}
+
+function showNoDataMessage() {
+    // $('#no-data-message').removeClass('d-none');
+}
+
+if (window.Chart && Chart.registerables) {
+    Chart.register(...Chart.registerables);
+}
+/**
+ * パラメータからtimeframe（時間足）を抽出する関数
+ */
+function extractTimeframeFromParams(params) {
+    // ohlcvInterval が存在する場合はそれを使用（大文字小文字を区別しない）
+    for (const key in params) {
+        if (key.toLowerCase() === 'ohlcvinterval') {
+            return params[key];
+        }
+    }
+
+    // デフォルト値
+    return "15m";
 }
 
 /**
- * データなしメッセージの表示
+ * パラメータからlimit（表示数）を抽出する関数
  */
-function showNoDataMessage(show) {
-    const noDataElement = document.getElementById('no-data-message');
-    if (show) {
-        noDataElement.classList.remove('d-none');
-    } else {
-        noDataElement.classList.add('d-none');
+function extractLimitFromParams(params) {
+    // periodという名前のパラメータがある場合（大文字小文字を区別しない）
+    for (const key in params) {
+        if (key.toLowerCase() === 'period' && !isNaN(params[key])) {
+            return parseInt(params[key]);
+        }
+    }
+
+    // periodを含むパラメータの最大値を探す（大文字小文字を区別しない）
+    let maxPeriod = 0;
+
+    for (const key in params) {
+        if (key.toLowerCase().includes('period') && !isNaN(params[key])) {
+            maxPeriod = Math.max(maxPeriod, parseInt(params[key]));
+        }
+    }
+
+    if (maxPeriod > 0) {
+        return maxPeriod;
+    }
+
+    // デフォルト値
+    return 100;
+}
+
+/**
+ * パラメータセットの詳細を取得してtimeframeとlimitを判定
+ */
+async function fetchParameterDetails(exchange, symbol, strategy) {
+    try {
+        const response = await fetch(`/api/parameters?exchangeId=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&strategyKey=${encodeURIComponent(strategy)}`);
+
+        if (!response.ok) {
+            throw new Error('パラメータ詳細の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        const timeframe = extractTimeframeFromParams(data.params);
+        const limit = extractLimitFromParams(data.params);
+
+        if (filterTimeframeSelect) filterTimeframeSelect.value = timeframe;
+        if (filterLimitSelect) filterLimitSelect.value = limit;
+
+    } catch (error) {
+        console.error('パラメータ詳細の取得に失敗しました:', error);
+        // エラー時はセレクトボックスの値をデフォルトに戻すか、エラー表示を検討
+        if (filterTimeframeSelect) filterTimeframeSelect.value = '1h';
+        if (filterLimitSelect) filterLimitSelect.value = '100';
     }
 }
 
-// Chart.js v4 CDN環境で全ての標準コントローラ・エレメントを一括登録
-if (window.Chart && Chart.registerables) {
-    Chart.register(...Chart.registerables);
+/**
+ * 時間足セレクトボックスにオプションを静的に設定
+ */
+function populateTimeframes() {
+    const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '8h', '12h', '1d', '1w'];
+    if (filterTimeframeSelect) {
+        filterTimeframeSelect.innerHTML = ''; // 既存オプションをクリア
+        timeframes.forEach(tf => {
+            const option = document.createElement('option');
+            option.value = tf;
+            option.textContent = tf;
+            if (tf === '15m') { // デフォルト値を設定
+                option.selected = true;
+            }
+            filterTimeframeSelect.appendChild(option);
+        });
+    }
+}
+
+/**
+ * 表示数セレクトボックスにオプションを静的に設定
+ */
+function populateLimits() {
+    const limits = [20, 30, 50, 100, 200, 500, 1000];
+    if (filterLimitSelect) {
+        filterLimitSelect.innerHTML = ''; // 既存オプションをクリア
+        limits.forEach(limit => {
+            const option = document.createElement('option');
+            option.value = limit;
+            option.textContent = limit;
+            if (limit === 100) { // デフォルト値を設定
+                option.selected = true;
+            }
+            filterLimitSelect.appendChild(option);
+        });
+    }
+}
+
+/**
+ * パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
+ */
+async function fetchParameterDetailsAndSetSelects(exchange, symbol, strategy) {
+    try {
+        const response = await fetch(`/api/parameters?exchangeId=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&strategyKey=${encodeURIComponent(strategy)}`);
+
+        if (!response.ok) {
+            throw new Error('パラメータ詳細の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        const timeframe = extractTimeframeFromParams(data.params);
+        const limit = extractLimitFromParams(data.params);
+
+        if (filterTimeframeSelect) filterTimeframeSelect.value = timeframe;
+        if (filterLimitSelect) filterLimitSelect.value = limit;
+
+    } catch (error) {
+        console.error('パラメータ詳細の取得に失敗しました:', error);
+        // エラー時はセレクトボックスの値をデフォルトに戻すか、エラー表示を検討
+        if (filterTimeframeSelect) filterTimeframeSelect.value = '15m';
+        if (filterLimitSelect) filterLimitSelect.value = '100';
+    }
 }

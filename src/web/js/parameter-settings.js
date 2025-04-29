@@ -466,96 +466,110 @@ $(document).ready(function() {
             // 銘柄別タブの表示
             for (const exchangeId in bySymbol) {
                 if (bySymbol.hasOwnProperty(exchangeId)) {
-                    for (const symbol in bySymbol[exchangeId]) {
-                        if (bySymbol[exchangeId].hasOwnProperty(symbol)) {
-                            const strategyParamsMap = bySymbol[exchangeId][symbol]; // この銘柄の全戦略パラメータ
-                            const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                    // 銘柄をアルファベット順にソート
+                    const sortedSymbols = Object.keys(bySymbol[exchangeId]).sort();
+                    
+                    for (const symbol of sortedSymbols) {
+                        const strategyParamsMap = bySymbol[exchangeId][symbol]; // この銘柄の全戦略パラメータ
+                        const collapseId = `collapse-symbol-${exchangeId}-${symbol.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-                            // カードコンテナ (銘柄ごと) - symbol-item クラスと data-symbol-name を追加
-                            const card = document.createElement('div');
-                            card.className = 'card mb-3 symbol-item'; // クラス追加
-                            card.setAttribute('data-symbol-name', symbol); // データ属性追加
-                            symbolContainer.appendChild(card);
+                        // カードコンテナ (銘柄ごと) - symbol-item クラスと data-symbol-name を追加
+                        const card = document.createElement('div');
+                        card.className = 'card mb-3 symbol-item'; // クラス追加
+                        card.setAttribute('data-symbol-name', symbol); // データ属性追加
+                        symbolContainer.appendChild(card);
 
-                            // カードヘッダー (Collapseトリガー)
-                            const cardHeader = document.createElement('div');
-                            cardHeader.className = 'card-header';
-                            card.appendChild(cardHeader);
+                        // カードヘッダー (Collapseトリガー)
+                        const cardHeader = document.createElement('div');
+                        cardHeader.className = 'card-header';
+                        card.appendChild(cardHeader);
 
-                            const headerButton = document.createElement('button');
-                            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
-                            headerButton.type = 'button';
-                            headerButton.setAttribute('data-bs-toggle', 'collapse');
-                            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
-                            headerButton.setAttribute('aria-expanded', 'false');
-                            headerButton.setAttribute('aria-controls', collapseId);
-                            headerButton.textContent = `${exchangeId} - ${symbol}`;
-                            cardHeader.appendChild(headerButton);
+                        const headerButton = document.createElement('button');
+                        headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
+                        headerButton.type = 'button';
+                        headerButton.setAttribute('data-bs-toggle', 'collapse');
+                        headerButton.setAttribute('data-bs-target', `#${collapseId}`);
+                        headerButton.setAttribute('aria-expanded', 'false');
+                        headerButton.setAttribute('aria-controls', collapseId);
+                        headerButton.textContent = `${exchangeId} - ${symbol}`;
+                        cardHeader.appendChild(headerButton);
 
-                            // Collapse コンテンツ (カードボディ)
-                            const collapseDiv = document.createElement('div');
-                            collapseDiv.className = 'collapse';
-                            collapseDiv.id = collapseId;
-                            card.appendChild(collapseDiv);
+                        // Collapse コンテンツ (カードボディ)
+                        const collapseDiv = document.createElement('div');
+                        collapseDiv.className = 'collapse';
+                        collapseDiv.id = collapseId;
+                        card.appendChild(collapseDiv);
 
-                            const cardBody = document.createElement('div');
-                            cardBody.className = 'card-body';
-                            collapseDiv.appendChild(cardBody);
+                        const cardBody = document.createElement('div');
+                        cardBody.className = 'card-body';
+                        collapseDiv.appendChild(cardBody);
 
-                            // パラメータテーブルを表示
-                            displayParameterTable(exchangeId, symbol, null, strategyParamsMap, cardBody, 'symbol');
+                        // 戦略もアルファベット順にソートしたものを使用
+                        const sortedStrategyParams = {};
+                        const sortedStrategyKeys = Object.keys(strategyParamsMap).sort();
+                        for (const key of sortedStrategyKeys) {
+                            sortedStrategyParams[key] = strategyParamsMap[key];
                         }
+
+                        // パラメータテーブルを表示（ソート済み戦略パラメータを使用）
+                        displayParameterTable(exchangeId, symbol, null, sortedStrategyParams, cardBody, 'symbol');
                     }
                 }
             }
-
 
             // 戦略別タブの表示
             for (const exchangeId in byStrategy) {
                 if (byStrategy.hasOwnProperty(exchangeId)) {
-                    for (const strategyKey in byStrategy[exchangeId]) {
-                        if (byStrategy[exchangeId].hasOwnProperty(strategyKey)) {
-                            const symbolParamsMap = byStrategy[exchangeId][strategyKey]; // この戦略の全銘柄パラメータ
-                            const collapseId = `collapse-strategy-${exchangeId}-${strategyKey}`;
+                    // 戦略をアルファベット順にソート
+                    const sortedStrategies = Object.keys(byStrategy[exchangeId]).sort();
+                    
+                    for (const strategyKey of sortedStrategies) {
+                        const symbolParamsMap = byStrategy[exchangeId][strategyKey]; // この戦略の全銘柄パラメータ
+                        const collapseId = `collapse-strategy-${exchangeId}-${strategyKey}`;
 
-                            // カードコンテナ (戦略ごと) - strategy-item クラスと data-strategy-name を追加
-                            const card = document.createElement('div');
-                            card.className = 'card mb-3 strategy-item'; // クラス追加
-                            card.setAttribute('data-strategy-name', strategyKey); // データ属性追加
-                            strategyContainer.appendChild(card);
+                        // カードコンテナ (戦略ごと) - strategy-item クラスと data-strategy-name を追加
+                        const card = document.createElement('div');
+                        card.className = 'card mb-3 strategy-item'; // クラス追加
+                        card.setAttribute('data-strategy-name', strategyKey); // データ属性追加
+                        strategyContainer.appendChild(card);
 
-                            // カードヘッダー (Collapseトリガー)
-                            const cardHeader = document.createElement('div');
-                            cardHeader.className = 'card-header';
-                            card.appendChild(cardHeader);
+                        // カードヘッダー (Collapseトリガー)
+                        const cardHeader = document.createElement('div');
+                        cardHeader.className = 'card-header';
+                        card.appendChild(cardHeader);
 
-                            const headerButton = document.createElement('button');
-                            headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
-                            headerButton.type = 'button';
-                            headerButton.setAttribute('data-bs-toggle', 'collapse');
-                            headerButton.setAttribute('data-bs-target', `#${collapseId}`);
-                            headerButton.setAttribute('aria-expanded', 'false');
-                            headerButton.setAttribute('aria-controls', collapseId);
-                            headerButton.textContent = `${exchangeId} - ${strategyKey}`;
-                            cardHeader.appendChild(headerButton);
+                        const headerButton = document.createElement('button');
+                        headerButton.className = 'btn btn-link text-decoration-none w-100 text-start collapsed';
+                        headerButton.type = 'button';
+                        headerButton.setAttribute('data-bs-toggle', 'collapse');
+                        headerButton.setAttribute('data-bs-target', `#${collapseId}`);
+                        headerButton.setAttribute('aria-expanded', 'false');
+                        headerButton.setAttribute('aria-controls', collapseId);
+                        headerButton.textContent = `${exchangeId} - ${strategyKey}`;
+                        cardHeader.appendChild(headerButton);
 
-                            // Collapse コンテンツ (カードボディ)
-                            const collapseDiv = document.createElement('div');
-                            collapseDiv.className = 'collapse';
-                            collapseDiv.id = collapseId;
-                            card.appendChild(collapseDiv);
+                        // Collapse コンテンツ (カードボディ)
+                        const collapseDiv = document.createElement('div');
+                        collapseDiv.className = 'collapse';
+                        collapseDiv.id = collapseId;
+                        card.appendChild(collapseDiv);
 
-                            const cardBody = document.createElement('div');
-                            cardBody.className = 'card-body';
-                            collapseDiv.appendChild(cardBody);
+                        const cardBody = document.createElement('div');
+                        cardBody.className = 'card-body';
+                        collapseDiv.appendChild(cardBody);
 
-                            // パラメータテーブルを表示
-                            displayParameterTable(exchangeId, null, strategyKey, symbolParamsMap, cardBody, 'strategy');
+                        // 銘柄もアルファベット順にソートしたものを使用
+                        const sortedSymbolParams = {};
+                        const sortedSymbolKeys = Object.keys(symbolParamsMap).sort();
+                        for (const key of sortedSymbolKeys) {
+                            sortedSymbolParams[key] = symbolParamsMap[key];
                         }
+
+                        // パラメータテーブルを表示（ソート済み銘柄パラメータを使用）
+                        displayParameterTable(exchangeId, null, strategyKey, sortedSymbolParams, cardBody, 'strategy');
                     }
                 }
             }
-
 
             if (!hasParameters) {
                 symbolContainer.innerHTML = '<p class="text-muted">パラメータが設定されている取引所、銘柄、戦略の組み合わせはありません。</p>';
@@ -567,7 +581,6 @@ $(document).ready(function() {
             tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
-
 
             hideLoading();
         } catch (error) {

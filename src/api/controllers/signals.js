@@ -28,6 +28,7 @@ const getSignals = async (req, res) => {
                 filter.timestamp.$lte = end.getTime() - 1;
             }
         }
+        console.log(filter.timestamp)
 
         // フィルタリングされたシグナルデータを取得 (ページング適用)
         const signals = await listSignals(filter, skip, limit, { timestamp: -1 }); // skip, limit, sort を追加

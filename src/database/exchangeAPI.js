@@ -138,6 +138,7 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
   let since = targetDate.getTime();
   
   // まず現在の日付でデータを取得
+  console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${since} ${limit}件`);
   let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
   let allData = [...ohlcv];
   let remainingLimit = limit - allData.length;

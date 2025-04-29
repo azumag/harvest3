@@ -20,65 +20,76 @@
     <!-- メインコンテンツ -->
     <div class="container-fluid mt-4">
         <h2>分析</h2>
+        <div id="chart-error" class="alert alert-danger mt-3 d-none">
+            データを取得できませんでした。入力条件を確認してください。
+        </div>
 
         <!-- フィルタエリア -->
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">フィルタ</h5>
-                <div class="row g-3">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label for="filter-parameter-set" class="form-label">戦略パラメータセット</label>
+                        <select id="filter-parameter-set" class="form-select">
+                            <option value="">パラメータセットを選択</option>
+                            <!-- パラメータセットはJSで動的に追加 -->
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-start-date" class="form-label">基準日</label>
+                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
+                    </div>
+                    <div class="col-md-2">
+                        <button id="apply-filter" class="btn btn-primary w-100">表示</button>
+                    </div>
+                </div>
+                <div class="row g-3 align-items-end mt-2"> <!-- mt-2で上の行との間に少し隙間を追加 -->
                     <div class="col-md-3">
                         <label for="filter-exchange" class="form-label">取引所</label>
                         <select id="filter-exchange" class="form-select">
                             <option value="">取引所を選択</option>
-                            <!-- 取引所オプションはJSで動的に追加 -->
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="filter-symbol" class="form-label">銘柄</label>
-                        <select id="filter-symbol" class="form-select">
+                        <select id="filter-symbol" class="form-select" disabled>
                             <option value="">銘柄を選択</option>
-                            <!-- 銘柄オプションはJSで動的に追加 -->
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="filter-strategy" class="form-label">戦略</label>
                         <select id="filter-strategy" class="form-select">
                             <option value="">戦略を選択</option>
-                            <!-- 戦略オプションはJSで動的に追加、または静的に設定 -->
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-1">
                         <label for="filter-timeframe" class="form-label">時間足</label>
                         <select id="filter-timeframe" class="form-select">
-                            <option value="1m">1分</option>
-                            <option value="5m">5分</option>
-                            <option value="15m" selected>15分</option>
-                            <option value="30m">30分</option>
-                            <option value="1h">1時間</option>
-                            <option value="4h">4時間</option>
-                            <option value="1d">1日</option>
-                            <option value="1w">1週間</option>
+                            <option value="1m">1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h" selected>1h</option>
+                            <option value="4h">4h</option>
+                            <option value="8h">8h</option>
+                            <option value="12h">12h</option>
+                            <option value="1d">1d</option>
+                            <option value="1w">1w</option>
                         </select>
                     </div>
-                </div>
-                <div class="row g-3 mt-1">
-                    <div class="col-md-3">
-                        <label for="filter-start-date" class="form-label">基準日</label>
-                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD" value="">
-                    </div>
-                    <div class="col-md-3">
+                    <div class="col-md-1">
                         <label for="filter-limit" class="form-label">表示数</label>
                         <select id="filter-limit" class="form-select">
-                            <option value="">指定なし</option>
-                            <option value="50">50件</option>
-                            <option value="100">100件</option>
-                            <option value="200">200件</option>
-                            <option value="500">500件</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="50">50</option>
+                            <option value="100" selected>100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
                         </select>
                     </div>
-                </div>
-                <div class="mt-3">
-                    <button id="apply-filter" class="btn btn-primary">表示</button>
                 </div>
             </div>
         </div>
@@ -87,20 +98,16 @@
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">チャート</h5>
-                <div id="chart-container" style="height: 600px;">
-                    <canvas id="ohlcvChart" width="1200" height="600"></canvas>
-                </div>
                 <div id="chart-loading" class="text-center py-3 d-none">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">読み込み中...</span>
                     </div>
                 </div>
-                <div id="chart-error" class="alert alert-danger mt-3 d-none">
-                    データを取得できませんでした。入力条件を確認してください。
+                <div id="chart-container" style="height: 600px;">
+                    <canvas id="ohlcvChart" width="1200" height="600"></canvas>
                 </div>
-                <div id="no-data-message" class="alert alert-info mt-3 d-none">
-                    選択した条件のデータが見つかりません。
-                </div>
+               
+
             </div>
         </div>
 
