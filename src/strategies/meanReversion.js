@@ -9,7 +9,7 @@ const {
 
 const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../database/manager');
 
-const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
+const { postOrderToDiscord, postErrorToDiscord } = require('../common/notifications');
 
 const { checkBuyOrderAllowance } = require('../common/utils');
 

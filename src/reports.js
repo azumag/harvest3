@@ -1,4 +1,4 @@
-const { postResultToDiscord, postErrorToDiscord } = require('./notifications');
+const { postResultToDiscord, postErrorToDiscord } = require('./common/notifications');
 const { exchangeBB, exchangeBF } = require('./config');
 const { getTradeSummaries } = require('./database/manager');
 const { initializeDB } = require('./database/manager');

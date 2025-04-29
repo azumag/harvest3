@@ -1,4 +1,4 @@
-const { postErrorToDiscord } = require('../notifications');
+const { postErrorToDiscord } = require('./notifications');
 const { getStrategyParameters, saveStrategyParameters,
    getTradeCurrentPosition, getCurrentOrderPosition } = require('../database/manager');
 

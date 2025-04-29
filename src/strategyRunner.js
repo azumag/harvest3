@@ -1,5 +1,5 @@
 const { config } = require('./config');
-const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { getMarketParameters, getStrategyConfig } = require('./utils');
 // const { getStrategyParameters, saveStrategyParameters } = require('./redisDatabase'); // getStrategyParametersをインポート
 const { getStrategyParameters, saveStrategyParameters } = require('./database/manager');

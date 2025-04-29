@@ -5,7 +5,7 @@
 // モジュールのインポート
 const { exchangeBB, exchangeBF } = require('../src/config');
 const { getMarketParameters, sleep } = require('../src/utils');
-const { postErrorToDiscord, postOrderToDiscord } = require('../src/notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('../src/common/notifications');
 
 /**
  * 指定された取引所の全ポジションを成行で売却する関数

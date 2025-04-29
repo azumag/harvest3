@@ -1,6 +1,6 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord } = require('./notifications');
+const { postErrorToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');

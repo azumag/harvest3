@@ -6,7 +6,7 @@ const { formattedAvailableAmount,
   getRealizedPnL, getOrderStrategyKeyByOrderId, addOrder,
  } = require("../database/manager");
 
-const { postErrorToDiscord, postOrderToDiscord } = require('../notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('../common/notifications');
 
 const { checkBuyOrderAllowance } = require('../common/utils');
 
