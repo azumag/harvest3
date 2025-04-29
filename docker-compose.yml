@@ -45,7 +45,7 @@ services:
   bot:
     image: harvest3-bot-image
     build: .
-    container_name: scalping_bot
+    container_name: strategy-runner
     restart: always
     volumes:
       - ./src:/usr/src/app/src
@@ -56,7 +56,6 @@ services:
       - ./bot.js:/usr/src/app/bot.js
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
-    command: npm start
     environment:
       - REDIS_URL=redis://redis:6379
     networks:

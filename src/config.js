@@ -198,7 +198,8 @@ const config = {
       stdDev: 2,
       ohlcvInterval: '5m',
       function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      atomicExec: true,
     },
 
     BOLLINGER_BANDS_LONG: {

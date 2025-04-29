@@ -6,50 +6,24 @@ const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./utils');
 
+const args = process.argv.slice(2);
+if (args.includes('--help') || args.includes('-h')) {
+  console.log('オプション:');
+  console.log('  --xxxxx(戦略名）で atomicExec が指定されている戦略を単一実行');
+  console.log('  --help, -h        このヘルプメッセージを表示');
+  console.log('オプションなしで実行すると、atomicExec 以外の戦略全てを実行');
+  process.exit(0);
+}
+
 /**
  * ボットを起動する関数
  */
 async function startBot() {
   initializeDB();
   try {
-    
-    // アービトラージ戦略を実行
-    // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
-    //   // 共通の通貨ペアを見つける
-    //   const bbMarkets = await exchangeBB.loadMarkets();
-    //   const bfMarkets = await exchangeBF.loadMarkets();
-      
-    //   const bbSymbols = Object.keys(bbMarkets).filter(symbol => symbol.endsWith('/JPY'));
-    //   const bfSymbols = Object.keys(bfMarkets).filter(symbol => symbol.endsWith('/JPY'));
-      
-    //   // 両方の取引所に存在する通貨ペアを見つける
-    //   const commonSymbols = bbSymbols.filter(symbol => bfSymbols.includes(symbol));
-      
-    //   // 定期的にアービトラージ機会を確認
-    //   setInterval(async () => {
-    //     // 一度に処理する通貨ペアの数を制限（最大3つ）
-    //     const symbolsToProcess = commonSymbols.slice(0, 3);
-        
-    //     // 各通貨ペアの処理の間に待機時間を入れる
-    //     for (const symbol of symbolsToProcess) {
-    //       try {
-    //         await runArbitrageStrategy(exchanges, symbol, {
-    //           postOrderToDiscord,
-    //           postErrorToDiscord,
-    //           tradePercentage: config.tradePercentage
-    //         });
-    //         // 各通貨ペアの処理の間に3秒待機
-    //         await sleep(3000);
-    //       } catch (error) {
-    //         console.error(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol}`, error);
-    //         await postErrorToDiscord(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol} - ${error.message}`);
-    //       }
-    //     }
-        
-    //     // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
-    //     commonSymbols.push(commonSymbols.shift());
-    //   }, 30000); // 30秒ごとに確認（10秒から30秒に延長）
-    // }
+    // コマンドライン引数があるかどうかをチェック
+    const hasArgs = args.length > 0;
+    console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
   
     while (true) {
       const symbolsByExchange = await getSymbolsByExchange(config);
@@ -57,8 +31,16 @@ async function startBot() {
       
       for (const strategyKey of Object.keys(config.strategies)) {
         const strategy = config.strategies[strategyKey];
+        if (hasArgs && !args.includes(`--${strategyKey}`)) {
+          // console.log(`指定された戦略 ${strategyKey} 以外は無視されます`);
+          continue;
+        }
         if (strategy.enabled) {
           console.log(`戦略 ${strategyKey} が有効です`);
+          if (strategy.atomicExec && (!hasArgs || !args.includes(`--${strategyKey}`))) {
+            console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
+            continue;
+          }
           
           try {
             for (const exchange of strategy.exchanges) {
@@ -143,3 +125,41 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 
 // ボットを起動
 startBot();
+
+// アービトラージ戦略を実行
+    // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
+    //   // 共通の通貨ペアを見つける
+    //   const bbMarkets = await exchangeBB.loadMarkets();
+    //   const bfMarkets = await exchangeBF.loadMarkets();
+      
+    //   const bbSymbols = Object.keys(bbMarkets).filter(symbol => symbol.endsWith('/JPY'));
+    //   const bfSymbols = Object.keys(bfMarkets).filter(symbol => symbol.endsWith('/JPY'));
+      
+    //   // 両方の取引所に存在する通貨ペアを見つける
+    //   const commonSymbols = bbSymbols.filter(symbol => bfSymbols.includes(symbol));
+      
+    //   // 定期的にアービトラージ機会を確認
+    //   setInterval(async () => {
+    //     // 一度に処理する通貨ペアの数を制限（最大3つ）
+    //     const symbolsToProcess = commonSymbols.slice(0, 3);
+        
+    //     // 各通貨ペアの処理の間に待機時間を入れる
+    //     for (const symbol of symbolsToProcess) {
+    //       try {
+    //         await runArbitrageStrategy(exchanges, symbol, {
+    //           postOrderToDiscord,
+    //           postErrorToDiscord,
+    //           tradePercentage: config.tradePercentage
+    //         });
+    //         // 各通貨ペアの処理の間に3秒待機
+    //         await sleep(3000);
+    //       } catch (error) {
+    //         console.error(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol}`, error);
+    //         await postErrorToDiscord(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol} - ${error.message}`);
+    //       }
+    //     }
+        
+    //     // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
+    //     commonSymbols.push(commonSymbols.shift());
+    //   }, 30000); // 30秒ごとに確認（10秒から30秒に延長）
+    // }

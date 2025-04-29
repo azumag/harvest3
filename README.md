@@ -135,11 +135,8 @@
     # 標準ボットのみ起動
     docker compose up -d bot
 
-    # HFTボットのみ起動
-    docker compose up -d hft
-
-    # マーケットメイキングボットのみ起動
-    docker compose up -d mm
+    # atomicExec (個別でしか起動が許されていない戦略) を指定して実行
+    docker compose run --rm bot node bot.js --XXXXXX_XXX
 
     # Web UIのみ起動 (通常は他のボットと併用)
     docker compose up -d web-ui
