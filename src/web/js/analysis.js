@@ -104,12 +104,38 @@ const OhlcPlugin = {
 // Chart.register(OhlcPlugin);
 // console.log('Chart.js registered plugins:', Chart.plugins);
  
-document.addEventListener('DOMContentLoaded', function() {
+// 新しいセレクトボックス要素への参照
+let filterExchangeSelect;
+let filterSymbolSelect;
+let filterStrategySelect;
+let filterTimeframeSelect;
+let filterLimitSelect;
+
+document.addEventListener('DOMContentLoaded', async function() {
+
+    await loadParameterSets();
+
+    // セレクトボックス要素への参照を取得
+    filterExchangeSelect = document.getElementById('filter-exchange');
+    filterSymbolSelect = document.getElementById('filter-symbol');
+    filterStrategySelect = document.getElementById('filter-strategy');
+    filterTimeframeSelect = document.getElementById('filter-timeframe');
+    filterLimitSelect = document.getElementById('filter-limit');
+
     // Flatpickrの初期化 (日付選択)
     initializeDatepickers();
 
     // イベントリスナーの設定
     setupEventListeners();
+
+    // 各セレクトボックスの初期データ読み込み
+    await loadParameterSets(); // パラメータセットの読み込みは残す
+    await fetchAndPopulateExchanges(); // 取引所リストの読み込み
+    await populateStrategies(); // 戦略リストの読み込み
+    // populateTimeframes(); // 時間足の静的設定
+    // populateLimits(); // 表示数の静的設定
+
+    // 取引所選択時の銘柄リスト更新イベントリスナーはsetupEventListeners内で設定
 });
 
 
@@ -252,8 +278,37 @@ function setupEventListeners() {
     document.getElementById('apply-filter').addEventListener('click', async () => {
         await fetchDataAndRenderChart();
     });
-}
 
+    // パラメータセット選択時の処理
+    document.getElementById('filter-parameter-set').addEventListener('change', async function() {
+        if (this.value) {
+            const [exchange, symbol, strategy] = this.value.split(':');
+            
+            // 個別のセレクトボックスに値を自動設定
+            if (filterExchangeSelect) filterExchangeSelect.value = exchange;
+            // 銘柄は取引所選択イベントで自動的に読み込まれるため、ここでは値を設定するのみ
+            if (filterSymbolSelect) {
+                 // オプションがまだ読み込まれていない可能性があるので、少し待つか、
+                 // fetchAndPopulateSymbolsをawaitしてから値を設定する
+                 await fetchAndPopulateSymbols(exchange); // 銘柄リストを先に読み込む
+                 filterSymbolSelect.value = symbol;
+            }
+            if (filterStrategySelect) filterStrategySelect.value = strategy;
+
+            // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
+            await fetchParameterDetailsAndSetSelects(exchange, symbol, strategy);
+
+            await fetchDataAndRenderChart();
+        }
+    });
+
+    // 取引所セレクトボックス変更時のイベント
+    if (filterExchangeSelect) {
+        filterExchangeSelect.addEventListener('change', async function() {
+            await fetchAndPopulateSymbols(this.value);
+        });
+    }
+}
 /**
  * データを取得してチャートを描画（更新版）
  */
@@ -265,30 +320,16 @@ async function fetchDataAndRenderChart() {
         return;
     }
 
-    // 表示されている値を使用して取得するように変更（要素が存在するかチェック）
-    const exchangeElement = document.getElementById('selected-exchange');
-    const symbolElement = document.getElementById('selected-symbol');
-    const strategyElement = document.getElementById('selected-strategy');
-    const timeframeElement = document.getElementById('selected-timeframe');
-    const limitElement = document.getElementById('selected-limit');
-    
-    // 要素が存在しない場合はエラーを表示して処理を中止
-    if (!exchangeElement || !symbolElement || !strategyElement) {
-        showError('必要な要素が見つかりません。パラメータセットを選択してください。');
-        return;
-    }
+    // 新しいセレクトボックスから値を取得
+    const exchange = filterExchangeSelect ? filterExchangeSelect.value : '';
+    const symbol = filterSymbolSelect ? filterSymbolSelect.value : '';
+    const strategy = filterStrategySelect ? filterStrategySelect.value : '';
+    const timeframe = filterTimeframeSelect ? filterTimeframeSelect.value : '1h'; // デフォルト値
+    const limit = filterLimitSelect ? filterLimitSelect.value : '100'; // デフォルト値
 
-    const exchange = exchangeElement.textContent;
-    const symbol = symbolElement.textContent; 
-    const strategy = strategyElement.textContent;
-
-    // 時間足と表示数（存在チェック付き）
-    const timeframe = timeframeElement ? timeframeElement.textContent : '1h';
-    const limit = limitElement ? limitElement.textContent : '100';
-
-    // 内容が空の場合もエラー
+    // 必須項目のチェック
     if (!exchange || !symbol || !strategy) {
-        showError('取引所、銘柄、戦略が正しく設定されていません。パラメータセットを選択してください。');
+        showError('取引所、銘柄、戦略を選択してください。');
         return;
     }
 
@@ -331,6 +372,8 @@ async function fetchDataAndRenderChart() {
  */
 async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
     try {
+        showLoading();
+
         // 日付をミリ秒のタイムスタンプに変換
         let startTime = startDate ? new Date(startDate).getTime() : undefined;
         // APIリクエストパラメータの構築
@@ -562,7 +605,6 @@ function prepareSignalDatasets(signalData) {
  */
 async function loadParameterSets() {
     try {
-        // showLoading();
         
         const response = await fetch('/api/all-parameters');
         
@@ -612,13 +654,10 @@ async function loadParameterSets() {
             parameterSetSelect.appendChild(option);
         }
         
-        hideLoading();
     } catch (error) {
         console.error('パラメータセットの読み込み中にエラーが発生しました:', error);
         showError('パラメータセットの読み込みに失敗しました');
-        hideLoading();
     } finally {
-        hideLoading();
     }
 }
 
@@ -660,43 +699,6 @@ function showNoDataMessage() {
     // $('#no-data-message').removeClass('d-none');
 }
 
-// DOMが読み込まれた後に実行
-document.addEventListener('DOMContentLoaded', () => {
-    // パラメータセットの読み込み
-    loadParameterSets();
-    
-    // パラメータセット選択時の処理
-    document.getElementById('filter-parameter-set').addEventListener('change', async function() {
-        if (this.value) {
-            const [exchange, symbol, strategy] = this.value.split(':');
-            
-            // 取引所と銘柄を自動選択
-            const exchangeSelect = document.getElementById('selected-exchange');
-            if (exchangeSelect) {
-                exchangeSelect.innerHTML = exchange;
-            }
-            
-            // 銘柄を設定
-            const symbolSelect = document.getElementById('selected-symbol');
-            if (symbolSelect) {
-                symbolSelect.innerHTML = symbol;
-            }
-
-            // 戦略を設定
-            const strategySelect = document.getElementById('selected-strategy');
-            if (strategySelect) {
-                strategySelect.innerHTML = strategy;
-            }
-
-            // パラメータセットの詳細を取得してtimeframeとlimitを判定
-            await fetchParameterDetails(exchange, symbol, strategy);
-
-            await fetchDataAndRenderChart()
-        }
-    });
-});
-
-// Chart.js v4 CDN環境で全ての標準コントローラ・エレメントを一括登録
 if (window.Chart && Chart.registerables) {
     Chart.register(...Chart.registerables);
 }
@@ -712,7 +714,7 @@ function extractTimeframeFromParams(params) {
     }
 
     // デフォルト値
-    return "1h";
+    return "15m";
 }
 
 /**
@@ -758,11 +760,77 @@ async function fetchParameterDetails(exchange, symbol, strategy) {
         const timeframe = extractTimeframeFromParams(data.params);
         const limit = extractLimitFromParams(data.params);
 
-        document.getElementById('selected-timeframe').textContent = timeframe;
-        document.getElementById('selected-limit').textContent = limit;
+        if (filterTimeframeSelect) filterTimeframeSelect.value = timeframe;
+        if (filterLimitSelect) filterLimitSelect.value = limit;
+
     } catch (error) {
         console.error('パラメータ詳細の取得に失敗しました:', error);
-        document.getElementById('selected-timeframe').textContent = '取得失敗';
-        document.getElementById('selected-limit').textContent = '取得失敗';
+        // エラー時はセレクトボックスの値をデフォルトに戻すか、エラー表示を検討
+        if (filterTimeframeSelect) filterTimeframeSelect.value = '1h';
+        if (filterLimitSelect) filterLimitSelect.value = '100';
+    }
+}
+
+/**
+ * 時間足セレクトボックスにオプションを静的に設定
+ */
+function populateTimeframes() {
+    const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '8h', '12h', '1d', '1w'];
+    if (filterTimeframeSelect) {
+        filterTimeframeSelect.innerHTML = ''; // 既存オプションをクリア
+        timeframes.forEach(tf => {
+            const option = document.createElement('option');
+            option.value = tf;
+            option.textContent = tf;
+            if (tf === '15m') { // デフォルト値を設定
+                option.selected = true;
+            }
+            filterTimeframeSelect.appendChild(option);
+        });
+    }
+}
+
+/**
+ * 表示数セレクトボックスにオプションを静的に設定
+ */
+function populateLimits() {
+    const limits = [20, 30, 50, 100, 200, 500, 1000];
+    if (filterLimitSelect) {
+        filterLimitSelect.innerHTML = ''; // 既存オプションをクリア
+        limits.forEach(limit => {
+            const option = document.createElement('option');
+            option.value = limit;
+            option.textContent = limit;
+            if (limit === 100) { // デフォルト値を設定
+                option.selected = true;
+            }
+            filterLimitSelect.appendChild(option);
+        });
+    }
+}
+
+/**
+ * パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
+ */
+async function fetchParameterDetailsAndSetSelects(exchange, symbol, strategy) {
+    try {
+        const response = await fetch(`/api/parameters?exchangeId=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&strategyKey=${encodeURIComponent(strategy)}`);
+
+        if (!response.ok) {
+            throw new Error('パラメータ詳細の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        const timeframe = extractTimeframeFromParams(data.params);
+        const limit = extractLimitFromParams(data.params);
+
+        if (filterTimeframeSelect) filterTimeframeSelect.value = timeframe;
+        if (filterLimitSelect) filterLimitSelect.value = limit;
+
+    } catch (error) {
+        console.error('パラメータ詳細の取得に失敗しました:', error);
+        // エラー時はセレクトボックスの値をデフォルトに戻すか、エラー表示を検討
+        if (filterTimeframeSelect) filterTimeframeSelect.value = '15m';
+        if (filterLimitSelect) filterLimitSelect.value = '100';
     }
 }

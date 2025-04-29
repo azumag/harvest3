@@ -44,23 +44,53 @@
                         <button id="apply-filter" class="btn btn-primary w-100">表示</button>
                     </div>
                 </div>
-                <div id="parameter-info" class="mt-3">
-                    <div class="alert alert-secondary p-2 mb-0"> <!-- mb-0 を追加 -->
-                        <small><strong>選択中:</strong>
-                            取引所: <span id="selected-exchange" class="fw-bold">未選択</span> |
-                            銘柄: <span id="selected-symbol" class="fw-bold">未選択</span> |
-                            戦略: <span id="selected-strategy" class="fw-bold">未選択</span> |
-                            時間足: <span id="selected-timeframe" class="fw-bold">自動</span> |
-                            表示数: <span id="selected-limit" class="fw-bold">自動</span>
-                        </small>
+                <div class="row g-3 align-items-end mt-2"> <!-- mt-2で上の行との間に少し隙間を追加 -->
+                    <div class="col-md-3">
+                        <label for="filter-exchange" class="form-label">取引所</label>
+                        <select id="filter-exchange" class="form-select">
+                            <option value="">取引所を選択</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-symbol" class="form-label">銘柄</label>
+                        <select id="filter-symbol" class="form-select" disabled>
+                            <option value="">銘柄を選択</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filter-strategy" class="form-label">戦略</label>
+                        <select id="filter-strategy" class="form-select">
+                            <option value="">戦略を選択</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label for="filter-timeframe" class="form-label">時間足</label>
+                        <select id="filter-timeframe" class="form-select">
+                            <option value="1m">1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h" selected>1h</option>
+                            <option value="4h">4h</option>
+                            <option value="8h">8h</option>
+                            <option value="12h">12h</option>
+                            <option value="1d">1d</option>
+                            <option value="1w">1w</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label for="filter-limit" class="form-label">表示数</label>
+                        <select id="filter-limit" class="form-select">
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="50">50</option>
+                            <option value="100" selected>100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                        </select>
                     </div>
                 </div>
-                <!-- 表示ボタンは上に移動したので削除 -->
-                <!--
-                <div class="mt-3">
-                    <button id="apply-filter" class="btn btn-primary">表示</button>
-                </div>
-                -->
             </div>
         </div>
 
@@ -68,14 +98,15 @@
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">チャート</h5>
-                <div id="chart-container" style="height: 600px;">
-                    <canvas id="ohlcvChart" width="1200" height="600"></canvas>
-                </div>
                 <div id="chart-loading" class="text-center py-3 d-none">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">読み込み中...</span>
                     </div>
                 </div>
+                <div id="chart-container" style="height: 600px;">
+                    <canvas id="ohlcvChart" width="1200" height="600"></canvas>
+                </div>
+               
 
             </div>
         </div>
