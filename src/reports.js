@@ -2,7 +2,6 @@ const { postResultToDiscord, postErrorToDiscord } = require('./common/notificati
 const { exchangeBB, exchangeBF } = require('./config');
 const { getTradeSummaries } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
-const { report } = require('./api/routes');
 
 // レポートを投稿するためのタイマー設定
 setInterval(() => {
