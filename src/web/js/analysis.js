@@ -347,7 +347,7 @@ async function fetchDataAndRenderChart() {
         // 戦略シグナルデータの取得
         let signalData = [];
         if (strategy) {
-            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate);
+            signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcvData);
         }
 
         if (ohlcvData.length === 0) {
@@ -415,7 +415,7 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
 /**
  * 戦略シグナルデータの取得
  */
-async function fetchStrategySignals(exchange, symbol, strategy, startDate, endDate) {
+async function fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcData) {
     try {
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
@@ -423,8 +423,17 @@ async function fetchStrategySignals(exchange, symbol, strategy, startDate, endDa
             symbol
         });
         
-        if (startDate) params.append('startDate', startDate);
-        if (endDate) params.append('endDate', endDate);
+        if (ohlcData) {
+            // ロウソク足データから期間を取得
+            const startTimestamp = ohlcData[0][0];
+            const endTimestamp = ohlcData[ohlcData.length - 1][0];
+            params.append('startDate', new Date(startTimestamp));
+            params.append('endDate', new Date(endTimestamp));
+        } else if(startDate) {
+            params.append('endDate', startDate);
+        } else {
+            params.append('endDate', new Date().getTime());
+        }
         
         // APIリクエスト
         const response = await fetch(`/api/signals?${params.toString()}`);
@@ -527,11 +536,11 @@ function addSignalsToChart(chart, signalData) {
             type: 'point',
             xValue: signal.timestamp,
             yValue: signal.price,
-            backgroundColor: isBuy ? 'rgba(40,167,69,1)' : 'rgba(220,53,69,1)',
+            backgroundColor: isBuy ? 'rgb(42, 167, 40)' : 'rgb(220, 53, 53)',
             borderColor: 'white',
             borderWidth: 2,
             radius: 10,
-            pointStyle: isBuy ? 'triangle' : 'triangle-down',
+            pointStyle: isBuy ? 'triangle' : 'triangle',
             yAdjust: isBuy ? 10 : -10,
             label: {
                 display: false
@@ -586,7 +595,7 @@ function prepareSignalDatasets(signalData) {
         type: 'scatter',
         data: buySignals.map(s => ({ x: s.timestamp, y: s.price })),
         backgroundColor: 'green',
-        pointRadius: 6,
+        pointRadius: 0,
         showLine: false
     } : null;
     const sellDataset = sellSignals.length > 0 ? {
@@ -594,7 +603,7 @@ function prepareSignalDatasets(signalData) {
         type: 'scatter',
         data: sellSignals.map(s => ({ x: s.timestamp, y: s.price })),
         backgroundColor: 'red',
-        pointRadius: 6,
+        pointRadius: 0,
         showLine: false
     } : null;
     return [buyDataset, sellDataset].filter(Boolean);
