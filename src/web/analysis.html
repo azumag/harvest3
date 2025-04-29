@@ -20,40 +20,47 @@
     <!-- メインコンテンツ -->
     <div class="container-fluid mt-4">
         <h2>分析</h2>
+        <div id="chart-error" class="alert alert-danger mt-3 d-none">
+            データを取得できませんでした。入力条件を確認してください。
+        </div>
 
         <!-- フィルタエリア -->
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">フィルタ</h5>
-                <div class="row g-3">
-                    <div class="col-md-4">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
                         <label for="filter-parameter-set" class="form-label">戦略パラメータセット</label>
                         <select id="filter-parameter-set" class="form-select">
                             <option value="">パラメータセットを選択</option>
                             <!-- パラメータセットはJSで動的に追加 -->
                         </select>
                     </div>
-                    <div id="parameter-info" class="mt-3">
-                        <div class="alert alert-info">
-                            <p><strong>選択情報:</strong></p>
-                            <p>取引所: <span id="selected-exchange">未選択</span></p>
-                            <p>銘柄: <span id="selected-symbol">未選択</span></p>
-                            <p>時間足: <span id="selected-timeframe">自動設定</span></p>
-                            <p>表示数: <span id="selected-limit">自動設定</span></p>
-                        </div>
-                    </div>
-
-                    <div class="col-md-3">
-                    <div class="col-md-2">
                     <div class="col-md-3">
                         <label for="filter-start-date" class="form-label">基準日</label>
-                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD" value="">
+                        <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
+                        <button id="apply-filter" class="btn btn-primary w-100">表示</button>
+                    </div>
                 </div>
+                <div id="parameter-info" class="mt-3">
+                    <div class="alert alert-secondary p-2 mb-0"> <!-- mb-0 を追加 -->
+                        <small><strong>選択中:</strong>
+                            取引所: <span id="selected-exchange" class="fw-bold">未選択</span> |
+                            銘柄: <span id="selected-symbol" class="fw-bold">未選択</span> |
+                            戦略: <span id="selected-strategy" class="fw-bold">未選択</span> |
+                            時間足: <span id="selected-timeframe" class="fw-bold">自動</span> |
+                            表示数: <span id="selected-limit" class="fw-bold">自動</span>
+                        </small>
+                    </div>
+                </div>
+                <!-- 表示ボタンは上に移動したので削除 -->
+                <!--
                 <div class="mt-3">
                     <button id="apply-filter" class="btn btn-primary">表示</button>
                 </div>
+                -->
             </div>
         </div>
 
@@ -69,12 +76,7 @@
                         <span class="visually-hidden">読み込み中...</span>
                     </div>
                 </div>
-                <div id="chart-error" class="alert alert-danger mt-3 d-none">
-                    データを取得できませんでした。入力条件を確認してください。
-                </div>
-                <div id="no-data-message" class="alert alert-info mt-3 d-none">
-                    選択した条件のデータが見つかりません。
-                </div>
+
             </div>
         </div>
 

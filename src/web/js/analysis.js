@@ -108,12 +108,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Flatpickrの初期化 (日付選択)
     initializeDatepickers();
 
-    // ドロップダウンの初期化
-    initializeDropdowns();
-
     // イベントリスナーの設定
     setupEventListeners();
 });
+
 
 /**
  * Flatpickrを使用した日付選択の初期化
@@ -126,7 +124,8 @@ function initializeDatepickers() {
     };
     flatpickr('#filter-start-date', datepickerConfig);
     // filter-end-dateの初期化は不要
-    document.getElementById('filter-start-date').value = '';
+    // 今日の日付を基準日に設定
+    document.getElementById('filter-start-date').value = formatDate(new Date());
 }
 
 /**
@@ -139,27 +138,6 @@ function formatDate(date) {
     return `${year}-${month}-${day}`;
 }
 
-/**
- * ドロップダウンの初期化
- */
-async function initializeDropdowns() {
-    try {
-        // 取引所リストの取得と設定
-        await fetchAndPopulateExchanges();
-        
-        // 取引所が選択されたら、銘柄リストを取得して設定
-        const exchangeSelect = document.getElementById('filter-exchange');
-        exchangeSelect.addEventListener('change', async () => {
-            await fetchAndPopulateSymbols(exchangeSelect.value);
-        });
-        
-        // 戦略リストの設定 (APIから取得)
-        await populateStrategies();
-    } catch (error) {
-        console.error('ドロップダウンの初期化中にエラーが発生しました:', error);
-        showError('データの読み込みに失敗しました。ページを再読み込みしてください。');
-    }
-}
 
 /**
  * 取引所リストを取得し、ドロップダウンを設定
@@ -281,27 +259,44 @@ function setupEventListeners() {
  */
 async function fetchDataAndRenderChart() {
     const parameterSetSelect = document.getElementById('filter-parameter-set');
-    const selectedOption = parameterSetSelect.options[parameterSetSelect.selectedIndex];
 
     if (!parameterSetSelect.value) {
         showError('パラメータセットを選択してください');
         return;
     }
 
-    // 選択されたパラメータセットからデータを取得
-    const exchange = selectedOption.dataset.exchange;
-    const symbol = selectedOption.dataset.symbol;
-    const strategy = selectedOption.dataset.strategy;
+    // 表示されている値を使用して取得するように変更（要素が存在するかチェック）
+    const exchangeElement = document.getElementById('selected-exchange');
+    const symbolElement = document.getElementById('selected-symbol');
+    const strategyElement = document.getElementById('selected-strategy');
+    const timeframeElement = document.getElementById('selected-timeframe');
+    const limitElement = document.getElementById('selected-limit');
+    
+    // 要素が存在しない場合はエラーを表示して処理を中止
+    if (!exchangeElement || !symbolElement || !strategyElement) {
+        showError('必要な要素が見つかりません。パラメータセットを選択してください。');
+        return;
+    }
 
-    // 時間足と表示数は表示されている値を使用
-    const timeframe = document.getElementById('selected-timeframe').textContent;
-    const limit = document.getElementById('selected-limit').textContent;
+    const exchange = exchangeElement.textContent;
+    const symbol = symbolElement.textContent; 
+    const strategy = strategyElement.textContent;
+
+    // 時間足と表示数（存在チェック付き）
+    const timeframe = timeframeElement ? timeframeElement.textContent : '1h';
+    const limit = limitElement ? limitElement.textContent : '100';
+
+    // 内容が空の場合もエラー
+    if (!exchange || !symbol || !strategy) {
+        showError('取引所、銘柄、戦略が正しく設定されていません。パラメータセットを選択してください。');
+        return;
+    }
 
     // 日付はデフォルトで現在時刻を使用
     const startDate = document.getElementById('filter-start-date').value || formatDate(new Date());
 
     // ローディング表示
-    showLoading(true);
+    // showLoading(true); // Re-enable loading display
     hideError();
 
     try {
@@ -316,7 +311,8 @@ async function fetchDataAndRenderChart() {
 
         if (ohlcvData.length === 0) {
             showNoDataMessage(true);
-            showLoading(false);
+            // showLoading(false);
+            hideLoading();
             return;
         }
 
@@ -326,7 +322,7 @@ async function fetchDataAndRenderChart() {
         console.error('データ取得中にエラーが発生しました:', error);
         showError('データの取得に失敗しました。入力条件を確認してください。');
     } finally {
-        showLoading(false);
+        // showLoading(false);
     }
 }
 
@@ -341,15 +337,17 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
         const params = new URLSearchParams({
             exchange,
             symbol,
-            interval: timeframe
+            timeframe
         });
         if (limit) params.append('limit', limit);
         if (startTime) params.append('startTime', startTime);
+
         // APIリクエスト
         const response = await fetch(`/api/ohlcv?${params.toString()}`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
+
         const data = await response.json();
         console.log('fetchOhlcvData - Raw data:', data);
         if (data && data.length > 0) {
@@ -361,10 +359,13 @@ async function fetchOhlcvData(exchange, symbol, timeframe, limit, startDate) {
                 timestampType: data[0] ? typeof data[0][0] : null
             });
         }
+        hideLoading();
         return data;
     } catch (error) {
         console.error('ロウソク足データの取得に失敗しました:', error);
         throw error;
+    } finally {
+        hideLoading();
     }
 }
 
@@ -561,7 +562,7 @@ function prepareSignalDatasets(signalData) {
  */
 async function loadParameterSets() {
     try {
-        showLoading();
+        // showLoading();
         
         const response = await fetch('/api/all-parameters');
         
@@ -616,6 +617,8 @@ async function loadParameterSets() {
         console.error('パラメータセットの読み込み中にエラーが発生しました:', error);
         showError('パラメータセットの読み込みに失敗しました');
         hideLoading();
+    } finally {
+        hideLoading();
     }
 }
 
@@ -640,19 +643,21 @@ function hideLoading() {
 }
 
 /**
- * エラーメッセージ表示
+ * エラーメッセージと「データなし」メッセージを非表示にする
  */
+function hideError() {
+    $('#chart-error').addClass('d-none');
+    // $('#no-data-message').addClass('d-none');
+}
+
+// 対応する関数として、エラーを表示する関数も定義しておくと良いでしょう
 function showError(message) {
-    const errorElement = document.getElementById('chart-error');
-    if (errorElement) {
-        errorElement.textContent = message;
-        errorElement.classList.remove('d-none');
-        
-        // 5秒後に非表示
-        setTimeout(() => {
-            errorElement.classList.add('d-none');
-        }, 5000);
-    }
+    $('#chart-error').text(message || 'データを取得できませんでした。入力条件を確認してください。');
+    $('#chart-error').removeClass('d-none');
+}
+
+function showNoDataMessage() {
+    // $('#no-data-message').removeClass('d-none');
 }
 
 // DOMが読み込まれた後に実行
@@ -661,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadParameterSets();
     
     // パラメータセット選択時の処理
-    document.getElementById('filter-parameter-set').addEventListener('change', function() {
+    document.getElementById('filter-parameter-set').addEventListener('change', async function() {
         if (this.value) {
             const [exchange, symbol, strategy] = this.value.split(':');
             
@@ -684,7 +689,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // パラメータセットの詳細を取得してtimeframeとlimitを判定
-            fetchParameterDetails(exchange, symbol, strategy);
+            await fetchParameterDetails(exchange, symbol, strategy);
+
+            await fetchDataAndRenderChart()
         }
     });
 });
