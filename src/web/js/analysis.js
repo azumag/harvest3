@@ -117,6 +117,8 @@ let filterLimitSelect;
 
 document.addEventListener('DOMContentLoaded', async function() {
 
+
+
     await loadParameterSets();
 
     // セレクトボックス要素への参照を取得
@@ -283,23 +285,28 @@ function setupEventListeners() {
         await fetchDataAndRenderChart();
     });
 
-    // パラメータセット選択時の処理
-    document.getElementById('filter-parameter-set').addEventListener('change', async function() {
-        if (this.value) {
-            const [exchange, symbol, strategy] = this.value.split(':');
-            
+    // 戦略パラメータセットのドロップダウンにSelect2を適用 (イベントリスナー登録後に初期化)
+    $('#filter-parameter-set').select2({
+        theme: "bootstrap-5",
+        placeholder: "検索または選択...",
+        allowClear: true
+    });
+
+    // Select2の選択イベントリスナー
+    $('#filter-parameter-set').on('select2:select', async function (e) {
+        const selectedValue = $(this).val(); // または e.params.data.id
+        if (selectedValue) {
+            const [exchange, symbol, strategy] = selectedValue.split(':');
+
             // 個別のセレクトボックスに値を自動設定
             if (filterExchangeSelect) filterExchangeSelect.value = exchange;
-            // 銘柄は取引所選択イベントで自動的に読み込まれるため、ここでは値を設定するのみ
+            // 銘柄リストを更新して値を設定
             if (filterSymbolSelect) {
-                 // オプションがまだ読み込まれていない可能性があるので、少し待つか、
-                 // fetchAndPopulateSymbolsをawaitしてから値を設定する
                  await fetchAndPopulateSymbols(exchange); // 銘柄リストを先に読み込む
                  filterSymbolSelect.value = symbol;
             }
             if (filterStrategySelect) filterStrategySelect.value = strategy;
 
-            // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
             // パラメータセットの詳細を取得してtimeframeとlimitを判定し、セレクトボックスに設定
             await fetchParameterDetailsAndSetSelects(exchange, symbol, strategy);
 
@@ -307,14 +314,19 @@ function setupEventListeners() {
             await fetchAndDisplayParameters(exchange, symbol, strategy);
 
             await fetchDataAndRenderChart();
-        } else {
-            // パラメータセットが選択されていない場合はパラメータ表示エリアをクリア
-            document.getElementById('analysis-params-container').innerHTML = '<p class="text-muted">パラメータセットを選択してください。</p>';
-            document.getElementById('save-analysis-params-btn').disabled = true;
-            currentAnalysisParams = {};
-            modifiedAnalysisParams = {};
         }
     });
+
+    // Select2の選択解除イベントリスナー (allowClear: true の場合)
+    $('#filter-parameter-set').on('select2:unselect', async function (e) {
+        // パラメータセットが選択されていない場合はパラメータ表示エリアをクリア
+        document.getElementById('analysis-params-container').innerHTML = '<p class="text-muted small">パラメータセットを選択してください。</p>';
+        document.getElementById('save-analysis-params-btn').disabled = true;
+        currentAnalysisParams = {};
+        modifiedAnalysisParams = {};
+        // 必要に応じて他のフィルタやチャートをリセットする処理を追加
+    });
+
 
     // 保存ボタンクリック時のイベント
     document.getElementById('save-analysis-params-btn').addEventListener('click', saveAnalysisParameters);
@@ -323,8 +335,12 @@ function setupEventListeners() {
     if (filterExchangeSelect) {
         filterExchangeSelect.addEventListener('change', async function() {
             await fetchAndPopulateSymbols(this.value);
+            // 取引所が変わったら銘柄選択をリセット
+            if (filterSymbolSelect) filterSymbolSelect.value = '';
         });
     }
+
+    
 }
 /**
  * データを取得してチャートを描画（更新版）
@@ -1312,7 +1328,7 @@ async function saveAnalysisParameters() {
 
             try {
                 const response = await fetch('/api/parameters', {
-                    method: 'PUT', // PUT リクエストに変更
+                    method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },

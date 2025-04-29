@@ -6,6 +6,10 @@
     <title>分析 - 取引データ閲覧</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <!-- Select2 Bootstrap 5 Theme -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     <!-- カスタムCSS -->
     <link href="css/style.css" rel="stylesheet">
     <!-- データテーブル -->
@@ -94,16 +98,6 @@
             </div>
         </div>
 
-        <!-- パラメータ表示・編集エリア -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">戦略パラメータ</h5>
-                <div id="analysis-params-container">
-                    <p class="text-muted">パラメータセットを選択してください。</p>
-                </div>
-            </div>
-        </div>
-
         <!-- チャート表示エリア -->
         <div class="card">
             <div class="card-body">
@@ -116,21 +110,45 @@
                 <div id="chart-container" style="height: 600px;">
                     <canvas id="ohlcvChart" width="1200" height="600"></canvas>
                 </div>
-               
-
             </div>
         </div>
 
     </div>
 
-    <!-- 保存ボタン (右下に固定) -->
-    <div class="position-fixed bottom-0 end-0 p-3">
-        <button id="save-analysis-params-btn" class="btn btn-primary" disabled>パラメータを保存</button>
+</div>
+
+<!-- 保存ボタンとパラメータ表示エリア (右下に固定) -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1030;">
+    <!-- パラメータ表示・編集エリア (折りたたみ可能) -->
+    <div class="card mb-2 analysis-params-fixed-card" id="collapsible-params-card">
+        <div class="card-header p-1">
+            <button class="btn btn-sm btn-link text-decoration-none text-dark w-100 d-flex justify-content-between align-items-center"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#collapsibleParamsBody"
+                    aria-expanded="false"
+                    aria-controls="collapsibleParamsBody">
+                <span>戦略パラメータ</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down collapse-icon" viewBox="0 0 16 16">
+                  <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                </svg>
+             </button>
+        </div>
+        <div class="collapse" id="collapsibleParamsBody">
+            <div class="card-body p-2" style="max-height: 200px; overflow-y: auto;">
+                <div id="analysis-params-container">
+                    <p class="text-muted small">パラメータセットを選択してください。</p>
+                </div>
+            </div>
+            <button id="save-analysis-params-btn" style="width: 100%;" class="btn btn-primary" disabled>パラメータを保存</button>
+        </div>
     </div>
 
     <!-- JavaScript ライブラリ -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@2.0.2/build/global/luxon.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.0.0/dist/chartjs-adapter-luxon.min.js"></script>

@@ -491,34 +491,38 @@ body {
     font-weight: 500; /* ラベルのフォントウェイト */
 }
 
-/* パラメータ設定ページのテーブルスタイル - セレクタを限定して干渉を防止 */
-.param-settings-page .table-bordered th,
-.param-settings-page .table-bordered td {
-    border: 1px solid #dee2e6;
-    vertical-align: middle;
+/* 分析ページのパラメータ表示エリアを右下に固定 */
+.analysis-params-fixed-card {
+    width: 300px; /* 幅を小さく設定 */
+    /* position: absolute; */ /* 親がfixedなので不要かも */
+    /* bottom: 60px; */ /* 保存ボタンの上に配置 */
+    /* right: 0; */
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
 
-.param-settings-page .table th {
-    background-color: #f8f9fa;
-    white-space: nowrap;
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* Collapseが開いたときにアイコンを上向きにする */
+.analysis-params-fixed-card .card-header button[aria-expanded="true"] .collapse-icon {
+    transform: rotate(180deg);
 }
 
-.param-settings-page .table td {
-    min-width: 120px;
+.analysis-params-fixed-card .card-header button .collapse-icon {
+    transition: transform 0.2s ease-in-out;
 }
 
-.param-settings-page .table td .form-control {
-    min-width: 100px;
+/* パラメータテーブルのフォントを少し小さく */
+#analysis-params-container .table {
+    font-size: 0.85rem;
 }
-
-/* パラメータ設定ページのテーブルを水平スクロール可能に */
-#by-symbol .table-responsive,
-#by-strategy .table-responsive {
-    overflow-x: auto;
-    max-height: none; /* 縦スクロールは不要なため */
+#analysis-params-container .table th,
+#analysis-params-container .table td {
+    padding: 0.25rem 0.4rem; /* セルのパディングを調整 */
+}
+#analysis-params-container .form-control-plaintext {
+    font-size: 0.85rem; /* input内のフォントサイズも調整 */
+    padding: 0.1rem 0.25rem; /* inputのパディング調整 */
+}
+#analysis-params-container textarea.form-control-plaintext {
+    font-size: 0.75rem; /* JSON表示はさらに小さく */
 }
 
 /* ダッシュボードの内訳テーブル用スタイル - はみ出しを防止 */
