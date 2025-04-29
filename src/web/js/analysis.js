@@ -559,45 +559,133 @@ function prepareSignalDatasets(signalData) {
 }
 
 /**
- * ローディング表示の制御
+ * パラメータセットを読み込み、セレクトボックスに表示する
  */
-function showLoading(show) {
-    const loading = document.getElementById('chart-loading');
-    if (show) {
-        loading.classList.remove('d-none');
-    } else {
-        loading.classList.add('d-none');
+async function loadParameterSets() {
+    try {
+        showLoading();
+        
+        const response = await fetch('/api/all-parameters');
+        
+        if (!response.ok) {
+            throw new Error('パラメータセットの取得に失敗しました');
+        }
+        
+        const allParameters = await response.json();
+        const parameterSetSelect = document.getElementById('filter-parameter-set');
+        
+        // セレクトボックスをクリア（最初のオプションは残す）
+        const defaultOption = parameterSetSelect.options[0];
+        parameterSetSelect.innerHTML = '';
+        parameterSetSelect.appendChild(defaultOption);
+        
+        // パラメータセット一覧を準備
+        const parameterSets = new Map(); // 重複を避けるためにMapを使用
+        
+        // パラメータをグループ化
+        for (const paramKey in allParameters) {
+            if (allParameters.hasOwnProperty(paramKey)) {
+                const parts = paramKey.split(':');
+                if (parts.length === 4 && parts[0] === 'params') {
+                    const exchangeId = parts[1];
+                    const symbol = parts[2];
+                    const strategyKey = parts[3];
+                    
+                    // パラメータセット名を作成 (例: binance:BTC/USDT:MovingAverageCrossover)
+                    const setName = `${exchangeId}:${symbol}:${strategyKey}`;
+                    const displayName = `${exchangeId} - ${symbol} - ${strategyKey}`;
+                    
+                    // 重複を避けつつ追加
+                    if (!parameterSets.has(setName)) {
+                        parameterSets.set(setName, displayName);
+                    }
+                }
+            }
+        }
+        
+        // セレクトボックスにオプションを追加（アルファベット順にソート）
+        const sortedSets = new Map([...parameterSets].sort((a, b) => a[1].localeCompare(b[1])));
+        
+        for (const [value, text] of sortedSets) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            parameterSetSelect.appendChild(option);
+        }
+        
+        hideLoading();
+    } catch (error) {
+        console.error('パラメータセットの読み込み中にエラーが発生しました:', error);
+        showError('パラメータセットの読み込みに失敗しました');
+        hideLoading();
     }
 }
 
 /**
- * エラーメッセージの表示
+ * ローディング表示
+ */
+function showLoading() {
+    const loadingElement = document.getElementById('chart-loading');
+    if (loadingElement) {
+        loadingElement.classList.remove('d-none');
+    }
+}
+
+/**
+ * ローディング非表示
+ */
+function hideLoading() {
+    const loadingElement = document.getElementById('chart-loading');
+    if (loadingElement) {
+        loadingElement.classList.add('d-none');
+    }
+}
+
+/**
+ * エラーメッセージ表示
  */
 function showError(message) {
     const errorElement = document.getElementById('chart-error');
-    errorElement.textContent = message;
-    errorElement.classList.remove('d-none');
-}
-
-/**
- * エラーメッセージの非表示
- */
-function hideError() {
-    const errorElement = document.getElementById('chart-error');
-    errorElement.classList.add('d-none');
-}
-
-/**
- * データなしメッセージの表示
- */
-function showNoDataMessage(show) {
-    const noDataElement = document.getElementById('no-data-message');
-    if (show) {
-        noDataElement.classList.remove('d-none');
-    } else {
-        noDataElement.classList.add('d-none');
+    if (errorElement) {
+        errorElement.textContent = message;
+        errorElement.classList.remove('d-none');
+        
+        // 5秒後に非表示
+        setTimeout(() => {
+            errorElement.classList.add('d-none');
+        }, 5000);
     }
 }
+
+// DOMが読み込まれた後に実行
+document.addEventListener('DOMContentLoaded', () => {
+    // パラメータセットの読み込み
+    loadParameterSets();
+    
+    // パラメータセット選択時の処理
+    document.getElementById('filter-parameter-set').addEventListener('change', function() {
+        if (this.value) {
+            const [exchange, symbol, strategy] = this.value.split(':');
+            
+            // 取引所と銘柄を自動選択
+            const exchangeSelect = document.getElementById('filter-exchange');
+            if (exchangeSelect) {
+                exchangeSelect.value = exchange;
+                // 銘柄選択を有効化する処理（既存のコードがあれば連動）
+                const event = new Event('change');
+                exchangeSelect.dispatchEvent(event);
+            }
+            
+            // 銘柄を設定（取引所変更イベントの後に実行する必要がある場合は遅延実行）
+            setTimeout(() => {
+                const symbolSelect = document.getElementById('filter-symbol');
+                if (symbolSelect) {
+                    symbolSelect.value = symbol;
+                }
+            }, 100);
+        }
+    });
+});
 
 // Chart.js v4 CDN環境で全ての標準コントローラ・エレメントを一括登録
 if (window.Chart && Chart.registerables) {

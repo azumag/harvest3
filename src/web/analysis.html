@@ -26,28 +26,28 @@
             <div class="card-body">
                 <h5 class="card-title">フィルタ</h5>
                 <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="filter-parameter-set" class="form-label">戦略パラメータセット</label>
+                        <select id="filter-parameter-set" class="form-select">
+                            <option value="">パラメータセットを選択</option>
+                            <!-- パラメータセットはJSで動的に追加 -->
+                        </select>
+                    </div>
                     <div class="col-md-3">
                         <label for="filter-exchange" class="form-label">取引所</label>
                         <select id="filter-exchange" class="form-select">
                             <option value="">取引所を選択</option>
-                            <!-- 取引所オプションはJSで動的に追加 -->
+                            <!-- 取引所はJSで動的に追加 -->
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="filter-symbol" class="form-label">銘柄</label>
-                        <select id="filter-symbol" class="form-select">
+                        <select id="filter-symbol" class="form-select" disabled>
                             <option value="">銘柄を選択</option>
-                            <!-- 銘柄オプションはJSで動的に追加 -->
+                            <!-- 銘柄はJSで動的に追加 -->
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label for="filter-strategy" class="form-label">戦略</label>
-                        <select id="filter-strategy" class="form-select">
-                            <option value="">戦略を選択</option>
-                            <!-- 戦略オプションはJSで動的に追加、または静的に設定 -->
-                        </select>
-                    </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label for="filter-timeframe" class="form-label">時間足</label>
                         <select id="filter-timeframe" class="form-select">
                             <option value="1m">1分</option>
@@ -60,8 +60,6 @@
                             <option value="1w">1週間</option>
                         </select>
                     </div>
-                </div>
-                <div class="row g-3 mt-1">
                     <div class="col-md-3">
                         <label for="filter-start-date" class="form-label">基準日</label>
                         <input type="text" id="filter-start-date" class="form-control datepicker" placeholder="YYYY-MM-DD" value="">
