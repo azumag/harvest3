@@ -277,52 +277,50 @@ function setupEventListeners() {
 }
 
 /**
- * データを取得してチャートを描画
+ * データを取得してチャートを描画（更新版）
  */
 async function fetchDataAndRenderChart() {
-    const exchange = document.getElementById('filter-exchange').value;
-    const symbol = document.getElementById('filter-symbol').value;
-    const strategy = document.getElementById('filter-strategy').value;
-    const timeframe = document.getElementById('filter-timeframe').value;
-    const startDate = document.getElementById('filter-start-date').value;
-    const limit = document.getElementById('filter-limit').value;
-    // endDateは使わない
+    const parameterSetSelect = document.getElementById('filter-parameter-set');
+    const selectedOption = parameterSetSelect.options[parameterSetSelect.selectedIndex];
 
-    // 必須フィールドの検証
-    if (!exchange || !symbol) {
-        showError('取引所と銘柄を選択してください');
+    if (!parameterSetSelect.value) {
+        showError('パラメータセットを選択してください');
         return;
     }
+
+    // 選択されたパラメータセットからデータを取得
+    const exchange = selectedOption.dataset.exchange;
+    const symbol = selectedOption.dataset.symbol;
+    const strategy = selectedOption.dataset.strategy;
+
+    // 時間足と表示数は表示されている値を使用
+    const timeframe = document.getElementById('selected-timeframe').textContent;
+    const limit = document.getElementById('selected-limit').textContent;
+
+    // 日付はデフォルトで現在時刻を使用
+    const startDate = document.getElementById('filter-start-date').value || formatDate(new Date());
 
     // ローディング表示
     showLoading(true);
     hideError();
 
     try {
-        console.log('fetchDataAndRenderChart - Fetching OHLCV data...');
         // ロウソク足データの取得
         const ohlcvData = await fetchOhlcvData(exchange, symbol, timeframe, limit, startDate);
-        console.log('fetchDataAndRenderChart - OHLCV data fetched.', ohlcvData.length, 'points.');
-        if (ohlcvData.length > 0) {
-            console.log('OHLCV data sample [0]:', ohlcvData[0]);
-            console.log('OHLCV data sample [last]:', ohlcvData[ohlcvData.length - 1]);
-        }
-        // 戦略シグナルデータの取得 (戦略が選択されている場合)
+
+        // 戦略シグナルデータの取得
         let signalData = [];
         if (strategy) {
-            console.log('fetchDataAndRenderChart - Fetching signal data...');
             signalData = await fetchStrategySignals(exchange, symbol, strategy, startDate);
-            console.log('fetchDataAndRenderChart - Signal data fetched.', signalData.length, 'points.');
         }
+
         if (ohlcvData.length === 0) {
-            console.log('fetchDataAndRenderChart - No OHLCV data received.');
             showNoDataMessage(true);
             showLoading(false);
             return;
         }
-        console.log('fetchDataAndRenderChart - Rendering chart...');
+
         renderChart(ohlcvData, signalData);
-        console.log('fetchDataAndRenderChart - Chart rendered.');
         showNoDataMessage(false);
     } catch (error) {
         console.error('データ取得中にエラーが発生しました:', error);
@@ -668,21 +666,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const [exchange, symbol, strategy] = this.value.split(':');
             
             // 取引所と銘柄を自動選択
-            const exchangeSelect = document.getElementById('filter-exchange');
+            const exchangeSelect = document.getElementById('selected-exchange');
             if (exchangeSelect) {
-                exchangeSelect.value = exchange;
-                // 銘柄選択を有効化する処理（既存のコードがあれば連動）
-                const event = new Event('change');
-                exchangeSelect.dispatchEvent(event);
+                exchangeSelect.innerHTML = exchange;
             }
             
-            // 銘柄を設定（取引所変更イベントの後に実行する必要がある場合は遅延実行）
-            setTimeout(() => {
-                const symbolSelect = document.getElementById('filter-symbol');
-                if (symbolSelect) {
-                    symbolSelect.value = symbol;
-                }
-            }, 100);
+            // 銘柄を設定
+            const symbolSelect = document.getElementById('selected-symbol');
+            if (symbolSelect) {
+                symbolSelect.innerHTML = symbol;
+            }
+
+            // 戦略を設定
+            const strategySelect = document.getElementById('selected-strategy');
+            if (strategySelect) {
+                strategySelect.innerHTML = strategy;
+            }
+
+            // パラメータセットの詳細を取得してtimeframeとlimitを判定
+            fetchParameterDetails(exchange, symbol, strategy);
         }
     });
 });
@@ -690,4 +692,70 @@ document.addEventListener('DOMContentLoaded', () => {
 // Chart.js v4 CDN環境で全ての標準コントローラ・エレメントを一括登録
 if (window.Chart && Chart.registerables) {
     Chart.register(...Chart.registerables);
+}
+/**
+ * パラメータからtimeframe（時間足）を抽出する関数
+ */
+function extractTimeframeFromParams(params) {
+    // ohlcvInterval が存在する場合はそれを使用（大文字小文字を区別しない）
+    for (const key in params) {
+        if (key.toLowerCase() === 'ohlcvinterval') {
+            return params[key];
+        }
+    }
+
+    // デフォルト値
+    return "1h";
+}
+
+/**
+ * パラメータからlimit（表示数）を抽出する関数
+ */
+function extractLimitFromParams(params) {
+    // periodという名前のパラメータがある場合（大文字小文字を区別しない）
+    for (const key in params) {
+        if (key.toLowerCase() === 'period' && !isNaN(params[key])) {
+            return parseInt(params[key]);
+        }
+    }
+
+    // periodを含むパラメータの最大値を探す（大文字小文字を区別しない）
+    let maxPeriod = 0;
+
+    for (const key in params) {
+        if (key.toLowerCase().includes('period') && !isNaN(params[key])) {
+            maxPeriod = Math.max(maxPeriod, parseInt(params[key]));
+        }
+    }
+
+    if (maxPeriod > 0) {
+        return maxPeriod;
+    }
+
+    // デフォルト値
+    return 100;
+}
+
+/**
+ * パラメータセットの詳細を取得してtimeframeとlimitを判定
+ */
+async function fetchParameterDetails(exchange, symbol, strategy) {
+    try {
+        const response = await fetch(`/api/parameters?exchangeId=${encodeURIComponent(exchange)}&symbol=${encodeURIComponent(symbol)}&strategyKey=${encodeURIComponent(strategy)}`);
+
+        if (!response.ok) {
+            throw new Error('パラメータ詳細の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        const timeframe = extractTimeframeFromParams(data.params);
+        const limit = extractLimitFromParams(data.params);
+
+        document.getElementById('selected-timeframe').textContent = timeframe;
+        document.getElementById('selected-limit').textContent = limit;
+    } catch (error) {
+        console.error('パラメータ詳細の取得に失敗しました:', error);
+        document.getElementById('selected-timeframe').textContent = '取得失敗';
+        document.getElementById('selected-limit').textContent = '取得失敗';
+    }
 }
