@@ -199,7 +199,7 @@ const config = {
       ohlcvInterval: '5m',
       function: bollingerBandsStrategy,
       exchanges: [exchangeBB],
-      atomicExec: true,
+      atomicExec: true, // TODO: ここに指定すると戦略パラメータとして記録されてしまので、対策必要
     },
 
     BOLLINGER_BANDS_LONG: {
