@@ -5,13 +5,13 @@ const {
   calculateSMA,
   calculateRSI,
   calculateBollingerBands,
-} = require('./indicators');
+} = require('../common/indicators');
 
 const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../database/manager');
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
-const { checkBuyOrderAllowance } = require('../utils');
+const { checkBuyOrderAllowance } = require('../common/utils');
 
 /**
  * 平均回帰戦略

@@ -1,10 +1,10 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { postErrorToDiscord } = require('./notifications');
-const { sleep } = require('./utils');
+const { sleep } = require('./common/utils');
 const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./utils');
+const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 
 const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {

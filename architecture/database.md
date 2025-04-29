@@ -156,7 +156,7 @@ Key: `params:${exchange}:${symbol}:${strategy}`
 - signals   # シグナル履歴
 - trades    # 約定履歴 取引IDでユニーク制約をつける。オーダーとは部分約定があるため多対一の関係になる
 - tickers   # ティッカー履歴
-- ohlc      # ロウソク足履歴
+- ohlcv     # ロウソク足履歴
 - orderBook # 板情報履歴
 
 ## orders
@@ -238,6 +238,24 @@ db.trades.createIndex({ tradeId: 1 }, { unique: true })
 ```
 
 # tickers
-# olhc
+# olhcv
+```json
+{
+  "_id": ObjectId("..."),
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "timeframe": "1m",
+  "timestamp": 1745908200000,
+  "ohlcv": [1745908200000, 101.62, 101.62, 101.589, 101.589, 1.1016] // OHLCV
+}
+```
+
+index
+```js
+db.signals.createIndex({ timestamp: 1 })
+db.signals.createIndex({ timestamp: -1 })
+```
+
+
 # orderBook
 未実装

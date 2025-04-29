@@ -7,14 +7,14 @@ const {
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
-} = require('./indicators');
+} = require('../common/indicators');
 
 const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../database/manager');
 const { addOrder, fetchOHLCVData } = require('../database/manager');
 
 const { postOrderToDiscord, postErrorToDiscord } = require('../notifications');
 
-const { checkBuyOrderAllowance } = require('../utils');
+const { checkBuyOrderAllowance } = require('../common/utils');
 
 /**
  * 移動平均線クロス戦略
