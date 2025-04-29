@@ -8,6 +8,7 @@ const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/mean
 const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
 
 // APIキーとシークレットを設定
+// TODO: move to const.js
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
 
