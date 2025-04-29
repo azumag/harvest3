@@ -420,12 +420,17 @@ function renderExchangeSummary(exchangeData) {
     return;
   }
 
+  // データを実現損益順にソート
+  const sortedExchanges = Object.entries(exchangeData)
+    .map(([exchangeId, data]) => ({ exchangeId, ...data }))
+    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
+
   let html = '';
 
   // 各取引所のカードを生成
-  Object.keys(exchangeData).forEach(exchangeId => {
-    const data = exchangeData[exchangeId];
+  sortedExchanges.forEach(data => {
     const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
+    const exchangeId = data.exchangeId;
 
     html += `
     <div class="col-md-6 col-lg-4 mb-3">
@@ -514,12 +519,17 @@ function renderSymbolSummary(symbolData) {
     return;
   }
 
+  // データを実現損益順にソート
+  const sortedSymbols = Object.entries(symbolData)
+    .map(([symbol, data]) => ({ symbol, ...data }))
+    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
+
   let html = '';
 
   // 各銘柄のカードを生成
-  Object.keys(symbolData).forEach(symbol => {
-    const data = symbolData[symbol];
+  sortedSymbols.forEach(data => {
     const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
+    const symbol = data.symbol;
 
     html += `
     <div class="col-md-6 col-lg-4 mb-3">
@@ -608,12 +618,17 @@ function renderStrategySummary(strategyData) {
     return;
   }
 
+  // データを実現損益順にソート
+  const sortedStrategies = Object.entries(strategyData)
+    .map(([strategyKey, data]) => ({ strategyKey, ...data }))
+    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
+
   let html = '';
 
   // 各戦略のカードを生成
-  Object.keys(strategyData).forEach(strategyKey => {
-    const data = strategyData[strategyKey];
+  sortedStrategies.forEach(data => {
     const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
+    const strategyKey = data.strategyKey;
 
     html += `
     <div class="col-md-6 col-lg-4 mb-3">
@@ -843,3 +858,45 @@ function formatNumber(num) {
   // 小さな数値の場合は小数点以下1桁まで表示
   return num.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
+
+/**
+ * テーブルヘッダーにツールチップを適用する関数
+ */
+function applyHeaderTooltips() {
+  // テーブルヘッダーに省略クラスとツールチップを追加
+  const tableHeaders = document.querySelectorAll('.summary-cards table th');
+  tableHeaders.forEach(header => {
+    // クラス適用
+    header.classList.add('truncate-header');
+    
+    // ツールチップ属性を設定
+    header.setAttribute('data-bs-toggle', 'tooltip');
+    header.setAttribute('data-bs-placement', 'top');
+    header.setAttribute('title', header.textContent);
+  });
+  
+  // Bootstrapツールチップを初期化
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+}
+
+// DOM読み込み完了時または動的コンテンツ生成後にツールチップを初期化
+document.addEventListener('DOMContentLoaded', function() {
+  // すでに存在するテーブルヘッダーに適用
+  applyHeaderTooltips();
+  
+  // タブ切り替え時にも適用（動的に生成される場合）
+  const tabElements = document.querySelectorAll('button[data-bs-toggle="tab"]');
+  tabElements.forEach(tab => {
+    tab.addEventListener('shown.bs.tab', function (e) {
+      // タブ切り替え後にツールチップを初期化
+      setTimeout(applyHeaderTooltips, 100);
+    });
+  });
+});
+
+// 動的にテーブルが生成される場合、生成後に以下の関数を呼び出す
+// 例：テーブルデータ読み込み完了時のコールバック内などで
+// applyHeaderTooltips();

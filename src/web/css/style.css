@@ -491,14 +491,14 @@ body {
     font-weight: 500; /* ラベルのフォントウェイト */
 }
 
-/* パラメータ設定ページのテーブルスタイル */
-.table-bordered th,
-.table-bordered td {
+/* パラメータ設定ページのテーブルスタイル - セレクタを限定して干渉を防止 */
+.param-settings-page .table-bordered th,
+.param-settings-page .table-bordered td {
     border: 1px solid #dee2e6;
     vertical-align: middle;
 }
 
-.table th {
+.param-settings-page .table th {
     background-color: #f8f9fa;
     white-space: nowrap;
     max-width: 200px;
@@ -506,11 +506,11 @@ body {
     text-overflow: ellipsis;
 }
 
-.table td {
+.param-settings-page .table td {
     min-width: 120px;
 }
 
-.table td .form-control {
+.param-settings-page .table td .form-control {
     min-width: 100px;
 }
 
@@ -521,9 +521,36 @@ body {
     max-height: none; /* 縦スクロールは不要なため */
 }
 
-/* アラートメッセージのスタイル */
-#feedback-container .alert {
-    pointer-events: auto;
-    max-width: 90%;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+/* ダッシュボードの内訳テーブル用スタイル - はみ出しを防止 */
+.breakdown-container .breakdown-table-container {
+    overflow-x: auto; /* 横スクロールを有効化 */
+    width: 100%;
+}
+
+.breakdown-container .table {
+    width: 100%;
+    table-layout: auto; /* テーブルレイアウトを自動調整に */
+}
+
+.breakdown-container .table th,
+.breakdown-container .table td {
+    min-width: auto; /* 最小幅の指定を解除 */
+    white-space: normal; /* 改行を許可 */
+}
+
+/* テーブルヘッダーセルの省略表示 */
+.table th.truncate-header {
+  max-width: 150px; /* 最大幅を調整してください */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  cursor: help;
+}
+
+/* モバイル向けの調整 */
+@media (max-width: 768px) {
+  .table th.truncate-header {
+    max-width: 100px;
+  }
 }
