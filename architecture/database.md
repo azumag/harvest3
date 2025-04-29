@@ -184,6 +184,7 @@ db.orders.createIndex({ timestamp: -1 }) // 降順
 ```
 
 ## signals
+シグナル履歴も膨大になるので、TODO: 古すぎるもららラウンドロビンで消していく
 ```json
 {
   "_id": ObjectId("..."),
@@ -238,6 +239,32 @@ db.trades.createIndex({ tradeId: 1 }, { unique: true })
 ```
 
 # tickers
+過去の tickers を全て保存していくと1ヶ月で400MBになる計算なので、現状実装なし
+```json
+{
+  "_id": ObjectId("..."),
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "timestamp": 1745908200000,
+  "data": {
+    "sell": "1231313",
+    "buy": "2342324",
+    "high": "3424242",
+    "low": "1111111",
+    "open": "342424",
+    "last": "22222",
+    "vol": "1.1",
+    "timestamp": 0
+  }
+}
+```
+
+index
+```js
+db.signals.createIndex({ timestamp: 1 })
+db.signals.createIndex({ timestamp: -1 })
+```
+
 # olhcv
 ```json
 {
