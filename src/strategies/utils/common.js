@@ -10,7 +10,7 @@ const { checkBuyOrderAllowance } = require('../../common/utils');
  * @param {number} period 期間
  * @param {Function} errorNotificationFn エラー通知関数
  * @param {string} strategyName 戦略名（エラーメッセージ用）
- * @returns {Array|null} 検証済みの終値配列、またはエラー時はnull
+ * @returns {Object|null} 検証済みのデータオブジェクト、またはエラー時はnull
  */
 async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, errorNotificationFn, strategyName, options) {
   // 過去のローソク足データを取得
@@ -32,7 +32,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
     return null;
   }
   
-  return closes;
+  return { ohlcv, closes };
 }
 
 /**

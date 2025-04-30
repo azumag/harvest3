@@ -45,6 +45,11 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) 
       // mongoDBから過去データを取得
       const historicalData = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
       
+      if (!historicalData || historicalData.length === 0) {
+        console.log(`バックテストモードでのOHLCVデータ取得に失敗しました: ${exchange.id} ${symbol} ${timeframe}`);
+        return [];
+      }
+
       // 取得したデータをCCXTフォーマットに変換して返す
       // CCXTフォーマット: [timestamp, open, high, low, close, volume]
       return historicalData.map(candle => {
@@ -223,6 +228,7 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
       options.backtest.totalBuyCost = (options.backtest.totalBuyCost || 0) + (price * amount);
     } else if (side === 'sell') {
       options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
+      options.backtest.baseFund = options.backtest.totalSellCost - options.backtest.totalBuyCost; // 基本資金を更新
     }
 
     // バックテスト結果を options.backtest.orders 配列に追加

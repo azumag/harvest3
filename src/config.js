@@ -5,7 +5,7 @@ dotenv.config(); // .envファイルから環境変数を読み込む
 // strategies 
 const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./strategies/trendFollowing');
 const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/meanReversion');
-const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
+// const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
 
 // APIキーとシークレットを設定
 // TODO: move to const.js

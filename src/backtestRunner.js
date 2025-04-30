@@ -36,8 +36,8 @@ async function runBacktest() {
     const symbolsByExchange = await getSymbolsByExchange(config);
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
 
-    // バックテスト期間の設定 (例: 1年前から2024年4月29日まで)
-    const endDate = new Date('2024-04-29T00:00:00Z'); // UTCで指定
+    // バックテスト期間の設定 (例: 1年前から2025年4月29日まで)
+    const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
     const startDate = new Date(endDate.getFullYear() - 1, endDate.getMonth(), endDate.getDate());
 
     // 各戦略・通貨ペアでループ
@@ -160,7 +160,7 @@ async function runBacktest() {
   } catch (error) {
     const errorMessage = `バックテスト実行中にエラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
-    await postErrorToDiscord(errorMessage);
+    // await postErrorToDiscord(errorMessage);
   }
 }
 

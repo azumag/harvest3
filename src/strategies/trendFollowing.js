@@ -28,7 +28,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
 
   try {
     // OHLCVデータを取得して検証
-    const closes = await fetchAndValidateOHLCVData(
+    const validatedData = await fetchAndValidateOHLCVData(
       exchange, 
       symbol, 
       ohlcvInterval, 
@@ -37,7 +37,10 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       'MA',
       options
     );
-    if (!closes) return;
+    if (!validatedData) return;
+    
+    const { closes, ohlcv } = validatedData;
+    options.ohlcv = ohlcv;
 
     // シグナル計算
     const signalResult = calculateMACrossSignals(
@@ -163,7 +166,7 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
 
   try {
     // OHLCVデータを取得して検証
-    const closes = await fetchAndValidateOHLCVData(
+    const validatedData = await fetchAndValidateOHLCVData(
       exchange, 
       symbol, 
       ohlcvInterval, 
@@ -172,8 +175,11 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       'MACD',
       options,
     );
-    if (!closes) return;
+    if (!validatedData) return;
     
+    const { closes, ohlcv } = validatedData;
+    options.ohlcv = ohlcv;
+
     // MACDを計算
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
     
@@ -272,7 +278,7 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
   const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
   try {
     // OHLCVデータを取得して検証
-    const closes = await fetchAndValidateOHLCVData(
+    const validatedData = await fetchAndValidateOHLCVData(  
       exchange, 
       symbol, 
       ohlcvInterval, 
@@ -281,8 +287,11 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       'RSI',
       options
     );
-    if (!closes) return;
+    if (!validatedData) return;
     
+    const { closes, ohlcv } = validatedData;
+    options.ohlcv = ohlcv;
+
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
     
@@ -388,7 +397,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
 
   try {
     // OHLCVデータを取得して検証
-    const closes = await fetchAndValidateOHLCVData(
+    const validatedData = await fetchAndValidateOHLCVData(
       exchange, 
       symbol, 
       ohlcvInterval, 
@@ -397,8 +406,11 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       'BB',
       options
     );
-    if (!closes) return;
+    if (!validatedData) return;
     
+    const { closes, ohlcv } = validatedData;
+    options.ohlcv = ohlcv;
+
     // ボリンジャーバンドを計算
     const bands = calculateBollingerBands(closes, period, stdDev);
     
