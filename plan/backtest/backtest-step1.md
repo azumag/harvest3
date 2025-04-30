@@ -15,11 +15,12 @@
 これは backtest 中の状態も表し、適宜アップデートする
 *  オプショナル引数
 *   `timestamp`: バックテストの実行タイムスタンプ (number, milliseconds)
-*   `sellCost`: うったがく
-*   `buyCost`: かったがく
+*   `totalSellCost`: うったがく
+*   `totalBuyCost`: かったがく
 *   `baseFund`: 最初の資金
 *   `ohlcvData`: 現状使ってるロウソク足データ
 *   `lastSignal`: 'buy' or 'sell'
+*   `currentAmount`
 
 ### 1. `src/database/manager.js` : fetchOHLCVData 関数修正
 

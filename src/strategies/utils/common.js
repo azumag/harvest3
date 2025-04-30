@@ -129,17 +129,18 @@ async function handleStrategySignals(
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object|void} 注文結果
  */
-async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo) {
+async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
 
   // 利用可能な資金を確認
-  const balance = await exchange.fetchBalance();
+  // const balance = await exchange.fetchBalance(); // 既存の呼び出し
+  const balance = await getAvailableFund(exchange, symbol, options, options.backtest?.availableBaseFund, options.backtest?.totalBuyCost, options.backtest?.totalSellCost); // getAvailableFund を呼び出すように変更
   const baseCurrency = symbol.split('/')[1];
   const availableFunds = balance.free[baseCurrency];
 
   // 損益を取得
-  const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey);
+  const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options); // options を渡すように変更
 
   // 利用可能な資金の割合に基づいて取引量を計算
   const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
@@ -152,35 +153,44 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
   // 買い注文が許可されるかチェック
   const allowanceCheck = await checkBuyOrderAllowance(
-    exchange, 
-    symbol, 
-    strategyKey, 
-    currentPrice, 
-    formattedAmount, 
-    availableFunds, 
-    tradePercentage, 
+    exchange,
+    symbol,
+    strategyKey,
+    currentPrice,
+    formattedAmount,
+    availableFunds,
+    tradePercentage,
     realizedPnL,
-    minTradeAmount
+    minTradeAmount,
+    options // options を渡すように変更
   );
 
   if (allowanceCheck.allowed) {
     // 買い注文を作成
     const params = { 'post_only': true };
-    const order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+    let order;
+    if (options.backtest) {
+      // バックテストモードの場合、バックテスト用の注文関数を呼び出す
+      order = await backtestCreateLimitBuyOrder(symbol, formattedAmount, currentPrice, options);
+    } else {
+      // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
+      order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+    }
+
     if (postOrderToDiscord) {
       postOrderToDiscord(`[${strategyName}] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit');
-    
+    addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+
     return { success: true, order };
   } else {
     console.log(allowanceCheck.reason);
     if (postOrderToDiscord) {
       await postOrderToDiscord(`[${strategyName}] ${allowanceCheck.reason}`);
     }
-    
+
     return { success: false, reason: allowanceCheck.reason };
   }
 }
@@ -196,26 +206,27 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object} 注文結果
  */
-async function executeSellOrder(exchange, symbol, strategyKey, marketParameters, currentPrice, strategyName, signalInfo) {
+async function executeSellOrder(exchange, symbol, strategyKey, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { amountPrecision, minTradeAmount } = marketParameters;
 
   // 利用可能な資産を確認
-  const balance = await exchange.fetchBalance();
+  // const balance = await exchange.fetchBalance(); // 既存の呼び出し
+  const balance = await getAvailableFund(exchange, symbol, options, options.backtest?.availableBaseFund, options.backtest?.totalBuyCost, options.backtest?.totalSellCost); // getAvailableFund を呼び出すように変更
   const quoteCurrency = symbol.split('/')[0];
   const availableAsset = balance.free[quoteCurrency];
 
   // 売れる量を取得
-  const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+  const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision, options); // options を渡すように変更
 
   if (formattedAmount < minTradeAmount) {
     console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
     if (postOrderToDiscord) {
       postOrderToDiscord(`[${strategyName}] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchange.id} - ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
     }
-    
+
     // 早期リターンが必要な場合のためのフラグとデータを含める
-    return { 
-      success: false, 
+    return {
+      success: false,
       reason: 'adjusted amount below minimum trade amount',
       earlyReturn: true,
       returnValue: {
@@ -228,25 +239,38 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
       }
     };
   }
-  
-  if (availableAsset >= formattedAmount && formattedAmount > 0) {
+
+  // availableAsset >= formattedAmount のチェックはバックテストでは不要（資金はシミュレーションで管理されるため）
+  // ただし、リアルタイムモードとの互換性を保つため、チェックを残すか、バックテストモードではスキップするように修正が必要。
+  // 計画ではバックテストモードでの資金チェックは getAvailableFund で行われる計算に委ねられていると解釈し、ここでは formattedAmount > 0 のチェックのみに絞る。
+  // リアルタイムモードの availableAsset >= formattedAmount && formattedAmount > 0 はそのまま残す。
+
+  if (options.backtest || (availableAsset >= formattedAmount && formattedAmount > 0)) { // バックテストモードの場合は formattedAmount > 0 のみチェック
     // 売り注文を作成
     const params = { 'post_only': true };
-    const order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+    let order;
+    if (options.backtest) {
+      // バックテストモードの場合、バックテスト用の注文関数を呼び出す
+      order = await backtestCreateLimitSellOrder(symbol, formattedAmount, currentPrice, options);
+    } else {
+      // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
+      order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+    }
+
     if (postOrderToDiscord) {
       postOrderToDiscord(`[${strategyName}] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit');
-    
+    addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+
     return { success: true, order };
   } else {
     console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
     if (postOrderToDiscord) {
       postOrderToDiscord(`[${strategyName}] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
     }
-    
+
     return { success: false, reason: 'insufficient funds' };
   }
 }

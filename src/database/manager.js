@@ -96,7 +96,14 @@ async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
   return totalAmount;
 };
 
-async function getRealizedPnL(exchange, symbol, strategyKey) {
+async function getRealizedPnL(exchange, symbol, strategyKey, options = {}) { // options を追加
+  // バックテストモードの場合
+  if (options.backtest) {
+    // options.backtest に totalSellCost と totalBuyCost があることを前提とする
+    return (options.backtest.totalSellCost || 0) - (options.backtest.totalBuyCost || 0);
+  }
+
+  // リアルタイムモードの場合 (既存ロジック)
   // 約定を更新
   await updateFilledTrades(exchange, symbol);
 
@@ -105,7 +112,7 @@ async function getRealizedPnL(exchange, symbol, strategyKey) {
     symbol,
     strategyKey
   });
-  
+
   // console.log(summary);
   return (summary && summary.realizedPnL) ? summary.realizedPnL : 0;
 }
@@ -204,22 +211,40 @@ async function updateFilledTrades(exchange, symbol) {
   }
 }
 
-async function addOrder(exchange, symbol, strategyKey, side, amount, price, orderId, orderType) {
-    const timestamp = Date.now();
+async function addOrder(exchange, symbol, strategyKey, side, amount, price, orderId, orderType, options = {}) { // options を追加
+  // バックテストモードの場合
+  if (options.backtest) {
+    // options.backtest のプロパティを更新
+    options.backtest.lastSignal = side;
+    options.backtest.currentAmount = amount; // amount を更新
 
-    const order = {
-      exchange: exchange.id,
-      symbol,
-      strategy: strategyKey,
-      side,
-      amount,
-      price,
-      orderId,
-      orderType,
-      timestamp
-    };
+    // buy/sell Cost を上書き (加算)
+    if (side === 'buy') {
+      options.backtest.totalBuyCost = (options.backtest.totalBuyCost || 0) + (price * amount);
+    } else if (side === 'sell') {
+      options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
+    }
 
-    return await addOrderMongoDB(order);
+    // バックテストモードではDBには記録しないため、ここで処理終了
+    return;
+  }
+
+  // リアルタイムモードの場合 (既存ロジック)
+  const timestamp = Date.now();
+
+  const order = {
+    exchange: exchange.id,
+    symbol,
+    strategy: strategyKey,
+    side,
+    amount,
+    price,
+    orderId,
+    orderType,
+    timestamp
+  };
+
+  return await addOrderMongoDB(order);
 }
 
 async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
@@ -274,11 +299,24 @@ async function getAllStrategyParameters() {
 }
 
 // 購入量ー売り注文量を計算
-async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision) {
+async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision, options = {}) { // options を追加
+  // バックテストモードの場合
+  if (options.backtest) {
+    // options.backtest の lastSignal と currentAmount を使用
+    if (options.backtest.lastSignal === 'buy') {
+      return options.backtest.currentAmount || 0; // amount を返す
+    } else if (options.backtest.lastSignal === 'sell') {
+      return 0; // sell なら 0
+    }
+    // lastSignal が設定されていない場合やその他のケースのデフォルト値
+    return 0;
+  }
+
+  // リアルタイムモードの場合 (既存ロジック)
   try {
     // 取引記録から買った量を取得（ネットポジション）
     const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-    
+
     // 未約定の注文を取得
     const openOrders = await exchange.fetchOpenOrders(symbol);
 
@@ -291,18 +329,18 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
       })
     );
     const totalSellOrderAmount = sellOrderAmounts.reduce((sum, amount) => sum + amount, 0);
-    
+
     // 売り注文のみをフィルタリングして合計量を計算
     // const totalSellOrderAmount = openOrders
     //   .filter(order => order.side === 'sell')
     //   .reduce((sum, order) => sum + order.amount, 0);
-    
+
     // 利用可能量 = ネットポジション - 未約定売り注文量
     let availableAmount = netPosition - totalSellOrderAmount;
-    
+
     // 負の値にならないようにする
     if (availableAmount < 0) availableAmount = 0;
-    
+
     // 精度を考慮して、最小精度以上の値を確保
     return parseFloat(availableAmount.toFixed(amountPrecision));
   } catch (error) {
@@ -310,10 +348,10 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     // エラーとなった取引所とシンボルを記録
     const errorMessage = `formattedAvailableAmount実行中にエラーが発生しました: ${exchange.id} ${symbol} ${strategyKey}`;
     console.error(errorMessage, error);
-    
+
     // エラー時は安全のために0を返す（より厳格な対応）
     return 0;
-  } 
+  }
 }
 
 /**
@@ -399,4 +437,75 @@ module.exports = {
   addOhlcvMongoDB,
   getOHLCVByParams,
   fetchTicker,
+  getAvailableFund, // 追加
+  backtestCreateLimitBuyOrder, // 追加
+  backtestCreateLimitSellOrder, // 追加
 };
+
+/**
+ * バックテスト用の利用可能資金取得関数
+ * @param {object} exchange - 取引所オブジェクト (バックテストではダミー)
+ * @param {string} symbol - 通貨ペア
+ * @param {object} options - オプション
+ * @param {number} basefund - バックテスト用の基本資金
+ * @param {number} buycost - バックテスト用の合計買いコスト
+ * @param {number} sellcost - バックテスト用の合計売りコスト
+ * @returns {object} - 利用可能資金情報 (CCXTのfetchBalanceのfreeプロパティ形式を模倣)
+ */
+async function getAvailableFund(exchange, symbol, options = {}, basefund, buycost, sellcost) {
+  // バックテストモードの場合
+  if (options.backtest) {
+    // 計画に基づき計算
+    const available = basefund - buycost + sellcost;
+    // CCXTのfetchBalanceのfreeプロパティ形式を模倣して返す
+    const baseCurrency = symbol.split('/')[1]; // 通貨ペアの右側を基軸通貨と仮定
+    const result = {
+      [baseCurrency]: available > 0 ? available : 0, // 負の値にならないようにする
+      // 他の通貨は必要に応じて追加
+    };
+    console.log(`[Backtest] 利用可能資金シミュレーション: ${baseCurrency}: ${result[baseCurrency]}`);
+    return { free: result }; // fetchBalanceの戻り値の形式に合わせる
+  }
+
+  // リアルタイムモードの場合 (既存のfetchBalanceを呼び出す)
+  // exchange オブジェクトは CCXT のインスタンスであると仮定
+  try {
+    const balance = await exchange.fetchBalance();
+    return balance;
+  } catch (error) {
+    console.error(`Error fetching balance for ${exchange.id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * バックテスト用の買い指値注文関数
+ * @param {string} symbol - 通貨ペア
+ * @param {number} amount - 注文数量
+ * @param {number} price - 注文価格
+ * @param {object} options - オプション
+ * @returns {object} - 注文情報 (ランダムなorderIDを含む)
+ */
+async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) {
+  // ランダムなorderIDを生成
+  const orderId = `backtest_${Date.now()}_buy_${Math.random().toString(36).substring(2, 15)}`;
+  console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
+  return { id: orderId };
+}
+
+/**
+ * バックテスト用の売り指値注文関数
+ * @param {string} symbol - 通貨ペア
+ * @param {number} amount - 注文数量
+ * @param {number} price - 注文価格
+ * @param {object} options - オプション
+ * @returns {object} - 注文情報 (ランダムなorderIDを含む)
+ */
+async function backtestCreateLimitSellOrder(symbol, amount, price, options = {}) {
+  // ランダムなorderIDを生成
+  const orderId = `backtest_${Date.now()}_sell_${Math.random().toString(36).substring(2, 15)}`;
+  console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
+  return { id: orderId };
+}

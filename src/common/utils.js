@@ -225,7 +225,21 @@ async function getSymbolsByExchange(config) {
  * @param {Number} baseMinTradeAmount - 最小取引量
  * @returns {Object} - {allowed: boolean, reason: string}
  */
-async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount) {
+async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, options = {}) {
+  // バックテストモードの場合
+  if (options.backtest) {
+    console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
+    if (options.backtest.lastSignal === 'sell') {
+      return { allowed: true };
+    } else if (options.backtest.lastSignal === 'buy') {
+      return { allowed: false, reason: '[Backtest] Last signal was buy' };
+    } else {
+      // lastSignal が設定されていない場合やその他のケース
+      return { allowed: false, reason: '[Backtest] Invalid or no last signal in backtest' };
+    }
+  }
+
+  // リアルタイムモードの場合 (既存ロジック)
   // この戦略で約定し残っている量（買った量ー売った量）
   const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
@@ -237,7 +251,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
 
   // Calculate required funds for the potential buy order
   const requiredFunds = price * formattedAmount;
-  
+
   // Check if available funds are sufficient
   if (availableFunds < requiredFunds || formattedAmount <= 0) {
     return {
@@ -245,21 +259,21 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
       reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
     };
   }
-  
+
   // Calculate total position after the potential order
   const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
-  
+
   // Determine if a buy order is allowed based on position limits
   // Allow buy if total position is within maxBuyAmount OR if maxBuyAmount is less than baseMinTradeAmount
   const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount || maxBuyAmount < baseMinTradeAmount;
-  
+
   if (!isBuyAllowed) {
     return {
       allowed: false,
       reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmount}`
     };
   }
-  
+
   return { allowed: true };
 }
 
