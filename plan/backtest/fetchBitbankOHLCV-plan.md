@@ -41,6 +41,3 @@ Bitbankの全ての銘柄に関して、`src/common/const.js` で定義されて
 -   新しいスクリプトファイル `scripts/fetchBitbankOHLCV.js` の作成
 -   MongoDBの `ohlcv` コレクションにBitbankのOHLCVデータが保存される
 
-## 今後のステップ
-
-計画に基づき、Codeモードに切り替えて実装を行います。

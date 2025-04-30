@@ -10,6 +10,7 @@ const {
   listSignals,
   countSignals,
   addOhlcvMongoDB,
+  getOHLCVByParamsMongoDB,
 } = require('./mongoDatabase');
 
 const {
@@ -36,6 +37,9 @@ async function initializeDB() {
   await connectDB();
 }
 
+async function getOHLCVByParams(exchange, symbol, timeframe, limit, timestamp) {
+  return await getOHLCVByParamsMongoDB(exchange.id, symbol, timeframe, limit, timestamp);
+}
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
   return await getCurrentOrderPairRedis(exchange.id, symbol, strategyKey);
@@ -304,6 +308,7 @@ module.exports = {
   listOrders,
   listTrades,
   listSignals,
-  countSignals, // countSignals をエクスポートに追加
-  addOhlcvMongoDB, // addOhlcvMongoDB をエクスポートに追加
+  countSignals,
+  addOhlcvMongoDB,
+  getOHLCVByParams,
 };

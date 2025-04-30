@@ -1,6 +1,6 @@
 const ccxt = require('ccxt');
 const { OHLCVTimeFrames } = require('../src/common/const');
-const { fetchOHLCVData, addOhlcvMongoDB, initializeDB } = require('../src/database/manager');
+const { fetchOHLCVData, addOhlcvMongoDB, initializeDB, getOHLCVByParams } = require('../src/database/manager');
 
 async function fetchAndSaveBitbankOHLCV() {
     let exchangeBB;
@@ -22,6 +22,12 @@ async function fetchAndSaveBitbankOHLCV() {
             for (const timeframe of OHLCVTimeFrames) {
                 console.log(`${symbol} - ${timeframe} のOHLCVデータを取得中...`);
 
+                const testOHLCV = await getOHLCVByParams(exchangeBB, symbol, timeframe, 1, new Date().getTime());
+                if (testOHLCV && testOHLCV.length > 0) {
+                    console.log(`${symbol} - ${timeframe} のOHLCVデータは既にDBに存在します。スキップします。`);
+                    continue;
+                }
+
                 try {
                     // 1年分のOHLCVデータを取得するためのlimitを計算
                     let limit;
@@ -32,6 +38,8 @@ async function fetchAndSaveBitbankOHLCV() {
                         case '30m': limit = 17520; break;
                         case '1h': limit = 8760; break;
                         case '4h': limit = 2190; break;
+                        case '8h': limit = 1095; break;
+                        case '12h': limit = 730; break;
                         case '1d': limit = 365; break;
                         case '1w': limit = 52; break;
                         default:
@@ -51,19 +59,23 @@ async function fetchAndSaveBitbankOHLCV() {
 
                     // 取得したOHLCVデータをMongoDBに保存
                     for (const ohlcv of ohlcvs) {
-                        const [timestamp, open, high, low, close, volume] = ohlcv;
-                        const ohlcvData = {
-                            exchange: exchangeBB.id,
-                            symbol: symbol,
-                            timeframe: timeframe,
-                            timestamp: timestamp,
-                            open: open,
-                            high: high,
-                            low: low,
-                            close: close,
-                            volume: volume,
-                        };
-                        await addOhlcvMongoDB(ohlcvData);
+                        try {
+                            const [timestamp, open, high, low, close, volume] = ohlcv;
+                            const ohlcvData = {
+                                exchange: exchangeBB.id,
+                                symbol: symbol,
+                                timeframe: timeframe,
+                                timestamp: timestamp,
+                                open: open,
+                                high: high,
+                                low: low,
+                                close: close,
+                                volume: volume,
+                            };
+                            await addOhlcvMongoDB(ohlcvData);
+                        } catch (error) {   
+                            console.error(`${symbol} - ${timeframe} のOHLCVデータ保存エラー:`, error);
+                        }
                     }
                     console.log(`${symbol} - ${timeframe}: ${ohlcvs.length}件のデータを保存しました。`);
 

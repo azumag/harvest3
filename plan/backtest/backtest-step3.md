@@ -3,6 +3,8 @@
 docker compose で backtest コンテナを起動
 
 src/backtest.js で bot.js 相当の起動を行う
+- marketParameter, symbolByExchange などはダミー値でいい
+- 
 
 共通化できるところはする
 

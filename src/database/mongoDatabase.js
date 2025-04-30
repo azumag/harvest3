@@ -349,6 +349,41 @@ async function addOhlcvMongoDB(ohlcvData) {
 }
 
 /**
+ * ohlcvコレクションから指定timestampに最も近い最新のOHLCVデータを取得する
+ * @param {string} exchange - 取引所名
+ * @param {string} symbol - 銘柄名
+ * @param {string} timeframe - タイムフレーム
+ * @param {number} limit - 取得する件数
+ * @param {number} timestamp - 指定したタイムスタンプ以前のデータを取得
+ * @returns {Promise<Array>} OHLCVデータの配列
+ */
+async function getOHLCVByParamsMongoDB(exchange, symbol, timeframe, limit, timestamp) {
+  await connectDB();
+  try {
+    const query = { 
+      exchange: exchange, 
+      symbol: symbol, 
+      timeframe: timeframe,
+      timestamp: { $lte: timestamp } 
+    };
+
+    console.log('OHLCV query:', query);
+    
+    const ohlcvData = await module.exports.ohlcvCollection
+      .find(query)
+      .sort({ timestamp: 1 })
+      .limit(limit)
+      .toArray();
+      
+    console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
+    return ohlcvData.length > 0 ? ohlcvData : null;
+  } catch (error) {
+    console.error('Error getting OHLCV by parameters:', error);
+    throw error;
+  }
+}
+
+/**
  * signalsコレクションから_idでデータを取得する
  * @param {string} id - MongoDBのObjectId文字列
  * @returns {Promise<Object|null>} シグナルデータまたはnull
@@ -408,18 +443,19 @@ module.exports = {
   addOrdersBulk,
   addTradeMongoDB,
   addSignalMongoDB,
-  addOhlcvMongoDB, // addOhlcvMongoDB 関数を追加
+  addOhlcvMongoDB, 
   listOrders,
   listTrades,
-  listSignals, // ページング対応版
-  countSignals, // 総件数取得関数を追加
+  listSignals, 
+  countSignals,
   getOrderByOrderId,
   getTradeByTradeId,
   getSignalById,
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
-  ohlcvCollection: null, // ohlcvCollection の参照を追加
+  ohlcvCollection: null,
   setupGracefulShutdown,
+  getOHLCVByParamsMongoDB,
   connectDB
 };
