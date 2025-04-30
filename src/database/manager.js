@@ -10,7 +10,7 @@ const {
   listSignals,
   countSignals,
   addOhlcvMongoDB,
-  getOHLCVByParamsMongoDB,
+  fetchHistoricalOHLCVData,
 } = require('./mongoDatabase');
 
 const {
@@ -26,7 +26,7 @@ const {
   getAllStrategyParametersRedis,
 } = require('./redisDatabase');
 
-const { fetchOHLCVData } = require('./exchangeAPI');
+const { fetchOHLCVDataAPI } = require('./exchangeAPI');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -35,6 +35,36 @@ async function initializeDB() {
   // MongoDBとRedisの初期化を行う
   await initialize();
   await connectDB();
+}
+
+async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) {
+  try {
+    // バックテストモードの場合
+    if (options.backtest) {
+      const timestamp = options.backtest.timestamp;
+      // mongoDBから過去データを取得
+      const historicalData = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
+      
+      // 取得したデータをCCXTフォーマットに変換して返す
+      // CCXTフォーマット: [timestamp, open, high, low, close, volume]
+      return historicalData.map(candle => {
+        return [
+          candle.timestamp,
+          candle.open,
+          candle.high,
+          candle.low,
+          candle.close,
+          candle.volume
+        ];
+      });
+    }
+    
+    // 通常モード（リアルタイムデータ取得）
+    return await fetchOHLCVDataAPI(exchange, symbol, timeframe, limit);
+  } catch (error) {
+    console.error(`Error fetching OHLCV data: ${error.message}`);
+    throw error;
+  }
 }
 
 async function getOHLCVByParams(exchange, symbol, timeframe, limit, timestamp) {
@@ -286,6 +316,63 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
   } 
 }
 
+/**
+ * 指定した取引所とシンボルのティッカーデータを取得する
+ * バックテストモード時は ohlcvData の平均値を計算して返す
+ * @param {Object} exchange - 取引所インスタンス
+ * @param {String} symbol - 取引ペア (例: "BTC/USDT")
+ * @param {Object} options - オプション設定
+ * @param {Object} [options.backtest] - バックテスト設定
+ * @param {Array} [options.backtest.ohlcvData] - バックテスト用のOHLCVデータ配列
+ * @returns {Object} ティッカーデータ
+ */
+async function fetchTicker(exchange, symbol, options = {}) {
+  try {
+    // バックテストモードの場合
+    if (options.backtest) {
+      // ohlcvData が存在しない場合はエラー
+      if (!options.backtest.ohlcvData || !options.backtest.ohlcvData.length) {
+        throw new Error('Backtest mode requires ohlcvData in options');
+      }
+
+      // 最新のOHLCVデータを取得 (配列の最後の要素)
+      const latestOHLCV = options.backtest.ohlcvData[options.backtest.ohlcvData.length - 1];
+      
+      // Open, High, Low, Close の平均値を計算
+      // OHLCV データ形式: [timestamp, open, high, low, close, volume]
+      const open = latestOHLCV[1];
+      const high = latestOHLCV[2];
+      const low = latestOHLCV[3];
+      const close = latestOHLCV[4];
+      
+      const averagePrice = (open + high + low + close) / 4;
+      
+      // バックテスト用のティッカーオブジェクトを作成
+      return {
+        symbol: symbol,
+        timestamp: latestOHLCV[0],
+        datetime: new Date(latestOHLCV[0]).toISOString(),
+        bid: averagePrice,
+        ask: averagePrice,
+        last: averagePrice,
+        close: close,
+        average: averagePrice,
+        baseVolume: latestOHLCV[5],
+        info: {
+          backtest: true
+        }
+      };
+    }
+    
+    // リアルタイムモード: 取引所APIからティッカーを取得
+    return await exchange.fetchTicker(symbol);
+  } catch (error) {
+    console.error(`Error fetching ticker for ${symbol}:`, error);
+    throw error;
+  }
+}
+
+// 関数をエクスポート
 module.exports = {
   fetchOHLCVData,
   updateFilledTrades,
@@ -311,4 +398,5 @@ module.exports = {
   countSignals,
   addOhlcvMongoDB,
   getOHLCVByParams,
+  fetchTicker,
 };

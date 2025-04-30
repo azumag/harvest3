@@ -21,7 +21,7 @@
 *   `ohlcvData`: 現状使ってるロウソク足データ
 *   `lastSignal`: 'buy' or 'sell'
 
-### 1. `src/database/managers.js` : fetchOHLCVData 関数修正
+### 1. `src/database/manager.js` : fetchOHLCVData 関数修正
 
 *   **現在のシグネチャ:** `fetchOHLCVData(exchange, symbol, timeframe, limit)`
 *   **修正後のシグネチャ:** `fetchOHLCVData(exchange, symbol, timeframe, limit, options = {})`

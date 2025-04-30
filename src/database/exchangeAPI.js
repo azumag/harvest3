@@ -202,7 +202,7 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
  * @param {Number} limit - データ数
  * @returns {Promise<Array>} OHLCV配列
  */
-async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) {
+async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 100) {
   // Bitbankの特定のtimeframeの場合は専用APIを使用
   if (exchange.id === 'bitbank' && TIMEFRAME_TO_CANDLE_TYPE[timeframe]) {
     // シンボルをBitbank APIで使用する形式に変換（BTC/JPY → btc_jpy）
@@ -218,5 +218,5 @@ async function fetchOHLCVData(exchange, symbol, timeframe = '15m', limit = 100) 
 }
 
 module.exports = {
-  fetchOHLCVData,
+  fetchOHLCVDataAPI,
 };

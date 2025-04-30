@@ -357,7 +357,7 @@ async function addOhlcvMongoDB(ohlcvData) {
  * @param {number} timestamp - 指定したタイムスタンプ以前のデータを取得
  * @returns {Promise<Array>} OHLCVデータの配列
  */
-async function getOHLCVByParamsMongoDB(exchange, symbol, timeframe, limit, timestamp) {
+async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, timestamp) {
   await connectDB();
   try {
     const query = { 
@@ -456,6 +456,6 @@ module.exports = {
   signalsCollection: null,
   ohlcvCollection: null,
   setupGracefulShutdown,
-  getOHLCVByParamsMongoDB,
+  fetchHistoricalOHLCVData,
   connectDB
 };
