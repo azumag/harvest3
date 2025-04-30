@@ -12,9 +12,9 @@ const { checkBuyOrderAllowance } = require('../../common/utils');
  * @param {string} strategyName 戦略名（エラーメッセージ用）
  * @returns {Array|null} 検証済みの終値配列、またはエラー時はnull
  */
-async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, errorNotificationFn, strategyName = 'オシレーター') {
+async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, errorNotificationFn, strategyName, options) {
   // 過去のローソク足データを取得
-  const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10);
+  const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10, options);
   if (ohlcv.length < period) {
     console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     return null;

@@ -34,7 +34,8 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       ohlcvInterval, 
       longPeriod, 
       postErrorToDiscord,
-      'MA'
+      'MA',
+      options
     );
     if (!closes) return;
 
@@ -168,7 +169,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       ohlcvInterval, 
       slowPeriod + signalPeriod, 
       postErrorToDiscord,
-      'MACD'
+      'MACD',
+      options,
     );
     if (!closes) return;
     
@@ -276,7 +278,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       ohlcvInterval, 
       period, 
       postErrorToDiscord,
-      'RSI'
+      'RSI',
+      options
     );
     if (!closes) return;
     
@@ -391,7 +394,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       ohlcvInterval, 
       period, 
       postErrorToDiscord,
-      'BB'
+      'BB',
+      options
     );
     if (!closes) return;
     
