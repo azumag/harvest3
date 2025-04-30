@@ -273,7 +273,11 @@ db.signals.createIndex({ timestamp: -1 })
   "symbol": "XRP/JPY",
   "timeframe": "1m",
   "timestamp": 1745908200000,
-  "ohlcv": [1745908200000, 101.62, 101.62, 101.589, 101.589, 1.1016] // OHLCV
+  "open": 101.62,
+  "high": 101.62,
+  "low": 101.589,
+  "close": 101.589,
+  "volume": 1.1016,
 }
 ```
 

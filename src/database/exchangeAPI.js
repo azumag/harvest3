@@ -18,7 +18,7 @@ const TIMEFRAME_TO_CANDLE_TYPE = {
  * @param {Number} waitTime - 待機時間（ミリ秒）
  * @returns {Promise<void>}
  */
-async function waitForAPILimit(waitTime = 200) {
+async function waitForAPILimit(waitTime = 100) {
   return new Promise(resolve => setTimeout(resolve, waitTime));
 }
 
@@ -79,33 +79,40 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
     allData = [...yearData];
   } catch (error) {
     console.error(`Bitbank APIエラー (${pair} ${candleType} ${currentYear}):`, error);
+    return [];
   }
   
-  // limitに達するまで前の年のデータを取得
-  let year = parseInt(currentYear);
-  while (allData.length < limit && year > 2015) { // 2015年より前のデータは取得しない
-    year--;
-    const prevYear = year.toString();
-    
-    try {
-      const prevYearData = await fetchBitbankOHLCV(pair, candleType, prevYear, limit - allData.length);
+  try {
+
+    // limitに達するまで前の年のデータを取得
+    let year = parseInt(currentYear);
+    while (allData.length < limit && year > 2015) { // 2015年より前のデータは取得しない
+      year--;
+      const prevYear = year.toString();
       
-      // データが取得できなかった場合はループ終了
-      if (prevYearData.length === 0) {
-        console.log(`Bitbank API: これ以上の過去データが取得できません: ${pair} ${candleType}`);
+      try {
+        const prevYearData = await fetchBitbankOHLCV(pair, candleType, prevYear, limit - allData.length);
+        
+        // データが取得できなかった場合はループ終了
+        if (prevYearData.length === 0) {
+          console.log(`Bitbank API: これ以上の過去データが取得できません: ${pair} ${candleType}`);
+          break;
+        }
+        
+        // 新しいデータを時系列順に結合
+        allData = [...prevYearData, ...allData];
+        console.log(`Bitbank API: ${prevYear}年のデータを取得: ${pair} ${candleType} ${allData.length}`);
+        
+        // API制限を考慮して少し待機
+        await waitForAPILimit();
+      } catch (error) {
+        console.error(`Bitbank APIエラー (${pair} ${candleType} ${prevYear}):`, error);
         break;
       }
-      
-      // 新しいデータを時系列順に結合
-      allData = [...prevYearData, ...allData];
-      console.log(`Bitbank API: ${prevYear}年のデータを取得: ${pair} ${candleType} ${allData.length}`);
-      
-      // API制限を考慮して少し待機
-      await waitForAPILimit();
-    } catch (error) {
-      console.error(`Bitbank APIエラー (${pair} ${candleType} ${prevYear}):`, error);
-      break;
     }
+  } catch (error) {
+    console.error(`Bitbank APIエラー (${pair} ${candleType}):`, error);
+    console.log(`Bitbank API: これ以上の過去データが取得できません: ${pair} ${candleType}`);
   }
   
   // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
@@ -124,54 +131,67 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
   // TODO: ここも bitbank 専用になっているので汎用化する
   // 1日のデータを取得ようになっている他、sinceなどの指定方法も違うので
 
-  const now = new Date();
-  const hour = now.getHours();
-  let targetDate = new Date(now);
-  
-  // 現在時刻が9時より前なら前日の日付を設定
-  if (hour < 9) {
-    targetDate.setDate(targetDate.getDate() - 1);
-  }
-  
-  // targetDateを当日の0:00に設定
-  targetDate.setHours(0, 0, 0, 0);
-  let since = targetDate.getTime();
-  
-  // まず現在の日付でデータを取得
-  console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${since} ${limit}件`);
-  let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
-  let allData = [...ohlcv];
-  let remainingLimit = limit - allData.length;
-  
-  // limitに達するまで過去に遡ってデータを取得
-  while (remainingLimit > 0) {
-    // 前日の日付に設定
-    targetDate.setDate(targetDate.getDate() - 1);
-    since = targetDate.getTime();
+  try {
+    const now = new Date();
+    const hour = now.getHours();
+    let targetDate = new Date(now);
     
-    // 残りの必要データ数分を取得
-    const prevData = await exchange.fetchOHLCV(symbol, timeframe, since, remainingLimit);
-    
-    // データが取得できなかった場合はループ終了
-    if (prevData.length === 0) {
-      console.log(`fetchOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
-      break;
+    // 現在時刻が9時より前なら前日の日付を設定
+    if (hour < 9) {
+      targetDate.setDate(targetDate.getDate() - 1);
     }
     
-    console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${prevData.length}件`);
+    // targetDateを当日の0:00に設定
+    targetDate.setHours(0, 0, 0, 0);
+    let since = targetDate.getTime();
     
-    // 新しいデータを先頭に追加
-    allData = prevData.concat(allData);
-    
-    // 残りの必要データ数を更新
-    remainingLimit = limit - allData.length;
-    
-    // API制限を考慮して少し待機
-    await waitForAPILimit();
-  }
+    // まず現在の日付でデータを取得
+    console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${since} ${limit}件`);
+
+    let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
+    let allData = [...ohlcv];
+    let remainingLimit = limit - allData.length;
   
-  // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
-  return allData.slice(-limit);
+    try {
+      // limitに達するまで過去に遡ってデータを取得
+      while (remainingLimit > 0) {
+        // 前日の日付に設定
+        targetDate.setDate(targetDate.getDate() - 1);
+        since = targetDate.getTime();
+        
+        // 残りの必要データ数分を取得
+        const prevData = await exchange.fetchOHLCV(symbol, timeframe, since, remainingLimit);
+        
+        // データが取得できなかった場合はループ終了
+        if (prevData.length === 0) {
+          console.log(`fetchOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
+          break;
+        }
+        
+        console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${prevData.length}件`);
+        
+        // 新しいデータを先頭に追加
+        allData = prevData.concat(allData);
+        
+        // 残りの必要データ数を更新
+        remainingLimit = limit - allData.length;
+        
+        // API制限を考慮して少し待機
+        await waitForAPILimit();
+      }
+    } catch (error) {
+      console.error(`fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}):`, error);
+      console.log(`fetchStandardHistoricalOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
+      await waitForAPILimit();
+    }
+    
+    // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
+    return allData.slice(-limit);
+    
+  } catch (error) {
+    console.error(`fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}):`, error);
+    return [];
+  }
 }
 
 /**

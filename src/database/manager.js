@@ -9,9 +9,10 @@ const {
   listTrades,
   listSignals,
   countSignals,
+  addOhlcvMongoDB,
 } = require('./mongoDatabase');
 
-const { 
+const {
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
   getCurrentOrderPairRedis, setCurrentOrderPairRedis,
@@ -20,8 +21,8 @@ const {
   getTradeSummaries,
   initialize,
   getTradeKeys,
-  getAllTradeSummaries, // コンマを追加
-  getAllStrategyParametersRedis, // 新しい関数をインポート
+  getAllTradeSummaries,
+  getAllStrategyParametersRedis,
 } = require('./redisDatabase');
 
 const { fetchOHLCVData } = require('./exchangeAPI');
@@ -304,4 +305,5 @@ module.exports = {
   listTrades,
   listSignals,
   countSignals, // countSignals をエクスポートに追加
+  addOhlcvMongoDB, // addOhlcvMongoDB をエクスポートに追加
 };

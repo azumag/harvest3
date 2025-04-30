@@ -35,6 +35,7 @@ async function connectDB() {
       module.exports.ordersCollection = db.collection('orders');
       module.exports.tradesCollection = db.collection('trades');
       module.exports.signalsCollection = db.collection('signals');
+      module.exports.ohlcvCollection = db.collection('ohlcv'); // ohlcvCollection の参照を追加
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
@@ -56,7 +57,7 @@ async function ensureCollectionsExist() {
     const collectionNames = collections.map(c => c.name);
     
     // 必要なコレクションのリスト
-    const requiredCollections = ['orders', 'trades', 'signals'];
+    const requiredCollections = ['orders', 'trades', 'signals', 'ohlcv'];
     
     // 存在しないコレクションを作成
     for (const name of requiredCollections) {
@@ -106,6 +107,13 @@ async function createIndexes() {
     
     await createCollectionIndexesIfNotExist('signals', [
       { key: { timestamp: 1 }, options: {} },
+      { key: { timestamp: -1 }, options: {} }
+    ]);
+    
+    // ohlcvコレクションのインデックス作成
+    await createCollectionIndexesIfNotExist('ohlcv', [
+      { key: { exchange: 1, symbol: 1, timeframe: 1, timestamp: 1 }, options: { unique: true } },
+      { key: { timestamp: 1 }, options: {} }, // タイムスタンプでの検索・ソート用
       { key: { timestamp: -1 }, options: {} }
     ]);
     
@@ -322,6 +330,25 @@ async function getTradeByTradeId(tradeId) {
 }
 
 /**
+ * OHLCVデータをohlcvコレクションに追加する
+ * @param {Object} ohlcvData 
+ */
+async function addOhlcvMongoDB(ohlcvData) {
+  await connectDB();
+  try {
+    // 重複挿入を防ぐために upsert: true を使用するか、事前に findOne で確認する
+    // ここではシンプルに insertOne を使用し、ユニークインデックスで重複エラーをハンドルすることを想定
+    const result = await module.exports.ohlcvCollection.insertOne(ohlcvData);
+    // console.log('OHLCV added:', result.insertedId);
+    return result;
+  } catch (error) {
+    // 重複エラー (E11000 duplicate key error) の場合はログを出力しないなど、より詳細なエラーハンドリングが必要になる可能性がある
+    console.error('Error adding OHLCV:', error);
+    throw error;
+  }
+}
+
+/**
  * signalsコレクションから_idでデータを取得する
  * @param {string} id - MongoDBのObjectId文字列
  * @returns {Promise<Object|null>} シグナルデータまたはnull
@@ -381,6 +408,7 @@ module.exports = {
   addOrdersBulk,
   addTradeMongoDB,
   addSignalMongoDB,
+  addOhlcvMongoDB, // addOhlcvMongoDB 関数を追加
   listOrders,
   listTrades,
   listSignals, // ページング対応版
@@ -391,6 +419,7 @@ module.exports = {
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
+  ohlcvCollection: null, // ohlcvCollection の参照を追加
   setupGracefulShutdown,
   connectDB
 };
