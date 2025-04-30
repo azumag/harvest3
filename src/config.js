@@ -70,20 +70,20 @@ const config = {
   strategies: {
 
     // 高頻度取引戦略
-    HFT: {
-      // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-      enabled: false,
-      interval: 100,
-      priceThreshold: 0.001,
-      maxOrdersPerMinute: 100,
-      amount: 0.0001,
-      orderBookDepth: 15,
-      function: highFrequencyTrading,
-      exchanges: [exchangeBB],
-    },
+    // HFT: {
+    //   // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
+    //   enabled: false,
+    //   interval: 100,
+    //   priceThreshold: 0.001,
+    //   maxOrdersPerMinute: 100,
+    //   amount: 0.0001,
+    //   orderBookDepth: 15,
+    //   function: highFrequencyTrading,
+    //   exchanges: [exchangeBB],
+    // },
 
     OSCILLATOR: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
+      enabled: true,
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -92,173 +92,52 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    
-
-    MA_LONG: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '1h',
-      function: maStrategy,
-      exchanges: [exchangeBB]
-    },
-
     // トレンドフォロー戦略
     MA: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
+      enabled: true,
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
       function: maStrategy,
       exchanges: [exchangeBB]
     },
-
-    MA_SHORT: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '5m',
-      function: maStrategy,
-      exchanges: [exchangeBB]
-    },
-
-
 
     MACD: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
+      enabled: true,
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
       ohlcvInterval: '15m',
-      function: macdStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MACD_SHORT: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      ohlcvInterval: '5m',
-      function: macdStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MACD_LONG: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      ohlcvInterval: '1h',
       function: macdStrategy,
       exchanges: [exchangeBB]
     },
 
     RSI: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
+      enabled: true,
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
       ohlcvInterval: '15m',
-      function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    RSI_SHORT: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
-      ohlcvInterval: '5m',
-      function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    RSI_LONG: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
-      ohlcvInterval: '1h',
       function: rsiStrategy,
       exchanges: [exchangeBB]
     },
 
     BOLLINGER_BANDS: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
+      enabled: true,
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    BOLLINGER_BANDS_SHORT: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '5m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB],
-      atomicExec: true, // TODO: ここに指定すると戦略パラメータとして記録されてしまので、対策必要
-    },
-
-    BOLLINGER_BANDS_LONG: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '1h',
       function: bollingerBandsStrategy,
       exchanges: [exchangeBB]
     },
     
     // 逆張り戦略
     MEAN_REVERSION: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
+      enabled: true,
       period: 20,
       ohlcvInterval: '15m',
       deviationThreshold: 3,
       function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MEAN_REVERSION_SHORT: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
-      period: 20,
-      ohlcvInterval: '5m',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MEAN_REVERSION_LONG: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
-      period: 20,
-      ohlcvInterval: '1h',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    
-
-    OSCILLATOR_SHORT: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
-      period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
-      ohlcvInterval: '5m',
-      function: oscillatorStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    OSCILLATOR_LONG: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
-      period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
-      ohlcvInterval: '1h',
-      function: oscillatorStrategy,
       exchanges: [exchangeBB]
     },
     

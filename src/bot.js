@@ -84,14 +84,15 @@ async function startBot() {
  * @param {String} symbol - 通貨ペア
  * @param {String} strategyKey - 戦略のキー
  * @param {Object} marketParametersBySymbol - 通貨ペアごとの市場パラメータ
+ * @param {Object} options - オプションオブジェクト
  */
-async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol) {
+async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol, options) {
   try {
 
     // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
     const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
 
-    return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol)
+    return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options)
   } catch (error) {
     console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
     if (options.postErrorToDiscord) {

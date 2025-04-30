@@ -211,7 +211,7 @@ async function updateFilledTrades(exchange, symbol) {
   }
 }
 
-async function addOrder(exchange, symbol, strategyKey, side, amount, price, orderId, orderType, options = {}) { // options を追加
+async function addOrder(exchange, symbol, strategyKey, side, amount, price, orderId, orderType, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
     // options.backtest のプロパティを更新
@@ -224,6 +224,22 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
     } else if (side === 'sell') {
       options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
     }
+
+    // バックテスト結果を options.backtest.orders 配列に追加
+    if (!options.backtest.orders) {
+      options.backtest.orders = [];
+    }
+    options.backtest.orders.push({
+      exchange: exchange.id,
+      symbol,
+      strategy: strategyKey,
+      side,
+      amount,
+      price,
+      orderId,
+      orderType,
+      timestamp: options.backtest.timestamp // バックテストのタイムスタンプを使用
+    });
 
     // バックテストモードではDBには記録しないため、ここで処理終了
     return;
@@ -247,7 +263,28 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
   return await addOrderMongoDB(order);
 }
 
-async function addSignal(exchange, symbol, strategyKey, side, price, detail) {
+async function addSignal(exchange, symbol, strategyKey, side, price, detail, options = {}) { // options を追加
+    // バックテストモードの場合
+    if (options.backtest) {
+      // バックテスト結果を options.backtest.signals 配列に追加
+      if (!options.backtest.signals) {
+        options.backtest.signals = [];
+      }
+      options.backtest.signals.push({
+        exchange: exchange.id,
+        symbol,
+        strategy: strategyKey,
+        side,
+        price,
+        detail,
+        timestamp: options.backtest.timestamp // バックテストのタイムスタンプを使用
+      });
+
+      // バックテストモードではDBには記録しないため、ここで処理終了
+      return;
+    }
+
+    // リアルタイムモードの場合 (既存ロジック)
     const timestamp = Date.now();
 
     const signal = {
