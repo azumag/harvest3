@@ -11,14 +11,14 @@ const {
   handleStrategySignals, 
 } = require('./utils/common');
 
-const { addSignal } = require('../database/manager');
+const { addSignal, fetchTicker } = require('../database/manager');
 const { postErrorToDiscord } = require('../common/notifications');
 
 /**
  * 平均回帰戦略
  * 価格が移動平均線から大きく乖離した場合に、平均に戻ると予測して取引
  */
-async function meanReversionStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function meanReversionStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
 
   const { period = 20, deviationThreshold = 3, ohlcvInterval } = config;
 
@@ -34,7 +34,8 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       deviationThreshold, 
       exchange, 
       symbol, 
-      strategyKey
+      strategyKey,
+      options
     );
     
     if (!signalResult) return;
@@ -69,7 +70,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
  * オシレーター系指標を利用した逆張り戦略
  * RSIが極端な値を示した場合に、反転を予測して取引
  */
-async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   
   const { period = 14, oversoldThreshold = 20, overboughtThreshold = 80, ohlcvInterval } = config;
 
@@ -87,7 +88,8 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
         overboughtThreshold,
         exchange,
         symbol,
-        strategyKey
+        strategyKey,
+        options
       );
 
       // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
@@ -141,7 +143,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
  * @param {string} strategyKey 戦略キー
  * @returns {Object|null} シグナル計算結果、エラー時はnull
  */
-async function calculateOscillatorSignals(closes, period, oversoldThreshold, overboughtThreshold, exchange, symbol, strategyKey) {
+async function calculateOscillatorSignals(closes, period, oversoldThreshold, overboughtThreshold, exchange, symbol, strategyKey, options = {}) {
   // RSIを計算
   const rsiValues = calculateRSI(closes, period);
   
@@ -158,7 +160,7 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
   const currentRSI = rsiValues[rsiValues.length - 1];
 
   // 現在の価格を取得
-  const ticker = await exchange.fetchTicker(symbol);
+  const ticker = await fetchTicker(exchange, symbol, options);
   const currentPrice = ticker.last;
 
   // 買いシグナル: RSIが極端に低い（売られすぎ）
@@ -246,13 +248,13 @@ function formatOscillatorLogInfo(signalResult) {
  * @param {string} strategyKey 戦略キー
  * @returns {Object} シグナル計算結果
  */
-async function calculateMeanReversionSignals(closes, period, deviationThreshold, exchange, symbol, strategyKey) {
+async function calculateMeanReversionSignals(closes, period, deviationThreshold, exchange, symbol, strategyKey, options = {}) {
   // 移動平均線を計算
   const sma = calculateSMA(closes, period);
   const currentSMA = sma[sma.length - 1];
 
   // 現在の価格を取得
-  const ticker = await exchange.fetchTicker(symbol);
+  const ticker = await fetchTicker(exchange, symbol, options);
   const currentPrice = ticker.last;
 
   // 乖離率を計算（%）

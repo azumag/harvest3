@@ -16,14 +16,14 @@ const {
   executeSellOrder 
 } = require('./utils/common');
 
-const { addSignal } = require('../database/manager');
+const { addSignal, fetchTicker } = require('../database/manager');
 const { postErrorToDiscord } = require('../common/notifications');
 
 /**
  * 移動平均線クロス戦略
  * 短期移動平均線が長期移動平均線を上抜けたら買い、下抜けたら売り
  */
-async function maStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function maStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { shortPeriod = 5, longPeriod = 20, ohlcvInterval } = config;
 
   try {
@@ -45,7 +45,8 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       longPeriod,
       exchange,
       symbol,
-      strategyKey
+      strategyKey,
+      options
     );
     
     if (!signalResult) return;
@@ -85,7 +86,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
  * @param {string} strategyKey 戦略キー
  * @returns {Object} シグナル計算結果
  */
-function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symbol, strategyKey) {
+function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symbol, strategyKey, options = {}) {
   // 短期と長期の移動平均線を計算
   const shortMA = calculateSMA(closes, shortPeriod);
   const longMA = calculateSMA(closes, longPeriod);
@@ -97,7 +98,7 @@ function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symb
   const previousLongMA = longMA[longMA.length - 2];
   
   // 現在の価格を取得
-  const ticker = exchange.fetchTicker(symbol);
+  const ticker = fetchTicker(exchange, symbol, options);
   const currentPrice = ticker.last;
   
   // クロスを検出
@@ -154,7 +155,7 @@ function formatMACrossLogInfo(signalResult) {
 }
 
 // MACD戦略
-async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { tradePercentage } = config;
   const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
@@ -181,7 +182,7 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const previousSignal = macdData.signal[macdData.signal.length - 2];
     
     // 現在の価格を取得
-    const ticker = await exchange.fetchTicker(symbol);
+    const ticker = await fetchTicker(exchange, symbol, options);
     const currentPrice = ticker.last;
     
     // クロスを検出
@@ -263,7 +264,7 @@ function formatMACDLogInfo(signalResult) {
 }
 
 // RSI戦略
-async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { tradePercentage } = config; 
   const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
@@ -287,7 +288,7 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
     const previousRSI = rsiValues[rsiValues.length - 2];
     
     // 現在の価格を取得
-    const ticker = await exchange.fetchTicker(symbol);
+    const ticker = await fetchTicker(exchange, symbol, options);
     const currentPrice = ticker.last;
     
     // 買いシグナル: RSIが閾値を下回り、前回のRSIが閾値以上
@@ -377,7 +378,7 @@ function formatRSILogInfo(signalResult) {
  * ボリンジャーバンド戦略
  * 価格がバンドの上限に達したら売り、下限に達したら買い
  */
-async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, marketParameters) {
+async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { tradePercentage } = config;
   const { period = 20, stdDev = 2, amount, ohlcvInterval } = config;
   const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
@@ -403,7 +404,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     const currentLower = bands.lower[bands.lower.length - 1];
     
     // 現在の価格を取得
-    const ticker = await exchange.fetchTicker(symbol);
+    const ticker = await fetchTicker(exchange, symbol, options);
     const currentPrice = ticker.last;
     
     // バンド幅を計算（ボラティリティの指標）
