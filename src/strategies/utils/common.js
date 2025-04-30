@@ -18,7 +18,9 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
   // 過去のローソク足データを取得
   const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10, options);
   if (ohlcv.length < period) {
-    console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
+    if (!options.backtest) {
+      console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
+    }
     return null;
   }
 
@@ -115,7 +117,9 @@ async function handleStrategySignals(
     }
     
   } else {
-    console.log(`${strategyName}シグナルなし: ${symbol} - ${logInfo.none}`);
+    if (!options.backtest) {
+      console.log(`${strategyName}シグナルなし: ${symbol} - ${logInfo.none}`);
+    }
   }
   
   return {

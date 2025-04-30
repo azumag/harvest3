@@ -103,8 +103,6 @@ async function runBacktest() {
                     lastSignal: 'sell',
                     currentAmount: 0,
                     timeframe,
-                    signals: [], // シグナルを保存する配列
-                    orders: [],  // 注文を保存する配列
                   },
                   // Discord通知の無効化
                   postOrderToDiscord: async () => {},
@@ -125,14 +123,16 @@ async function runBacktest() {
                     console.error(`バックテスト中にエラーが発生しました: ${error.message}`);
                   }
                 }
-                
-                // この組み合わせの結果を保存
-                testResults.push({
+
+                const result = {
                   parameters: paramCombination,
                   finalBaseFund: options.backtest.baseFund,
-                  signalCount: options.backtest.signals.length,
-                  orderCount: options.backtest.orders.length
-                });
+                }
+
+                console.log(`  結果: ${JSON.stringify(result)}`);
+                
+                // この組み合わせの結果を保存
+                testResults.push(result);
               }
               
               // 結果をbaseFundでランキング
@@ -141,7 +141,7 @@ async function runBacktest() {
               // ランキング結果を表示
               console.log(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
               rankedResults.slice(0, 10).forEach((result, index) => {
-                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)} (シグナル: ${result.signalCount}, 注文: ${result.orderCount})`);
+                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
               });
               
               console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
@@ -179,9 +179,9 @@ function extractNumericParameterKeys(config) {
  * パラメータの全ての組み合わせを生成する
  * @param {Object} defaultConfig - デフォルト設定
  * @param {Array} numericKeys - 数値型のキーの配列
- * @param {number} min - パラメータの最小値
- * @param {number} max - パラメータの最大値
- * @param {number} step - パラメータの増分
+ * @param {number} min - パラメータの最小値（デフォルト値を使わない場合）
+ * @param {number} max - パラメータの最大値（デフォルト値を使わない場合）
+ * @param {number} step - パラメータの増分（デフォルト値を使わない場合）
  * @returns {Array} 全ての組み合わせの配列
  */
 function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max = 100, step = 1) {
@@ -192,7 +192,25 @@ function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max 
   const [currentKey, ...remainingKeys] = numericKeys;
   const combinations = [];
   
-  for (let value = min; value <= max; value += step) {
+  // パラメータのデフォルト値
+  const defaultValue = defaultConfig[currentKey];
+  
+  // パラメータに応じた範囲を設定
+  let paramMin, paramMax, paramStep;
+  
+  if (defaultValue <= 5) {
+    // stdDev など小さい値のパラメータ（1,2,3程度）は 1~5 の範囲
+    paramMin = 1;
+    paramMax = 5;
+    paramStep = 1;
+  } else {
+    // period など大きい値のパラメータ（20程度）は 元の値の±50%程度の範囲
+    paramMin = Math.max(1, Math.floor(defaultValue * 0.75));
+    paramMax = Math.ceil(defaultValue * 1.5);
+    paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 10)); // 10段階程度に分割
+  }
+  
+  for (let value = paramMin; value <= paramMax; value += paramStep) {
     const subCombinations = generateParameterCombinations(defaultConfig, remainingKeys, min, max, step);
     
     for (const subComb of subCombinations) {

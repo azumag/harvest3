@@ -46,7 +46,6 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) 
       const historicalData = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
       
       if (!historicalData || historicalData.length === 0) {
-        console.log(`バックテストモードでのOHLCVデータ取得に失敗しました: ${exchange.id} ${symbol} ${timeframe}`);
         return [];
       }
 
@@ -238,23 +237,6 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
       options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
     }
 
-    // バックテスト結果を options.backtest.orders 配列に追加
-    if (!options.backtest.orders) {
-      options.backtest.orders = [];
-    }
-    options.backtest.orders.push({
-      exchange: exchange.id,
-      symbol,
-      strategy: strategyKey,
-      side,
-      amount,
-      price,
-      orderId,
-      orderType,
-      timestamp: options.backtest.timestamp // バックテストのタイムスタンプを使用
-    });
-
-    // バックテストモードではDBには記録しないため、ここで処理終了
     return;
   }
 
@@ -279,20 +261,6 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
 async function addSignal(exchange, symbol, strategyKey, side, price, detail, options = {}) { // options を追加
     // バックテストモードの場合
     if (options.backtest) {
-      // バックテスト結果を options.backtest.signals 配列に追加
-      if (!options.backtest.signals) {
-        options.backtest.signals = [];
-      }
-      options.backtest.signals.push({
-        exchange: exchange.id,
-        symbol,
-        strategy: strategyKey,
-        side,
-        price,
-        detail,
-        timestamp: options.backtest.timestamp // バックテストのタイムスタンプを使用
-      });
-
       // バックテストモードではDBには記録しないため、ここで処理終了
       return;
     }
