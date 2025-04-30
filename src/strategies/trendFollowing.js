@@ -7,7 +7,7 @@ const {
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
-} = require('../common/indicators');
+} = require('./utils/indicators');
 
 const { formattedAvailableAmount, getRealizedPnL, addSignal} = require('../database/manager');
 const { addOrder, fetchOHLCVData } = require('../database/manager');

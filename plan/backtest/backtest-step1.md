@@ -5,38 +5,42 @@
 バックテストシステムのためのデータ取得ロジックを設計し、`fetchOHLCVData` および `fetchTicker` 関数の修正・新規実装の詳細を定義する。
 
 ## 設計詳細
+### 方針
+- 注文が全て約定する前提
+- 手数料を考慮しない
+- ticker など取得が困難なものは別で計算できるもので代替する
 
-## 0. `src/database/mongoDatabase.js` : fetchOHLCVData 関数実装
-*   args: exchangeId, symbol, timestamp, limit
-*   MongoDB (`src/database/mongoDatabase.js` の関数を利用) から、指定された `timestamp` までのOHLCVデータを件数(limit)分取得する。
-*   timestamp の降順で取得
+### **`options:backtest` オブジェクト:**
+各関数に options を渡せるようにし、 backtest に設定が入っているかどうかで扱う。
+これは backtest 中の状態も表し、適宜アップデートする
+*  オプショナル引数
+*   `timestamp`: バックテストの実行タイムスタンプ (number, milliseconds)
+*   `sellCost`: うったがく
+*   `buyCost`: かったがく
+*   `baseFund`: 最初の資金
+*   `ohlcvData`: 現状使ってるロウソク足データ
+*   `lastSignal`: 'buy' or 'sell'
 
 ### 1. `src/database/managers.js` : fetchOHLCVData 関数修正
 
 *   **現在のシグネチャ:** `fetchOHLCVData(exchange, symbol, timeframe, limit)`
 *   **修正後のシグネチャ:** `fetchOHLCVData(exchange, symbol, timeframe, limit, options = {})`
-*   **`options` オブジェクト:**
-    *  オプショナル引数
-    *   `backtestTimestamp`: バックテストの終了タイムスタンプ (number, milliseconds)
 *   **ロジック:**
-    *   `options.backtestTimestamp` が `null` でない場合:
-        * mongoDatabase.js から fetchOHLCVData を呼び出す
+    *   `options.backtest` が `null` でない場合:
+        * mongoDatabase.js から fetchOHLCVData を呼び出す. paramter に options.backtest.timestamp 使う
         * 形を現状のOHCLVデータに変換して返す
-    *   `options.backtestTimestamp` および options が未定義の場合:
+    *   `options.backtest` および options が未定義の場合:
         *   既存のリアルタイムデータ取得ロジック（取引所APIからの取得）を実行する。
 
 ### 2. `src/database/manager.js` に `fetchTicker` 関数の新規実装
 
 *   **関数名:** `fetchTicker`
 *   **引数:** `exchange`, `symbol`, `options = {}`
-*   **`options` オブジェクト:**
-    *   `backtestTimestamp`: バックテストの終了タイムスタンプ (number, milliseconds)。
-    *   `ohlcvData`: バックテストシナリオで使用するOHLCVデータの配列。
 *   **ロジック:**
-    *   `options.backtestTimestamp` が存在する場合（バックテストシナリオ）:
-        *   提供された `options.ohlcvData` 配列の末尾（最新値）の各要素の値(Open, High, Low, Close) の平均値を計算する。
+    *   `options.backtest` が存在する場合（バックテストシナリオ）:
+        *   提供された `options.backtest.ohlcvData` 配列の末尾（最新値）の各要素の値(Open, High, Low, Close) の平均値を計算する。
         *   計算した平均値をティッカー値として返す。
-    *   `options.backtestTimestamp` が存在しない場合（リアルタイムシナリオ）:
+    *   `options.backtest` が存在しない場合（リアルタイムシナリオ）:
         *   取引所API (`exchange.fetchTicker`) を使用して現在のティッカーデータを取得する。
         *   取得したティッカー値を返す。
 
