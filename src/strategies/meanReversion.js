@@ -4,16 +4,15 @@
 const {
   calculateSMA,
   calculateRSI,
-  calculateBollingerBands,
 } = require('./utils/indicators');
 
-const { fetchAndValidateOHLCVData } = require('./utils/common');
+const { 
+  fetchAndValidateOHLCVData, 
+  handleStrategySignals, 
+} = require('./utils/common');
 
-const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../database/manager');
-
-const { postOrderToDiscord, postErrorToDiscord } = require('../common/notifications');
-
-const { checkBuyOrderAllowance } = require('../common/utils');
+const { addSignal } = require('../database/manager');
+const { postErrorToDiscord } = require('../common/notifications');
 
 /**
  * 平均回帰戦略
@@ -64,67 +63,6 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       error: error.message
     };
   }
-}
-
-/**
- * 平均回帰戦略のシグナルを計算する
- * @param {Array} closes 終値の配列
- * @param {number} period 期間
- * @param {number} deviationThreshold 乖離閾値
- * @param {Object} exchange 取引所オブジェクト
- * @param {string} symbol 通貨ペア
- * @param {string} strategyKey 戦略キー
- * @returns {Object} シグナル計算結果
- */
-async function calculateMeanReversionSignals(closes, period, deviationThreshold, exchange, symbol, strategyKey) {
-  // 移動平均線を計算
-  const sma = calculateSMA(closes, period);
-  const currentSMA = sma[sma.length - 1];
-
-  // 現在の価格を取得
-  const ticker = await exchange.fetchTicker(symbol);
-  const currentPrice = ticker.last;
-
-  // 乖離率を計算（%）
-  const deviation = ((currentPrice - currentSMA) / currentSMA) * 100;
-
-  // 買いシグナル: 価格が移動平均線から下に大きく乖離
-  const buySignal = deviation <= -deviationThreshold;
-
-  // 売りシグナル: 価格が移動平均線から上に大きく乖離
-  const sellSignal = deviation >= deviationThreshold;
-
-  // シグナルタイプを決定
-  const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-  
-  // 戦略固有の計算結果
-  const strategyResults = {
-    sma: currentSMA,
-    deviation
-  };
-  
-  // シグナルがある場合のみ保存
-  if (signalType !== 'none') {
-    // 戦略シグナルを保存
-    addSignal(
-      exchange,
-      symbol,
-      strategyKey,
-      signalType,
-      currentPrice,
-      strategyResults
-    );
-  }
-  
-  return {
-    currentPrice,
-    currentSMA,
-    deviation,
-    signalType,
-    buySignal,
-    sellSignal,
-    strategyResults
-  };
 }
 
 /**
@@ -263,88 +201,6 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
 }
 
 /**
- * 戦略のシグナルに基づいて処理を行う共通関数
- * @param {Object} exchange 取引所オブジェクト
- * @param {string} symbol 通貨ペア
- * @param {string} strategyKey 戦略キー
- * @param {Object} config 設定オブジェクト
- * @param {Object} marketParameters マーケットパラメータ
- * @param {Object} signalResult シグナル計算結果
- * @param {string} strategyName 戦略名（日本語）
- * @param {string} strategyId 戦略ID（英語）
- * @param {Function} formatLogInfo ログ情報をフォーマットする関数
- * @returns {Object} 処理結果
- */
-async function handleStrategySignals(
-  exchange,
-  symbol,
-  strategyKey,
-  config,
-  marketParameters,
-  signalResult,
-  strategyName,
-  strategyId,
-  formatLogInfo
-) {
-  const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
-  const logInfo = formatLogInfo(signalResult);
-  
-  // 注文を作成
-  if (buySignal) {
-    // 買いシグナル情報をログ出力
-    console.log(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
-    if (postOrderToDiscord) {
-      await postOrderToDiscord(`[${strategyName}] 買いシグナル: ${exchange.id} - ${symbol} - ${logInfo.buy}`);
-    }
-
-    // 買い注文実行
-    await executeBuyOrder(
-      exchange, 
-      symbol, 
-      strategyKey, 
-      config, 
-      marketParameters, 
-      currentPrice, 
-      strategyName,
-      logInfo.orderInfo
-    );
-    
-  } else if (sellSignal) {
-    // 売りシグナル情報をログ出力
-    console.log(`${strategyName}売りシグナル: ${symbol} - ${logInfo.sell}`);
-    if (postOrderToDiscord) {
-      postOrderToDiscord(`[${strategyName}] 売りシグナル: ${exchange.id} - ${symbol} - ${logInfo.sell}`);
-    }
-
-    // 売り注文実行
-    const sellResult = await executeSellOrder(
-      exchange, 
-      symbol, 
-      strategyKey, 
-      marketParameters, 
-      currentPrice, 
-      strategyName,
-      logInfo.orderInfo
-    );
-    
-    // 特定条件で早期リターン
-    if (sellResult.earlyReturn) {
-      return sellResult.returnValue;
-    }
-    
-  } else {
-    console.log(`${strategyName}シグナルなし: ${symbol} - ${logInfo.none}`);
-  }
-  
-  return {
-    strategy: strategyId,
-    symbol,
-    ...logInfo.result,
-    signal: buySignal ? 'buy' : (sellSignal ? 'sell' : 'none')
-  };
-}
-
-/**
  * 平均回帰戦略のログ情報をフォーマットする
  * @param {Object} signalResult シグナル計算結果
  * @returns {Object} フォーマットされたログ情報
@@ -379,6 +235,69 @@ function formatOscillatorLogInfo(signalResult) {
     result: { rsi: currentRSI, currentPrice }
   };
 }
+
+/**
+ * 平均回帰戦略のシグナルを計算する
+ * @param {Array} closes 終値の配列
+ * @param {number} period 期間
+ * @param {number} deviationThreshold 乖離閾値
+ * @param {Object} exchange 取引所オブジェクト
+ * @param {string} symbol 通貨ペア
+ * @param {string} strategyKey 戦略キー
+ * @returns {Object} シグナル計算結果
+ */
+async function calculateMeanReversionSignals(closes, period, deviationThreshold, exchange, symbol, strategyKey) {
+  // 移動平均線を計算
+  const sma = calculateSMA(closes, period);
+  const currentSMA = sma[sma.length - 1];
+
+  // 現在の価格を取得
+  const ticker = await exchange.fetchTicker(symbol);
+  const currentPrice = ticker.last;
+
+  // 乖離率を計算（%）
+  const deviation = ((currentPrice - currentSMA) / currentSMA) * 100;
+
+  // 買いシグナル: 価格が移動平均線から下に大きく乖離
+  const buySignal = deviation <= -deviationThreshold;
+
+  // 売りシグナル: 価格が移動平均線から上に大きく乖離
+  const sellSignal = deviation >= deviationThreshold;
+
+  // シグナルタイプを決定
+  const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+  
+  // 戦略固有の計算結果
+  const strategyResults = {
+    sma: currentSMA,
+    deviation
+  };
+  
+  // シグナルがある場合のみ保存
+  if (signalType !== 'none') {
+    // 戦略シグナルを保存
+    addSignal(
+      exchange,
+      symbol,
+      strategyKey,
+      signalType,
+      currentPrice,
+      strategyResults
+    );
+  }
+  
+  return {
+    currentPrice,
+    currentSMA,
+    deviation,
+    signalType,
+    buySignal,
+    sellSignal,
+    strategyResults
+  };
+}
+
+
 
 module.exports = {
   meanReversionStrategy,
