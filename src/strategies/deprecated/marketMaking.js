@@ -1,7 +1,7 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
 
 // const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
-const { updateFilledTrades, getRealizedPnL, getCurrentOrderPair, setCurrentOrderPair} = require('../database/manager');
+const { updateFilledTrades, getRealizedPnL, getCurrentOrderPair, setCurrentOrderPair} = require('../../database/manager');
 
 /**
  * 保存された orderPairs 配列から activeOrders オブジェクトを再構築する
