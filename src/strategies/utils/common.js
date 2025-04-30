@@ -1,4 +1,6 @@
-const { formattedAvailableAmount, getRealizedPnL, addSignal, addOrder, fetchOHLCVData } = require('../../database/manager');
+const { formattedAvailableAmount, getRealizedPnL, addSignal,
+  backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
+  addOrder, fetchOHLCVData, getAvailableFund } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { checkBuyOrderAllowance } = require('../../common/utils');
 
@@ -57,7 +59,8 @@ async function handleStrategySignals(
   signalResult,
   strategyName,
   strategyId,
-  formatLogInfo
+  formatLogInfo,
+  options = {}
 ) {
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
   const logInfo = formatLogInfo(signalResult);
@@ -65,8 +68,10 @@ async function handleStrategySignals(
   // 注文を作成
   if (buySignal) {
     // 買いシグナル情報をログ出力
-    console.log(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
-    if (postOrderToDiscord) {
+    if (!options.backtest) {
+      console.log(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
+    }
+    if (postOrderToDiscord && !options.backtest) {
       await postOrderToDiscord(`[${strategyName}] 買いシグナル: ${exchange.id} - ${symbol} - ${logInfo.buy}`);
     }
 
@@ -79,13 +84,16 @@ async function handleStrategySignals(
       marketParameters, 
       currentPrice, 
       strategyName,
-      logInfo.orderInfo
+      logInfo.orderInfo,
+      options
     );
     
   } else if (sellSignal) {
     // 売りシグナル情報をログ出力
-    console.log(`${strategyName}売りシグナル: ${symbol} - ${logInfo.sell}`);
-    if (postOrderToDiscord) {
+    if (!options.backtest) {
+      console.log(`${strategyName}売りシグナル: ${symbol} - ${logInfo.sell}`);
+    }
+    if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 売りシグナル: ${exchange.id} - ${symbol} - ${logInfo.sell}`);
     }
 
@@ -97,7 +105,8 @@ async function handleStrategySignals(
       marketParameters, 
       currentPrice, 
       strategyName,
-      logInfo.orderInfo
+      logInfo.orderInfo,
+      options
     );
     
     // 特定条件で早期リターン
@@ -135,7 +144,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
   // 利用可能な資金を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
-  const balance = await getAvailableFund(exchange, symbol, options, options.backtest?.availableBaseFund, options.backtest?.totalBuyCost, options.backtest?.totalSellCost); // getAvailableFund を呼び出すように変更
+  const balance = await getAvailableFund(exchange, symbol, options); // getAvailableFund を呼び出すように変更
   const baseCurrency = symbol.split('/')[1];
   const availableFunds = balance.free[baseCurrency];
 
@@ -177,7 +186,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
     }
 
-    if (postOrderToDiscord) {
+    if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
     }
 
@@ -186,8 +195,8 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
     return { success: true, order };
   } else {
-    console.log(allowanceCheck.reason);
-    if (postOrderToDiscord) {
+    // console.log(allowanceCheck.reason);
+    if (postOrderToDiscord && !options.backtest) {
       await postOrderToDiscord(`[${strategyName}] ${allowanceCheck.reason}`);
     }
 
@@ -211,7 +220,7 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
 
   // 利用可能な資産を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
-  const balance = await getAvailableFund(exchange, symbol, options, options.backtest?.availableBaseFund, options.backtest?.totalBuyCost, options.backtest?.totalSellCost); // getAvailableFund を呼び出すように変更
+  const balance = await getAvailableFund(exchange, symbol, options); // getAvailableFund を呼び出すように変更
   const quoteCurrency = symbol.split('/')[0];
   const availableAsset = balance.free[quoteCurrency];
 
@@ -219,8 +228,10 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
   const formattedAmount = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision, options); // options を渡すように変更
 
   if (formattedAmount < minTradeAmount) {
-    console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
-    if (postOrderToDiscord) {
+    if (!options.backtest) {
+      console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+    }
+    if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchange.id} - ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
     }
 
@@ -255,10 +266,6 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
     } else {
       // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
       order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
-    }
-
-    if (postOrderToDiscord) {
-      postOrderToDiscord(`[${strategyName}] 売り注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
     }
 
     // 取引記録を更新

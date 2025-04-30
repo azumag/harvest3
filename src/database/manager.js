@@ -105,7 +105,12 @@ async function getRealizedPnL(exchange, symbol, strategyKey, options = {}) { // 
   // バックテストモードの場合
   if (options.backtest) {
     // options.backtest に totalSellCost と totalBuyCost があることを前提とする
-    return (options.backtest.totalSellCost || 0) - (options.backtest.totalBuyCost || 0);
+    if (options.backtest.lastSignal === 'buy') {
+      return 0;
+    }
+    if (options.backtest.lastSignal === 'sell') {
+      return (options.backtest.totalSellCost || 0) - (options.backtest.totalBuyCost || 0);
+    }
   }
 
   // リアルタイムモードの場合 (既存ロジック)
@@ -226,9 +231,11 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
     // buy/sell Cost を上書き (加算)
     if (side === 'buy') {
       options.backtest.totalBuyCost = (options.backtest.totalBuyCost || 0) + (price * amount);
+      options.backtest.lastSignal = 'buy'; // 最後のシグナルを更新
     } else if (side === 'sell') {
       options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
       options.backtest.baseFund = options.backtest.totalSellCost - options.backtest.totalBuyCost; // 基本資金を更新
+      options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
     }
 
     // バックテスト結果を options.backtest.orders 配列に追加
@@ -304,7 +311,7 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail, opt
     };
     
     // console.log('Adding signal with exchange:', exchange); // ログを追加
-    console.log('Signal object to be saved:', signal); // ログを追加
+    // console.log('Signal object to be saved:', signal); // ログを追加
 
     return await addSignalMongoDB(signal);
 }
@@ -413,6 +420,8 @@ async function fetchTicker(exchange, symbol, options = {}) {
     if (options.backtest) {
       // ohlcvData が存在しない場合はエラー
       if (!options.backtest.ohlcvData || !options.backtest.ohlcvData.length) {
+        console.log({ backtest: options.backtest });
+        console.log(`バックテストモードでのティッカー取得に失敗しました: ${exchange.id} ${symbol}`);
         throw new Error('Backtest mode requires ohlcvData in options');
       }
 
@@ -495,18 +504,19 @@ module.exports = {
  * @param {number} sellcost - バックテスト用の合計売りコスト
  * @returns {object} - 利用可能資金情報 (CCXTのfetchBalanceのfreeプロパティ形式を模倣)
  */
-async function getAvailableFund(exchange, symbol, options = {}, basefund, buycost, sellcost) {
+async function getAvailableFund(exchange, symbol, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
     // 計画に基づき計算
-    const available = basefund - buycost + sellcost;
+    const { baseFund, totalBuyCost, totalSellCost } = options.backtest;
+    const available = baseFund - totalBuyCost + totalSellCost;
     // CCXTのfetchBalanceのfreeプロパティ形式を模倣して返す
     const baseCurrency = symbol.split('/')[1]; // 通貨ペアの右側を基軸通貨と仮定
     const result = {
       [baseCurrency]: available > 0 ? available : 0, // 負の値にならないようにする
       // 他の通貨は必要に応じて追加
     };
-    console.log(`[Backtest] 利用可能資金シミュレーション: ${baseCurrency}: ${result[baseCurrency]}`);
+    // console.log(`[Backtest] 利用可能資金シミュレーション: ${baseCurrency}: ${result[baseCurrency]}`);
     return { free: result }; // fetchBalanceの戻り値の形式に合わせる
   }
 
@@ -532,7 +542,7 @@ async function getAvailableFund(exchange, symbol, options = {}, basefund, buycos
 async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) {
   // ランダムなorderIDを生成
   const orderId = `backtest_${Date.now()}_buy_${Math.random().toString(36).substring(2, 15)}`;
-  console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   return { id: orderId };
 }
@@ -548,7 +558,7 @@ async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) 
 async function backtestCreateLimitSellOrder(symbol, amount, price, options = {}) {
   // ランダムなorderIDを生成
   const orderId = `backtest_${Date.now()}_sell_${Math.random().toString(36).substring(2, 15)}`;
-  console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   return { id: orderId };
 }

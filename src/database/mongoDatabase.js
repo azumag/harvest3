@@ -367,7 +367,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
       timestamp: { $lte: timestamp } 
     };
 
-    console.log('OHLCV query:', query);
+    // console.log('OHLCV query:', query);
     
     const ohlcvData = await module.exports.ohlcvCollection
       .find(query)
@@ -375,7 +375,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
       .limit(limit)
       .toArray();
       
-    console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
+    // console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
     return ohlcvData.length > 0 ? ohlcvData : null;
   } catch (error) {
     console.error('Error getting OHLCV by parameters:', error);

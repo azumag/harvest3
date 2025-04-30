@@ -40,7 +40,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.ohlcv = ohlcv;
+    options.backtest.ohlcvData = ohlcv;
 
     // シグナル計算
     const signalResult = calculateMACrossSignals(
@@ -65,7 +65,8 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       signalResult,
       'MA戦略',
       'MA Cross',
-      formatMACrossLogInfo
+      formatMACrossLogInfo,
+      options
     );
   } catch (error) {
     console.error(`移動平均線戦略でエラーが発生しました: ${symbol}`, error);
@@ -126,7 +127,8 @@ function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symb
       strategyKey,
       signalType,
       currentPrice,
-      strategyResults
+      strategyResults,
+      options // optionsを追加
     );
   }
   
@@ -178,7 +180,7 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.ohlcv = ohlcv;
+    options.backtest.ohlcvData = ohlcv;
 
     // MACDを計算
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
@@ -214,7 +216,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
         strategyKey,
         signalType,
         currentPrice,
-        strategyResults
+        strategyResults,
+        options // optionsを追加
       );
     }
     
@@ -239,7 +242,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       signalResult,
       'MACD戦略',
       'MACD',
-      formatMACDLogInfo
+      formatMACDLogInfo,
+      options
     );
   } catch (error) {
     console.error(`MACD戦略でエラーが発生しました: ${symbol}`, error);
@@ -290,7 +294,7 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.ohlcv = ohlcv;
+    options.backtest.ohlcvData = ohlcv;
 
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
@@ -327,7 +331,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
         strategyKey,
         signalType,
         currentPrice,
-        strategyResults
+        strategyResults,
+        options // optionsを追加
       );
     }
     
@@ -353,7 +358,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       signalResult,
       'RSI戦略',
       'RSI',
-      formatRSILogInfo
+      formatRSILogInfo,
+      options
     );
     
   } catch (error) {
@@ -409,7 +415,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.ohlcv = ohlcv;
+    options.backtest.ohlcvData = ohlcv;
 
     // ボリンジャーバンドを計算
     const bands = calculateBollingerBands(closes, period, stdDev);
@@ -451,7 +457,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
         strategyKey,
         signalType,
         currentPrice,
-        strategyResults
+        strategyResults,
+        options // optionsを追加
       );
     }
     
@@ -478,7 +485,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       signalResult,
       'BB戦略',
       'Bollinger Bands',
-      formatBollingerBandsLogInfo
+      formatBollingerBandsLogInfo,
+      options
     );
     
   } catch (error) {

@@ -228,7 +228,7 @@ async function getSymbolsByExchange(config) {
 async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
-    console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
+    // console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
     if (options.backtest.lastSignal === 'sell') {
       return { allowed: true };
     } else if (options.backtest.lastSignal === 'buy') {

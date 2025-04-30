@@ -26,7 +26,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
     // OHLCVデータを取得して検証
     const { ohlcv, closes } = await fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, postErrorToDiscord, strategyKey, options);
     if (!closes) return;
-    options.ohlcv = ohlcv; // オプションにOHLCVデータを追加
+    options.backtest.ohlcvData = ohlcv; // オプションにOHLCVデータを追加
 
     // シグナル計算
     const signalResult = calculateMeanReversionSignals(
@@ -51,7 +51,8 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       signalResult,
       '平均回帰戦略',
       'Mean Reversion',
-      formatMeanReversionLogInfo
+      formatMeanReversionLogInfo,
+      options
     );
     
   } catch (error) {
@@ -81,7 +82,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.ohlcv = ohlcv;
+    options.backtest.ohlcvData = ohlcv;
 
     // RSIシグナル計算
     try {
@@ -109,13 +110,14 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
         signalResult,
         'オシレーター戦略',
         'Oscillator',
-        formatOscillatorLogInfo
+        formatOscillatorLogInfo,
+        options
       );
 
     } catch (error) {
       console.error(`オシレーター戦略でエラーが発生しました: ${symbol}`, error);
       if (postErrorToDiscord) {
-        await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+        // await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
       }
       return {
         strategy: 'Oscillator',
@@ -126,7 +128,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
   } catch (error) {
     console.error(`オシレーター戦略でエラーが発生しました: ${symbol}`, error);
     if (postErrorToDiscord) {
-      await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+      // await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return {
       strategy: 'Oscillator',
@@ -154,7 +156,7 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
   // RSI値の検証
   if (!rsiValues || rsiValues.length === 0 || rsiValues[rsiValues.length - 1] === undefined) {
     console.log(`オシレーター戦略: ${symbol} - RSI計算結果が無効です`);
-    if (postErrorToDiscord) {
+    if (postErrorToDiscord && !options.backtest) {
       await postErrorToDiscord(`[オシレーター戦略] 警告: ${exchange.id} - ${symbol} - RSI計算結果が無効です`);
     }
     return null;
@@ -192,7 +194,8 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
       strategyKey,
       signalType,
       currentPrice,
-      strategyResults
+      strategyResults,
+      options // optionsを追加
     );
   }
   

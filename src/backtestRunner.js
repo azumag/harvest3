@@ -87,7 +87,8 @@ async function runBacktest() {
                 const strategyConfig = {
                   ...defaultConfig,
                   hlcvInterval: timeframe,
-                  ...paramCombination
+                  ...paramCombination,
+                  tradePercentage: config.global.tradePercentage,
                 };
                 
                 console.log(`  パラメータ組み合わせをテスト: ${JSON.stringify(paramCombination)}`);
@@ -99,7 +100,7 @@ async function runBacktest() {
                     totalBuyCost: 0,
                     baseFund: 10000, 
                     ohlcvData: [],
-                    lastSignal: null,
+                    lastSignal: 'sell',
                     currentAmount: 0,
                     timeframe,
                     signals: [], // シグナルを保存する配列
