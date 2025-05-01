@@ -40,7 +40,10 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.backtest.ohlcvData = ohlcv;
+    if (options.backtest) {
+      // バックテストモードの場合、OHLCVデータを保存
+      options.backtest.ohlcvData = ohlcv;
+    }
 
     // シグナル計算
     const signalResult = calculateMACrossSignals(
@@ -180,7 +183,10 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.backtest.ohlcvData = ohlcv;
+    if (options.backtest) {
+      // バックテストモードの場合、OHLCVデータを保存
+      options.backtest.ohlcvData = ohlcv;
+    }
 
     // MACDを計算
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
@@ -294,7 +300,10 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.backtest.ohlcvData = ohlcv;
+    if (options.backtest) {
+      // バックテストモードの場合、OHLCVデータを保存
+      options.backtest.ohlcvData = ohlcv;
+    }
 
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
@@ -415,7 +424,10 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.backtest.ohlcvData = ohlcv;
+    if (options.backtest) {
+      // バックテストモードの場合、OHLCVデータを保存
+      options.backtest.ohlcvData = ohlcv;
+    }
 
     // ボリンジャーバンドを計算
     const bands = calculateBollingerBands(closes, period, stdDev);

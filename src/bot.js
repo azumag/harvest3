@@ -7,9 +7,19 @@ const { initializeDB } = require('./database/manager');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 
 const args = process.argv.slice(2);
+// 通貨ペア（シンボル）の取得
+let targetSymbol = null;
+const symbolArgIndex = args.findIndex(arg => arg === '--symbol' || arg === '-s');
+if (symbolArgIndex !== -1 && symbolArgIndex + 1 < args.length) {
+  targetSymbol = args[symbolArgIndex + 1];
+  // 引数リストから削除（後続の処理に影響しないように）
+  args.splice(symbolArgIndex, 2);
+}
+
 if (args.includes('--help') || args.includes('-h')) {
   console.log('オプション:');
   console.log('  --xxxxx(戦略名）で atomicExec が指定されている戦略を単一実行');
+  console.log('  --symbol, -s [シンボル]  特定の通貨ペア（例：BTC/JPY）のみを処理');
   console.log('  --help, -h        このヘルプメッセージを表示');
   console.log('オプションなしで実行すると、atomicExec 以外の戦略全てを実行');
   process.exit(0);
@@ -24,10 +34,13 @@ async function startBot() {
     // コマンドライン引数があるかどうかをチェック
     const hasArgs = args.length > 0;
     console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
+    if (targetSymbol) {
+      console.log(`指定された通貨ペア: ${targetSymbol}`);
+    }
   
     while (true) {
       const symbolsByExchange = await getSymbolsByExchange(config);
-      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
+      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
       
       for (const strategyKey of Object.keys(config.strategies)) {
         const strategy = config.strategies[strategyKey];
@@ -48,6 +61,10 @@ async function startBot() {
               
               for (const symbol of symbols) {
                 const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
+                // シンボルが指定されている場合、一致するもののみ処理
+                if (targetSymbol && symbol !== targetSymbol) {
+                  continue;
+                }
                 
                 try {
                   await updateFilledTrades(exchange, symbol);
@@ -92,11 +109,16 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
     // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
     const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
 
+    if (strategyConfig.enabled === false) {
+      console.log(`戦略 ${strategyKey}:${symbol} は個別に無効化されています`);
+      return null;
+    }
+
     return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options)
   } catch (error) {
     console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return null;
   }

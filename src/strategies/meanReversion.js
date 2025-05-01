@@ -26,7 +26,10 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
     // OHLCVデータを取得して検証
     const { ohlcv, closes } = await fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, postErrorToDiscord, strategyKey, options);
     if (!closes) return;
-    options.backtest.ohlcvData = ohlcv; // オプションにOHLCVデータを追加
+    if (options.backtest) {
+      // バックテストの場合、OHLCVデータをオプションに追加
+      options.backtest.ohlcvData = ohlcv; // オプションにOHLCVデータを追加
+    }
 
     // シグナル計算
     const signalResult = calculateMeanReversionSignals(
@@ -82,7 +85,9 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    options.backtest.ohlcvData = ohlcv;
+    if (options.backtest) {
+      options.backtest.ohlcvData = ohlcv;
+    }
 
     // RSIシグナル計算
     try {
