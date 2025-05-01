@@ -198,8 +198,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 }
 
                 console.log(`  結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
-                await postResultToDiscord(`バックテスト結果: ${exchange.id} ${symbol} ${strategyKey} ${JSON.stringify(result)}`);
-                
+                await postResultToDiscord(`バックテスト結果: ${exchange.id} ${symbol} ${strategyKey} ${timeframe} ${options.backtest.baseFund} ${JSON.stringify(result)}`);            
                 // この組み合わせの結果を保存
                 testResults.push(result);
               }

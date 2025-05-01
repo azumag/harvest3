@@ -1,6 +1,7 @@
 const { postErrorToDiscord } = require('./notifications');
 const { getStrategyParameters, saveStrategyParameters,
    getTradeCurrentPosition, getCurrentOrderPosition } = require('../database/manager');
+const { max } = require('moment');
 
 async function getMarketParametersByExchangeSymbol(symbolByExchange, config, options = {}) {
   const exchanges = Object.keys(symbolByExchange);
@@ -267,6 +268,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
 
   // Calculate total position after the potential order
   const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
+  console.log(`最大可能購入量: ${maxBuyAmount} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
 
   // Determine if a buy order is allowed based on position limits
   // Allow buy if total position is within maxBuyAmount
