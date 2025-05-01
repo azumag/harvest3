@@ -3,7 +3,7 @@ const { config } = require('./config');
 const { postErrorToDiscord, postResultToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
-const { backtestCreateLimitSellOrder, saveStrategyParameters } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
+const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
 
 // コマンドライン引数を取得
@@ -63,6 +63,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
       console.log('自動更新モード: 有効 (最適なパラメータで設定を更新します)');
     }
 
+    initializeDB(); // データベースの初期化
+
     // marketParameter, symbolByExchange を一度だけ取得
     const symbolsByExchange = await getSymbolsByExchange(config);
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
@@ -87,16 +89,20 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
             console.log(`${symbol} のバックテストを開始...`);
             
+            // 全タイムフレームの結果を保存する配列
+            const allTimeframeResults = [];
+            
             // タイムフレームでループ
             for (const timeframe of OHLCVTimeFrames) {
               const timeframeMs = timeframeToMs(timeframe);
               
               console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
               const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
+              const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
               // config.strategies[strategyKey];
               
               // 数値パラメータのキーを抽出
-              const numericParameterKeys = extractNumericParameterKeys(_strategyConfig);
+              const numericParameterKeys = extractNumericParameterKeys(dbParams);
               console.log(`数値パラメータ: ${numericParameterKeys.join(', ')}`);
               
               // パラメータ最適化のために小さめのステップ値を使用（大量の組み合わせになるため）
@@ -107,7 +113,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               
               // 全ての組み合わせを生成
               const parameterCombinations = generateParameterCombinations(
-                _strategyConfig,
+                dbParams,
                 numericParameterKeys,
                 paramMin,
                 paramMax,
@@ -195,6 +201,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 const result = {
                   parameters: paramCombination,
                   finalBaseFund: options.backtest.baseFund,
+                  timeframe: timeframe, // タイムフレーム情報を追加
                 }
 
                 console.log(`  結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
@@ -214,17 +221,40 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 
+                await sleep(100);
+              }
+
+              // タイムフレームごとの結果を全体の結果配列に追加
+              allTimeframeResults.push(...testResults);
+              
+              console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
+            }
+            
+            // 全タイムフレームの結果をランキング
+            const allTimeframeRankedResults = rankResults(allTimeframeResults);
+            
+            // 全タイムフレームの統合ランキング結果を表示
+            console.log(`\n===== ${symbol} (全タイムフレーム) パラメータ最適化結果 =====`);
+            await postResultToDiscord(`\n===== ${symbol} (全タイムフレーム) ${strategyKey} パラメータ統合最適化結果 =====`);
+            
+            for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
+                const result = allTimeframeRankedResults[index];
+                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
+                await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
+                
                 // 自動更新が有効で、1位の結果の場合
                 if (autoUpdate && index === 0) {
-                  await saveStrategyParameters(exchange.id, strategyKey, symbol, result.parameters);
-                  console.log(`最適なパラメータで ${strategyKey} の ${symbol} 設定を更新しました`);
-                  await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - ${JSON.stringify(result.parameters)}`);
+                  const paramsToUpdate = {
+                    ..._strategyConfig,
+                    hlcvInterval: result.timeframe, // 最適なタイムフレームを設定
+                    ...result.parameters,
+                  };
+                  await saveStrategyParameters(exchange.id, strategyKey, symbol, paramsToUpdate);
+                  console.log(`最適なパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${result.timeframe}）`);
+                  await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - タイムフレーム: ${result.timeframe} - ${JSON.stringify(result.parameters)}`);
                 }
                 
                 await sleep(100);
-              }
-              
-              console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
             }
             
             console.log(`${symbol} のバックテスト完了`);
