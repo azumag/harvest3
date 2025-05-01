@@ -2,7 +2,7 @@ const { postErrorToDiscord } = require('./notifications');
 const { getStrategyParameters, saveStrategyParameters,
    getTradeCurrentPosition, getCurrentOrderPosition } = require('../database/manager');
 
-async function getMarketParametersByExchangeSymbol(symbolByExchange, config) {
+async function getMarketParametersByExchangeSymbol(symbolByExchange, config, options = {}) {
   const exchanges = Object.keys(symbolByExchange);
   const marketParametersByExchange = {};
 
@@ -10,6 +10,11 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config) {
     const symbols = symbolByExchange[exchangeId];
     const exchangeInstance = config.exchanges[exchangeId].instance;
     for (const symbol of symbols) {
+      if (options.targetSymbol) {
+        if (symbol !== options.targetSymbol) {
+          continue;
+        }
+      }
       const params = await getMarketParameters(exchangeInstance, symbol);
       const { minTradeAmount, pricePrecision, amountPrecision } = params;
 

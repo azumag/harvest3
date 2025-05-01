@@ -92,11 +92,13 @@ const config = {
       exchanges: [exchangeBB],
       BTC_JPY: { // symbol specific settings
         enabled: true,
-        period: 30,
-        oversoldThreshold: 30,
-        overboughtThreshold: 80,
-        ohlcvInterval: '1m',
+        period: 33,
+        oversoldThreshold: 24,
+        overboughtThreshold: 72,
+        ohlcvInterval: '5m',
+        // 2位: 最終資金 10283.82 - パラメータ: {"overboughtThreshold":64,"oversoldThreshold":45,"period":30}
       },
+      
     },
 
     // トレンドフォロー戦略

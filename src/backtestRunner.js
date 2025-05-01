@@ -3,7 +3,7 @@ const { config } = require('./config');
 const { postErrorToDiscord, postResultToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
-const { updateFilledTrades } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
+const { backtestCreateLimitSellOrder } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
 
 // コマンドライン引数を取得
@@ -43,12 +43,12 @@ async function runBacktest(targetSymbol) {
 
     // marketParameter, symbolByExchange を一度だけ取得
     const symbolsByExchange = await getSymbolsByExchange(config);
-    const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
+    const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
 
     // バックテスト期間の設定 
     const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
     const startDate = new Date(endDate);
-    startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
+    startDate.setMonth(endDate.getMonth() - 3); // 3ヶ月前の日付を設定
 
     // 各戦略・通貨ペアでループ
     for (const strategyKey of Object.keys(config.strategies)) {
@@ -163,6 +163,17 @@ async function runBacktest(targetSymbol) {
                   }
                 }
 
+                if (options.backtest.lastSignal === 'buy') {
+                  // 最後のシグナルが買いの場合、売り注文を実行
+                  const sellResult = await backtestCreateLimitSellOrder(
+                    symbol,
+                    options.backtest.currentAmount,
+                    options.backtest.currentPrice,
+                    options
+                  );
+                  console.log(`  最後のシグナルが買いでした。売り注文を実行: ${JSON.stringify(sellResult)}`);
+                }
+
                 // ループ終了後、完了メッセージを表示
                 console.log(`バックテスト完了: 全${totalIterations}回の処理を実行しました`);
 
@@ -182,12 +193,13 @@ async function runBacktest(targetSymbol) {
               
               // ランキング結果を表示
               console.log(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
-              await postResultToDiscord(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
-              await Promise.all(rankedResults.slice(0, 10).map(async (result, index) => {
+              await postResultToDiscord(`\n===== ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果 =====`);
+              for (let index = 0; index < Math.min(rankedResults.length, 10); index++) {
+                const result = rankedResults[index];
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 await sleep(100);
-              }));
+              }
               
               console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
             }
@@ -243,11 +255,16 @@ function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max 
   // パラメータに応じた範囲を設定
   let paramMin, paramMax, paramStep;
   
-  // パラメータは 元の値の±10%程度の範囲で組み合わせを考える
-  paramMin = Math.max(1, Math.floor(defaultValue * 0.9));
-  paramMax = Math.ceil(defaultValue * 1.1);
-  paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 3)); // 3段階程度に分割
-  
+  // パラメータは 元の値の±N%程度の範囲で組み合わせを考える
+  const N = 0.5; // ±10%
+  const STEP = 10;
+  paramMin = Math.max(1, Math.floor(defaultValue * (1 - N)));
+  paramMax = Math.ceil(defaultValue * (1 + N));
+  paramStep = Math.max(1, Math.floor((paramMax - paramMin) / STEP)); // 段階に分割
+  // paramMin = Math.max(1, Math.floor(defaultValue * 0.9));
+  // paramMax = Math.ceil(defaultValue * 1.1);
+  // paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 3)); // 3段階程度に分割
+
   for (let value = paramMin; value <= paramMax; value += paramStep) {
     const subCombinations = generateParameterCombinations(defaultConfig, remainingKeys, min, max, step);
     

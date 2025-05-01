@@ -223,20 +223,6 @@ async function updateFilledTrades(exchange, symbol) {
 async function addOrder(exchange, symbol, strategyKey, side, amount, price, orderId, orderType, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
-    // options.backtest のプロパティを更新
-    options.backtest.lastSignal = side;
-    options.backtest.currentAmount = amount; // amount を更新
-
-    // buy/sell Cost を上書き (加算)
-    if (side === 'buy') {
-      options.backtest.totalBuyCost = (options.backtest.totalBuyCost || 0) + (price * amount);
-      options.backtest.lastSignal = 'buy'; // 最後のシグナルを更新
-    } else if (side === 'sell') {
-      options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
-      options.backtest.baseFund = options.backtest.totalSellCost - options.backtest.totalBuyCost; // 基本資金を更新
-      options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
-    }
-
     return;
   }
 
@@ -409,6 +395,8 @@ async function fetchTicker(exchange, symbol, options = {}) {
       const close = latestOHLCV[4];
       
       const averagePrice = (open + high + low + close) / 4;
+
+      options.backtest.currentPrice = averagePrice; // 現在価格を更新
       
       // バックテスト用のティッカーオブジェクトを作成
       return {
@@ -518,6 +506,10 @@ async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) 
   // console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   options.backtest.buyOrderCount += 1;
+  options.backtest.baseFund -= price * amount; // 基本資金を減少
+  options.backtest.currentAmount = amount; // 現在の量を更新
+  options.backtest.totalBuyCost = (options.backtest.totalBuyCost || 0) + (price * amount);
+  options.backtest.lastSignal = 'buy';
   return { id: orderId };
 }
 
@@ -535,5 +527,9 @@ async function backtestCreateLimitSellOrder(symbol, amount, price, options = {})
   // console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   options.backtest.sellOrderCount += 1;
+  options.backtest.baseFund += price * amount; // 基本資金を増加
+  options.backtest.currentAmount = 0; // 現在の量を更新
+  options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
+  options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
   return { id: orderId };
 }
