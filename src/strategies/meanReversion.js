@@ -221,7 +221,7 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
  */
 function formatMeanReversionLogInfo(signalResult) {
   const { currentPrice, currentSMA, deviation } = signalResult;
-  const deviationFormatted = deviation.toFixed(2);
+  const deviationFormatted = deviation;
   
   return {
     buy: `価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviationFormatted}%`,

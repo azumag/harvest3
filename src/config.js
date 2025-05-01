@@ -48,15 +48,8 @@ const config = {
 
   global: {
     // 共通設定
-    amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
-    profitMargin: 0.003,  // 目標利益率（取引料を考慮）
-    maxHistoryLength: 100,  // スプレッド履歴の最大長
+    amount: 0.0001,  // 最小取引単位
     tradePercentage: 0.01,  // 資金の%で取引
-    sellPercentage: 0.1,   // 売却時の資金の%
-    tradeCost: 0.0012, // 手数料暫定（bitbank)
-    cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
-    safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
-    amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
 
     // 除外シンボル
     excludeSymbols: [
@@ -66,7 +59,7 @@ const config = {
     ],
   },
   
-  // 戦略固有の設定
+  // 戦略固有の デフォルト設定
   strategies: {
 
     // 高頻度取引戦略
@@ -82,7 +75,7 @@ const config = {
     //   exchanges: [exchangeBB],
     // },
 
-    OSCILLATOR: { // strategy specific settings
+    OSCILLATOR: {
       enabled: true,
       period: 20,
       oversoldThreshold: 20,
@@ -90,15 +83,6 @@ const config = {
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
-      // atomicExec: true,
-      // BTC_JPY: { // symbol specific settings
-      //   enabled: true,
-      //   period: 33,
-      //   oversoldThreshold: 24,
-      //   overboughtThreshold: 72,
-      //   ohlcvInterval: '5m',
-      //   // 2位: 最終資金 10283.82 - パラメータ: {"overboughtThreshold":64,"oversoldThreshold":45,"period":30}
-      // },
     },
 
     // トレンドフォロー戦略
