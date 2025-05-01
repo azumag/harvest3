@@ -72,6 +72,7 @@ const config = {
     //   amount: 0.0001,
     //   orderBookDepth: 15,
     //   function: highFrequencyTrading,
+    //   atomicExec: true,
     //   exchanges: [exchangeBB],
     // },
 

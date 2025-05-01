@@ -269,8 +269,8 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
 
   // Determine if a buy order is allowed based on position limits
-  // Allow buy if total position is within maxBuyAmount OR if maxBuyAmount is less than baseMinTradeAmount
-  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount || maxBuyAmount < baseMinTradeAmount;
+  // Allow buy if total position is within maxBuyAmount
+  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount;
 
   if (!isBuyAllowed) {
     return {
