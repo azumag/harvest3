@@ -82,14 +82,21 @@ const config = {
     //   exchanges: [exchangeBB],
     // },
 
-    OSCILLATOR: {
+    OSCILLATOR: { // strategy specific settings
       enabled: true,
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      BTC_JPY: { // symbol specific settings
+        enabled: true,
+        period: 30,
+        oversoldThreshold: 30,
+        overboughtThreshold: 80,
+        ohlcvInterval: '1m',
+      },
     },
 
     // トレンドフォロー戦略

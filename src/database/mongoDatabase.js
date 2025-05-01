@@ -371,12 +371,16 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
     
     const ohlcvData = await module.exports.ohlcvCollection
       .find(query)
-      .sort({ timestamp: 1 })
+      .sort({ timestamp: -1 })
       .limit(limit)
       .toArray();
       
     // console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
-    return ohlcvData.length > 0 ? ohlcvData : null;
+    // 最新のデータを末尾に持ってくる
+    if (ohlcvData && ohlcvData.length > 0) {
+      return ohlcvData.reverse();
+    }
+    return [];
   } catch (error) {
     console.error('Error getting OHLCV by parameters:', error);
     throw error;

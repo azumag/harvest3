@@ -1,10 +1,13 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord } = require('./common/notifications');
+const { postErrorToDiscord, postResultToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 const { updateFilledTrades } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
+
+// コマンドライン引数を取得
+const targetSymbol = process.argv[2]; // 例: BTC/USDT
 
 /**
  * タイムフレーム文字列をミリ秒に変換する関数
@@ -26,19 +29,26 @@ function timeframeToMs(timeframe) {
 
 /**
  * バックテストを実行する関数
+ * @param {string} targetSymbol - ターゲットとなるシンボル（通貨ペア）。未指定の場合は全シンボルを対象とする
  */
-async function runBacktest() {
+async function runBacktest(targetSymbol) {
   try {
     // バックテストの主要なロジックをここに実装
     console.log('バックテストを開始します...');
+    if (targetSymbol) {
+      console.log(`対象シンボル: ${targetSymbol}`);
+    } else {
+      console.log('対象シンボル: すべて');
+    }
 
     // marketParameter, symbolByExchange を一度だけ取得
     const symbolsByExchange = await getSymbolsByExchange(config);
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
 
-    // バックテスト期間の設定 (例: 1年前から2025年4月29日まで)
+    // バックテスト期間の設定 
     const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
-    const startDate = new Date(endDate.getFullYear() - 1, endDate.getMonth(), endDate.getDate());
+    const startDate = new Date(endDate);
+    startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
 
     // 各戦略・通貨ペアでループ
     for (const strategyKey of Object.keys(config.strategies)) {
@@ -47,6 +57,11 @@ async function runBacktest() {
         for (const exchange of strategy.exchanges) {
           const symbols = symbolsByExchange[exchange.id];
           for (const symbol of symbols) {
+            // シンボルが指定されている場合、一致するもののみ処理
+            if (targetSymbol && symbol !== targetSymbol) {
+              continue;
+            }
+            
             const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
             console.log(`${symbol} のバックテストを開始...`);
             
@@ -56,9 +71,17 @@ async function runBacktest() {
               
               console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
               const defaultConfig = config.strategies[strategyKey];
+
+              // symbol-specificな設定を取得してマージ
+              const symbolConfig = defaultConfig[symbol.replace(/\//g, '_')] || {};
+
+              const _defaultConfig = {
+                ...defaultConfig,
+                ...symbolConfig,
+              }
               
               // 数値パラメータのキーを抽出
-              const numericParameterKeys = extractNumericParameterKeys(defaultConfig);
+              const numericParameterKeys = extractNumericParameterKeys(_defaultConfig);
               console.log(`数値パラメータ: ${numericParameterKeys.join(', ')}`);
               
               // パラメータ最適化のために小さめのステップ値を使用（大量の組み合わせになるため）
@@ -69,7 +92,7 @@ async function runBacktest() {
               
               // 全ての組み合わせを生成
               const parameterCombinations = generateParameterCombinations(
-                defaultConfig, 
+                _defaultConfig,
                 numericParameterKeys,
                 paramMin,
                 paramMax,
@@ -80,12 +103,14 @@ async function runBacktest() {
               
               // 各組み合わせの結果を保存する配列
               const testResults = [];
+
+              // const parameterCombinations = [defaultConfig]; // デフォルト設定のみでテスト
               
               // 各パラメータ組み合わせでバックテスト実行
               for (const paramCombination of parameterCombinations) {
                 // 基本設定にパラメータの組み合わせを適用
                 const strategyConfig = {
-                  ...defaultConfig,
+                  ..._defaultConfig,
                   hlcvInterval: timeframe,
                   ...paramCombination,
                   tradePercentage: config.global.tradePercentage,
@@ -102,6 +127,10 @@ async function runBacktest() {
                     ohlcvData: [],
                     lastSignal: 'sell',
                     currentAmount: 0,
+                    buySignalCount: 0,
+                    sellSignalCount: 0,
+                    buyOrderCount: 0,
+                    sellOrderCount: 0,
                     timeframe,
                   },
                   // Discord通知の無効化
@@ -109,10 +138,20 @@ async function runBacktest() {
                   postErrorToDiscord: async () => {},
                 };
 
+                // ループの総数を計算
+                const totalIterations = Math.floor((endDate.getTime() - startDate.getTime()) / timeframeMs) + 1;
+                let currentIteration = 0;
+
                 // タイムスタンプを生成してループ
                 for (let timestamp = startDate.getTime(); timestamp <= endDate.getTime(); timestamp += timeframeMs) {
-                  // 詳細ログは無効化し、処理を高速化
-                  // console.log(`    Processing ${symbol} (${timeframe}) at: ${new Date(timestamp).toISOString()}`);
+                  // 現在の進行状況を更新
+                  currentIteration++;
+                  
+                  // 10%ごとまたは一定間隔で進捗を表示
+                  if (currentIteration % Math.ceil(totalIterations / 10) === 0 || currentIteration === 1 || currentIteration === totalIterations) {
+                    const progressPercent = (currentIteration / totalIterations * 100).toFixed(1);
+                    console.log(`バックテスト進捗: ${currentIteration}/${totalIterations} (${progressPercent}%)`);
+                  }
                   
                   // 現在のタイムスタンプを options.backtest に設定
                   options.backtest.timestamp = timestamp;
@@ -124,12 +163,15 @@ async function runBacktest() {
                   }
                 }
 
+                // ループ終了後、完了メッセージを表示
+                console.log(`バックテスト完了: 全${totalIterations}回の処理を実行しました`);
+
                 const result = {
                   parameters: paramCombination,
                   finalBaseFund: options.backtest.baseFund,
                 }
 
-                console.log(`  結果: ${JSON.stringify(result)}`);
+                console.log(`  結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
                 
                 // この組み合わせの結果を保存
                 testResults.push(result);
@@ -140,9 +182,12 @@ async function runBacktest() {
               
               // ランキング結果を表示
               console.log(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
-              rankedResults.slice(0, 10).forEach((result, index) => {
+              await postResultToDiscord(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
+              await Promise.all(rankedResults.slice(0, 10).map(async (result, index) => {
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
-              });
+                await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
+                await sleep(100);
+              }));
               
               console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
             }
@@ -198,17 +243,10 @@ function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max 
   // パラメータに応じた範囲を設定
   let paramMin, paramMax, paramStep;
   
-  if (defaultValue <= 5) {
-    // stdDev など小さい値のパラメータ（1,2,3程度）は 1~5 の範囲
-    paramMin = 1;
-    paramMax = 5;
-    paramStep = 1;
-  } else {
-    // period など大きい値のパラメータ（20程度）は 元の値の±50%程度の範囲
-    paramMin = Math.max(1, Math.floor(defaultValue * 0.75));
-    paramMax = Math.ceil(defaultValue * 1.5);
-    paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 10)); // 10段階程度に分割
-  }
+  // パラメータは 元の値の±10%程度の範囲で組み合わせを考える
+  paramMin = Math.max(1, Math.floor(defaultValue * 0.9));
+  paramMax = Math.ceil(defaultValue * 1.1);
+  paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 3)); // 3段階程度に分割
   
   for (let value = paramMin; value <= paramMax; value += paramStep) {
     const subCombinations = generateParameterCombinations(defaultConfig, remainingKeys, min, max, step);
@@ -232,4 +270,4 @@ function rankResults(results) {
 
 
 // バックテストを開始
-runBacktest();
+runBacktest(targetSymbol);

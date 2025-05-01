@@ -261,7 +261,12 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
 async function addSignal(exchange, symbol, strategyKey, side, price, detail, options = {}) { // options を追加
     // バックテストモードの場合
     if (options.backtest) {
-      // バックテストモードではDBには記録しないため、ここで処理終了
+      if (side === 'buy') {
+        options.backtest.buySignalCount += 1;
+      }
+      if (side === 'sell') {
+        options.backtest.sellSignalCount += 1;
+      }
       return;
     }
 
@@ -512,6 +517,7 @@ async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) 
   const orderId = `backtest_${Date.now()}_buy_${Math.random().toString(36).substring(2, 15)}`;
   // console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
+  options.backtest.buyOrderCount += 1;
   return { id: orderId };
 }
 
@@ -528,5 +534,6 @@ async function backtestCreateLimitSellOrder(symbol, amount, price, options = {})
   const orderId = `backtest_${Date.now()}_sell_${Math.random().toString(36).substring(2, 15)}`;
   // console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
+  options.backtest.sellOrderCount += 1;
   return { id: orderId };
 }
