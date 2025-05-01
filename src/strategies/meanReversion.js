@@ -32,7 +32,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
     }
 
     // シグナル計算
-    const signalResult = calculateMeanReversionSignals(
+    const signalResult = await calculateMeanReversionSignals(
       closes, 
       period, 
       deviationThreshold, 
@@ -41,7 +41,7 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       strategyKey,
       options
     );
-    
+
     if (!signalResult) return;
     
     // シグナルによって売買

@@ -254,6 +254,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
 
   // 可能購入量限度を計算
   const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / price;
+  const maxBuyAmountWithMinTrade = Math.max(maxBuyAmount, baseMinTradeAmount);
 
   // Calculate required funds for the potential buy order
   const requiredFunds = price * formattedAmount;
@@ -268,16 +269,16 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
 
   // Calculate total position after the potential order
   const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
-  console.log(`最大可能購入量: ${maxBuyAmount} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
+  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
 
   // Determine if a buy order is allowed based on position limits
   // Allow buy if total position is within maxBuyAmount
-  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmount;
+  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmountWithMinTrade;
 
   if (!isBuyAllowed) {
     return {
       allowed: false,
-      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmount}`
+      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
     };
   }
 
