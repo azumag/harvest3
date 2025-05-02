@@ -103,11 +103,11 @@ async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
 async function getRealizedPnL(exchange, symbol, strategyKey, options = {}) { // options を追加
   // バックテストモードの場合
   if (options.backtest) {
-    // options.backtest に totalSellCost と totalBuyCost があることを前提とする
     if (options.backtest.lastSignal === 'buy') {
       return 0;
     }
     if (options.backtest.lastSignal === 'sell') {
+      // options.backtest に totalSellCost と totalBuyCost があることを前提とする
       return (options.backtest.totalSellCost || 0) - (options.backtest.totalBuyCost || 0);
     }
   }
@@ -470,7 +470,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
   if (options.backtest) {
     // 計画に基づき計算
     const { baseFund, totalBuyCost, totalSellCost } = options.backtest;
-    const available = baseFund - totalBuyCost + totalSellCost;
+    const available = baseFund;
     // CCXTのfetchBalanceのfreeプロパティ形式を模倣して返す
     const baseCurrency = symbol.split('/')[1]; // 通貨ペアの右側を基軸通貨と仮定
     const result = {

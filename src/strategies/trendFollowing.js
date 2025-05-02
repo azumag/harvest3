@@ -46,7 +46,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     }
 
     // シグナル計算
-    const signalResult = calculateMACrossSignals(
+    const signalResult = await calculateMACrossSignals(
       closes,
       shortPeriod,
       longPeriod,
@@ -57,6 +57,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     );
     
     if (!signalResult) return;
+    console.log('シグナル結果:', signalResult);
     
     // シグナル処理
     return await handleStrategySignals(
@@ -94,7 +95,7 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
  * @param {string} strategyKey 戦略キー
  * @returns {Object} シグナル計算結果
  */
-function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symbol, strategyKey, options = {}) {
+async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symbol, strategyKey, options = {}) {
   // 短期と長期の移動平均線を計算
   const shortMA = calculateSMA(closes, shortPeriod);
   const longMA = calculateSMA(closes, longPeriod);
@@ -106,7 +107,7 @@ function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange, symb
   const previousLongMA = longMA[longMA.length - 2];
   
   // 現在の価格を取得
-  const ticker = fetchTicker(exchange, symbol, options);
+  const ticker = await fetchTicker(exchange, symbol, options);
   const currentPrice = ticker.last;
   
   // クロスを検出

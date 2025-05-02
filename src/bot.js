@@ -5,6 +5,7 @@ const { sleep } = require('./common/utils');
 const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
+const { pro } = require('ccxt');
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -121,6 +122,8 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
       await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return null;
+  } finally {
+    process.exit(0);
   }
 }
 

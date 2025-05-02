@@ -5,6 +5,7 @@ const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
+const { pro } = require('ccxt');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -72,8 +73,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     // バックテスト期間の設定 
     const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
     const startDate = new Date(endDate);
-    // startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
-    startDate.setDate(endDate.getDate() - 1); // 1日前の日付を設定
+    startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
+    // startDate.setDate(endDate.getDate() - 1); // 1日前の日付を設定
 
     // 各戦略・通貨ペアでループ
     for (const strategyKey of Object.keys(config.strategies)) {
@@ -255,10 +256,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             if (autoUpdate && allTimeframeRankedResults.length > 0) {
               // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
               const topResult = allTimeframeRankedResults[0];
-              const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
+              const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
               const paramsToUpdate = {
-                ..._strategyConfig,
-                hlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
+                ...dbParams,
+                ohlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
                 ...topResult.parameters,
               };
               await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
@@ -281,6 +282,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const errorMessage = `バックテスト実行中にエラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
     // await postErrorToDiscord(errorMessage);
+  } finally {
+    // バックテスト終了後の処理
+    process.exit(0);
   }
 }
 
