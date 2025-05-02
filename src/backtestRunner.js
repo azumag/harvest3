@@ -1,6 +1,6 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord, postResultToDiscord, discordWebWebhookUrl } = require('./common/notifications');
+const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
@@ -11,6 +11,7 @@ const { OHLCVTimeFrames } = require('./common/const');
 const args = process.argv.slice(2);
 const targetSymbol = args.find(arg => !arg.startsWith('--')); // ハイフンで始まらない引数はシンボルと見なす
 const autoUpdate = args.includes('--auto-update'); // auto-update フラグを検出
+const gridSearch = args.includes('--grid-search'); // grid-search フラグを検出
 
 // 引数の説明を表示
 if (args.includes('--help') || args.includes('-h')) {
@@ -22,6 +23,7 @@ if (args.includes('--help') || args.includes('-h')) {
   
 オプション:
   --auto-update  - 最適なパラメータで設定ファイルを自動更新する
+  --grid-search  - グリッドサーチを実行する
   --help, -h     - このヘルプを表示
   `);
   process.exit(0);
@@ -113,14 +115,25 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               const paramMax = 100;
               const paramStep = 1; // ステップを大きくして組み合わせ数を減らす
               
-              // 全ての組み合わせを生成
-              const parameterCombinations = generateParameterCombinations(
-                dbParams,
-                numericParameterKeys,
-                paramMin,
-                paramMax,
-                paramStep
-              );
+              let parameterCombinations = null;
+              if (gridSearch) {
+                // グリッドサーチを実行
+                console.log('グリッドサーチを実行します...');
+                // 全ての組み合わせを生成
+                parameterCombinations = generateParameterCombinations(
+                  dbParams,
+                  numericParameterKeys,
+                  paramMin,
+                  paramMax,
+                  paramStep
+                );
+              } else {
+                console.log('正規乱数を使ったランダムサーチを実行します');
+                parameterCombinations = generateRandomParameterCombinations(
+                  dbParams, numericParameterKeys, 30 // 30個の組み合わせを生成
+                );
+                parameterCombinations.push(dbParams); // デフォルト設定を追加
+              }
               
               console.log(`テスト対象の組み合わせ数: ${parameterCombinations.length}`);
               
@@ -224,7 +237,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 resultSrtArr.push(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
               }
-              await postResultToDiscord(resultSrtArr.join('\n'), discordWebWebhookUrl);
+              await postResultToDiscord(resultSrtArr.join('\n'), discordBacktestURL);
 
               // タイムフレームごとの結果を全体の結果配列に追加
               allTimeframeResults.push(...testResults);
@@ -250,7 +263,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             }
             
             // まとめてDiscordに通知
-            await postResultToDiscord(allResultsArr.join('\n'), discordWebWebhookUrl);
+            await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
             
             // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
             if (autoUpdate && allTimeframeRankedResults.length > 0) {
@@ -264,7 +277,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               };
               await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
               console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
-              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordWebWebhookUrl);
+              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordBacktestURL);
             }
             
             console.log(`${symbol} のバックテスト完了`);
@@ -348,6 +361,61 @@ function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max 
  */
 function rankResults(results) {
   return results.sort((a, b) => b.finalBaseFund - a.finalBaseFund);
+}
+
+/**
+ * 正規分布に従った乱数を生成する（Box-Mullerアルゴリズム）
+ * @param {number} mean - 平均
+ * @param {number} stdDev - 標準偏差
+ * @returns {number} 正規分布に従った乱数
+ */
+function generateNormalRandom(mean, stdDev) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random(); // 0を回避
+  while (v === 0) v = Math.random(); // 0を回避
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return mean + z * stdDev;
+}
+
+/**
+ * 正規乱数を使ったパラメータ組み合わせを生成する
+ * @param {Object} defaultConfig - デフォルト設定
+ * @param {Array} numericKeys - 数値型のキーの配列
+ * @param {number} count - 生成する組み合わせの数（デフォルト60）
+ * @returns {Array} ランダムに生成されたパラメータ組合せの配列
+ */
+function generateRandomParameterCombinations(defaultConfig, numericKeys, count = 60) {
+  if (numericKeys.length === 0) {
+    return [{}];
+  }
+  
+  const combinations = [];
+  
+  // デフォルト設定を最初に追加
+  const defaultCombo = {};
+  for (const key of numericKeys) {
+    defaultCombo[key] = defaultConfig[key];
+  }
+  combinations.push(defaultCombo);
+  
+  // 残りのランダム組み合わせを生成
+  for (let i = 0; i < count - 1; i++) {
+    const combo = {};
+    for (const key of numericKeys) {
+      const defaultValue = defaultConfig[key];
+      // 標準偏差はデフォルト値の50%程度に設定
+      const stdDev = Math.max(1, defaultValue * 0.5);
+      // 正規分布に従ったランダム値を生成し、整数に丸める
+      let value = Math.round(generateNormalRandom(defaultValue, stdDev));
+      // 最小値を1に制限
+      value = Math.max(1, value);
+      
+      combo[key] = value;
+    }
+    combinations.push(combo);
+  }
+  
+  return combinations;
 }
 
 // バックテストを開始

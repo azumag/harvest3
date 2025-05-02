@@ -4,7 +4,7 @@
   "description": "Bitcoin scalping bot using ccxt and Docker",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js -s BTC/JPY",
+    "start": "node bot.js",
     "start-hft": "node src/hftBot.js",
     "start-mm": "node src/mmBot.js",
     "start-web": "node src/api/index.js",

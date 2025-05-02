@@ -1,9 +1,12 @@
 const axios = require('axios');
+const dotenv = require('dotenv');
+dotenv.config();
 
 const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
 const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Discord Webhook URL
 const discordWebWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL; // Discord Webhook URL
+const discordBacktestURL = process.env.DISCORD_BACKTEST_WEBHOOK_URL; // Discord Webhook URL
 
 /**
  * エラーメッセージをDiscordに投稿する関数
@@ -139,5 +142,6 @@ module.exports = {
   postErrorToDiscord,
   postOrderToDiscord,
   postResultToDiscord,
-  discordWebWebhookUrl
+  discordWebWebhookUrl,
+  discordBacktestURL
 };
