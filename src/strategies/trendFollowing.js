@@ -57,7 +57,6 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     );
     
     if (!signalResult) return;
-    console.log('シグナル結果:', signalResult);
     
     // シグナル処理
     return await handleStrategySignals(

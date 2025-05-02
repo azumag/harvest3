@@ -1,11 +1,11 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord, postResultToDiscord } = require('./common/notifications');
+const { postErrorToDiscord, postResultToDiscord, discordWebWebhookUrl } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
-const { pro } = require('ccxt');
+
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -224,7 +224,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 resultSrtArr.push(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
               }
-              await postResultToDiscord(resultSrtArr.join('\n'));
+              await postResultToDiscord(resultSrtArr.join('\n'), discordWebWebhookUrl);
 
               // タイムフレームごとの結果を全体の結果配列に追加
               allTimeframeResults.push(...testResults);
@@ -250,7 +250,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             }
             
             // まとめてDiscordに通知
-            await postResultToDiscord(allResultsArr.join('\n'));
+            await postResultToDiscord(allResultsArr.join('\n'), discordWebWebhookUrl);
             
             // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
             if (autoUpdate && allTimeframeRankedResults.length > 0) {
@@ -264,7 +264,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               };
               await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
               console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
-              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`);
+              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordWebWebhookUrl);
             }
             
             console.log(`${symbol} のバックテスト完了`);

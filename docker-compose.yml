@@ -56,6 +56,7 @@ services:
       - ./bot.js:/usr/src/app/bot.js
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
+    command: npm run start
     environment:
       - REDIS_URL=redis://redis:6379
     networks:

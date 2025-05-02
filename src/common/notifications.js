@@ -3,6 +3,7 @@ const axios = require('axios');
 const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
 const discordResultWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL; // Discord Webhook URL
+const discordWebWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL; // Discord Webhook URL
 
 /**
  * エラーメッセージをDiscordに投稿する関数
@@ -77,8 +78,8 @@ async function postOrderToDiscord(message, maxRetries = 3) {
  * 結果情報をDiscordに投稿する関数（2000文字制限対応）
  * @param {String} message - 投稿するメッセージ
  */
-async function postResultToDiscord(message) {
-  if (!discordResultWebhookUrl) {
+async function postResultToDiscord(message, discordWebhookURL = discordResultWebhookUrl) {
+  if (!discordWebhookURL) {
     console.error('Discord Webhook URLが設定されていません');
     return;
   }
@@ -126,7 +127,7 @@ async function postResultToDiscord(message) {
     try {
       // Discord APIのレート制限を考慮して少し待機（必要に応じて調整）
       await new Promise(resolve => setTimeout(resolve, 500));
-      await axios.post(discordResultWebhookUrl, { content: chunk });
+      await axios.post(discordWebhookURL, { content: chunk });
     } catch (error) {
       console.error(`Discordへの通知チャンク送信に失敗しました: ${error.message}`);
       // エラーが発生しても次のチャンクの送信を試みる
@@ -137,5 +138,6 @@ async function postResultToDiscord(message) {
 module.exports = {
   postErrorToDiscord,
   postOrderToDiscord,
-  postResultToDiscord
+  postResultToDiscord,
+  discordWebWebhookUrl
 };

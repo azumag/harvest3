@@ -93,6 +93,10 @@ async function startBot() {
     const errorMessage = `エラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
     await postErrorToDiscord(errorMessage);
+  } finally {
+    // DB接続をクローズ
+    await closeDB();
+    process.exit(0);
   }
 }
 
@@ -122,8 +126,6 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
       await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
     }
     return null;
-  } finally {
-    process.exit(0);
   }
 }
 

@@ -177,12 +177,12 @@ const config = {
       module: 'bitbank',
       instance: exchangeBB,
     },
-    'bitflyer': {
-      apiKey: BFApiKey,
-      secret: BFApiSecret,
-      module: 'bitflyer',
-      instance: exchangeBF,
-    }
+    // 'bitflyer': {
+    //   apiKey: BFApiKey,
+    //   secret: BFApiSecret,
+    //   module: 'bitflyer',
+    //   instance: exchangeBF,
+    // }
   }
 };
 
