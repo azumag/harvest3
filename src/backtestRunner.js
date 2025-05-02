@@ -72,7 +72,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     // バックテスト期間の設定 
     const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
     const startDate = new Date(endDate);
-    startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
+    // startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
+    startDate.setDate(endDate.getDate() - 1); // 1日前の日付を設定
 
     // 各戦略・通貨ペアでループ
     for (const strategyKey of Object.keys(config.strategies)) {
@@ -205,7 +206,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 }
 
                 console.log(`  結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
-                await postResultToDiscord(`バックテスト結果: ${exchange.id} ${symbol} ${strategyKey} ${timeframe} ${options.backtest.baseFund} ${JSON.stringify(result)}`);            
+                // await postResultToDiscord(`バックテスト結果: ${exchange.id} ${symbol} ${strategyKey} ${timeframe} ${options.backtest.baseFund} ${JSON.stringify(result)}`);            
                 // この組み合わせの結果を保存
                 testResults.push(result);
               }
@@ -214,15 +215,15 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               const rankedResults = rankResults(testResults);
               
               // ランキング結果を表示
-              console.log(`\n===== ${symbol} (${timeframe}) パラメータ最適化結果 =====`);
-              await postResultToDiscord(`\n===== ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果 =====`);
+              const rankingTitle = `===== ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果 =====`;
+              console.log(rankingTitle);
+              const resultSrtArr = [rankingTitle];
               for (let index = 0; index < Math.min(rankedResults.length, 10); index++) {
                 const result = rankedResults[index];
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                
-                await sleep(100);
+                resultSrtArr.push(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
               }
+              await postResultToDiscord(resultSrtArr.join('\n'));
 
               // タイムフレームごとの結果を全体の結果配列に追加
               allTimeframeResults.push(...testResults);
@@ -233,28 +234,36 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             // 全タイムフレームの結果をランキング
             const allTimeframeRankedResults = rankResults(allTimeframeResults);
             
-            // 全タイムフレームの統合ランキング結果を表示
-            console.log(`\n===== ${symbol} (全タイムフレーム) パラメータ最適化結果 =====`);
-            await postResultToDiscord(`\n===== ${symbol} (全タイムフレーム) ${strategyKey} パラメータ統合最適化結果 =====`);
+            // 全タイムフレームの統合ランキング結果を表示（全てのタイムフレームを横断して最高スコアのものを選択）
+            const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果 =====`;
+            console.log(allTimeframeRankingTitle);
+            
+            // 全タイムフレーム結果をまとめて表示するための配列
+            const allResultsArr = [allTimeframeRankingTitle];
             
             for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
                 const result = allTimeframeRankedResults[index];
-                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                await postResultToDiscord(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                
-                // 自動更新が有効で、1位の結果の場合
-                if (autoUpdate && index === 0) {
-                  const paramsToUpdate = {
-                    ..._strategyConfig,
-                    hlcvInterval: result.timeframe, // 最適なタイムフレームを設定
-                    ...result.parameters,
-                  };
-                  await saveStrategyParameters(exchange.id, strategyKey, symbol, paramsToUpdate);
-                  console.log(`最適なパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${result.timeframe}）`);
-                  await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - タイムフレーム: ${result.timeframe} - ${JSON.stringify(result.parameters)}`);
-                }
-                
-                await sleep(100);
+                const resultLine = `${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`;
+                console.log(resultLine);
+                allResultsArr.push(resultLine);
+            }
+            
+            // まとめてDiscordに通知
+            await postResultToDiscord(allResultsArr.join('\n'));
+            
+            // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
+            if (autoUpdate && allTimeframeRankedResults.length > 0) {
+              // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
+              const topResult = allTimeframeRankedResults[0];
+              const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
+              const paramsToUpdate = {
+                ..._strategyConfig,
+                hlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
+                ...topResult.parameters,
+              };
+              await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
+              console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
+              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`);
             }
             
             console.log(`${symbol} のバックテスト完了`);

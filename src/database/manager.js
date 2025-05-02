@@ -72,7 +72,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) 
 }
 
 async function getOHLCVByParams(exchange, symbol, timeframe, limit, timestamp) {
-  return await getOHLCVByParamsMongoDB(exchange.id, symbol, timeframe, limit, timestamp);
+  return await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
 }
 
 async function getCurrentOrderPair(exchange, symbol, strategyKey) {
