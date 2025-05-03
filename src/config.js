@@ -62,19 +62,16 @@ const config = {
   // 戦略固有の デフォルト設定
   strategies: {
 
-    // 高頻度取引戦略
-    // HFT: {
-    //   // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-    //   enabled: false,
-    //   interval: 100,
-    //   priceThreshold: 0.001,
-    //   maxOrdersPerMinute: 100,
-    //   amount: 0.0001,
-    //   orderBookDepth: 15,
-    //   function: highFrequencyTrading,
-    //   atomicExec: true,
-    //   exchanges: [exchangeBB],
-    // },
+    // 高頻度取引戦略 (bitbank WebSocket)
+    HFT: {
+      enabled: process.env.STRATEGY_HFT_BB_WS_ENABLED === 'true', // .envで制御できるようにする
+      // interval, priceThreshold, orderBookDepth などのパラメータは src/hft/config.js で管理
+      function: require('./hft').startHFTStrategy, // 新しいHFT戦略のエントリポイント
+      atomicExec: true,
+      exchanges: [exchangeBB], // bitbank を使用
+    },
+
+    
     BOLLINGER_BANDS: {
       enabled: true,
       period: 20,
@@ -84,7 +81,6 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    
 
     // トレンドフォロー戦略
     MA: {
@@ -125,7 +121,7 @@ const config = {
       function: rsiStrategy,
       exchanges: [exchangeBB]
     },
-    
+
     OSCILLATOR: {
       enabled: true,
       period: 20,
@@ -135,7 +131,7 @@ const config = {
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
     },
-    
+
     // アービトラージ戦略
     // INTER_EXCHANGE_ARBITRAGE: {
     //   enabled: process.env.STRATEGY_ARBITRAGE_ENABLED === 'true',
@@ -149,7 +145,7 @@ const config = {
     //   function: scalpingStrategy,
     //   exchanges: [exchangeBB],
     // },
-    
+
     // マーケットメイキング戦略
     // MARKET_MAKING: {
     //   enabled: process.env.STRATEGY_MARKET_MAKING_ENABLED === 'true',
