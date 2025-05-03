@@ -32,6 +32,7 @@ class MarketDataStore extends EventEmitter {
    * @param {object} orderBookData - 注文板データ (depth_whole または depth_diff)
    */
   updateOrderBook(pair, orderBookData) {
+    console.log(`Received order book for ${pair}: ${JSON.stringify(orderBookData)}`);
     const pairData = this.getOrCreatePairData(pair);
     // TODO: depth_whole と depth_diff の適用ロジックを実装
     // 現状は単純な上書き（depth_whole を想定）

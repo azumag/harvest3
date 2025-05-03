@@ -262,7 +262,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               }
               resultSrtArr.push('```');
 
-              await postResultToDiscord(resultSrtArr.join('\n'), discordBacktestURL);
+              // timeframeごとの結果は一旦スキップ
+              // await postResultToDiscord(resultSrtArr.join('\n'), discordBacktestURL);
               
               // 現在のタイムフレームの結果を全タイムフレーム結果配列に追加
               allTimeframeResults.push(...rankedResults.map(result => ({ ...result, timeframe })));
