@@ -2,11 +2,15 @@
 const { config } = require('./config');
 const { postErrorToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
-const { updateFilledTrades } = require('./database/manager');
-const { initializeDB } = require('./database/manager');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
+const { 
+  initializeDB,
+  updateFilledTrades,
+  fetchTicker,
+  getSymbolsByExchange,
+  getStrategyConfig,
+  getMarketParametersByExchangeSymbol 
+} = require('./database/manager');
 const { pro } = require('ccxt');
-const { getTickerRedis } = require('./database/redisDatabase');
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -41,6 +45,7 @@ async function startBot() {
     }
   
     while (true) {
+      // マーケットパラメータの更新
       const symbolsByExchange = await getSymbolsByExchange(config);
       const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
       
@@ -68,6 +73,8 @@ async function startBot() {
 
         const exchangeInstance = exchangeConfig.instance;
 
+        console.log(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`); 
+
         try {
           // 約定済み取引の更新
           await updateFilledTrades(exchangeInstance, symbol);
@@ -75,7 +82,7 @@ async function startBot() {
           // Ticker情報を取得
           // 同時にキャッシュする効果もある
           const ticker = await fetchTicker(exchangeInstance, symbol);
-          console.log(`Ticker: ${exchangeId} - ${symbol} - ${JSON.stringify(ticker)}`);
+          // console.log(`Ticker: ${exchangeId} - ${symbol} - ${JSON.stringify(ticker)}`);
           
           // 有効な戦略を適用
           for (const strategyKey of Object.keys(config.strategies)) {
@@ -147,6 +154,7 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
       return null;
     }
 
+    console.log(`--- 戦略 ${strategyKey} を実行中...`);
     return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options)
   } catch (error) {
     console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);

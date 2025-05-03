@@ -57,10 +57,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
 
     // バックテスト期間の設定 
-    const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
+    // const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
+    const endDate = new Date(); // 現在の日付を使用
     const startDate = new Date(endDate);
-    startDate.setMonth(endDate.getMonth() - 1); // 1ヶ月前の日付を設定
-    // startDate.setDate(endDate.getDate() - 1); // 1日前の日付を設定
+    startDate.setDate(endDate.getDate() - 7); // n日間前の日付を設定
 
     // 各戦略・通貨ペアでループ
     for (const strategyKey of Object.keys(config.strategies)) {
