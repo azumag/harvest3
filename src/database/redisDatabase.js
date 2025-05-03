@@ -375,6 +375,26 @@ async function updateOHLCVRedis(exchangeId, symbol, timeframe, ohlcvData) {
   // console.log(`OHLCVデータを更新しました: ${key} - ${now}`);
 }
 
+async function getTickerRedis(exchangeId, symbol) {
+  const key = `ticker:${exchangeId}:${symbol}`;
+  const data = await client.get(key);
+
+  if (data) {
+    return JSON.parse(data);
+  }
+
+  return null;
+}
+
+async function updateTickerRedis(exchangeId, symbol, tickerData) {
+  const key = `ticker:${exchangeId}:${symbol}`;
+
+  // Redisにティッカーデータを保存
+  await client.set(key, JSON.stringify(tickerData));
+
+  // console.log(`ティッカーデータを更新しました: ${key}`);
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
@@ -392,5 +412,7 @@ module.exports = {
   getAllStrategyParametersRedis,
   getOHLCVRedisTimestamp,
   getOHLCVRedis,
-  updateOHLCVRedis
+  updateOHLCVRedis,
+  getTickerRedis,
+  updateTickerRedis
 };

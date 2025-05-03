@@ -27,6 +27,8 @@ const {
   getOHLCVRedisTimestamp,
   getOHLCVRedis,
   updateOHLCVRedis,
+  getTickerRedis,
+  updateTickerRedis
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
@@ -487,8 +489,29 @@ async function fetchTicker(exchange, symbol, options = {}) {
       };
     }
     
-    // リアルタイムモード: 取引所APIからティッカーを取得
-    return await exchange.fetchTicker(symbol);
+    // REDISに最新データがあるか確認
+    const timestamp = Date.now();
+    const redisTicker = await getTickerRedis(exchange.id, symbol);
+
+    // console.log(redisTicker);
+
+    if (!redisTicker || (timestamp - redisTicker.timestamp > timeframeToMs('1m'))) {
+      // ticker が redis にないか、前回更新時刻から 1m 時間以上経過している場合
+      // TODO: 並列実行の場合 1s でもよい
+      const ticker = await exchange.fetchTicker(symbol);
+      if (!ticker) {
+        console.log(`${symbol} - ティッカーが見つかりませんでした。`);
+        return null;
+      }
+
+      // Save to Redis
+      await updateTickerRedis(exchange.id, symbol, ticker);
+      return ticker;
+    } else {
+      // Redisに保存されたティッカーを返す
+      return redisTicker;
+    }
+
   } catch (error) {
     console.error(`Error fetching ticker for ${symbol}:`, error);
     throw error;

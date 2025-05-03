@@ -21,14 +21,15 @@
 
 # Redis構成
 - summary
-  - order    : 現在注文中サマリ
-  - trade    : 現在約定サマリ
+  - order                               : 現在注文中サマリ
+  - trade                               : 現在約定サマリ
 - current
-  - orderPair : オーダーペア保存領域 戦略によってはつかう
-- params      : 取引所・通貨・戦略ごとのパラメータ
-- ohlcv       : 取引所・通貨ごとの最新ロウソク足（100件）
-  - timestamp:exchange:symbol : 最終取得時刻
-  - exchange:symbol           : ロウソク足データ
+  - orderPair                           : オーダーペア保存領域 戦略によってはつかう
+- params                                : 取引所・通貨・戦略ごとのパラメータ
+- ohlcv                                 : 取引所・通貨ごとの最新ロウソク足（100件）
+  - timestamp:exchange:symbol:timeframe : 最終取得時刻
+  - data:exchange:symbol:timeframe      : ロウソク足データ
+- ticker:exchange:symbol                : 取引所・通貨ごとの Ticker
 
 ## summary
 ### order
@@ -166,6 +167,20 @@ Key: `params:${exchange}:${symbol}:${strategy}`
 ]
 ```
 
+## ticker
+### timestamp:exchange:symbol
+### data:exchange:symbol
+```json
+{
+  "sell": "1231313",
+  "buy": "2342324",
+  "high": "3424242",
+  "low": "1111111",
+  "open": "342424",
+  "last": "22222",
+  "vol": "1.1",
+}
+```
 
 # MongoDB 構成
 分析用, 履歴などを永続化して保存するための DB
