@@ -4,7 +4,7 @@ const { postErrorToDiscord } = require('./common/notifications');
 const { sleep } = require('./common/utils');
 const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
+const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
 const { pro } = require('ccxt');
 
 const args = process.argv.slice(2);

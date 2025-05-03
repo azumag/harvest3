@@ -31,7 +31,7 @@ const {
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
 
-const { timeframeToMs } = require('../common/utils');
+const { sleep, timeframeToMs } = require('../common/utils');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -70,7 +70,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     
     // 通常モード
     // REDISに最新データがあるか確認
-    const timestamp = Date.now().getTime();
+    const timestamp = Date.now();
     const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
     const timeframeMs = timeframeToMs(timeframe);
     // 前回更新時刻がない、または前回更新時刻から Timeframe 時間以上経過している場合
@@ -87,8 +87,10 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       // 履歴から最新の1件だけ取得して、timestamp が更新しようとしているデータより
       // 新しい場合のみ履歴保存する
       const lastOhlcv = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, 1);
+      // console.log(`lastOhlcv: ${lastOhlcv}`);
+      // console.log(`ohlcvs: ${ohlcvs}`);
       for (const ohlcv of ohlcvs) {
-        if (ohlcv[0] <= lastOhlcv[0][0]) {
+        if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
           continue; // 既存のデータより古い場合はスキップ
         }
         try {
@@ -493,37 +495,7 @@ async function fetchTicker(exchange, symbol, options = {}) {
   }
 }
 
-// 関数をエクスポート
-module.exports = {
-  fetchOHLCVData,
-  updateFilledTrades,
-  formattedAvailableAmount,
-  getRealizedPnL,
-  addSignal,
-  addOrder,
-  getStrategyParameters,
-  saveStrategyParameters,
-  getCurrentOrderPair,
-  setCurrentOrderPair,
-  getOrderStrategyKeyByOrderId,
-  getTradeSummaries,
-  getTradeCurrentPosition,
-  getCurrentOrderPosition,
-  initializeDB,
-  getTradeKeys,
-  getAllTradeSummaries,
-  getAllStrategyParameters,
-  listOrders,
-  listTrades,
-  listSignals,
-  countSignals,
-  addOhlcvMongoDB, // script からの利用のみ
-  getOHLCVByParams, // script からの利用のみ
-  fetchTicker,
-  getAvailableFund, 
-  backtestCreateLimitBuyOrder,
-  backtestCreateLimitSellOrder,
-};
+
 
 /**
  * バックテスト用の利用可能資金取得関数
@@ -603,3 +575,262 @@ async function backtestCreateLimitSellOrder(symbol, amount, price, options = {})
   options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
   return { id: orderId };
 }
+
+async function getMarketParametersByExchangeSymbol(symbolByExchange, config, options = {}) {
+  const exchanges = Object.keys(symbolByExchange);
+  const marketParametersByExchange = {};
+
+  for (const exchangeId of exchanges) {
+    const symbols = symbolByExchange[exchangeId];
+    const exchangeInstance = config.exchanges[exchangeId].instance;
+    for (const symbol of symbols) {
+      if (options.targetSymbol) {
+        if (symbol !== options.targetSymbol) {
+          continue;
+        }
+      }
+      const params = await getMarketParameters(exchangeInstance, symbol);
+      const { minTradeAmount, pricePrecision, amountPrecision } = params;
+
+      marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+      marketParametersByExchange[exchangeId][symbol] = {
+        minTradeAmount,
+        pricePrecision,
+        amountPrecision,
+      };
+
+      console.log(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータを取得しました:`, params)
+      await sleep(300);
+    }
+  }
+
+  return marketParametersByExchange;
+}
+
+async function getStrategyConfig(exchange, symbol, strategyKey, config) {
+  // configからデフォルトの戦略設定を取得
+  const defaultConfig = config.strategies[strategyKey];
+    
+  if (!defaultConfig || !defaultConfig.enabled) {
+    return null;
+  }
+
+  // データベースから戦略パラメータを取得
+  const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
+
+  const strategyConfig = (() => {
+    if (dbParams) {
+      // デフォルト設定とデータベースのパラメータをマージ（データベース優先）
+      return { ...(config.global), ...defaultConfig, ...dbParams };
+    } else {
+      // DBにパラメータがない場合はデフォルト設定を使用
+      // デフォルト設定をDBに保存
+      // Create a clean config without functions and exchanges property
+      const configToSave = Object.fromEntries(
+        Object.entries(defaultConfig).filter(([key, value]) => 
+          typeof value !== 'function' && key !== 'exchanges'
+        )
+      );
+      saveStrategyParameters(exchange.id, symbol, strategyKey, configToSave);
+      return { ...(config.global), ...defaultConfig };
+    }
+  })();
+
+  return strategyConfig;
+}
+
+/**
+ * マーケットパラメータを取得する共通関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @returns {Object|null} - マーケットパラメータまたはnull（エラー時）
+ */
+async function getMarketParameters(exchange, symbol) {
+  const market = exchange.markets[symbol];
+  if (!market) {
+    console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
+    return null;
+  }
+  
+  const minTradeAmount = (market.limits?.amount?.min || 0.0001);
+    
+  let pricePrecision = market.precision ? market.precision.price : undefined;
+  
+  if (!pricePrecision) {
+    try {
+      const ticker = await exchange.fetchTicker(symbol);
+      const lastPrice = ticker.last;
+      
+      if (lastPrice) {
+        const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
+        pricePrecision = priceDecimals;
+      } else {
+        const errorMessage = `ティッカーのlast価格が取得できませんでした: ${symbol} ${exchange.name}`;
+        console.error(errorMessage);
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(errorMessage);
+        }
+        return null;
+      }
+    } catch (error) {
+      const errorMessage = `価格精度が取得できず、ティッカーの取得にも失敗しました: ${symbol} ${exchange.name}`;
+      console.error(errorMessage, error);
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(errorMessage);
+      }
+      return null;
+    }
+  }
+  
+  if (pricePrecision > 0 && pricePrecision < 1) {
+    const priceDecimals = (pricePrecision.toString().split('.')[1] || '').length;
+    pricePrecision = priceDecimals;
+  }
+  
+  let amountPrecision = market.precision ? market.precision.amount : undefined;
+  
+  if (!minTradeAmount) {
+    const errorMessage = `最小取引単位が取得できませんでした: ${symbol} ${exchange.name}`;
+    console.error(errorMessage);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(errorMessage);
+    }
+    return null;
+  }
+  
+  if (!amountPrecision) {
+    const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
+    amountPrecision = minTradeAmountDecimals;
+  }
+  
+  if (amountPrecision > 0 && amountPrecision < 1) {
+    const amountDecimals = (amountPrecision.toString().split('.')[1] || '').length;
+    amountPrecision = amountDecimals;
+  }
+  
+  return { minTradeAmount, pricePrecision, amountPrecision };
+}
+
+async function getSymbolsByExchange(config) {
+  const exchanges = Object.keys(config.exchanges);
+  const symbolsByExchange = {};
+
+  for (const exchange of exchanges) {
+    const exchangeInstance = config.exchanges[exchange].instance;
+    const markets = await exchangeInstance.loadMarkets();
+
+    // 除外シンボル
+    const symbols = Object.keys(markets).filter(symbol =>
+      symbol.endsWith('/JPY') 
+        && !config.global.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
+    );
+
+    symbolsByExchange[exchange] = symbols;
+    console.log(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
+  }
+
+  return symbolsByExchange;
+}
+
+/**
+ * 買い注文が実行可能かどうかを資金とポジション制限に基づいてチェックする
+ * @param {Object} exchange - ccxtの取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @param {Number} midPrice - 現在の中間価格
+ * @param {Number} formattedAmount - 注文数量
+ * @param {Number} availableFunds - 利用可能な資金
+ * @param {Number} tradePercentage - 取引に使用する資金の割合
+ * @param {Number} realizedPnL - 実現した損益
+ * @param {Number} baseMinTradeAmount - 最小取引量
+ * @returns {Object} - {allowed: boolean, reason: string}
+ */
+async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, options = {}) {
+  // バックテストモードの場合
+  if (options.backtest) {
+    // console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
+    if (options.backtest.lastSignal === 'sell') {
+      return { allowed: true };
+    } else if (options.backtest.lastSignal === 'buy') {
+      return { allowed: false, reason: '[Backtest] Last signal was buy' };
+    } else {
+      // lastSignal が設定されていない場合やその他のケース
+      return { allowed: false, reason: '[Backtest] Invalid or no last signal in backtest' };
+    }
+  }
+
+  // リアルタイムモードの場合 (既存ロジック)
+  // この戦略で約定し残っている量（買った量ー売った量）
+  const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+
+  // 今注文に出している買い量
+  const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
+
+  // 可能購入量限度を計算
+  const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / price;
+  const maxBuyAmountWithMinTrade = Math.max(maxBuyAmount, baseMinTradeAmount);
+
+  // Calculate required funds for the potential buy order
+  const requiredFunds = price * formattedAmount;
+
+  // Check if available funds are sufficient
+  if (availableFunds < requiredFunds || formattedAmount <= 0) {
+    return {
+      allowed: false,
+      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
+    };
+  }
+
+  // Calculate total position after the potential order
+  const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
+  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
+
+  // Determine if a buy order is allowed based on position limits
+  // Allow buy if total position is within maxBuyAmount
+  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmountWithMinTrade;
+
+  if (!isBuyAllowed) {
+    return {
+      allowed: false,
+      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
+    };
+  }
+
+  return { allowed: true };
+}
+
+module.exports = {
+  fetchOHLCVData,
+  updateFilledTrades,
+  formattedAvailableAmount,
+  getRealizedPnL,
+  addSignal,
+  addOrder,
+  getStrategyParameters,
+  saveStrategyParameters,
+  getCurrentOrderPair,
+  setCurrentOrderPair,
+  getOrderStrategyKeyByOrderId,
+  getTradeSummaries,
+  getTradeCurrentPosition,
+  getCurrentOrderPosition,
+  initializeDB,
+  getTradeKeys,
+  getAllTradeSummaries,
+  getAllStrategyParameters,
+  listOrders,
+  listTrades,
+  listSignals,
+  countSignals,
+  addOhlcvMongoDB, // script からの利用のみ
+  getOHLCVByParams, // script からの利用のみ
+  fetchTicker,
+  getAvailableFund, 
+  backtestCreateLimitBuyOrder,
+  backtestCreateLimitSellOrder,
+  getStrategyConfig,
+  getMarketParametersByExchangeSymbol,
+  checkBuyOrderAllowance,
+  getSymbolsByExchange,
+  getMarketParameters,
+};

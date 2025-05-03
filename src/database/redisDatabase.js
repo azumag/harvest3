@@ -344,7 +344,7 @@ async function getOHLCVRedisTimestamp(exchangeId, symbol, timeframe) {
 
 async function updateOHLCVRedisTimestamp(exchangeId, symbol, timeframe) {
   const key = `ohlcv:timestamp:${exchangeId}:${symbol}:${timeframe}`;
-  const now = Date.now().getTime();
+  const now = Date.now();
 
   await client.set(key, now);
   // console.log(`OHLCVのタイムスタンプを更新しました: ${key} - ${now}`);

@@ -2,7 +2,7 @@
 const { config } = require('./config');
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { sleep, timeframeToMs } = require('./common/utils');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
+const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
 

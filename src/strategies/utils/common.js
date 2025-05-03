@@ -2,7 +2,7 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
   addOrder, fetchOHLCVData, getAvailableFund } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
-const { checkBuyOrderAllowance } = require('../../common/utils');
+const { checkBuyOrderAllowance } = require('../../database/manager');
 
 /**
  * OHLCV データを取得して検証する

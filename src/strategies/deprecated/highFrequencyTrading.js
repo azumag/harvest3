@@ -8,7 +8,7 @@ const { formattedAvailableAmount,
 
 const { postErrorToDiscord, postOrderToDiscord } = require('../../common/notifications');
 
-const { checkBuyOrderAllowance } = require('../../common/utils');
+const { checkBuyOrderAllowance } = require('../../database/manager');
 
 const priceCache = {};
 
