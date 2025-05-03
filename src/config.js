@@ -75,16 +75,16 @@ const config = {
     //   atomicExec: true,
     //   exchanges: [exchangeBB],
     // },
-
-    OSCILLATOR: {
+    BOLLINGER_BANDS: {
       enabled: true,
       period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
+      stdDev: 2,
       ohlcvInterval: '15m',
-      function: oscillatorStrategy,
-      exchanges: [exchangeBB],
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
     },
+
+    
 
     // トレンドフォロー戦略
     MA: {
@@ -93,6 +93,16 @@ const config = {
       longPeriod: 20,
       ohlcvInterval: '15m',
       function: maStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    // 逆張り戦略
+    MEAN_REVERSION: {
+      enabled: true,
+      period: 20,
+      ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
       exchanges: [exchangeBB]
     },
 
@@ -115,24 +125,15 @@ const config = {
       function: rsiStrategy,
       exchanges: [exchangeBB]
     },
-
-    BOLLINGER_BANDS: {
-      enabled: true,
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
     
-    // 逆張り戦略
-    MEAN_REVERSION: {
+    OSCILLATOR: {
       enabled: true,
       period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
       ohlcvInterval: '15m',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
+      function: oscillatorStrategy,
+      exchanges: [exchangeBB],
     },
     
     // アービトラージ戦略

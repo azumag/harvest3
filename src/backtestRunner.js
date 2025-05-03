@@ -134,6 +134,34 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 );
                 parameterCombinations.push(dbParams); // デフォルト設定を追加
               }
+
+              // parameterCombinations を生成した後、重複を排除する処理を追加します
+              if (parameterCombinations) {
+                // 重複排除前の数を保存
+                const originalCount = parameterCombinations.length;
+                
+                // パラメータの組み合わせを文字列化してキーにするマップを作成
+                const uniqueCombinationsMap = new Map();
+                
+                parameterCombinations.forEach(combo => {
+                  // オブジェクトをソートしてからJSON文字列化することで一貫性を確保
+                  const keys = Object.keys(combo).sort();
+                  const sortedCombo = {};
+                  keys.forEach(key => sortedCombo[key] = combo[key]);
+                  
+                  const comboKey = JSON.stringify(sortedCombo);
+                  
+                  // まだ追加されていない組み合わせの場合のみマップに追加
+                  if (!uniqueCombinationsMap.has(comboKey)) {
+                    uniqueCombinationsMap.set(comboKey, combo);
+                  }
+                });
+                
+                // 一意の組み合わせだけを含む新しい配列を作成
+                parameterCombinations = Array.from(uniqueCombinationsMap.values());
+                
+                console.log(`重複排除: ${originalCount} 組み合わせから ${parameterCombinations.length} 組み合わせに削減されました`);
+              }
               
               console.log(`テスト対象の組み合わせ数: ${parameterCombinations.length}`);
               
@@ -231,56 +259,70 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               // ランキング結果を表示
               const rankingTitle = `===== ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果 =====`;
               console.log(rankingTitle);
-              const resultSrtArr = [rankingTitle];
+
+              // Discord用に整形した文字列を作成
+              const resultSrtArr = [`## ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果`];
+              resultSrtArr.push('```');
+              resultSrtArr.push('順位  最終資金       パラメータ');
+              resultSrtArr.push('----------------------------------');
+
               for (let index = 0; index < Math.min(rankedResults.length, 10); index++) {
                 const result = rankedResults[index];
                 console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                resultSrtArr.push(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
+                
+                // パラメータを整形
+                const paramStr = Object.entries(result.parameters)
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join(', ');
+                
+                // 整形した行を追加（桁揃えのためにパディングを使用）
+                resultSrtArr.push(`${(index + 1).toString().padStart(2)}位  ${result.finalBaseFund.toFixed(2).padStart(8)}  ${paramStr}`);
               }
+              resultSrtArr.push('```');
+
               await postResultToDiscord(resultSrtArr.join('\n'), discordBacktestURL);
 
-              // タイムフレームごとの結果を全体の結果配列に追加
-              allTimeframeResults.push(...testResults);
-              
-              console.log(`  ${timeframe} タイムフレームのバックテスト完了`);
-            }
-            
-            // 全タイムフレームの結果をランキング
-            const allTimeframeRankedResults = rankResults(allTimeframeResults);
-            
-            // 全タイムフレームの統合ランキング結果を表示（全てのタイムフレームを横断して最高スコアのものを選択）
-            const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果 =====`;
-            console.log(allTimeframeRankingTitle);
-            
-            // 全タイムフレーム結果をまとめて表示するための配列
-            const allResultsArr = [allTimeframeRankingTitle];
-            
-            for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
+              // 全タイムフレームの統合結果表示部分も同様に修正
+              const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果 =====`;
+              console.log(allTimeframeRankingTitle);
+
+              // Discord用に整形
+              const allResultsArr = [`## ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果`];
+              allResultsArr.push('```');
+              allResultsArr.push('順位  最終資金    タイムフレーム  パラメータ');
+              allResultsArr.push('-------------------------------------------');
+
+              for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
                 const result = allTimeframeRankedResults[index];
-                const resultLine = `${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`;
-                console.log(resultLine);
+                const paramStr = Object.entries(result.parameters)
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join(', ');
+                
+                const resultLine = `${(index + 1).toString().padStart(2)}位  ${result.finalBaseFund.toFixed(2).padStart(8)}  ${result.timeframe.padEnd(10)}  ${paramStr}`;
+                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 allResultsArr.push(resultLine);
+              }
+              allResultsArr.push('```');
+
+              await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
+              
+              // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
+              if (autoUpdate && allTimeframeRankedResults.length > 0) {
+                // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
+                const topResult = allTimeframeRankedResults[0];
+                const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
+                const paramsToUpdate = {
+                  ...dbParams,
+                  ohlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
+                  ...topResult.parameters,
+                };
+                await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
+                console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
+                await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordBacktestURL);
+              }
+              
+              console.log(`${symbol} のバックテスト完了`);
             }
-            
-            // まとめてDiscordに通知
-            await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
-            
-            // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
-            if (autoUpdate && allTimeframeRankedResults.length > 0) {
-              // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
-              const topResult = allTimeframeRankedResults[0];
-              const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
-              const paramsToUpdate = {
-                ...dbParams,
-                ohlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
-                ...topResult.parameters,
-              };
-              await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
-              console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
-              await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordBacktestURL);
-            }
-            
-            console.log(`${symbol} のバックテスト完了`);
           }
         }
       }
@@ -404,7 +446,7 @@ function generateRandomParameterCombinations(defaultConfig, numericKeys, count =
     for (const key of numericKeys) {
       const defaultValue = defaultConfig[key];
       // 標準偏差はデフォルト値の50%程度に設定
-      const stdDev = Math.max(1, defaultValue * 0.5);
+      const stdDev = Math.max(1, defaultValue * 0.1);
       // 正規分布に従ったランダム値を生成し、整数に丸める
       let value = Math.round(generateNormalRandom(defaultValue, stdDev));
       // 最小値を1に制限
