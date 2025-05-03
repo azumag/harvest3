@@ -395,7 +395,20 @@ async function fetchTicker(exchange, symbol, options = {}) {
       const close = latestOHLCV[4];
       
       // highとlowの間のランダムな値を生成
-      const randomPrice = low + Math.random() * (high - low);
+      // 一様分布の代わりに正規分布を使用
+      const mean = (high + low) / 2; // 平均値（中央値）
+      const stdDev = (high - low) / 6; // 標準偏差（範囲の1/6で約99.7%が範囲内に収まる）
+      
+      // 標準正規分布の乱数を生成（Box-Muller変換）
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      
+      // 指定された平均と標準偏差の正規分布に変換
+      let randomPrice = mean + stdDev * z;
+      
+      // 範囲外の値を切り詰める
+      randomPrice = Math.max(low, Math.min(high, randomPrice));
 
       options.backtest.currentPrice = randomPrice; // 現在価格を更新
       
