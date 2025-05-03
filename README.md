@@ -163,6 +163,7 @@ Discord Webhookが設定されている場合、以下のレポートが送信�
 
 ```javascript
 const config = {
+
   // 共通設定
   amount: 0.0001,          // 注文する最低量
   tradePercentage: 0.01,   // 資金の%で取引 (購入時)
