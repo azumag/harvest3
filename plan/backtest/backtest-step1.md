@@ -15,7 +15,7 @@
 これは backtest 中の状態も表し、適宜アップデートする
 *  オプショナル引数
 *   `timestamp`: バックテストの実行タイムスタンプ (number, milliseconds)
-*   `totalSellCost`: うったがく
+*   `totalSellCost`: 売った額
 *   `totalBuyCost`: かったがく
 *   `baseFund`: 最初の資金
 *   `ohlcvData`: 現状使ってるロウソク足データ
