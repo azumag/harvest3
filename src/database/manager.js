@@ -394,20 +394,21 @@ async function fetchTicker(exchange, symbol, options = {}) {
       const low = latestOHLCV[3];
       const close = latestOHLCV[4];
       
-      const averagePrice = (open + high + low + close) / 4;
+      // highとlowの間のランダムな値を生成
+      const randomPrice = low + Math.random() * (high - low);
 
-      options.backtest.currentPrice = averagePrice; // 現在価格を更新
+      options.backtest.currentPrice = randomPrice; // 現在価格を更新
       
       // バックテスト用のティッカーオブジェクトを作成
       return {
         symbol: symbol,
         timestamp: latestOHLCV[0],
         datetime: new Date(latestOHLCV[0]).toISOString(),
-        bid: averagePrice,
-        ask: averagePrice,
-        last: averagePrice,
+        bid: randomPrice,
+        ask: randomPrice,
+        last: randomPrice,
         close: close,
-        average: averagePrice,
+        average: randomPrice,
         baseVolume: latestOHLCV[5],
         info: {
           backtest: true
@@ -482,7 +483,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
   }
 
   // リアルタイムモードの場合 (既存のfetchBalanceを呼び出す)
-  // exchange オブジェクトは CCXT のインスタンスであると仮定
+  // exchange オブジェクトは CCXT の インスタンスであると仮定
   try {
     const balance = await exchange.fetchBalance();
     return balance;

@@ -98,7 +98,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             
             // タイムフレームでループ
             for (const timeframe of OHLCVTimeFrames) {
-              const timeframeMs = timeframeToMs(timeframe);
+              // const timeframeMs = timeframeToMs(timeframe);
+              const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
               
               console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
               const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
@@ -132,7 +133,6 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 parameterCombinations = generateRandomParameterCombinations(
                   dbParams, numericParameterKeys, 30 // 30個の組み合わせを生成
                 );
-                parameterCombinations.push(dbParams); // デフォルト設定を追加
               }
 
               // parameterCombinations を生成した後、重複を排除する処理を追加します
@@ -281,47 +281,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               resultSrtArr.push('```');
 
               await postResultToDiscord(resultSrtArr.join('\n'), discordBacktestURL);
-
-              // 全タイムフレームの統合結果表示部分も同様に修正
-              const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果 =====`;
-              console.log(allTimeframeRankingTitle);
-
-              // Discord用に整形
-              const allResultsArr = [`## ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果`];
-              allResultsArr.push('```');
-              allResultsArr.push('順位  最終資金    タイムフレーム  パラメータ');
-              allResultsArr.push('-------------------------------------------');
-
-              for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
-                const result = allTimeframeRankedResults[index];
-                const paramStr = Object.entries(result.parameters)
-                  .map(([key, value]) => `${key}: ${value}`)
-                  .join(', ');
-                
-                const resultLine = `${(index + 1).toString().padStart(2)}位  ${result.finalBaseFund.toFixed(2).padStart(8)}  ${result.timeframe.padEnd(10)}  ${paramStr}`;
-                console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
-                allResultsArr.push(resultLine);
-              }
-              allResultsArr.push('```');
-
-              await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
               
-              // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
-              if (autoUpdate && allTimeframeRankedResults.length > 0) {
-                // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
-                const topResult = allTimeframeRankedResults[0];
-                const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
-                const paramsToUpdate = {
-                  ...dbParams,
-                  ohlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
-                  ...topResult.parameters,
-                };
-                await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
-                console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
-                await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordBacktestURL);
-              }
-              
-              console.log(`${symbol} のバックテスト完了`);
+              // 現在のタイムフレームの結果を全タイムフレーム結果配列に追加
+              allTimeframeResults.push(...rankedResults.map(result => ({ ...result, timeframe })));
             }
           }
         }
@@ -365,6 +327,54 @@ function generateParameterCombinations(defaultConfig, numericKeys, min = 1, max 
   if (numericKeys.length === 0) {
     return [{}];
   }
+  
+  // すべてのタイムフレームが処理された後に全タイムフレーム統合処理を実行
+  // 非同期処理をasync関数内で行うためのIIFE（即時実行関数式）
+  await (async () => {
+    // 全タイムフレームの統合結果表示部分
+    const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果 =====`;
+    console.log(allTimeframeRankingTitle);
+    
+    // 全タイムフレーム結果をランキング
+    const allTimeframeRankedResults = rankResults(allTimeframeResults);
+
+    // Discord用に整形
+    const allResultsArr = [`## ${symbol} (全タイムフレーム統合) ${strategyKey} パラメータ最適化結果`];
+    allResultsArr.push('```');
+    allResultsArr.push('順位  最終資金    タイムフレーム  パラメータ');
+    allResultsArr.push('-------------------------------------------');
+
+    for (let index = 0; index < Math.min(allTimeframeRankedResults.length, 10); index++) {
+      const result = allTimeframeRankedResults[index];
+      const paramStr = Object.entries(result.parameters)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(', ');
+      
+      const resultLine = `${(index + 1).toString().padStart(2)}位  ${result.finalBaseFund.toFixed(2).padStart(8)}  ${result.timeframe.padEnd(10)}  ${paramStr}`;
+      console.log(`${index + 1}位: 最終資金 ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
+      allResultsArr.push(resultLine);
+    }
+    allResultsArr.push('```');
+
+    await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
+    
+    // 自動更新が有効で、全タイムフレーム中で最も高いスコア（1位）の結果の場合のみ更新
+    if (autoUpdate && allTimeframeRankedResults.length > 0) {
+      // スコアが最高の結果を使用する（すでにfinalBaseFundでソート済み）
+      const topResult = allTimeframeRankedResults[0];
+      const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
+      const paramsToUpdate = {
+        ...dbParams,
+        ohlcvInterval: topResult.timeframe, // 最適なタイムフレームを設定
+        ...topResult.parameters,
+      };
+      await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
+      console.log(`全タイムフレーム中で最高スコア（${topResult.finalBaseFund.toFixed(2)}）を持つパラメータで ${strategyKey} の ${symbol} 設定を更新しました（タイムフレーム: ${topResult.timeframe}）`);
+      await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - 最高スコア: ${topResult.finalBaseFund.toFixed(2)} - タイムフレーム: ${topResult.timeframe} - ${JSON.stringify(topResult.parameters)}`, discordBacktestURL);
+    }
+  })();
+  
+  console.log(`${symbol} のバックテスト完了`);
 
   const [currentKey, ...remainingKeys] = numericKeys;
   const combinations = [];
