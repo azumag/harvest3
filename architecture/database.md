@@ -298,7 +298,7 @@ db.signals.createIndex({ timestamp: 1 })
 db.signals.createIndex({ timestamp: -1 })
 ```
 
-# olhcv
+# ohlcv
 ```json
 {
   "_id": ObjectId("..."),
