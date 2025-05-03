@@ -782,12 +782,15 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
     }
   }
 
-  // リアルタイムモードの場合 (既存ロジック)
+  // リアルタイムモードの場合
   // この戦略で約定し残っている量（買った量ー売った量）
   const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
   // 今注文に出している買い量
   const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
+
+  // 今注文に出している売り量を取得 (新規追加)
+  const currentSellOrders = await getCurrentSellOrderPosition(exchange, symbol, strategyKey);
 
   // 可能購入量限度を計算
   const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / price;
@@ -804,23 +807,39 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
     };
   }
 
-  // Calculate total position after the potential order
-  const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
-  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
+  // 実質的なポジションを計算 (売り注文量を差し引く)
+  const effectivePosition = currentTradePosition + currentOrderPosition - currentSellOrders;
+  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}`);
 
-  // Determine if a buy order is allowed based on position limits
-  // Allow buy if total position is within maxBuyAmount
-  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmountWithMinTrade;
+  // 実質的なポジションに基づいて購入可否を判断
+  const isBuyAllowed = effectivePosition <= maxBuyAmountWithMinTrade;
 
   if (!isBuyAllowed) {
     return {
       allowed: false,
-      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
+      reason: `買い注文が許可されません: ${symbol} - 実質ポジション: ${effectivePosition}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
     };
   }
 
   return { allowed: true };
 }
+
+async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
+  // 未約定の注文を取得
+  const openOrders = await exchange.fetchOpenOrders(symbol);
+
+  // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
+  const sellOrderAmounts = await Promise.all(
+    openOrders.map(async (order) => {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      // sell only
+      return (strategyKey === _strategyKey && order.side === 'sell') ? order.amount : 0;
+    })
+  );
+  const totalAmount = sellOrderAmounts.reduce((sum, amount) => sum + amount, 0);
+
+  return totalAmount;
+};
 
 module.exports = {
   fetchOHLCVData,
@@ -856,4 +875,5 @@ module.exports = {
   checkBuyOrderAllowance,
   getSymbolsByExchange,
   getMarketParameters,
+  getCurrentSellOrderPosition,
 };
