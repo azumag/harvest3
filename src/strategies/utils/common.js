@@ -74,7 +74,7 @@ async function handleStrategySignals(
       console.log(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
     }
     if (postOrderToDiscord && !options.backtest) {
-      await postOrderToDiscord(`[${strategyName}] 買いシグナル: ${exchange.id} - ${symbol} - ${logInfo.buy}`);
+      postOrderToDiscord(`[${strategyName}] 買いシグナル: ${exchange.id} - ${symbol} - ${logInfo.buy}`);
     }
 
     // 買い注文実行
