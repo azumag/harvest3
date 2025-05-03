@@ -24,9 +24,14 @@ const {
   getTradeKeys,
   getAllTradeSummaries,
   getAllStrategyParametersRedis,
+  getOHLCVRedisTimestamp,
+  getOHLCVRedis,
+  updateOHLCVRedis,
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
+
+const { timeframeToMs } = require('../common/utils');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -37,7 +42,7 @@ async function initializeDB() {
   await connectDB();
 }
 
-async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) {
+async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options = {}) {
   try {
     // バックテストモードの場合
     if (options.backtest) {
@@ -63,8 +68,59 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit, options = {}) 
       });
     }
     
-    // 通常モード（リアルタイムデータ取得）
-    return await fetchOHLCVDataAPI(exchange, symbol, timeframe, limit);
+    // 通常モード
+    // REDISに最新データがあるか確認
+    const timestamp = Date.now().getTime();
+    const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
+    const timeframeMs = timeframeToMs(timeframe);
+    // 前回更新時刻がない、または前回更新時刻から Timeframe 時間以上経過している場合
+    if (!redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+      // TODO: 前回更新時刻をみて取得する limit を調整
+      // TODO: 取得したデータを保存する際、redisには更新でなく追記をかける必要がある
+      const _limit = limit > 100 ? limit : 100; // デフォルトの取得数を100に設定, 100を超える場合はその数字にする
+      const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
+      if (!ohlcvs || ohlcvs.length === 0) {
+        console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
+        return [];
+      }
+      // RedisとMongoDBに保存
+      // 履歴から最新の1件だけ取得して、timestamp が更新しようとしているデータより
+      // 新しい場合のみ履歴保存する
+      const lastOhlcv = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, 1);
+      for (const ohlcv of ohlcvs) {
+        if (ohlcv[0] <= lastOhlcv[0][0]) {
+          continue; // 既存のデータより古い場合はスキップ
+        }
+        try {
+          const [_timestamp, open, high, low, close, volume] = ohlcv;
+          const ohlcvData = {
+              exchange: exchange.id,
+              symbol: symbol,
+              timeframe: timeframe,
+              timestamp: _timestamp,
+              open: open,
+              high: high,
+              low: low,
+              close: close,
+              volume: volume,
+          };
+          addOhlcvMongoDB(ohlcvData);
+        } catch (error) {
+          // console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
+        }
+      }
+      await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+      return ohlcvs;
+    } else {
+      // Redisにデータがある場合はそれを返す
+      const redisData = await getOHLCVRedis(exchange.id, symbol, timeframe);
+      // limitが指定されている場合、データを制限
+      if (limit && limit > 0) {
+        return redisData.slice(-limit);
+      } else {
+        return redisData;
+      }
+    }
   } catch (error) {
     console.error(`Error fetching OHLCV data: ${error.message}`);
     throw error;
@@ -456,17 +512,17 @@ module.exports = {
   initializeDB,
   getTradeKeys,
   getAllTradeSummaries,
-  getAllStrategyParameters, // 新しい関数をエクスポート
+  getAllStrategyParameters,
   listOrders,
   listTrades,
   listSignals,
   countSignals,
-  addOhlcvMongoDB,
-  getOHLCVByParams,
+  addOhlcvMongoDB, // script からの利用のみ
+  getOHLCVByParams, // script からの利用のみ
   fetchTicker,
-  getAvailableFund, // 追加
-  backtestCreateLimitBuyOrder, // 追加
-  backtestCreateLimitSellOrder, // 追加
+  getAvailableFund, 
+  backtestCreateLimitBuyOrder,
+  backtestCreateLimitSellOrder,
 };
 
 /**

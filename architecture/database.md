@@ -26,6 +26,9 @@
 - current
   - orderPair : オーダーペア保存領域 戦略によってはつかう
 - params      : 取引所・通貨・戦略ごとのパラメータ
+- ohlcv       : 取引所・通貨ごとの最新ロウソク足（100件）
+  - timestamp:exchange:symbol : 最終取得時刻
+  - exchange:symbol           : ロウソク足データ
 
 ## summary
 ### order
@@ -148,6 +151,21 @@ Key: `params:${exchange}:${symbol}:${strategy}`
     ...
 }
 ```
+
+## ohlcv
+### timestamp:exchange:symbol:timeframe
+### data:exchange:symbol:timeframe
+```json
+[
+  "timestamp": 1745908200000,
+  "open": 101.62,
+  "high": 101.62,
+  "low": 101.589,
+  "close": 101.589,
+  "volume": 1.1016,
+]
+```
+
 
 # MongoDB 構成
 分析用, 履歴などを永続化して保存するための DB

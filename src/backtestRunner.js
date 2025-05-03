@@ -1,7 +1,7 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
-const { sleep } = require('./common/utils');
+const { sleep, timeframeToMs } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./common/utils');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 const { OHLCVTimeFrames } = require('./common/const');
@@ -29,23 +29,7 @@ if (args.includes('--help') || args.includes('-h')) {
   process.exit(0);
 }
 
-/**
- * タイムフレーム文字列をミリ秒に変換する関数
- * @param {string} timeframe - タイムフレーム文字列 (例: "1m", "1h", "1d")
- * @returns {number} ミリ秒
- */
-function timeframeToMs(timeframe) {
-  const value = parseInt(timeframe);
-  const unit = timeframe.slice(value.toString().length);
-  
-  switch (unit) {
-    case 'm': return value * 60 * 1000;
-    case 'h': return value * 60 * 60 * 1000;
-    case 'd': return value * 24 * 60 * 60 * 1000;
-    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
-    default: throw new Error(`Unknown timeframe unit: ${unit}`);
-  }
-}
+
 
 /**
  * バックテストを実行する関数
@@ -263,11 +247,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               // Discord用に整形した文字列を作成
               const resultSrtArr = [`## ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果`];
               resultSrtArr.push('```');
-              resultSrtArr.push('----------------------------------');
 
               for (let index = 0; index < Math.min(rankedResults.length, 10); index++) {
                 const result = rankedResults[index];
-                console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} \n- パラメータ: ${JSON.stringify(result.parameters)}`);
+                console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
                 
                 // パラメータを整形
                 const paramStr = Object.entries(result.parameters)
@@ -293,10 +276,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             // Discord用に整形した文字列を作成
             const allResultsArr = [`## ${symbol} (全タイムフレーム) ${strategyKey} パラメータ最適化結果`];
             allResultsArr.push('```');
-            allResultsArr.push('-------------------------------------------');
             for (let index = 0; index < Math.min(rankedAllTimeframeResults.length, 10); index++) {
               const result = rankedAllTimeframeResults[index];
-              console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} \n- パラメータ: ${JSON.stringify(result.parameters)}`);
+              console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
               
               // パラメータを整形
               const paramStr = Object.entries(result.parameters)

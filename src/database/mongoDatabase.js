@@ -337,7 +337,17 @@ async function addOhlcvMongoDB(ohlcvData) {
   await connectDB();
   try {
     // 重複挿入を防ぐために upsert: true を使用するか、事前に findOne で確認する
-    // ここではシンプルに insertOne を使用し、ユニークインデックスで重複エラーをハンドルすることを想定
+    const existingData = await module.exports.ohlcvCollection.findOne({
+      exchange: ohlcvData.exchange,
+      symbol: ohlcvData.symbol,
+      timeframe: ohlcvData.timeframe,
+      timestamp: ohlcvData.timestamp
+    });
+    if (existingData) {
+      console.log('OHLCV data already exists:', existingData);
+      return existingData;
+    }
+    // insertOne を使用し、ユニークインデックスで重複エラーをハンドル
     const result = await module.exports.ohlcvCollection.insertOne(ohlcvData);
     // console.log('OHLCV added:', result.insertedId);
     return result;

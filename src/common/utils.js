@@ -285,6 +285,24 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   return { allowed: true };
 }
 
+/**
+ * タイムフレーム文字列をミリ秒に変換する関数
+ * @param {string} timeframe - タイムフレーム文字列 (例: "1m", "1h", "1d")
+ * @returns {number} ミリ秒
+ */
+function timeframeToMs(timeframe) {
+  const value = parseInt(timeframe);
+  const unit = timeframe.slice(value.toString().length);
+  
+  switch (unit) {
+    case 'm': return value * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: throw new Error(`Unknown timeframe unit: ${unit}`);
+  }
+}
+
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -297,4 +315,5 @@ module.exports = {
   getStrategyConfig,
   getMarketParametersByExchangeSymbol,
   checkBuyOrderAllowance,
+  timeframeToMs
 };
