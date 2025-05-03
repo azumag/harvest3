@@ -1,7 +1,7 @@
 /**
  * アービトラージ戦略
  */
-const { formattedAvailableAmount, addOrder } = require('../database/manager');
+const { formattedAvailableAmount, addOrder } = require('../../database/manager');
 
 /**
  * 価格差取引（取引所間アービトラージ）

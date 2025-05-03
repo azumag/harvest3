@@ -333,6 +333,68 @@ async function getTradeKeys() {
   }
 }
 
+async function getOHLCVRedisTimestamp(exchangeId, symbol, timeframe) {
+  const key = `ohlcv:timestamp:${exchangeId}:${symbol}:${timeframe}`;
+  const timestamp = await client.get(key);
+  if (timestamp) {
+    return parseInt(timestamp);
+  }
+  return null;
+}
+
+async function updateOHLCVRedisTimestamp(exchangeId, symbol, timeframe) {
+  const key = `ohlcv:timestamp:${exchangeId}:${symbol}:${timeframe}`;
+  const now = Date.now();
+
+  await client.set(key, now);
+  // console.log(`OHLCVのタイムスタンプを更新しました: ${key} - ${now}`);
+
+  return now;
+}
+
+async function getOHLCVRedis(exchangeId, symbol, timeframe) {
+  const key = `ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
+  const data = await client.get(key);
+
+  if (data) {
+    return JSON.parse(data);
+  }
+
+  return null;
+}
+
+async function updateOHLCVRedis(exchangeId, symbol, timeframe, ohlcvData) {
+  const key = `ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
+
+  // RedisにOHLCVデータを保存
+  await client.set(key, JSON.stringify(ohlcvData));
+
+  // タイムスタンプを更新
+  updateOHLCVRedisTimestamp(exchangeId, symbol, timeframe);
+
+  // console.log(`OHLCVデータを更新しました: ${key} - ${now}`);
+}
+
+async function getTickerRedis(exchangeId, symbol) {
+  const key = `ticker:${exchangeId}:${symbol}`;
+  const data = await client.get(key);
+
+  if (data) {
+    return JSON.parse(data);
+  }
+
+  return null;
+}
+
+async function updateTickerRedis(exchangeId, symbol, tickerData) {
+  const key = `ticker:${exchangeId}:${symbol}`;
+
+  // Redisにティッカーデータを保存
+  await client.set(key, JSON.stringify(tickerData));
+
+  // console.log(`ティッカーデータを更新しました: ${key}`);
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
@@ -347,5 +409,10 @@ module.exports = {
   getTradeSummaries,
   getAllTradeSummaries,
   getTradeKeys,
-  getAllStrategyParametersRedis, // 新しい関数を追加
+  getAllStrategyParametersRedis,
+  getOHLCVRedisTimestamp,
+  getOHLCVRedis,
+  updateOHLCVRedis,
+  getTickerRedis,
+  updateTickerRedis
 };

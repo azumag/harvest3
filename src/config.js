@@ -5,9 +5,10 @@ dotenv.config(); // .envファイルから環境変数を読み込む
 // strategies 
 const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./strategies/trendFollowing');
 const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/meanReversion');
-const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
+// const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
 
 // APIキーとシークレットを設定
+// TODO: move to const.js
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
 
@@ -47,15 +48,8 @@ const config = {
 
   global: {
     // 共通設定
-    amount: 0.0001,  // 注文するBTCの量（固定値、tradePercentageが優先される）
-    profitMargin: 0.003,  // 目標利益率（取引料を考慮）
-    maxHistoryLength: 100,  // スプレッド履歴の最大長
+    amount: 0.0001,  // 最小取引単位
     tradePercentage: 0.01,  // 資金の%で取引
-    sellPercentage: 0.1,   // 売却時の資金の%
-    tradeCost: 0.0012, // 手数料暫定（bitbank)
-    cancelOrderThreshold: 10, // 一銘柄ごとの注文限度数
-    safetyJPYAmount: 2000, // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
-    amountPrecision: 8, // 取引量の小数点以下の桁数（デフォルト値）
 
     // 除外シンボル
     excludeSymbols: [
@@ -65,46 +59,36 @@ const config = {
     ],
   },
   
-  // 戦略固有の設定
+  // 戦略固有の デフォルト設定
   strategies: {
 
     // 高頻度取引戦略
-    HFT: {
-      // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-      enabled: false,
-      interval: 100,
-      priceThreshold: 0.001,
-      maxOrdersPerMinute: 100,
-      amount: 0.0001,
-      orderBookDepth: 15,
-      function: highFrequencyTrading,
-      exchanges: [exchangeBB],
-    },
-
-    OSCILLATOR: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
+    // HFT: {
+    //   // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
+    //   enabled: false,
+    //   interval: 100,
+    //   priceThreshold: 0.001,
+    //   maxOrdersPerMinute: 100,
+    //   amount: 0.0001,
+    //   orderBookDepth: 15,
+    //   function: highFrequencyTrading,
+    //   atomicExec: true,
+    //   exchanges: [exchangeBB],
+    // },
+    BOLLINGER_BANDS: {
+      enabled: true,
       period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
+      stdDev: 2,
       ohlcvInterval: '15m',
-      function: oscillatorStrategy,
+      function: bollingerBandsStrategy,
       exchanges: [exchangeBB]
     },
 
     
 
-    MA_LONG: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '1h',
-      function: maStrategy,
-      exchanges: [exchangeBB]
-    },
-
     // トレンドフォロー戦略
     MA: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
+      enabled: true,
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
@@ -112,152 +96,44 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    MA_SHORT: {
-      enabled: process.env.STRATEGY_MA_ENABLED === 'true',
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '5m',
-      function: maStrategy,
+    // 逆張り戦略
+    MEAN_REVERSION: {
+      enabled: true,
+      period: 20,
+      ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
       exchanges: [exchangeBB]
     },
-
-
 
     MACD: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
+      enabled: true,
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
       ohlcvInterval: '15m',
-      function: macdStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MACD_SHORT: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      ohlcvInterval: '5m',
-      function: macdStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MACD_LONG: {
-      enabled: process.env.STRATEGY_MACD_ENABLED === 'true',
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      ohlcvInterval: '1h',
       function: macdStrategy,
       exchanges: [exchangeBB]
     },
 
     RSI: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
+      enabled: true,
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
       ohlcvInterval: '15m',
       function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    RSI_SHORT: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
-      ohlcvInterval: '5m',
-      function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    RSI_LONG: {
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true',
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
-      ohlcvInterval: '1h',
-      function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    BOLLINGER_BANDS: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    BOLLINGER_BANDS_SHORT: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '5m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    BOLLINGER_BANDS_LONG: {
-      enabled: process.env.STRATEGY_BOLLINGER_BANDS_ENABLED === 'true',
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '1h',
-      function: bollingerBandsStrategy,
       exchanges: [exchangeBB]
     },
     
-    // 逆張り戦略
-    MEAN_REVERSION: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
+    OSCILLATOR: {
+      enabled: true,
       period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
       ohlcvInterval: '15m',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MEAN_REVERSION_SHORT: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
-      period: 20,
-      ohlcvInterval: '5m',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    MEAN_REVERSION_LONG: {
-      enabled: process.env.STRATEGY_MEAN_REVERSION_ENABLED === 'true',
-      period: 20,
-      ohlcvInterval: '1h',
-      deviationThreshold: 3,
-      function: meanReversionStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    
-
-    OSCILLATOR_SHORT: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
-      period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
-      ohlcvInterval: '5m',
       function: oscillatorStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    OSCILLATOR_LONG: {
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true',
-      period: 20,
-      oversoldThreshold: 20,
-      overboughtThreshold: 80,
-      ohlcvInterval: '1h',
-      function: oscillatorStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
     },
     
     // アービトラージ戦略
@@ -302,12 +178,12 @@ const config = {
       module: 'bitbank',
       instance: exchangeBB,
     },
-    'bitflyer': {
-      apiKey: BFApiKey,
-      secret: BFApiSecret,
-      module: 'bitflyer',
-      instance: exchangeBF,
-    }
+    // 'bitflyer': {
+    //   apiKey: BFApiKey,
+    //   secret: BFApiSecret,
+    //   module: 'bitflyer',
+    //   instance: exchangeBF,
+    // }
   }
 };
 

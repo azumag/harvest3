@@ -4,11 +4,11 @@
 
 const { formattedAvailableAmount, 
   getRealizedPnL, getOrderStrategyKeyByOrderId, addOrder,
- } = require("../database/manager");
+ } = require("../../database/manager");
 
-const { postErrorToDiscord, postOrderToDiscord } = require('../notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('../../common/notifications');
 
-const { checkBuyOrderAllowance } = require('../utils');
+const { checkBuyOrderAllowance } = require('../../database/manager');
 
 const priceCache = {};
 

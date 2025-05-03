@@ -32,18 +32,18 @@
 
 -   **取引所間アービトラージ (INTER_EXCHANGE_ARBITRAGE)**: 複数の取引所間でビットコインの価格差が生じた際に、安い取引所で買って高い取引所で売ることで利益を得ます。
 
-### 高頻度取引 (HFT) (`strategies/highFrequency.js`, `src/hftBot.js`)
+<!-- ### 高頻度取引 (HFT) (`strategies/highFrequency.js`, `src/hftBot.js`)
 
 -   **高頻度取引 (HFT)**: 極めて短い時間間隔で大量の取引を行い、小さな利益を積み重ねます。専用の起動スクリプト (`npm run start-hft`) があります。
 
 ### マーケットメイキング (`strategies/marketMaking.js`, `src/mmBot.js`)
 
--   **マーケットメイキング (MARKET_MAKING)**: 買値と売値の両方の注文を同時に出し、スプレッドから利益を得る戦略です。専用の起動スクリプト (`npm run start-mm`) があります。
+-   **マーケットメイキング (MARKET_MAKING)**: 買値と売値の両方の注文を同時に出し、スプレッドから利益を得る戦略です。専用の起動スクリプト (`npm run start-mm`) があります。 -->
 
-### その他戦略
+<!-- ### その他戦略
 
 -   **INYO戦略 (`strategies/inyo.js`)**: 詳細不明。
--   **スキャルピング (SCALPING)**: スプレッドに基づいて取引を行う戦略ですが、デフォルトでは無効 (`enabled: false`) になっています。
+-   **スキャルピング (SCALPING)**: スプレッドに基づいて取引を行う戦略ですが、デフォルトでは無効 (`enabled: false`) になっています。 -->
 
 ## セットアップ
 
@@ -109,14 +109,11 @@
     ```bash
     npm start
     ```
--   **高頻度取引ボット (src/hftBot.js):** HFT戦略に特化したボットを実行します。
+<!-- -   **高頻度取引ボット (src/hftBot.js):** HFT戦略に特化したボットを実行します。
     ```bash
     npm run start-hft
-    ```
--   **マーケットメイキングボット (src/mmBot.js):** マーケットメイキング戦略に特化したボットを実行します。
-    ```bash
-    npm run start-mm
-    ```
+    ``` -->
+
 -   **Web UIサーバー (src/api/index.js):** Web UI用のAPIサーバーを起動します。
     ```bash
     npm run start-web
@@ -134,12 +131,6 @@
     ```bash
     # 標準ボットのみ起動
     docker compose up -d bot
-
-    # HFTボットのみ起動
-    docker compose up -d hft
-
-    # マーケットメイキングボットのみ起動
-    docker compose up -d mm
 
     # Web UIのみ起動 (通常は他のボットと併用)
     docker compose up -d web-ui
@@ -168,22 +159,14 @@ Discord Webhookが設定されている場合、以下のレポートが送信�
 
 ## 設定
 
-共通設定や各戦略のパラメータは `src/config.js` ファイル内の `config` オブジェクトで設定します。
+共通設定や各戦略のデフォルトパラメータは `src/config.js` ファイル内の `config` オブジェクトにあります
 
 ```javascript
 const config = {
-  global: {
-      // 共通設定
-      amount: 0.0001,          // 注文するBTCの量（固定値、tradePercentageが優先される）
-      profitMargin: 0.003,     // 目標利益率（取引料を考慮）
-      maxHistoryLength: 100,   // スプレッド履歴の最大長
-      tradePercentage: 0.01,   // 資金の%で取引 (購入時)
-      sellPercentage: 0.1,    // 資金の%で取引 (売却時)
-      tradeCost: 0.0012,       // 手数料暫定（bitbank)
-      cancelOrderThreshold: 10,// 一銘柄ごとの注文限度数
-      safetyJPYAmount: 2000,   // JPY残高がこの額を下回ったら購入しない(HFTのときのみ)
-      amountPrecision: 8,      // 取引量の小数点以下の桁数（デフォルト値）
-  },
+
+  // 共通設定
+  amount: 0.0001,          // 注文する最低量
+  tradePercentage: 0.01,   // 資金の%で取引 (購入時)
 
   // 戦略固有の設定
   strategies: {
@@ -235,7 +218,7 @@ Web UIが実装されており、Webブラウザからボットの状態を監�
 -   **取引履歴 (`/history.html`)**: ボットが実行した注文の履歴（作成、更新、キャンセルなど）を確認できます。**MongoDBに保存された履歴も表示される可能性があります。**
 -   **約定履歴 (`/filled-history.html`)**: 実際に約定した取引の履歴を詳細に確認できます。フィルタリングやソートも可能です。**MongoDBに保存された履歴も表示される可能性があります。**
 -   **分析 (`/analysis.html`)**: 損益グラフや取引統計など、ボットのパフォーマンスを分析するための情報を提供します。 (現在開発中または機能限定の可能性あり)
--   **リアルタイムイベント**: Web UI は Redis Pub/Sub を通じてバックエンドからのイベント（ポジション更新、新規約定など）をリアルタイムに受信し、表示を更新します。APIエンドポイント (`/api/redis-events` など) 経由で Server-Sent Events (SSE) として配信されます。
+-   **各戦略・銘柄に対するパラメータ設定**
 
 ### 使い方
 

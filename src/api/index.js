@@ -82,7 +82,7 @@ app.listen(PORT, async () => {
           });
 
           // Discord への投稿処理
-          const discordWebhookUrl = process.env.DISCORD_RESULT_WEBHOOK_URL;
+          const discordWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL;
           if (discordWebhookUrl) {
             try {
               const message = `Localtunnel URL: ${tunnel.url}`;

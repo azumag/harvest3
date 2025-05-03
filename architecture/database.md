@@ -21,11 +21,15 @@
 
 # Redis構成
 - summary
-  - order    : 現在注文中サマリ
-  - trade    : 現在約定サマリ
+  - order                               : 現在注文中サマリ
+  - trade                               : 現在約定サマリ
 - current
-  - orderPair : オーダーペア保存領域 戦略によってはつかう
-- params      : 取引所・通貨・戦略ごとのパラメータ
+  - orderPair                           : オーダーペア保存領域 戦略によってはつかう
+- params                                : 取引所・通貨・戦略ごとのパラメータ
+- ohlcv                                 : 取引所・通貨ごとの最新ロウソク足（100件）
+  - timestamp:exchange:symbol:timeframe : 最終取得時刻
+  - data:exchange:symbol:timeframe      : ロウソク足データ
+- ticker:exchange:symbol                : 取引所・通貨ごとの Ticker
 
 ## summary
 ### order
@@ -149,6 +153,35 @@ Key: `params:${exchange}:${symbol}:${strategy}`
 }
 ```
 
+## ohlcv
+### timestamp:exchange:symbol:timeframe
+### data:exchange:symbol:timeframe
+```json
+[
+  "timestamp": 1745908200000,
+  "open": 101.62,
+  "high": 101.62,
+  "low": 101.589,
+  "close": 101.589,
+  "volume": 1.1016,
+]
+```
+
+## ticker
+### timestamp:exchange:symbol
+### data:exchange:symbol
+```json
+{
+  "sell": "1231313",
+  "buy": "2342324",
+  "high": "3424242",
+  "low": "1111111",
+  "open": "342424",
+  "last": "22222",
+  "vol": "1.1",
+}
+```
+
 # MongoDB 構成
 分析用, 履歴などを永続化して保存するための DB
 
@@ -156,7 +189,7 @@ Key: `params:${exchange}:${symbol}:${strategy}`
 - signals   # シグナル履歴
 - trades    # 約定履歴 取引IDでユニーク制約をつける。オーダーとは部分約定があるため多対一の関係になる
 - tickers   # ティッカー履歴
-- ohlc      # ロウソク足履歴
+- ohlcv     # ロウソク足履歴
 - orderBook # 板情報履歴
 
 ## orders
@@ -184,6 +217,7 @@ db.orders.createIndex({ timestamp: -1 }) // 降順
 ```
 
 ## signals
+シグナル履歴も膨大になるので、TODO: 古すぎるもららラウンドロビンで消していく
 ```json
 {
   "_id": ObjectId("..."),
@@ -238,6 +272,54 @@ db.trades.createIndex({ tradeId: 1 }, { unique: true })
 ```
 
 # tickers
-# olhc
+過去の tickers を全て保存していくと1ヶ月で400MBになる計算なので、現状実装なし
+```json
+{
+  "_id": ObjectId("..."),
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "timestamp": 1745908200000,
+  "data": {
+    "sell": "1231313",
+    "buy": "2342324",
+    "high": "3424242",
+    "low": "1111111",
+    "open": "342424",
+    "last": "22222",
+    "vol": "1.1",
+    "timestamp": 0
+  }
+}
+```
+
+index
+```js
+db.signals.createIndex({ timestamp: 1 })
+db.signals.createIndex({ timestamp: -1 })
+```
+
+# ohlcv
+```json
+{
+  "_id": ObjectId("..."),
+  "exchange": "bitbank",
+  "symbol": "XRP/JPY",
+  "timeframe": "1m",
+  "timestamp": 1745908200000,
+  "open": 101.62,
+  "high": 101.62,
+  "low": 101.589,
+  "close": 101.589,
+  "volume": 1.1016,
+}
+```
+
+index
+```js
+db.signals.createIndex({ timestamp: 1 })
+db.signals.createIndex({ timestamp: -1 })
+```
+
+
 # orderBook
 未実装

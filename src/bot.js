@@ -1,10 +1,35 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord } = require('./notifications');
-const { sleep } = require('./utils');
-const { updateFilledTrades } = require('./database/manager');
-const { initializeDB } = require('./database/manager');
-const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./utils');
+const { postErrorToDiscord } = require('./common/notifications');
+const { sleep } = require('./common/utils');
+const { 
+  initializeDB,
+  updateFilledTrades,
+  fetchTicker,
+  getSymbolsByExchange,
+  getStrategyConfig,
+  getMarketParametersByExchangeSymbol 
+} = require('./database/manager');
+const { pro } = require('ccxt');
+
+const args = process.argv.slice(2);
+// 通貨ペア（シンボル）の取得
+let targetSymbol = null;
+const symbolArgIndex = args.findIndex(arg => arg === '--symbol' || arg === '-s');
+if (symbolArgIndex !== -1 && symbolArgIndex + 1 < args.length) {
+  targetSymbol = args[symbolArgIndex + 1];
+  // 引数リストから削除（後続の処理に影響しないように）
+  args.splice(symbolArgIndex, 2);
+}
+
+if (args.includes('--help') || args.includes('-h')) {
+  console.log('オプション:');
+  console.log('  --xxxxx(戦略名）で atomicExec が指定されている戦略を単一実行');
+  console.log('  --symbol, -s [シンボル]  特定の通貨ペア（例：BTC/JPY）のみを処理');
+  console.log('  --help, -h        このヘルプメッセージを表示');
+  console.log('オプションなしで実行すると、atomicExec 以外の戦略全てを実行');
+  process.exit(0);
+}
 
 /**
  * ボットを起動する関数
@@ -12,8 +37,160 @@ const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSy
 async function startBot() {
   initializeDB();
   try {
+    // コマンドライン引数があるかどうかをチェック
+    const hasArgs = args.length > 0;
+    console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
+    if (targetSymbol) {
+      console.log(`指定された通貨ペア: ${targetSymbol}`);
+    }
+  
+    while (true) {
+      // マーケットパラメータの更新
+      const symbolsByExchange = await getSymbolsByExchange(config);
+      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
+      
+      // すべての取引所とシンボルの組み合わせを作成
+      const allExchangeSymbolPairs = [];
+      for (const exchangeId in symbolsByExchange) {
+        for (const symbol of symbolsByExchange[exchangeId]) {
+          // シンボルが指定されている場合、一致するもののみ処理
+          if (targetSymbol && symbol !== targetSymbol) {
+            continue;
+          }
+          allExchangeSymbolPairs.push({ 
+            exchangeId, 
+            symbol, 
+            marketParameters: marketParametersByExchange[exchangeId][symbol] 
+          });
+        }
+      }
+      
+      // 各取引所-シンボルの組み合わせに対して
+      for (const { exchangeId, symbol, marketParameters } of allExchangeSymbolPairs) {
+        // 取引所情報を取得
+        const exchangeConfig = config.exchanges[exchangeId];
+        if (!exchangeConfig) continue;
+
+        const exchangeInstance = exchangeConfig.instance;
+
+        console.log(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`); 
+
+        try {
+          // 約定済み取引の更新
+          await updateFilledTrades(exchangeInstance, symbol);
+
+          // Ticker情報を取得
+          // 同時にキャッシュする効果もある
+          const ticker = await fetchTicker(exchangeInstance, symbol);
+          // console.log(`Ticker: ${exchangeId} - ${symbol} - ${JSON.stringify(ticker)}`);
+          
+          // 有効な戦略を適用
+          for (const strategyKey of Object.keys(config.strategies)) {
+            const strategy = config.strategies[strategyKey];
+            
+            // 戦略が無効の場合はスキップ
+            if (!strategy.enabled) {
+              console.log(`戦略 ${strategyKey} が無効です`);
+              continue;
+            }
+            
+            // コマンドライン引数で指定された戦略以外はスキップ
+            if (hasArgs && !args.includes(`--${strategyKey}`)) {
+              continue;
+            }
+            
+            // atomicExec指定でコマンドライン引数なしの場合はスキップ
+            if (strategy.atomicExec && (!hasArgs || !args.includes(`--${strategyKey}`))) {
+              console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
+              continue;
+            }
+            
+            // この戦略が対象の取引所をサポートしているか確認
+            const supportedExchange = strategy.exchanges.find(e => e.id === exchangeId);
+            if (!supportedExchange) continue;
+            
+            try {
+              await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters);
+            } catch (error) {
+              console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
+              await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+            }
+          }
+        } catch (error) {
+          console.error(`通貨ペア ${symbol} の処理中にエラーが発生しました: ${error.message}`);
+          await postErrorToDiscord(`通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+        }
+      }
+      
+      await sleep(1000);
+    }
     
-    // アービトラージ戦略を実行
+  } catch (error) {
+    const errorMessage = `エラーが発生しました: ${error.message}`;
+    console.error(errorMessage, error);
+    await postErrorToDiscord(errorMessage);
+  } finally {
+    // DB接続をクローズ
+    process.exit(0);
+  }
+}
+
+/**
+ * 指定された戦略を実行する関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略のキー
+ * @param {Object} marketParametersBySymbol - 通貨ペアごとの市場パラメータ
+ * @param {Object} options - オプションオブジェクト
+ */
+async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol, options) {
+  try {
+
+    // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
+    const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
+
+    if (strategyConfig.enabled === false) {
+      console.log(`戦略 ${strategyKey}:${symbol} は個別に無効化されています`);
+      return null;
+    }
+
+    console.log(`--- 戦略 ${strategyKey} を実行中...`);
+    return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options)
+  } catch (error) {
+    console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
+    }
+    return null;
+  }
+}
+
+// レポートを投稿するためのタイマー設定
+// setInterval(() => {
+//   const now = new Date();
+//   if (now.getMinutes() === 0) { // 時間ごと
+//     // 全体資産計算レポート
+//     postReport(exchangeBB);
+//     postReport(exchangeBF);
+    
+//     // 戦略と銘柄ごとの損益レポート
+//     postStrategyProfitReport(exchangeBB);
+//     postStrategyProfitReport(exchangeBF);
+//   }
+// }, 60000); // 1分ごとにチェック
+
+// // 初期レポートを投稿
+// postReport(exchangeBB);
+// postReport(exchangeBF);
+
+// 利用可能な戦略を表示
+// console.log('利用可能な戦略:');
+// console.log(strategies.getAvailableStrategies());
+
+// ボットを起動
+startBot();
+
+// アービトラージ戦略を実行
     // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
     //   // 共通の通貨ペアを見つける
     //   const bbMarkets = await exchangeBB.loadMarkets();
@@ -50,96 +227,3 @@ async function startBot() {
     //     commonSymbols.push(commonSymbols.shift());
     //   }, 30000); // 30秒ごとに確認（10秒から30秒に延長）
     // }
-  
-    while (true) {
-      const symbolsByExchange = await getSymbolsByExchange(config);
-      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config);
-      
-      for (const strategyKey of Object.keys(config.strategies)) {
-        const strategy = config.strategies[strategyKey];
-        if (strategy.enabled) {
-          console.log(`戦略 ${strategyKey} が有効です`);
-          
-          try {
-            for (const exchange of strategy.exchanges) {
-              const symbols = symbolsByExchange[exchange.id];
-              
-              for (const symbol of symbols) {
-                const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
-                
-                try {
-                  await updateFilledTrades(exchange, symbol);
-                  await runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol);
-                } catch (error) {
-                  console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
-                  await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
-                }
-              }
-              
-            }
-          } catch (error) {
-            console.error(`戦略 ${strategyKey} の実行中にエラーが発生しました: ${error.message}`);
-            await postErrorToDiscord(`戦略 ${strategyKey} でエラー: ${error.message}`).catch(() => {});
-          }
-        } else {
-          console.log(`戦略 ${strategyKey} が無効です`);
-        }
-      }
-      
-      await sleep(1000);
-    }
-    
-  } catch (error) {
-    const errorMessage = `エラーが発生しました: ${error.message}`;
-    console.error(errorMessage, error);
-    await postErrorToDiscord(errorMessage);
-  }
-}
-
-/**
- * 指定された戦略を実行する関数
- * @param {Object} exchange - 取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {String} strategyKey - 戦略のキー
- * @param {Object} marketParametersBySymbol - 通貨ペアごとの市場パラメータ
- */
-async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol) {
-  try {
-
-    // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
-    const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
-
-    return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol)
-  } catch (error) {
-    console.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
-    if (options.postErrorToDiscord) {
-      await options.postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return null;
-  }
-}
-
-// レポートを投稿するためのタイマー設定
-// setInterval(() => {
-//   const now = new Date();
-//   if (now.getMinutes() === 0) { // 時間ごと
-//     // 全体資産計算レポート
-//     postReport(exchangeBB);
-//     postReport(exchangeBF);
-    
-//     // 戦略と銘柄ごとの損益レポート
-//     postStrategyProfitReport(exchangeBB);
-//     postStrategyProfitReport(exchangeBF);
-//   }
-// }, 60000); // 1分ごとにチェック
-
-// // 初期レポートを投稿
-// postReport(exchangeBB);
-// postReport(exchangeBF);
-
-// 利用可能な戦略を表示
-// console.log('利用可能な戦略:');
-// console.log(strategies.getAvailableStrategies());
-
-// ボットを起動
-startBot();

@@ -35,6 +35,7 @@ async function connectDB() {
       module.exports.ordersCollection = db.collection('orders');
       module.exports.tradesCollection = db.collection('trades');
       module.exports.signalsCollection = db.collection('signals');
+      module.exports.ohlcvCollection = db.collection('ohlcv'); // ohlcvCollection の参照を追加
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
@@ -56,7 +57,7 @@ async function ensureCollectionsExist() {
     const collectionNames = collections.map(c => c.name);
     
     // 必要なコレクションのリスト
-    const requiredCollections = ['orders', 'trades', 'signals'];
+    const requiredCollections = ['orders', 'trades', 'signals', 'ohlcv'];
     
     // 存在しないコレクションを作成
     for (const name of requiredCollections) {
@@ -106,6 +107,13 @@ async function createIndexes() {
     
     await createCollectionIndexesIfNotExist('signals', [
       { key: { timestamp: 1 }, options: {} },
+      { key: { timestamp: -1 }, options: {} }
+    ]);
+    
+    // ohlcvコレクションのインデックス作成
+    await createCollectionIndexesIfNotExist('ohlcv', [
+      { key: { exchange: 1, symbol: 1, timeframe: 1, timestamp: 1 }, options: { unique: true } },
+      { key: { timestamp: 1 }, options: {} }, // タイムスタンプでの検索・ソート用
       { key: { timestamp: -1 }, options: {} }
     ]);
     
@@ -322,6 +330,74 @@ async function getTradeByTradeId(tradeId) {
 }
 
 /**
+ * OHLCVデータをohlcvコレクションに追加する
+ * @param {Object} ohlcvData 
+ */
+async function addOhlcvMongoDB(ohlcvData) {
+  await connectDB();
+  try {
+    // 重複挿入を防ぐために upsert: true を使用するか、事前に findOne で確認する
+    const existingData = await module.exports.ohlcvCollection.findOne({
+      exchange: ohlcvData.exchange,
+      symbol: ohlcvData.symbol,
+      timeframe: ohlcvData.timeframe,
+      timestamp: ohlcvData.timestamp
+    });
+    if (existingData) {
+      // console.log('OHLCV data already exists:', existingData);
+      return existingData;
+    }
+    // insertOne を使用し、ユニークインデックスで重複エラーをハンドル
+    const result = await module.exports.ohlcvCollection.insertOne(ohlcvData);
+    // console.log('OHLCV added:', result.insertedId);
+    return result;
+  } catch (error) {
+    // 重複エラー (E11000 duplicate key error) の場合はログを出力しないなど、より詳細なエラーハンドリングが必要になる可能性がある
+    console.error('Error adding OHLCV:', error);
+    throw error;
+  }
+}
+
+/**
+ * ohlcvコレクションから指定timestampに最も近い最新のOHLCVデータを取得する
+ * @param {string} exchange - 取引所名
+ * @param {string} symbol - 銘柄名
+ * @param {string} timeframe - タイムフレーム
+ * @param {number} limit - 取得する件数
+ * @param {number} timestamp - 指定したタイムスタンプ以前のデータを取得
+ * @returns {Promise<Array>} OHLCVデータの配列
+ */
+async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, timestamp) {
+  await connectDB();
+  try {
+    const query = { 
+      exchange: exchange, 
+      symbol: symbol, 
+      timeframe: timeframe,
+      timestamp: { $lte: timestamp } 
+    };
+
+    // console.log('OHLCV query:', query);
+    
+    const ohlcvData = await module.exports.ohlcvCollection
+      .find(query)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
+      
+    // console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
+    // 最新のデータを末尾に持ってくる
+    if (ohlcvData && ohlcvData.length > 0) {
+      return ohlcvData.reverse();
+    }
+    return [];
+  } catch (error) {
+    console.error('Error getting OHLCV by parameters:', error);
+    throw error;
+  }
+}
+
+/**
  * signalsコレクションから_idでデータを取得する
  * @param {string} id - MongoDBのObjectId文字列
  * @returns {Promise<Object|null>} シグナルデータまたはnull
@@ -381,16 +457,19 @@ module.exports = {
   addOrdersBulk,
   addTradeMongoDB,
   addSignalMongoDB,
+  addOhlcvMongoDB, 
   listOrders,
   listTrades,
-  listSignals, // ページング対応版
-  countSignals, // 総件数取得関数を追加
+  listSignals, 
+  countSignals,
   getOrderByOrderId,
   getTradeByTradeId,
   getSignalById,
   ordersCollection: null,
   tradesCollection: null,
   signalsCollection: null,
+  ohlcvCollection: null,
   setupGracefulShutdown,
+  fetchHistoricalOHLCVData,
   connectDB
 };
