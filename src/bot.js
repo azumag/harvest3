@@ -6,6 +6,7 @@ const { updateFilledTrades } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
 const { pro } = require('ccxt');
+const { getTickerRedis } = require('./database/redisDatabase');
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -43,46 +44,74 @@ async function startBot() {
       const symbolsByExchange = await getSymbolsByExchange(config);
       const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
       
-      for (const strategyKey of Object.keys(config.strategies)) {
-        const strategy = config.strategies[strategyKey];
-        if (hasArgs && !args.includes(`--${strategyKey}`)) {
-          // console.log(`指定された戦略 ${strategyKey} 以外は無視されます`);
-          continue;
-        }
-        if (strategy.enabled) {
-          console.log(`戦略 ${strategyKey} が有効です`);
-          if (strategy.atomicExec && (!hasArgs || !args.includes(`--${strategyKey}`))) {
-            console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
+      // すべての取引所とシンボルの組み合わせを作成
+      const allExchangeSymbolPairs = [];
+      for (const exchangeId in symbolsByExchange) {
+        for (const symbol of symbolsByExchange[exchangeId]) {
+          // シンボルが指定されている場合、一致するもののみ処理
+          if (targetSymbol && symbol !== targetSymbol) {
             continue;
           }
+          allExchangeSymbolPairs.push({ 
+            exchangeId, 
+            symbol, 
+            marketParameters: marketParametersByExchange[exchangeId][symbol] 
+          });
+        }
+      }
+      
+      // 各取引所-シンボルの組み合わせに対して
+      for (const { exchangeId, symbol, marketParameters } of allExchangeSymbolPairs) {
+        // 取引所情報を取得
+        const exchangeConfig = config.exchanges[exchangeId];
+        if (!exchangeConfig) continue;
+
+        const exchangeInstance = exchangeConfig.instance;
+
+        try {
+          // 約定済み取引の更新
+          await updateFilledTrades(exchangeInstance, symbol);
+
+          // Ticker情報を取得
+          // 同時にキャッシュする効果もある
+          const ticker = await fetchTicker(exchangeInstance, symbol);
+          console.log(`Ticker: ${exchangeId} - ${symbol} - ${JSON.stringify(ticker)}`);
           
-          try {
-            for (const exchange of strategy.exchanges) {
-              const symbols = symbolsByExchange[exchange.id];
-              
-              for (const symbol of symbols) {
-                const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
-                // シンボルが指定されている場合、一致するもののみ処理
-                if (targetSymbol && symbol !== targetSymbol) {
-                  continue;
-                }
-                
-                try {
-                  await updateFilledTrades(exchange, symbol);
-                  await runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol);
-                } catch (error) {
-                  console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
-                  await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
-                }
-              }
-              
+          // 有効な戦略を適用
+          for (const strategyKey of Object.keys(config.strategies)) {
+            const strategy = config.strategies[strategyKey];
+            
+            // 戦略が無効の場合はスキップ
+            if (!strategy.enabled) {
+              console.log(`戦略 ${strategyKey} が無効です`);
+              continue;
             }
-          } catch (error) {
-            console.error(`戦略 ${strategyKey} の実行中にエラーが発生しました: ${error.message}`);
-            await postErrorToDiscord(`戦略 ${strategyKey} でエラー: ${error.message}`).catch(() => {});
+            
+            // コマンドライン引数で指定された戦略以外はスキップ
+            if (hasArgs && !args.includes(`--${strategyKey}`)) {
+              continue;
+            }
+            
+            // atomicExec指定でコマンドライン引数なしの場合はスキップ
+            if (strategy.atomicExec && (!hasArgs || !args.includes(`--${strategyKey}`))) {
+              console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
+              continue;
+            }
+            
+            // この戦略が対象の取引所をサポートしているか確認
+            const supportedExchange = strategy.exchanges.find(e => e.id === exchangeId);
+            if (!supportedExchange) continue;
+            
+            try {
+              await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters);
+            } catch (error) {
+              console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
+              await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+            }
           }
-        } else {
-          console.log(`戦略 ${strategyKey} が無効です`);
+        } catch (error) {
+          console.error(`通貨ペア ${symbol} の処理中にエラーが発生しました: ${error.message}`);
+          await postErrorToDiscord(`通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
         }
       }
       
@@ -95,7 +124,6 @@ async function startBot() {
     await postErrorToDiscord(errorMessage);
   } finally {
     // DB接続をクローズ
-    await closeDB();
     process.exit(0);
   }
 }
