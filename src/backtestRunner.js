@@ -62,44 +62,65 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - 7); // n日間前の日付を設定
 
-    // 各戦略・通貨ペアでループ
+    // 戦略を並列に処理するためのPromiseの配列
+    const strategyPromises = [];
+
     for (const strategyKey of Object.keys(config.strategies)) {
       if (strategySpecify && strategySpecify !== strategyKey) {
         console.log(`戦略 ${strategyKey} はスキップされました`);
         continue; // 指定された戦略以外はスキップ
       }
+      
       const strategy = config.strategies[strategyKey];
       if (strategy.enabled) { // 有効な戦略のみ実行
-        for (const exchange of strategy.exchanges) {
-          const symbols = symbolsByExchange[exchange.id];
+        // 各戦略の処理を非同期関数でラップしてPromiseとして追加
+        const strategyPromise = (async () => {
+          console.log(`戦略 ${strategyKey} の処理を開始します...`);
+          
+          for (const exchange of strategy.exchanges) {
+            const symbols = symbolsByExchange[exchange.id];
 
-          for (const symbol of symbols) {
-            // シンボルが指定されている場合、一致するもののみ処理
-            if (targetSymbol && symbol !== targetSymbol) {
-              continue;
-            }
+            for (const symbol of symbols) {
+              // シンボルが指定されている場合、一致するもののみ処理
+              if (targetSymbol && symbol !== targetSymbol) {
+                continue;
+              }
 
-            let shouldRetry = false;
-            let retryCount = 0;
-            while(!shouldRetry) {
-              const result = await runBacktestForSymbol(
-                exchange,
-                symbol,
-                strategy,
-                strategyKey,
-                marketParametersByExchange,
-                autoUpdate,
-                gridSearch,
-                startDate,
-                endDate,
-                retryCount
-              );
-              shouldRetry = result.shouldRetry;
-              retryCount++;
+              let shouldRetry = false;
+              let retryCount = 0;
+              while(!shouldRetry) {
+                const result = await runBacktestForSymbol(
+                  exchange,
+                  symbol,
+                  strategy,
+                  strategyKey,
+                  marketParametersByExchange,
+                  autoUpdate,
+                  gridSearch,
+                  startDate,
+                  endDate,
+                  retryCount
+                );
+                shouldRetry = result.shouldRetry;
+                retryCount++;
+              }
             }
           }
-        }
+          
+          console.log(`戦略 ${strategyKey} の処理が完了しました`);
+          return { strategyKey, completed: true };
+        })();
+        
+        strategyPromises.push(strategyPromise);
       }
+    }
+
+    // 全ての戦略の処理を並列に実行
+    if (strategyPromises.length > 0) {
+      console.log(`${strategyPromises.length}個の戦略を並列処理中...`);
+      await Promise.all(strategyPromises);
+    } else {
+      console.log('処理対象の戦略がありません');
     }
 
     console.log('バックテストが完了しました。');
