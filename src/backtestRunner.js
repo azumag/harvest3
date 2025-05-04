@@ -66,25 +66,24 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // 設定された期間で、すべてのシンボルのOHLCVデータを取得
     // TODO: 現状保存されているデータからの差分のみを取得するようにする
-    // 現状は処理時間短縮のため1日分だけ取得
-    for (const exchange of Object.keys(symbolsByExchange)) {
-      console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
-      const exchangeInstance = config.exchanges[exchange].instance;
-      const symbols = symbolsByExchange[exchange];
-      for (const symbol of symbols) {
-        // シンボルが指定されている場合、一致するもののみ処理
-        if (targetSymbol && symbol !== targetSymbol) {
-          continue;
-        }
+    // 現状は処理時間短縮のため disable
+    // for (const exchange of Object.keys(symbolsByExchange)) {
+    //   console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
+    //   const exchangeInstance = config.exchanges[exchange].instance;
+    //   const symbols = symbolsByExchange[exchange];
+    //   for (const symbol of symbols) {
+    //     // シンボルが指定されている場合、一致するもののみ処理
+    //     if (targetSymbol && symbol !== targetSymbol) {
+    //       continue;
+    //     }
 
-        // OHLCVデータを取得して保存
-        for (const timeframe of OHLCVTimeFrames) {
-          const _days = 1;
-          const limit = calculateLimit(timeframe, _days);
-          await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
-        }
-      }
-    }
+    //     // OHLCVデータを取得して保存
+    //     for (const timeframe of OHLCVTimeFrames) {
+    //       const limit = calculateLimit(timeframe, days);
+    //       await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
+    //     }
+    //   }
+    // }
 
     // 戦略を並列に処理するためのPromiseの配列
     const strategyPromises = [];
@@ -287,6 +286,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
           await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
         } catch (error) {
           console.error(`バックテスト中にエラーが発生しました: ${error.message}`);
+          postErrorToDiscord(`[バックテスト] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
         }
       }
 

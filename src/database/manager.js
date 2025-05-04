@@ -82,7 +82,14 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     // if (true) {
       // TODO: 前回更新時刻をみて取得する limit を調整
       // TODO: 取得したデータを保存する際、redisには更新でなく追記をかける必要がある
-      const _limit = limit > 100 ? limit : 100; // デフォルトの取得数を100に設定, 100を超える場合はその数字にする
+      // forceUpdate が true の場合以外は、limit を 100 にする: REDISに保存するデータ量を固定
+      const _limit = (() => {
+        if (options.forceUpdate) {
+          return limit;
+        }
+        return 100;
+      })();
+
       const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
       if (!ohlcvs || ohlcvs.length === 0) {
         console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
@@ -97,7 +104,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       for (const ohlcv of ohlcvs) {
         if (options.forceUpdate) {
           // forceUpdate が true の場合は全て保存
-          console.log(`forceUpdate: ${ohlcv}`);
+          // console.log(`forceUpdate: ${ohlcv}`);
         } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
           console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0][0]}`);
           continue; // 既存のデータより古い場合はスキップ

@@ -21,7 +21,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
     if (!options.backtest) {
       console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     }
-    return null;
+    throw new Error(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
   }
 
   // 終値の配列を作成
@@ -33,7 +33,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
     if (errorNotificationFn) {
       await errorNotificationFn(`[${strategyName}戦略] 警告: ${exchange.id} - ${symbol} - 無効な価格データが含まれています`);
     }
-    return null;
+    throw new Error(`${strategyName}戦略: ${symbol} - 無効な価格データが含まれています`);
   }
   
   return { ohlcv, closes };
