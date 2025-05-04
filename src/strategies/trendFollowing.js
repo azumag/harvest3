@@ -444,62 +444,69 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;
     
-    // 買いシグナル: 価格がバンドの下限に近づいた場合
-    const buySignal = currentPrice <= currentLower * 1.01; // 下限の1%以内
-    
-    // 売りシグナル: 価格がバンドの上限に近づいた場合
-    const sellSignal = currentPrice >= currentUpper * 0.99; // 上限の1%以内
-    
-    // シグナルタイプを決定
-    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-    
-    // 戦略固有の計算結果
-    const strategyResults = {
-      upper: currentUpper,
-      middle: currentMiddle,
-      lower: currentLower,
-      bandWidth
-    };
-    
-    // シグナルがある場合のみ保存
-    if (signalType !== 'none') {
-      addSignal(
-        exchange,
-        symbol,
-        strategyKey,
-        signalType,
-        currentPrice,
-        strategyResults,
-        options // optionsを追加
-      );
+    // バンド幅の最小閾値（例：中央値の3%以上）
+    const minBandWidthThreshold = 0.03;
+
+    // バンド幅が十分ある場合のみシグナルを有効にする
+    if (bandWidth >= minBandWidthThreshold) {
+        // 既存のシグナルロジック
+        const buySignal = currentPrice <= currentLower * 1.01;
+        const sellSignal = currentPrice >= currentUpper * 0.99;
+        // シグナルタイプを決定
+        const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+        
+        // 戦略固有の計算結果
+        const strategyResults = {
+          upper: currentUpper,
+          middle: currentMiddle,
+          lower: currentLower,
+          bandWidth
+        };
+        
+        // シグナルがある場合のみ保存
+        if (signalType !== 'none') {
+          addSignal(
+            exchange,
+            symbol,
+            strategyKey,
+            signalType,
+            currentPrice,
+            strategyResults,
+            options // optionsを追加
+          );
+        }
+        
+        // シグナル結果をまとめる
+        const signalResult = {
+          currentPrice,
+          currentUpper,
+          currentMiddle,
+          currentLower,
+          bandWidth,
+          signalType,
+          buySignal,
+          sellSignal,
+          strategyResults
+        };
+        
+        // シグナル処理を共通関数で行う
+        return await handleStrategySignals(
+          exchange,
+          symbol,
+          strategyKey,
+          config,
+          marketParameters,
+          signalResult,
+          'BB戦略',
+          'Bollinger Bands',
+          formatBollingerBandsLogInfo,
+          options
+        );
+    } else {
+        // バンド幅が狭い場合はシグナルを出さない
+        const buySignal = false;
+        const sellSignal = false;
     }
-    
-    // シグナル結果をまとめる
-    const signalResult = {
-      currentPrice,
-      currentUpper,
-      currentMiddle,
-      currentLower,
-      bandWidth,
-      signalType,
-      buySignal,
-      sellSignal,
-      strategyResults
-    };
-    
-    // シグナル処理を共通関数で行う
-    return await handleStrategySignals(
-      exchange,
-      symbol,
-      strategyKey,
-      config,
-      marketParameters,
-      signalResult,
-      'BB戦略',
-      'Bollinger Bands',
-      formatBollingerBandsLogInfo,
-      options
-    );
     
   } catch (error) {
     console.error(`ボリンジャーバンド戦略でエラーが発生しました: ${symbol}`, error);

@@ -626,7 +626,8 @@ async function fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcD
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
             exchange,
-            symbol
+            symbol,
+            strategy
         });
         
         if (ohlcData) {

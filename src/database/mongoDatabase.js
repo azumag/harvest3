@@ -344,7 +344,7 @@ async function addOhlcvMongoDB(ohlcvData) {
       timestamp: ohlcvData.timestamp
     });
     if (existingData) {
-      // console.log('OHLCV data already exists:', existingData);
+      console.log('OHLCV data already exists:', ohlcvData.timestamp);
       return existingData;
     }
     // insertOne を使用し、ユニークインデックスで重複エラーをハンドル
@@ -374,8 +374,11 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
       exchange: exchange, 
       symbol: symbol, 
       timeframe: timeframe,
-      timestamp: { $lte: timestamp } 
     };
+
+    if (timestamp) {
+      query.timestamp = { $lte: timestamp }; // 指定したタイムスタンプ以前のデータを取得
+    }
 
     // console.log('OHLCV query:', query);
     

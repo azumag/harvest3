@@ -133,20 +133,23 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
 
   try {
     const now = new Date();
-    const hour = now.getHours();
+    // 日本時間の時刻を計算（UTC+9）
+    const jstHour = (now.getUTCHours() + 9) % 24;
     let targetDate = new Date(now);
     
-    // 現在時刻が9時より前なら前日の日付を設定
-    if (hour < 9) {
+    // 日本時間で9時より前なら前日の日付を設定
+    if (jstHour < 9) {
       targetDate.setDate(targetDate.getDate() - 1);
+      console.log(`fetchOHLCVData: 現在時刻が日本時間の9時より前のため、前日の日付を設定: ${targetDate.toISOString().split('T')[0]}`);
     }
     
     // targetDateを当日の0:00に設定
     targetDate.setHours(0, 0, 0, 0);
     let since = targetDate.getTime();
     
-    // まず現在の日付でデータを取得
-    console.log(`fetchOHLCVData: ${targetDate.toISOString().split('T')[0]}のデータを取得: ${symbol} ${timeframe} ${since} ${limit}件`);
+    // 日本時間の日付表記に変換（toLocaleStringを使用）
+    const jstDate = targetDate.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }).split(' ')[0];
+    console.log(`fetchOHLCVData: ${jstDate}のデータを取得: ${symbol} ${timeframe} ${since} ${limit}件`);
 
     let ohlcv = await exchange.fetchOHLCV(symbol, timeframe, since, limit);
     let allData = [...ohlcv];

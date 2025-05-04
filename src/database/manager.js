@@ -69,6 +69,8 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
         ];
       });
     }
+
+    console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     
     // 通常モード
     // REDISに最新データがあるか確認
@@ -76,7 +78,8 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
     const timeframeMs = timeframeToMs(timeframe);
     // 前回更新時刻がない、または前回更新時刻から Timeframe 時間以上経過している場合
-    if (!redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+    if (options.forceUpdate || !redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+    // if (true) {
       // TODO: 前回更新時刻をみて取得する limit を調整
       // TODO: 取得したデータを保存する際、redisには更新でなく追記をかける必要がある
       const _limit = limit > 100 ? limit : 100; // デフォルトの取得数を100に設定, 100を超える場合はその数字にする
@@ -92,7 +95,11 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       // console.log(`lastOhlcv: ${lastOhlcv}`);
       // console.log(`ohlcvs: ${ohlcvs}`);
       for (const ohlcv of ohlcvs) {
-        if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
+        if (options.forceUpdate) {
+          // forceUpdate が true の場合は全て保存
+          console.log(`forceUpdate: ${ohlcv}`);
+        } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
+          console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0][0]}`);
           continue; // 既存のデータより古い場合はスキップ
         }
         try {
@@ -110,7 +117,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
           };
           addOhlcvMongoDB(ohlcvData);
         } catch (error) {
-          // console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
+          console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
         }
       }
       await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
@@ -118,6 +125,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     } else {
       // Redisにデータがある場合はそれを返す
       const redisData = await getOHLCVRedis(exchange.id, symbol, timeframe);
+      // console.log(`Redis data: ${redisData}`);
       // limitが指定されている場合、データを制限
       if (limit && limit > 0) {
         return redisData.slice(-limit);
