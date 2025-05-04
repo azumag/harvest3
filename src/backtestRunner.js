@@ -4,6 +4,7 @@ const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require(
 const { sleep, timeframeToMs } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
+const { fetchOHLCVData } = require('./database/manager');
 const { OHLCVTimeFrames } = require('./common/const');
 
 
@@ -58,9 +59,32 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // バックテスト期間の設定 
     // const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
+    const days = 7; // n日間のOHLCVデータを取得
     const endDate = new Date(); // 現在の日付を使用
     const startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - 7); // n日間前の日付を設定
+    startDate.setDate(endDate.getDate() - days); // n日間前の日付を設定
+
+    // 設定された期間で、すべてのシンボルのOHLCVデータを取得
+    // TODO: 現状保存されているデータからの差分のみを取得するようにする
+    // 現状は処理時間短縮のため1日分だけ取得
+    for (const exchange of Object.keys(symbolsByExchange)) {
+      console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
+      const exchangeInstance = config.exchanges[exchange].instance;
+      const symbols = symbolsByExchange[exchange];
+      for (const symbol of symbols) {
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol && symbol !== targetSymbol) {
+          continue;
+        }
+
+        // OHLCVデータを取得して保存
+        for (const timeframe of OHLCVTimeFrames) {
+          const _days = 1;
+          const limit = calculateLimit(timeframe, _days);
+          await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
+        }
+      }
+    }
 
     // 戦略を並列に処理するためのPromiseの配列
     const strategyPromises = [];
@@ -86,9 +110,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 continue;
               }
 
-              let shouldRetry = false;
+              let shouldRetry = true; // 最初はtrueでループに入る
               let retryCount = 0;
-              while(!shouldRetry) {
+              while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
                 const result = await runBacktestForSymbol(
                   exchange,
                   symbol,
@@ -506,6 +530,31 @@ function generateRandomParameterCombinations(defaultConfig, numericKeys, count =
   return combinations;
 }
 
+/**
+ * タイムフレームと日数からlimitを計算する関数
+ * @param {string} timeframe - タイムフレーム ('1m', '5m', '15m', '30m', '1h', '4h', '8h', '12h', '1d', '1w')
+ * @param {number} days - 取得したい日数
+ * @returns {number} 指定されたタイムフレームと日数に対応するlimit値
+ */
+function calculateLimit(timeframe, days) {
+  switch (timeframe) {
+    case '1m': return days * 24 * 60;     // 1日 = 1440ポイント
+    case '5m': return days * 24 * 12;     // 1日 = 288ポイント
+    case '15m': return days * 24 * 4;     // 1日 = 96ポイント
+    case '30m': return days * 24 * 2;     // 1日 = 48ポイント
+    case '1h': return days * 24;          // 1日 = 24ポイント
+    case '4h': return days * 6;           // 1日 = 6ポイント
+    case '8h': return days * 3;           // 1日 = 3ポイント
+    case '12h': return days * 2;          // 1日 = 2ポイント
+    case '1d': return days;               // 1日 = 1ポイント
+    case '1w': 
+      // 週単位の場合、日数を7で割って切り上げ
+      return Math.ceil(days / 7);
+    default:
+      console.warn(`未知のタイムフレーム: ${timeframe}`);
+      return 0;
+  }
+}
 
 // バックテストを開始
 runBacktest(targetSymbol, autoUpdate);
