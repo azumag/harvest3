@@ -253,6 +253,7 @@ async function listOrders(filter = {}, options = {}) {
 async function listTrades(filter = {}, options = {}) {
   await connectDB();
   try {
+    console.log({filter})
     const trades = await module.exports.tradesCollection.find(filter, options).toArray();
     return trades;
   } catch (error) {

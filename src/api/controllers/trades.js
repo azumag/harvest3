@@ -13,15 +13,13 @@ const getTrades = async (req, res) => {
         if (startDate || endDate) {
             filter.timestamp = {};
             if (startDate) {
-                // startDateをミリ秒のタイムスタンプに変換し、$gteを使用
-                filter.timestamp.$gte = new Date(startDate).getTime();
+                // startDateはすでにタイムスタンプなので直接使用（文字列の場合は数値に変換）
+                filter.timestamp.$gte = Number(startDate);
             }
             if (endDate) {
-                // endDateをミリ秒のタイムスタンプに変換し、$lteを使用
-                // endDateの終わり（23:59:59.999）を含めるために1日加算してgetTime()を使用
-                const end = new Date(endDate);
-                end.setDate(end.getDate() + 1);
-                filter.timestamp.$lte = end.getTime() - 1;
+                // endDateはすでにタイムスタンプなので直接使用（文字列の場合は数値に変換）
+                // 日の終わり（23:59:59.999）を含めるには86400000ミリ秒（1日分）を加算して1ミリ秒引く
+                filter.timestamp.$lte = Number(endDate) + 86400000 - 1;
             }
         }
 
