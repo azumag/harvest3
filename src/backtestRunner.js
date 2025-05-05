@@ -478,7 +478,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       ohlcvInterval: selectedResult.timeframe,
       ...selectedResult.parameters,
     };
-    paramsToUpdate.enable = true; // 自動更新後は有効にする
+    paramsToUpdate.enabled = true; // 自動更新後は有効にする
     await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
     
     // 選択した結果がトップスコアと異なる場合はその旨を記録
