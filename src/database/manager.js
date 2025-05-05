@@ -158,7 +158,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
           // forceUpdate が true の場合は全て保存
           // console.log(`forceUpdate: ${ohlcv}`);
         } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0].timestamp) {
-          console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0].timestamp}`);
+          // console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0].timestamp}`);
           continue; // 既存のデータより古い場合はスキップ
         }
         try {
