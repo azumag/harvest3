@@ -30,8 +30,8 @@ const {
   updateOHLCVRedis,
   getTickerRedis,
   updateTickerRedis,
-  updateBacktestOHLCVRedis,
-  getBacktestOHLCVRedis,
+  updateBacktestOHLCVRedisSortedSet,
+  getBacktestOHLCVRedisBeforeTimestamp
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
@@ -65,7 +65,7 @@ async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, l
       return [];
     }
     // Redisに保存
-    await updateBacktestOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+    await updateBacktestOHLCVRedisSortedSet(exchange.id, symbol, timeframe, ohlcvs);
     console.log(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
     return ohlcvs;
   } catch (error) {
@@ -87,43 +87,24 @@ async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, l
 */
 async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100, timestamp) {
   try {
-    console.log(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+    // console.log(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
     // Redisからデータを取得
-    const redisData = await getBacktestOHLCVRedis(exchangeId, symbol, timeframe);
+    const redisData = await getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit);
     if (!redisData || redisData.length === 0) {
       console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
       return [];
     }
 
-    // Redisのデータをフィルタリング
-    // timestamp が指定されている場合、指定された timestamp より新しいデータを除外
-    const filteredData = timestamp
-      ? redisData.filter(candle => candle.timestamp <= timestamp)
-      : redisData;
-
-    // 指定された件数だけ取得
-    const limitedData = filteredData.slice(-limit);
-
-    if (limitedData.length < limit) {
-      console.log(`${symbol} - ${timeframe}: データが不足しています。取得件数: ${limitedData.length}, 要求件数: ${limit}`);
-      // throw new Error(`データが不足しています。取得件数: ${limitedData.length}, 要求件数: ${limit}`);
-    }
-
-    // データが見つからない場合
-    if (!limitedData || limitedData.length === 0) {
-      console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
-      return [];
-    }
     // データをCCXTフォーマットに変換して返す
     // CCXTフォーマット: [timestamp, open, high, low, close, volume]
-    return limitedData.map(candle => {
+    return redisData.map(candle => {
       return [
-        candle[0],
-        candle[1],
-        candle[2],
-        candle[3],
-        candle[4],
-        candle[5]
+        candle.timestamp,
+        candle.open,
+        candle.high,
+        candle.low,
+        candle.close,
+        candle.volume
       ];
     });
    } catch (error) {
@@ -140,7 +121,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 
-    console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+    // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     
     // 通常モード
     // REDISに最新データがあるか確認

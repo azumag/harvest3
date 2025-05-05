@@ -395,30 +395,89 @@ async function updateTickerRedis(exchangeId, symbol, tickerData) {
   // console.log(`ティッカーデータを更新しました: ${key}`);
 }
 
-// RedisにBacktest用OHLCVデータを保存する関数
 /**
- * Backtest用OHLCVデータを保存する関数
+ * Backtest用OHLCVデータをsorted setとして保存する関数
+ * タイムスタンプをスコアとして使用
+ */
+async function updateBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe, ohlcvData) {
+  const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
+  
+  // 既存のデータをクリア
+  await client.del(key);
+  
+  // バルク操作用の配列を準備
+  const bulkData = [];
+  
+  for (const item of ohlcvData) {
+    // 配列の最初の要素（通常はタイムスタンプ）をスコアとして使用
+    const score = item.timestamp;
+    // 残りのデータをJSON文字列として保存
+    const value = JSON.stringify(item);
+    
+    bulkData.push({ score, value });
+  }
+  
+  // バルク操作でデータを追加
+  if (bulkData.length > 0) {
+    await client.zAdd(key, bulkData);
+  }
+  
+  return Date.now();
+}
+
+/**
+ * タイムスタンプの範囲でフィルタリングしてデータを取得
+ */
+async function getBacktestOHLCVRedisByTimeRange(exchangeId, symbol, timeframe, startTime, endTime) {
+  const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
+  
+  // 指定された範囲のスコア（タイムスタンプ）の要素を取得
+  const result = await client.zRangeByScore(key, startTime, endTime);
+  
+  // 結果をJSONとしてパース
+  return result.map(item => JSON.parse(item));
+}
+
+/**
+ * すべてのBacktest用OHLCVデータを取得
+ */
+async function getAllBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe) {
+  const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
+  
+  // すべての要素を取得
+  const result = await client.zRange(key, 0, -1);
+  
+  // 結果をJSONとしてパース
+  return result.map(item => JSON.parse(item));
+}
+
+/**
+ * 指定されたtimestampより古いOHLCVデータをlimit件数だけ取得する
  * @param {String} exchangeId - 取引所ID
  * @param {String} symbol - 通貨ペア
  * @param {String} timeframe - タイムフレーム
- * @param {Object} ohlcvData - OHLCVデータ
- * @returns {Promise} 処理完了時に解決されるPromise
-*/
-async function updateBacktestOHLCVRedis(exchangeId, symbol, timeframe, ohlcvData) {
-  const key = `backtest:ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
-  const now = Date.now();
-  await client.set(key, JSON.stringify(ohlcvData));
-  // console.log(`Backtest用OHLCVデータを更新しました: ${key} - ${now}`);
-  return now;
-}
-
-async function getBacktestOHLCVRedis(exchangeId, symbol, timeframe) {
-  const key = `backtest:ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
-  const data = await client.get(key);
-  if (data) {
-    return JSON.parse(data);
-  }
-  return null;
+ * @param {Number} timestamp - このtimestamp以前のデータを取得
+ * @param {Number} limit - 取得する最大件数
+ * @returns {Promise<Array>} OHLCVデータの配列
+ */
+async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit = 100) {
+  const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
+  
+  // timestampより古いデータを取得（-inf 〜 timestamp）
+  const result = await client.zRangeByScore(
+    key,
+    '-inf',       // 最小値（無限小）
+    timestamp,    // 最大値（指定されたtimestamp）
+    {
+      LIMIT: {
+        offset: 0,  // オフセットなし
+        count: limit // 指定された件数まで
+      }
+    }
+  );
+  
+  // 結果をJSONとしてパース
+  return result.map(item => JSON.parse(item));
 }
 
 // モジュールのエクスポートに新しい関数を追加
@@ -441,6 +500,8 @@ module.exports = {
   updateOHLCVRedis,
   getTickerRedis,
   updateTickerRedis,
-  updateBacktestOHLCVRedis,
-  getBacktestOHLCVRedis,
+  updateBacktestOHLCVRedisSortedSet,
+  getBacktestOHLCVRedisByTimeRange,
+  getAllBacktestOHLCVRedisSortedSet,
+  getBacktestOHLCVRedisBeforeTimestamp,
 };

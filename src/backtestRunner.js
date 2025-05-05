@@ -352,14 +352,8 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         
         options.backtest.timestamp = timestamp;
 
-        // DEBUG: ohlcvDataを取得
-        const period = strategyConfig.period;
-        console.log({period, timestamp});
-        const ohlcvData = await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, period, timestamp);
-        process.exit(0);
-
         try {
-          // await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
+          await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
         } catch (error) {
           console.error(`バックテスト中にエラーが発生しました: ${error.message}`);
           postErrorToDiscord(`[バックテスト] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
@@ -484,6 +478,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       ohlcvInterval: selectedResult.timeframe,
       ...selectedResult.parameters,
     };
+    paramsToUpdate.enable = true; // 自動更新後は有効にする
     await saveStrategyParameters(exchange.id, symbol, strategyKey, paramsToUpdate);
     
     // 選択した結果がトップスコアと異なる場合はその旨を記録
