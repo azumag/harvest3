@@ -29,7 +29,9 @@ const {
   getOHLCVRedis,
   updateOHLCVRedis,
   getTickerRedis,
-  updateTickerRedis
+  updateTickerRedis,
+  updateBacktestOHLCVRedis,
+  getBacktestOHLCVRedis,
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
@@ -45,30 +47,97 @@ async function initializeDB() {
   await connectDB();
 }
 
+/**
+ * バックテスト用のOHLCVデータを取得し、Redisに保存する関数
+ * 
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} timeframe - 時間枠
+ * @param {number} limit - 取得するデータの件数
+ * @returns {Promise<Array>} - 取得したOHLCVデータの配列
+ * @throws {Error} - データ取得に失敗した場合
+**/
+async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, limit = 100) {
+  try {
+    const ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
+    if (!ohlcvs || ohlcvs.length === 0) {
+      console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      return [];
+    }
+    // Redisに保存
+    await updateBacktestOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+    console.log(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
+    return ohlcvs;
+  } catch (error) {
+    console.error(`Error loading historical OHLCV data: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Backtest用のOHLCVデータを取得する関数
+ * 
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 通貨ペア
+ * @param {string} timeframe - 時間枠
+ * @param {number} limit - 取得するデータの件数
+ * @param {number} timestamp - タイムスタンプ
+ * @returns {Promise<Array>} - 取得したOHLCVデータの配列
+ * @throws {Error} - データ取得に失敗した場合
+*/
+async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100, timestamp) {
+  try {
+    console.log(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+    // Redisからデータを取得
+    const redisData = await getBacktestOHLCVRedis(exchangeId, symbol, timeframe);
+    if (!redisData || redisData.length === 0) {
+      console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
+      return [];
+    }
+
+    // Redisのデータをフィルタリング
+    // timestamp が指定されている場合、指定された timestamp より新しいデータを除外
+    const filteredData = timestamp
+      ? redisData.filter(candle => candle.timestamp <= timestamp)
+      : redisData;
+
+    // 指定された件数だけ取得
+    const limitedData = filteredData.slice(-limit);
+
+    if (limitedData.length < limit) {
+      console.log(`${symbol} - ${timeframe}: データが不足しています。取得件数: ${limitedData.length}, 要求件数: ${limit}`);
+      // throw new Error(`データが不足しています。取得件数: ${limitedData.length}, 要求件数: ${limit}`);
+    }
+
+    // データが見つからない場合
+    if (!limitedData || limitedData.length === 0) {
+      console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      return [];
+    }
+    // データをCCXTフォーマットに変換して返す
+    // CCXTフォーマット: [timestamp, open, high, low, close, volume]
+    return limitedData.map(candle => {
+      return [
+        candle[0],
+        candle[1],
+        candle[2],
+        candle[3],
+        candle[4],
+        candle[5]
+      ];
+    });
+   } catch (error) {
+    console.error(`Error fetching historical OHLCV data: ${error.message}`);
+    throw error;
+  }
+}
+
 async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options = {}) {
   try {
     // バックテストモードの場合
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      // mongoDBから過去データを取得
-      const historicalData = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
-      
-      if (!historicalData || historicalData.length === 0) {
-        return [];
-      }
-
-      // 取得したデータをCCXTフォーマットに変換して返す
-      // CCXTフォーマット: [timestamp, open, high, low, close, volume]
-      return historicalData.map(candle => {
-        return [
-          candle.timestamp,
-          candle.open,
-          candle.high,
-          candle.low,
-          candle.close,
-          candle.volume
-        ];
-      });
+      return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 
     console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
@@ -107,8 +176,8 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
         if (options.forceUpdate) {
           // forceUpdate が true の場合は全て保存
           // console.log(`forceUpdate: ${ohlcv}`);
-        } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
-          console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0][0]}`);
+        } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0].timestamp) {
+          console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0].timestamp}`);
           continue; // 既存のデータより古い場合はスキップ
         }
         try {
@@ -900,4 +969,7 @@ module.exports = {
   getSymbolsByExchange,
   getMarketParameters,
   getCurrentSellOrderPosition,
+  fetchHistoricalOHLCVData,
+  loadHistoricalOHLCVToBacktestRedis,
+  fetchBacktestOHLCVData,
 };

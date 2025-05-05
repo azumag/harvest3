@@ -1,7 +1,15 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
-const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
+const { backtestCreateLimitSellOrder,
+  saveStrategyParameters,
+  getStrategyParameters,
+  initializeDB,
+  fetchHistoricalOHLCVData,
+  fetchOHLCVData,
+  loadHistoricalOHLCVToBacktestRedis,
+  fetchBacktestOHLCVData
+ } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
 
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { OHLCVTimeFrames } = require('./common/const');
@@ -64,26 +72,59 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const startDate = new Date(endDate);
     startDate.setDate(endDate.getDate() - days); // n日間前の日付を設定
 
-    // 設定された期間で、すべてのシンボルのOHLCVデータを取得
-    // TODO: 現状保存されているデータからの差分のみを取得するようにする
-    // 現状は処理時間短縮のため disable
-    // for (const exchange of Object.keys(symbolsByExchange)) {
-    //   console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
-    //   const exchangeInstance = config.exchanges[exchange].instance;
-    //   const symbols = symbolsByExchange[exchange];
-    //   for (const symbol of symbols) {
-    //     // シンボルが指定されている場合、一致するもののみ処理
-    //     if (targetSymbol && symbol !== targetSymbol) {
-    //       continue;
-    //     }
+    // 設定された期間で、すべてのシンボルのOHLCVデータを取得して更新
+    for (const exchange of Object.keys(symbolsByExchange)) {
+      console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
+      const exchangeInstance = config.exchanges[exchange].instance;
+      const symbols = symbolsByExchange[exchange].sort();
+      for (const symbol of symbols) {
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol && symbol !== targetSymbol) {
+          continue;
+        }
 
-    //     // OHLCVデータを取得して保存
-    //     for (const timeframe of OHLCVTimeFrames) {
-    //       const limit = calculateLimit(timeframe, days);
-    //       await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
-    //     }
-    //   }
-    // }
+        // OHLCVデータを取得して保存
+        for (const timeframe of OHLCVTimeFrames) {
+          // 現状保存されているデータからの差分のみを取得するようにする
+          const lastOhlcv = await fetchHistoricalOHLCVData(exchange, symbol, timeframe, 1);
+          const lastTimestamp = lastOhlcv && lastOhlcv.length > 0 ? lastOhlcv[0].timestamp : null;
+          const currentTimestamp = Date.now();
+          let daysToFetch = days; // Default to the days variable defined earlier
+
+          console.log(`Last data for ${symbol}/${timeframe} is from ${lastTimestamp ? new Date(lastTimestamp).toISOString() : 'N/A'}`);
+            
+          if (lastTimestamp) {
+            // Calculate difference in milliseconds and convert to days
+            const timeDiffInDays = (currentTimestamp - lastTimestamp) / (1000 * 60 * 60 * 24);
+            daysToFetch = Math.ceil(timeDiffInDays);
+            console.log(`fetching ${daysToFetch} days of data`);
+          } 
+          
+          const limit = calculateLimit(timeframe, daysToFetch);
+          await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
+        }
+      }
+    }
+
+    // すべてのシンボルのOHLCVデータをREDISにロード
+    for (const exchange of Object.keys(symbolsByExchange)) {
+      console.log(`=== ${exchange} のOHLCVデータをREDISにロード ===`);
+      const exchangeInstance = config.exchanges[exchange].instance;
+      const symbols = symbolsByExchange[exchange].sort();
+      for (const symbol of symbols) {
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol && symbol !== targetSymbol) {
+          continue;
+        }
+        for (const timeframe of OHLCVTimeFrames) {
+          // バックテストに必要なローソク足の本数を計算する
+          // バッファを持たせプラス100する.
+          // TODO: この値は戦略で使う period の最大値を設定したい
+          const limit = calculateLimit(timeframe, days) + 100;
+          await loadHistoricalOHLCVToBacktestRedis(exchangeInstance, symbol, timeframe, limit)
+        }
+      }
+    }
 
     // 戦略を並列に処理するためのPromiseの配列
     const strategyPromises = [];
@@ -105,7 +146,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         console.log(`戦略 ${strategyKey} の処理を開始します...`);
         
         for (const exchange of strategy.exchanges) {
-          const symbols = symbolsByExchange[exchange.id];
+            const symbols = symbolsByExchange[exchange.id].sort();
 
           for (const symbol of symbols) {
             // シンボルが指定されている場合、一致するもののみ処理
@@ -238,6 +279,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       parameterCombinations = generateRandomParameterCombinations(
         dbParams, numericParameterKeys,
         10 + (retryCount*10), // パラメータのパターン数
+        // 1 + (retryCount*1), // パラメータのパターン数
         0.1 + (retryCount*0.1) // 変動幅
       );
     }
@@ -310,8 +352,14 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         
         options.backtest.timestamp = timestamp;
 
+        // DEBUG: ohlcvDataを取得
+        const period = strategyConfig.period;
+        console.log({period, timestamp});
+        const ohlcvData = await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, period, timestamp);
+        process.exit(0);
+
         try {
-          await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
+          // await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
         } catch (error) {
           console.error(`バックテスト中にエラーが発生しました: ${error.message}`);
           postErrorToDiscord(`[バックテスト] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
@@ -371,11 +419,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   const rankedAllTimeframeResults = rankResults(allTimeframeResults);
   
   // ランキング結果を表示
-  const allTimeframeRankingTitle = `===== ${symbol} (全タイムフレーム) ${strategyKey} パラメータ最適化結果 =====`;
+  const allTimeframeRankingTitle = `===== ${symbol} ${strategyKey} パラメータ最適化結果 =====`;
   console.log(allTimeframeRankingTitle);
   
   // Discord用に整形した文字列を作成
-  const allResultsArr = [`## ${symbol} (全タイムフレーム) ${strategyKey} パラメータ最適化結果`];
+  const allResultsArr = [`## ${symbol} ${strategyKey} パラメータ最適化結果`];
   allResultsArr.push('```');
   
   for (let index = 0; index < Math.min(rankedAllTimeframeResults.length, 10); index++) {
@@ -413,10 +461,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     if (shouldRetry) {  
       if (topScore <= initialBaseFund) {
         console.log(`最高スコア(${topScore.toFixed(2)})が初期資金(${initialBaseFund})以下のため、より広いパラメータ範囲でループをやり直します`);
-        await postResultToDiscord(`${strategyKey} の ${symbol} - すべての結果が利益を出せていないため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+        await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果が利益を出せていないため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       } else {
         console.log(`全スコアの差が非常に小さい (${(scoreDifference * 100).toFixed(4)}%) ため、より広いパラメータ範囲でループをやり直します`);
-        await postResultToDiscord(`${strategyKey} の ${symbol} - すべての結果のスコア差が小さすぎるため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+        await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果のスコア差が小さすぎるため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       }
       return { shouldRetry };
     }

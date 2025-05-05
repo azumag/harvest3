@@ -2,7 +2,7 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
   addOrder, fetchOHLCVData, getAvailableFund,
   checkBuyOrderAllowance,
-  getStrategyConfig,
+  getStrategyParameters,
   saveStrategyParameters,
   getTradeCurrentPosition,
   getOrderStrategyKeyByOrderId,
@@ -293,11 +293,11 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
 
 async function disableStrategy(exchange, symbol, strategyKey, config, options = {}) {
   // configを取得
-  const _config = await getStrategyConfig(exchange, symbol, strategyKey, config);
+  const _dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
   // enabledをfalseに設定
-  _config.enabled = false;
+  _dbParams.enabled = false;
   // configを保存
-  await saveStrategyParameters(exchange.id, symbol, strategyKey, _config);
+  await saveStrategyParameters(exchange.id, symbol, strategyKey, _dbParams);
 }
 
 async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) {
@@ -310,11 +310,11 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   }));
 
   // 戦略に買いポジションがある場合、売り注文を作成
-  const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-  if (position.strategyKey === strategyKey) {
-    const order = await exchange.createMarketSellOrder(symbol, netPosition);
-    addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
-  }
+  const _netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+  // TODO: use market parameters
+  const netPosition = Math.max(_netPosition.toFixed(4), 0.0001); // 精度を考慮して、最小精度以上の値を確保
+  const order = await exchange.createMarketSellOrder(symbol, netPosition);
+  addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
 
   return { success: true };
 }

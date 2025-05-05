@@ -90,7 +90,8 @@ services:
       - ./src:/usr/src/app/src
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
-    command: sh -c "while true; do npm run backtest; sleep 5; done"
+    command: sh -c "while true; do npm run backtest; sleep 500; done"
+    # command: sh -c "npm run backtest"
     environment:
       - REDIS_URL=redis://redis:6379
     networks:

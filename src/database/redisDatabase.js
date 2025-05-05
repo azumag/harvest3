@@ -395,6 +395,32 @@ async function updateTickerRedis(exchangeId, symbol, tickerData) {
   // console.log(`ティッカーデータを更新しました: ${key}`);
 }
 
+// RedisにBacktest用OHLCVデータを保存する関数
+/**
+ * Backtest用OHLCVデータを保存する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} timeframe - タイムフレーム
+ * @param {Object} ohlcvData - OHLCVデータ
+ * @returns {Promise} 処理完了時に解決されるPromise
+*/
+async function updateBacktestOHLCVRedis(exchangeId, symbol, timeframe, ohlcvData) {
+  const key = `backtest:ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
+  const now = Date.now();
+  await client.set(key, JSON.stringify(ohlcvData));
+  // console.log(`Backtest用OHLCVデータを更新しました: ${key} - ${now}`);
+  return now;
+}
+
+async function getBacktestOHLCVRedis(exchangeId, symbol, timeframe) {
+  const key = `backtest:ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
+  const data = await client.get(key);
+  if (data) {
+    return JSON.parse(data);
+  }
+  return null;
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
@@ -414,5 +440,7 @@ module.exports = {
   getOHLCVRedis,
   updateOHLCVRedis,
   getTickerRedis,
-  updateTickerRedis
+  updateTickerRedis,
+  updateBacktestOHLCVRedis,
+  getBacktestOHLCVRedis,
 };
