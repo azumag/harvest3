@@ -194,15 +194,107 @@ async function loadAndDisplayDailyPnL() {
     });
 
     // 結果の表示
-    document.getElementById('total-sell-amount').innerText = formatNumber(totalSellAmount);
-    document.getElementById('total-buy-amount').innerText = formatNumber(totalBuyAmount);
-    document.getElementById('profit-loss').innerText = formatNumber(realizedPnL);
-    document.getElementById('total-fee').innerText = formatNumber(totalFee);
-    document.getElementById('buy-count').innerText = buyCount;
-    document.getElementById('sell-count').innerText = sellCount;
+    const dailyPnlContainer = document.getElementById('daily-pnl-container');
+    if (dailyPnlContainer) {
+      // マージンを徹底的に調整した改良版
+      dailyPnlContainer.innerHTML = `
+    <div class="row g-3 mb-2">
+      <!-- 主要な損益情報 -->
+      <div class="col-md-6 mb-3">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-primary bg-opacity-10">
+            <h5 class="card-title mb-0">損益サマリー</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="row align-items-center">
+              <div class="col-8">
+                <div class="d-flex flex-column">
+                  <div class="mb-3">
+                    <p class="text-muted mb-1 small">実現損益</p>
+                    <h3 class="${realizedPnL >= 0 ? 'text-success' : 'text-danger'} mb-0">
+                      ${formatNumber(realizedPnL)} 円
+                    </h3>
+                  </div>
+                  <div>
+                    <p class="text-muted mb-1 small">手数料</p>
+                    <h5 class="text-secondary mb-0">${formatNumber(totalFee)} 円</h5>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="rounded-circle p-2 ${realizedPnL >= 0 ? 'bg-success' : 'bg-danger'} bg-opacity-10">
+                  <i class="bi ${realizedPnL >= 0 ? 'bi-graph-up-arrow' : 'bi-graph-down-arrow'} 
+                     ${realizedPnL >= 0 ? 'text-success' : 'text-danger'}" style="font-size: 2rem;"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 取引額情報 -->
+      <div class="col-md-6 mb-3">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-info bg-opacity-10">
+            <h5 class="card-title mb-0">取引額</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="row align-items-center mb-3">
+              <div class="col-7">
+                <p class="text-muted mb-1 small">売った額</p>
+                <h4 class="mb-0">${formatNumber(totalSellAmount)} 円</h4>
+              </div>
+              <div class="col-5 text-end">
+                <span class="badge bg-success rounded-pill px-2 py-1">
+                  <i class="bi bi-arrow-up-circle me-1"></i> ${sellCount}回
+                </span>
+              </div>
+            </div>
+            <div class="row align-items-center">
+              <div class="col-7">
+                <p class="text-muted mb-1 small">買った額</p>
+                <h4 class="mb-0">${formatNumber(totalBuyAmount)} 円</h4>
+              </div>
+              <div class="col-5 text-end">
+                <span class="badge bg-primary rounded-pill px-2 py-1">
+                  <i class="bi bi-arrow-down-circle me-1"></i> ${buyCount}回
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 取引回数比率 -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-secondary bg-opacity-10">
+            <h5 class="card-title mb-0">取引回数比率</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="progress" style="height: 28px;">
+              <div class="progress-bar bg-success" role="progressbar" 
+                   style="width: ${(sellCount / (buyCount + sellCount) * 100).toFixed(1)}%;" 
+                   aria-valuenow="${sellCount}" aria-valuemin="0" aria-valuemax="${buyCount + sellCount}">
+                売り ${sellCount}回 (${(sellCount / (buyCount + sellCount) * 100).toFixed(1)}%)
+              </div>
+              <div class="progress-bar bg-primary" role="progressbar" 
+                   style="width: ${(buyCount / (buyCount + sellCount) * 100).toFixed(1)}%;" 
+                   aria-valuenow="${buyCount}" aria-valuemin="0" aria-valuemax="${buyCount + sellCount}">
+                買い ${buyCount}回 (${(buyCount / (buyCount + sellCount) * 100).toFixed(1)}%)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+} else {
+  console.error('日次損益を表示するためのコンテナが見つかりません');
+}
 
-    // 銘柄別ポジション情報の表示（任意）
-    renderPositionDetails(symbolSummaries);
+// ポジション詳細を表示（続く部分はそのまま）
+renderPositionDetails(symbolSummaries);
 
     // ローディング表示を非表示にしてコンテンツを表示
     if (loadingElement) loadingElement.classList.add('d-none');
