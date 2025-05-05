@@ -139,8 +139,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 try {
                   if (autoUpdate) {
                     postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
-                    await disableStrategy(exchange.id, symbol, strategyKey, config);
-                    await clearPositionMarket(exchange.id, symbol, strategyKey);
+                    await disableStrategy(exchange, symbol, strategyKey, config);
+                    await clearPositionMarket(exchange, symbol, strategyKey);
                   }
                 } catch (error) {
                   console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
