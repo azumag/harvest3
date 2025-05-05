@@ -36,6 +36,7 @@ async function connectDB() {
       module.exports.tradesCollection = db.collection('trades');
       module.exports.signalsCollection = db.collection('signals');
       module.exports.ohlcvCollection = db.collection('ohlcv'); // ohlcvCollection の参照を追加
+      module.exports.tickersCollection = db.collection('tickers');
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
@@ -110,10 +111,15 @@ async function createIndexes() {
       { key: { timestamp: -1 }, options: {} }
     ]);
     
-    // ohlcvコレクションのインデックス作成
     await createCollectionIndexesIfNotExist('ohlcv', [
       { key: { exchange: 1, symbol: 1, timeframe: 1, timestamp: 1 }, options: { unique: true } },
       { key: { timestamp: 1 }, options: {} }, // タイムスタンプでの検索・ソート用
+      { key: { timestamp: -1 }, options: {} }
+    ]);
+
+    await createCollectionIndexesIfNotExist('tickers', [
+      { key: { exchange: 1, symbol: 1, timestamp: 1 }, options: { unique: true } },
+      { key: { timestamp: 1 }, options: {} },
       { key: { timestamp: -1 }, options: {} }
     ]);
     
@@ -452,6 +458,52 @@ function setupGracefulShutdown() {
   process.on('SIGINT', shutdown);
 }
 
+/**
+ * tickerコレクションにデータを追加する
+ * 一週間分の分速データを超える場合は古いデータを削除する
+ * @param {Object} tickerData - ティッカーデータ
+ */
+async function saveTickerMongoDB(tickerData) {
+  await connectDB();
+  try {
+    const result = await module.exports.tickersCollection.insertOne(tickerData);
+    
+    // 一週間分の分速データの上限（7日 × 1440分）
+    const MAX_TICKER_RECORDS = 7 * 1440;
+    
+    // 同じ銘柄・取引所のデータ数をカウント
+    const count = await module.exports.tickersCollection.countDocuments({
+      exchange: tickerData.exchange,
+      symbol: tickerData.symbol
+    });
+    
+    // 上限を超えている場合、古いデータを削除
+    if (count > MAX_TICKER_RECORDS) {
+      const recordsToDelete = count - MAX_TICKER_RECORDS;
+      
+      // 最も古いデータを特定して削除
+      const oldestRecords = await module.exports.tickersCollection
+        .find({ exchange: tickerData.exchange, symbol: tickerData.symbol })
+        .sort({ timestamp: 1 })
+        .limit(recordsToDelete)
+        .toArray();
+      
+      if (oldestRecords.length > 0) {
+        const oldestIds = oldestRecords.map(record => record._id);
+        await module.exports.tickersCollection.deleteMany({
+          _id: { $in: oldestIds }
+        });
+        // console.log(`${tickerData.exchange}:${tickerData.symbol} の古いticker ${recordsToDelete}件を削除しました`);
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    // console.error('Error adding ticker:', error);
+    throw error;
+  }
+}
+
 // モジュールエクスポートに追加
 module.exports = {
   connectDB,
@@ -461,6 +513,7 @@ module.exports = {
   addTradeMongoDB,
   addSignalMongoDB,
   addOhlcvMongoDB, 
+  saveTickerMongoDB,
   listOrders,
   listTrades,
   listSignals, 

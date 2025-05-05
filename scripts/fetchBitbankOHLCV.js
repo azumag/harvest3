@@ -34,7 +34,6 @@ async function fetchAndSaveBitbankOHLCV() {
                 // }
 
                 try {
-                    // 1ヶ月分のOHLCVデータを取得するためのlimitを計算
                     let limit;
                     switch (timeframe) {
                         case '1m': limit = 10080; break; // 7日 * 24時間 * 60分
@@ -53,6 +52,7 @@ async function fetchAndSaveBitbankOHLCV() {
                     }
 
                     // OHLCVデータを取得
+                    limit = 100;
                     const ohlcvs = await fetchOHLCVData(exchangeBB, symbol, timeframe, limit, { forceUpdate: true });
 
                     if (!ohlcvs || ohlcvs.length === 0) {

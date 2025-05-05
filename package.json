@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node bot.js",
     "start-hft": "node src/hft/runner.js",
+    "backtest": "node src/backtestRunner.js --auto-update",
     "start-web": "node src/api/index.js",
     "reporter": "node src/reports.js"
   },

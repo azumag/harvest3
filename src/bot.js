@@ -88,8 +88,9 @@ async function startBot() {
           for (const strategyKey of Object.keys(config.strategies)) {
             const strategy = config.strategies[strategyKey];
             
-            // 戦略が無効の場合はスキップ
-            if (!strategy.enabled) {
+            // 戦略自体か、個別設定で戦略が無効の場合はスキップ
+            const strategyConfig = await getStrategyConfig(exchangeInstance, symbol, strategyKey, config);
+            if (!strategy.enabled || !strategyConfig.enabled) {
               console.log(`戦略 ${strategyKey} が無効です`);
               continue;
             }

@@ -82,6 +82,23 @@ services:
       - redis
       - mongodb
 
+  backtest:
+    image: harvest3-bot-image
+    container_name: backtest
+    restart: always
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./package.json:/usr/src/app/package.json
+      - .env:/usr/src/app/.env
+    command: sh -c "while true; do npm run backtest; sleep 5; done"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - harvest-network
+    depends_on:
+      - redis
+      - mongodb
+ 
   # mm:
   #   image: harvest3-bot-image
   #   container_name: market_making_bot

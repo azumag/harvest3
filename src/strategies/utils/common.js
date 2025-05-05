@@ -1,8 +1,13 @@
 const { formattedAvailableAmount, getRealizedPnL, addSignal,
   backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
-  addOrder, fetchOHLCVData, getAvailableFund } = require('../../database/manager');
+  addOrder, fetchOHLCVData, getAvailableFund,
+  checkBuyOrderAllowance,
+  getStrategyConfig,
+  saveStrategyParameters,
+  getTradeCurrentPosition,
+  getOrderStrategyKeyByOrderId,
+} = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
-const { checkBuyOrderAllowance } = require('../../database/manager');
 
 /**
  * OHLCV データを取得して検証する
@@ -286,9 +291,39 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
   }
 }
 
+async function disableStrategy(exchange, symbol, strategyKey, config, options = {}) {
+  // configを取得
+  const _config = await getStrategyConfig(exchange, symbol, strategyKey, config);
+  // enabledをfalseに設定
+  _config.enabled = false;
+  // configを保存
+  await saveStrategyParameters(exchange.id, symbol, strategyKey, _config);
+}
+
+async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) {
+
+  // 戦略キーが一致するオーダーのみキャンセル
+  const openOrders = await exchange.fetchOpenOrders(symbol);
+  await Promise.all(openOrders.map(async (order) => {
+    const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+    return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
+  }));
+
+  // 戦略に買いポジションがある場合、売り注文を作成
+  const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+  if (position.strategyKey === strategyKey) {
+    const order = await exchange.createMarketSellOrder(symbol, netPosition);
+    addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
+  }
+
+  return { success: true };
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
   executeBuyOrder,
-  executeSellOrder
+  executeSellOrder,
+  disableStrategy,
+  clearPositionMarket,
 };

@@ -1,12 +1,12 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
-const { sleep, timeframeToMs } = require('./common/utils');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
 const { backtestCreateLimitSellOrder, saveStrategyParameters, getStrategyParameters, initializeDB } = require('./database/manager'); // バックテストでは不要かもしれないが、bot.jsから一旦コピー
-const { fetchOHLCVData } = require('./database/manager');
-const { OHLCVTimeFrames } = require('./common/const');
 
+const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
+const { OHLCVTimeFrames } = require('./common/const');
+const { sleep, timeframeToMs } = require('./common/utils');
+const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -58,7 +58,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
 
     // バックテスト期間の設定 
-    // const endDate = new Date('2025-04-29T00:00:00Z'); // UTCで指定
+    // const endDate = new Date('2025-04-20T00:00:00Z'); // UTCで指定
     const days = 7; // n日間のOHLCVデータを取得
     const endDate = new Date(); // 現在の日付を使用
     const startDate = new Date(endDate);
@@ -95,53 +95,81 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
       }
       
       const strategy = config.strategies[strategyKey];
-      if (strategy.enabled) { // 有効な戦略のみ実行
-        // 各戦略の処理を非同期関数でラップしてPromiseとして追加
-        const strategyPromise = (async () => {
-          console.log(`戦略 ${strategyKey} の処理を開始します...`);
-          
-          for (const exchange of strategy.exchanges) {
-            const symbols = symbolsByExchange[exchange.id];
+      // atomicExec指定の場合はスキップ
+      if (strategy.atomicExec) {
+        console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
+        continue;
+      }
+      // 各戦略の処理を非同期関数でラップしてPromiseとして追加
+      const strategyPromise = (async () => {
+        console.log(`戦略 ${strategyKey} の処理を開始します...`);
+        
+        for (const exchange of strategy.exchanges) {
+          const symbols = symbolsByExchange[exchange.id];
 
-            for (const symbol of symbols) {
-              // シンボルが指定されている場合、一致するもののみ処理
-              if (targetSymbol && symbol !== targetSymbol) {
-                continue;
-              }
+          for (const symbol of symbols) {
+            // シンボルが指定されている場合、一致するもののみ処理
+            if (targetSymbol && symbol !== targetSymbol) {
+              continue;
+            }
 
-              let shouldRetry = true; // 最初はtrueでループに入る
-              let retryCount = 0;
-              while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
-                const result = await runBacktestForSymbol(
-                  exchange,
-                  symbol,
-                  strategy,
-                  strategyKey,
-                  marketParametersByExchange,
-                  autoUpdate,
-                  gridSearch,
-                  startDate,
-                  endDate,
-                  retryCount
-                );
-                shouldRetry = result.shouldRetry;
-                retryCount++;
+            let shouldRetry = true; // 最初はtrueでループに入る
+            let retryCount = 0;
+            while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
+              const result = await runBacktestForSymbol(
+                exchange,
+                symbol,
+                strategy,
+                strategyKey,
+                marketParametersByExchange,
+                autoUpdate,
+                gridSearch,
+                startDate,
+                endDate,
+                retryCount
+              );
+              shouldRetry = result.shouldRetry;
+              retryCount++;
+              if (retryCount > 5) {
+                console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
+                postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
+                // いったん銘柄戦略の enable フラグをfalseにして取り引きはしないようにする
+                // 反対売買を実行してポジションを解消する(成り行き)
+                // ただしバックテストは実行し、また使えるようになったら復帰させる
+                try {
+                  if (autoUpdate) {
+                    postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
+                    await disableStrategy(exchange.id, symbol, strategyKey, config);
+                    await clearPositionMarket(exchange.id, symbol, strategyKey);
+                  }
+                } catch (error) {
+                  console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
+                  postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
+                } finally {
+                  break;
+                }
+
               }
             }
           }
-          
-          console.log(`戦略 ${strategyKey} の処理が完了しました`);
-          return { strategyKey, completed: true };
-        })();
+        }
         
-        strategyPromises.push(strategyPromise);
-      }
+        console.log(`戦略 ${strategyKey} の処理が完了しました`);
+        return { strategyKey, completed: true };
+      })();
+      
+      strategyPromises.push(strategyPromise);
     }
 
     // 全ての戦略の処理を並列に実行
     if (strategyPromises.length > 0) {
       console.log(`${strategyPromises.length}個の戦略を並列処理中...`);
-      await Promise.all(strategyPromises);
+      await Promise.all(strategyPromises)
+
+      // 一時的に順次実行に変更
+      // for (const strategyPromise of strategyPromises) {
+      //   await strategyPromise();
+      // }
     } else {
       console.log('処理対象の戦略がありません');
     }
@@ -275,10 +303,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       for (let timestamp = startDate.getTime(); timestamp <= endDate.getTime(); timestamp += timeframeMs) {
         currentIteration++;
         
-        if (currentIteration % Math.ceil(totalIterations / 10) === 0 || currentIteration === 1 || currentIteration === totalIterations) {
-          const progressPercent = (currentIteration / totalIterations * 100).toFixed(1);
-          console.log(`バックテスト進捗: ${currentIteration}/${totalIterations} (${progressPercent}%)`);
-        }
+        // if (currentIteration % Math.ceil(totalIterations / 10) === 0 || currentIteration === 1 || currentIteration === totalIterations) {
+        //   const progressPercent = (currentIteration / totalIterations * 100).toFixed(1);
+        //   console.log(`バックテスト進捗: ${currentIteration}/${totalIterations} (${progressPercent}%)`);
+        // }
         
         options.backtest.timestamp = timestamp;
 
@@ -376,12 +404,20 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     const minScore = rankedAllTimeframeResults[rankedAllTimeframeResults.length - 1].finalBaseFund;
     const scoreDifference = (topScore - minScore) / topScore;
     
-    // スコアの差が0.1%未満の場合はループをやり直す
-    const shouldRetry = (scoreDifference < 0.001) 
+    // 初期資金値（options.backtest.baseFundの初期値と同じ）
+    const initialBaseFund = 10000;
+    
+    // スコアの差が0.1%未満、最高スコアが初期資金以下の場合はループをやり直す
+    const shouldRetry = (scoreDifference < 0.001) || (topScore <= initialBaseFund);
     
     if (shouldRetry) {  
-      console.log(`全スコアの差が非常に小さい (${(scoreDifference * 100).toFixed(4)}%) ため、より広いパラメータ範囲でループをやり直します`);
-      await postResultToDiscord(`${strategyKey} の ${symbol} - すべての結果のスコア差が小さすぎるため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+      if (topScore <= initialBaseFund) {
+        console.log(`最高スコア(${topScore.toFixed(2)})が初期資金(${initialBaseFund})以下のため、より広いパラメータ範囲でループをやり直します`);
+        await postResultToDiscord(`${strategyKey} の ${symbol} - すべての結果が利益を出せていないため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+      } else {
+        console.log(`全スコアの差が非常に小さい (${(scoreDifference * 100).toFixed(4)}%) ため、より広いパラメータ範囲でループをやり直します`);
+        await postResultToDiscord(`${strategyKey} の ${symbol} - すべての結果のスコア差が小さすぎるため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+      }
       return { shouldRetry };
     }
     

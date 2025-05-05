@@ -11,6 +11,7 @@ const {
   countSignals,
   addOhlcvMongoDB,
   fetchHistoricalOHLCVData,
+  saveTickerMongoDB,
 } = require('./mongoDatabase');
 
 const {
@@ -87,7 +88,8 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
         if (options.forceUpdate) {
           return limit;
         }
-        return 100;
+        return 100; // 戦略パラメータで100以上必要になったときに増やす
+        // TODO: 戦略パラメータのMAXをlimit下限にする
       })();
 
       const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
@@ -127,7 +129,11 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
           console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
         }
       }
-      await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+      if (options.forceUpdate) {
+        // forceUpdate が true の場合は REDIS に保存しない
+      } else {
+        await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+      }
       return ohlcvs;
     } else {
       // Redisにデータがある場合はそれを返す
@@ -521,6 +527,9 @@ async function fetchTicker(exchange, symbol, options = {}) {
 
       // Save to Redis
       await updateTickerRedis(exchange.id, symbol, ticker);
+      // mongoDB にも保存
+      await saveTickerMongoDB(ticker);
+
       return ticker;
     } else {
       // Redisに保存されたティッカーを返す
