@@ -311,14 +311,14 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
   // 戦略に買いポジションがある場合、売り注文を作成
   const _netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-  // TODO: use market parameters
 
-  if (_netPosition <= 0) {
-    console.log(`ポジションがないため、売り注文は発注しません: ${symbol} - ポジション: ${netPosition}`);
+  // TODO: use market parameters
+  if (_netPosition < 0.0001) {
+    console.log(`ポジションがないため、売り注文は発注しません: ${symbol}`);
     return { success: false, reason: 'no position' };
   }
 
-  const netPosition = Math.max(_netPosition.toFixed(4), 0.0001); // 精度を考慮して、最小精度以上の値を確保
+  const netPosition = Math.max(_netPosition.toFixed(4), 0.0001);
   // 売り注文を作成
   const order = await exchange.createMarketSellOrder(symbol, netPosition);
   addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
