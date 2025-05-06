@@ -118,9 +118,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         }
         for (const timeframe of OHLCVTimeFrames) {
           // バックテストに必要なローソク足の本数を計算する
-          // バッファを持たせプラス100する.
-          // TODO: この値は戦略で使う period の最大値を設定したい
-          const limit = calculateLimit(timeframe, days) + 100;
+          // バッファを持たせプラスする.
+          // TODO: この値は戦略で使う period の最大値+bufferを設定したい
+          const limit = calculateLimit(timeframe, days) + 150;
           await loadHistoricalOHLCVToBacktestRedis(exchangeInstance, symbol, timeframe, limit)
         }
       }
@@ -142,78 +142,85 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         continue;
       }
       // 各戦略の処理を非同期関数でラップしてPromiseとして追加
-      const strategyPromise = (async () => {
+      // const strategyPromise = (async () => {
         console.log(`戦略 ${strategyKey} の処理を開始します...`);
         
         for (const exchange of strategy.exchanges) {
             const symbols = symbolsByExchange[exchange.id].sort();
 
+          const symbolPromises = [];
           for (const symbol of symbols) {
             // シンボルが指定されている場合、一致するもののみ処理
             if (targetSymbol && symbol !== targetSymbol) {
               continue;
             }
 
-            let shouldRetry = true; // 最初はtrueでループに入る
-            let retryCount = 0;
-            while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
-              const result = await runBacktestForSymbol(
-                exchange,
-                symbol,
-                strategy,
-                strategyKey,
-                marketParametersByExchange,
-                autoUpdate,
-                gridSearch,
-                startDate,
-                endDate,
-                retryCount
-              );
-              shouldRetry = result.shouldRetry;
-              retryCount++;
-              if (retryCount > 5) {
-                console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
-                postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
-                // いったん銘柄戦略の enable フラグをfalseにして取り引きはしないようにする
-                // 反対売買を実行してポジションを解消する(成り行き)
-                // ただしバックテストは実行し、また使えるようになったら復帰させる
-                try {
-                  if (autoUpdate) {
-                    postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
-                    await disableStrategy(exchange, symbol, strategyKey, config);
-                    await clearPositionMarket(exchange, symbol, strategyKey);
+            const symbolPromise = (async () => {
+              let shouldRetry = true; // 最初はtrueでループに入る
+              let retryCount = 0;
+              while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
+                const result = await runBacktestForSymbol(
+                  exchange,
+                  symbol,
+                  strategy,
+                  strategyKey,
+                  marketParametersByExchange,
+                  autoUpdate,
+                  gridSearch,
+                  startDate,
+                  endDate,
+                  retryCount
+                );
+                shouldRetry = result.shouldRetry;
+                retryCount++;
+                if (retryCount > 5) {
+                  console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
+                  postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
+                  // いったん銘柄戦略の enable フラグをfalseにして取り引きはしないようにする
+                  // 反対売買を実行してポジションを解消する(成り行き)
+                  // ただしバックテストは実行し、また使えるようになったら復帰させる
+                  try {
+                    if (autoUpdate) {
+                      postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
+                      await disableStrategy(exchange, symbol, strategyKey, config);
+                      await clearPositionMarket(exchange, symbol, strategyKey);
+                    }
+                  } catch (error) {
+                    console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
+                    postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
+                  } finally {
+                    break;
                   }
-                } catch (error) {
-                  console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
-                  postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
-                } finally {
-                  break;
-                }
 
+                }
               }
-            }
+            });//();
+
+            symbolPromises.push(symbolPromise());
           }
+          await Promise.all(symbolPromises);
         }
         
         console.log(`戦略 ${strategyKey} の処理が完了しました`);
         return { strategyKey, completed: true };
-      })();
+      // });//();
       
-      strategyPromises.push(strategyPromise);
+      // strategyPromises.push(strategyPromise);
     }
 
     // 全ての戦略の処理を並列に実行
-    if (strategyPromises.length > 0) {
-      console.log(`${strategyPromises.length}個の戦略を並列処理中...`);
-      await Promise.all(strategyPromises)
+    // if (strategyPromises.length > 0) {
+    //   // console.log(`${strategyPromises.length}個の戦略を並列処理中...`);
+    //   // await Promise.all(strategyPromises)
 
-      // 一時的に順次実行に変更
-      // for (const strategyPromise of strategyPromises) {
-      //   await strategyPromise();
-      // }
-    } else {
-      console.log('処理対象の戦略がありません');
-    }
+    //   // 一時的に順次実行に変更
+    //   // symbol処理の並列化をした
+    //   for (const strategyPromise of strategyPromises) {
+    //     await strategyPromise();
+    //   }
+    // } else {
+    //   console.log('処理対象の戦略がありません');
+    // }
 
     console.log('バックテストが完了しました。');
   } catch (error) {

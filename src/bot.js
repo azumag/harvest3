@@ -126,7 +126,7 @@ async function startBot() {
             // この戦略が対象の取引所をサポートしているか確認 (HFT_BB_WS以外)
             const supportedExchange = strategy.exchanges.find(e => e.id === exchangeId);
             if (!supportedExchange) continue;
-            
+
             try {
               await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters);
             } catch (error) {
