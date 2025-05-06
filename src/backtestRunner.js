@@ -253,10 +253,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   console.log(`${symbol} のバックテストを開始...`);
   
   // 全タイムフレームの結果を保存する配列
-  const allTimeframeResults = [];
+  let allTimeframeResults = [];
   
   // タイムフレームでループ
-  for (const timeframe of OHLCVTimeFrames) {
+  const timeframePromises = OHLCVTimeFrames.map(async (timeframe) => {
     // const timeframeMs = timeframeToMs(timeframe);
     const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
     
@@ -274,7 +274,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     // リトライが多いほどパラメータの変動幅を広げる
     if (gridSearch) {
       // グリッドサーチを実行
-      console.log('グリッドサーチを実行します...');
+      console.log(`${timeframe}: グリッドサーチを実行します...`);
       parameterCombinations = generateParameterCombinations(
         dbParams,
         numericParameterKeys,
@@ -282,11 +282,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         10 // ステップ数
       );
     } else {
-      console.log('パラメータ数が多いため正規乱数を使ったランダムサーチを実行します');
+      console.log(`${timeframe}: 正規乱数を使ったランダムサーチを実行します`);
       parameterCombinations = generateRandomParameterCombinations(
         dbParams, numericParameterKeys,
         10 + (retryCount*10), // パラメータのパターン数
-        // 1 + (retryCount*1), // パラメータのパターン数
         0.1 + (retryCount*0.1) // 変動幅
       );
     }
@@ -309,10 +308,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       });
       
       parameterCombinations = Array.from(uniqueCombinationsMap.values());
-      console.log(`重複排除: ${originalCount} 組み合わせから ${parameterCombinations.length} 組み合わせに削減されました`);
+      console.log(`${timeframe}: 重複排除: ${originalCount} 組み合わせから ${parameterCombinations.length} 組み合わせに削減されました`);
     }
     
-    console.log(`テスト対象の組み合わせ数: ${parameterCombinations.length}`);
+    console.log(`${timeframe}: テスト対象の組み合わせ数: ${parameterCombinations.length}`);
     
     // 各組み合わせの結果を保存する配列
     const testResults = [];
@@ -326,7 +325,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         tradePercentage: config.global.tradePercentage,
       };
       
-      console.log(`  パラメータ組み合わせをテスト: ${JSON.stringify(paramCombination)}`);
+      console.log(`  ${timeframe}: パラメータ組み合わせをテスト: ${JSON.stringify(paramCombination)}`);
       
       const options = {
         backtest: {
@@ -351,18 +350,12 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
       for (let timestamp = startDate.getTime(); timestamp <= endDate.getTime(); timestamp += timeframeMs) {
         currentIteration++;
-        
-        // if (currentIteration % Math.ceil(totalIterations / 10) === 0 || currentIteration === 1 || currentIteration === totalIterations) {
-        //   const progressPercent = (currentIteration / totalIterations * 100).toFixed(1);
-        //   console.log(`バックテスト進捗: ${currentIteration}/${totalIterations} (${progressPercent}%)`);
-        // }
-        
         options.backtest.timestamp = timestamp;
 
         try {
           await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);              
         } catch (error) {
-          console.error(`バックテスト中にエラーが発生しました: ${error.message}`);
+          console.error(`${timeframe}: バックテスト中にエラーが発生しました: ${error.message}`);
           postErrorToDiscord(`[バックテスト] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
         }
       }
@@ -374,10 +367,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
           options.backtest.currentPrice,
           options
         );
-        console.log(`  最後のシグナルが買いでした。売り注文を実行: ${JSON.stringify(sellResult)}`);
+        console.log(`  ${timeframe}: 最後のシグナルが買いでした。売り注文を実行: ${JSON.stringify(sellResult)}`);
       }
 
-      console.log(`バックテスト完了: 全${totalIterations}回の処理を実行しました`);
+      console.log(`${timeframe}: バックテスト完了: 全${totalIterations}回の処理を実行しました`);
 
       const result = {
         parameters: paramCombination,
@@ -385,7 +378,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         timeframe: timeframe,
       }
 
-      console.log(`  結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
+      console.log(`  ${timeframe}: 結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
       testResults.push(result);
     }
     
@@ -412,9 +405,15 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     }
     resultSrtArr.push('```');
     
-    // 現在のタイムフレームの結果を全タイムフレーム結果配列に追加
-    allTimeframeResults.push(...rankedResults.map(result => ({ ...result, timeframe })));
-  }
+    // このタイムフレームの結果を返す
+    return rankedResults.map(result => ({ ...result, timeframe }));
+  });
+
+  // すべてのタイムフレームの処理を並列に実行
+  const allTimeframeResultsArrays = await Promise.all(timeframePromises);
+
+  // 結果を平坦化して一つの配列にする
+  allTimeframeResults = allTimeframeResultsArrays.flat();
   
   // 全タイムフレームの結果をランキング
   const rankedAllTimeframeResults = rankResults(allTimeframeResults);

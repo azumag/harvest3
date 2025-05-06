@@ -71,16 +71,14 @@ const config = {
       exchanges: [exchangeBB], // bitbank を使用
     },
 
-    
-    BOLLINGER_BANDS: {
-      enabled: true,
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
-
+    // BOLLINGER_BANDS: {
+    //   enabled: true,
+    //   period: 20,
+    //   stdDev: 2,
+    //   ohlcvInterval: '15m',
+    //   function: bollingerBandsStrategy,
+    //   exchanges: [exchangeBB]
+    // }, 
 
     // トレンドフォロー戦略
     MA: {
@@ -130,6 +128,15 @@ const config = {
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
+    },
+
+    BOLLINGER_BANDS: {
+      enabled: true,
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
     },
 
     // アービトラージ戦略
