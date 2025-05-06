@@ -18,6 +18,8 @@ services:
     depends_on:
       - redis
       - mongodb
+    logging:
+      driver: "none"
 
   redis:
     image: redis:7-alpine
@@ -30,6 +32,8 @@ services:
     restart: always
     networks:
       - harvest-network
+    logging:
+      driver: "none"
 
   mongodb:
     image: mongo:7.0
@@ -41,6 +45,8 @@ services:
     restart: always
     networks:
       - harvest-network
+    logging:
+      driver: "none"
 
   bot:
     image: harvest3-bot-image
@@ -64,6 +70,8 @@ services:
     depends_on:
       - redis
       - mongodb
+    logging:
+      driver: "none"
 
   hft:
     image: harvest3-bot-image
@@ -99,6 +107,8 @@ services:
     depends_on:
       - redis
       - mongodb
+    logging:
+      driver: "none"
  
   # mm:
   #   image: harvest3-bot-image
