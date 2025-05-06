@@ -863,7 +863,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   // 今注文に出している買い量
   const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
 
-  // 今注文に出している売り量を取得 (新規追加)
+  // 今注文に出している売り量を取得
   const currentSellOrders = await getCurrentSellOrderPosition(exchange, symbol, strategyKey);
 
   // 可能購入量限度を計算
@@ -873,25 +873,32 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   // Calculate required funds for the potential buy order
   const requiredFunds = price * formattedAmount;
 
-  // Check if available funds are sufficient
-  if (availableFunds < requiredFunds || formattedAmount <= 0) {
+  // トレードパーセンテージを考慮した利用可能資金を計算
+  const allowedFunds = (availableFunds * tradePercentage) + realizedPnL;
+
+  // Check if available funds are sufficient, considering trade percentage
+  if (requiredFunds > allowedFunds || formattedAmount <= 0) {
     return {
       allowed: false,
-      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
+      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能(制限内): ${allowedFunds.toFixed(2)}`
     };
   }
 
   // 実質的なポジションを計算 (売り注文量を差し引く)
   const effectivePosition = currentTradePosition + currentOrderPosition - currentSellOrders;
-  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}`);
 
-  // 実質的なポジションに基づいて購入可否を判断
-  const isBuyAllowed = effectivePosition <= maxBuyAmountWithMinTrade;
+  // 新しい注文を加えた場合の合計ポジションを計算
+  const newEffectivePosition = effectivePosition + formattedAmount;
+
+  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}, 新注文後ポジション: ${newEffectivePosition}`);
+
+  // 新注文を加えた合計ポジションが最大購入量以下かチェック
+  const isBuyAllowed = newEffectivePosition <= maxBuyAmountWithMinTrade;
 
   if (!isBuyAllowed) {
     return {
       allowed: false,
-      reason: `買い注文が許可されません: ${symbol} - 実質ポジション: ${effectivePosition}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
+      reason: `買い注文が許可されません: ${symbol} - 新注文後の実質ポジション: ${newEffectivePosition}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
     };
   }
 
