@@ -120,7 +120,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     // バックテストモードの場合
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+      // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 

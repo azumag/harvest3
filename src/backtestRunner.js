@@ -448,14 +448,14 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       result.finalBaseFund >= threshold
     );
     
-    // スコアの差が非常に小さいかどうかをチェック
+    // 最高スコアと最低スコアの差を計算
     const minScore = rankedAllTimeframeResults[rankedAllTimeframeResults.length - 1].finalBaseFund;
     const scoreDifference = (topScore - minScore) / topScore;
     
     // 初期資金値（options.backtest.baseFundの初期値と同じ）
     const initialBaseFund = 10000;
     
-    // スコアの差が0.1%未満、最高スコアが初期資金以下の場合はループをやり直す
+    // スコアの差が0.1%未満、または最高スコアが初期資金以下の場合はループをやり直す
     const shouldRetry = (scoreDifference < 0.001) || (topScore <= initialBaseFund);
     
     if (shouldRetry) {  
@@ -463,21 +463,17 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         console.log(`最高スコア(${topScore.toFixed(2)})が初期資金(${initialBaseFund})以下のため、より広いパラメータ範囲でループをやり直します`);
         await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果が利益を出せていないため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       } else {
-        console.log(`全スコアの差が非常に小さい (${(scoreDifference * 100).toFixed(4)}%) ため、より広いパラメータ範囲でループをやり直します`);
-        await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果のスコア差が小さすぎるため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
+        console.log(`スコアの差が0.1%未満 (${(scoreDifference * 100).toFixed(4)}%) のため、より広いパラメータ範囲でループをやり直します`);
+        await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果のスコア差が0.1%未満のため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       }
       return { shouldRetry };
     }
     
     console.log(`トップスコア(${topScore.toFixed(2)})に近い${eligibleResults.length}個の結果から最適なタイムフレームを選択します`);
-    
-    // 対象の結果から最も短いタイムフレームを選択
-    const selectedResult = eligibleResults.reduce((shortest, current) => {
-      const shortestMs = timeframeToMs(shortest.timeframe);
-      const currentMs = timeframeToMs(current.timeframe);
-      return currentMs < shortestMs ? current : shortest;
-    }, eligibleResults[0]);
-    
+
+    // 単純に最高スコアの結果を選択（すでにrankedAllTimeframeResultsがスコア順にソートされているため）
+    const selectedResult = eligibleResults[0];
+
     const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey, config);
     const paramsToUpdate = {
       ...dbParams,
