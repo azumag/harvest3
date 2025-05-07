@@ -463,15 +463,17 @@ async function getAllBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe) 
 async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit = 100) {
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
   
-  // timestampより古いデータを取得（-inf 〜 timestamp）
-  const result = await client.zRangeByScore(
+  // timestampより古いデータを降順（新しい順）で取得
+  const result = await client.zRange(
     key,
-    '-inf',       // 最小値（無限小）
-    timestamp,    // 最大値（指定されたtimestamp）
+    timestamp,
+    '-inf',
     {
+      BY: 'SCORE',
+      REV: true,
       LIMIT: {
-        offset: 0,  // オフセットなし
-        count: limit // 指定された件数まで
+        offset: 0,
+        count: limit
       }
     }
   );

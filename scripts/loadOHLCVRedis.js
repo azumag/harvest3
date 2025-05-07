@@ -10,6 +10,8 @@ const { backtestCreateLimitSellOrder,
   fetchBacktestOHLCVData,
  } = require('../src/database/manager'); 
 
+const { getBacktestOHLCVRedisBeforeTimestamp} = require('../src/database/redisDatabase');
+
 const { OHLCVTimeFrames } = require('../src/common/const');
 
 /**
@@ -43,13 +45,17 @@ async function main() {
     initializeDB();
     const exchangeInstance = config.exchanges['bitbank'].instance;
     // const symbol = 'QTUM/JPY';
-    const symbol = 'BAT/JPY';
+    const symbol = 'BTC/JPY';
     const days = 7; // 取得したい日数
     for (const timeframe of OHLCVTimeFrames) {
         // バックテストに必要なローソク足の本数を計算する
         const limit = calculateLimit(timeframe, days) + 200;
         await loadHistoricalOHLCVToBacktestRedis(exchangeInstance, symbol, timeframe, limit)
     }
+
+    // await fetchHistoricalOHLCVData(exchangeInstance.id, symbol, '1m', 10280);
+    // const a = await getBacktestOHLCVRedisBeforeTimestamp(exchangeInstance.id, symbol, '1m', Date.now(), 100);
+
 }
 
 main().catch(console.error).finally(() => {

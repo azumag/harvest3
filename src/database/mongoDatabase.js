@@ -394,6 +394,9 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
       .sort({ timestamp: -1 })
       .limit(limit)
       .toArray();
+
+    // 一番新しいデータを表示
+    // console.log(ohlcvData[0]);
       
     // console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
     // 最新のデータを末尾に持ってくる

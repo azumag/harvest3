@@ -95,6 +95,8 @@ async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100
       return [];
     }
 
+    redisData.reverse(); // データを逆順にして最新のデータが末尾に来るようにする
+
     // データをCCXTフォーマットに変換して返す
     // CCXTフォーマット: [timestamp, open, high, low, close, volume]
     return redisData.map(candle => {
@@ -118,6 +120,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     // バックテストモードの場合
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
+      console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 

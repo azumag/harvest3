@@ -120,7 +120,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
           // バックテストに必要なローソク足の本数を計算する
           // バッファを持たせプラスする.
           // TODO: この値は戦略で使う period の最大値+bufferを設定したい
-          const limit = calculateLimit(timeframe, days) + 150;
+          const limit = calculateLimit(timeframe, days) + 200;
           await loadHistoricalOHLCVToBacktestRedis(exchangeInstance, symbol, timeframe, limit)
         }
       }

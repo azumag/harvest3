@@ -71,22 +71,13 @@ const config = {
       exchanges: [exchangeBB], // bitbank を使用
     },
 
-    BOLLINGER_BANDS: {
+    RSI: {
       enabled: true,
-      period: 20,
-      stdDev: 2,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
       ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    }, 
-
-    // トレンドフォロー戦略
-    MA: {
-      enabled: true,
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '15m',
-      function: maStrategy,
+      function: rsiStrategy,
       exchanges: [exchangeBB]
     },
 
@@ -110,13 +101,22 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    RSI: {
+    BOLLINGER_BANDS: {
       enabled: true,
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
+      period: 20,
+      stdDev: 2,
       ohlcvInterval: '15m',
-      function: rsiStrategy,
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
+    }, 
+
+    // トレンドフォロー戦略
+    MA: {
+      enabled: true,
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '15m',
+      function: maStrategy,
       exchanges: [exchangeBB]
     },
 
