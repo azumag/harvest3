@@ -129,6 +129,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     // 戦略を並列に処理するためのPromiseの配列
     const strategyPromises = [];
 
+    // runBacktest関数内の戦略処理部分
+
     for (const strategyKey of Object.keys(config.strategies)) {
       if (strategySpecify && strategySpecify !== strategyKey) {
         console.log(`戦略 ${strategyKey} はスキップされました`);
@@ -141,71 +143,64 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
         continue;
       }
-      // 各戦略の処理を非同期関数でラップしてPromiseとして追加
-      // const strategyPromise = (async () => {
-        console.log(`戦略 ${strategyKey} の処理を開始します...`);
-        
-        for (const exchange of strategy.exchanges) {
-            const symbols = symbolsByExchange[exchange.id].sort();
 
-          const symbolPromises = [];
-          for (const symbol of symbols) {
-            // シンボルが指定されている場合、一致するもののみ処理
-            if (targetSymbol && symbol !== targetSymbol) {
-              continue;
-            }
+      console.log(`戦略 ${strategyKey} の処理を開始します...`);
+      
+      for (const exchange of strategy.exchanges) {
+        const symbols = symbolsByExchange[exchange.id].sort();
 
-            const symbolPromise = (async () => {
-              let shouldRetry = true; // 最初はtrueでループに入る
-              let retryCount = 0;
-              while(shouldRetry) { // shouldRetryがtrueの間ループを続ける
-                const result = await runBacktestForSymbol(
-                  exchange,
-                  symbol,
-                  strategy,
-                  strategyKey,
-                  marketParametersByExchange,
-                  autoUpdate,
-                  gridSearch,
-                  startDate,
-                  endDate,
-                  retryCount
-                );
-                shouldRetry = result.shouldRetry;
-                retryCount++;
-                if (retryCount > 5) {
-                  console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
-                  postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
-                  // いったん銘柄戦略の enable フラグをfalseにして取り引きはしないようにする
-                  // 反対売買を実行してポジションを解消する(成り行き)
-                  // ただしバックテストは実行し、また使えるようになったら復帰させる
-                  try {
-                    if (autoUpdate) {
-                      postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
-                      await disableStrategy(exchange, symbol, strategyKey, config);
-                      await clearPositionMarket(exchange, symbol, strategyKey);
-                    }
-                  } catch (error) {
-                    console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
-                    postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
-                  } finally {
-                    break;
+        const symbolPromises = [];
+        for (const symbol of symbols) {
+          // シンボルが指定されている場合、一致するもののみ処理
+          if (targetSymbol && symbol !== targetSymbol) {
+            continue;
+          }
+
+          const symbolPromise = (async () => {
+            // ここは既存のシンボル処理コード
+            let shouldRetry = true;
+            let retryCount = 0;
+            while(shouldRetry) {
+              const result = await runBacktestForSymbol(
+                exchange,
+                symbol,
+                strategy,
+                strategyKey,
+                marketParametersByExchange,
+                autoUpdate,
+                gridSearch,
+                startDate,
+                endDate,
+                retryCount
+              );
+              shouldRetry = result.shouldRetry;
+              retryCount++;
+              if (retryCount > 5) {
+                console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
+                postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
+                try {
+                  if (autoUpdate) {
+                    postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
+                    await disableStrategy(exchange, symbol, strategyKey, config);
+                    await clearPositionMarket(exchange, symbol, strategyKey);
                   }
-
+                } catch (error) {
+                  console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
+                  postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
+                } finally {
+                  break;
                 }
               }
-            });//();
+            }
+          });
 
-            symbolPromises.push(symbolPromise());
-          }
-          await Promise.all(symbolPromises);
+          symbolPromises.push(symbolPromise());
         }
-        
-        console.log(`戦略 ${strategyKey} の処理が完了しました`);
-        return { strategyKey, completed: true };
-      // });//();
+        await Promise.all(symbolPromises);
+      }
       
-      // strategyPromises.push(strategyPromise);
+      console.log(`戦略 ${strategyKey} の処理が完了しました`);
+      // return { strategyKey, completed: true }; <- このreturnを削除
     }
 
     // 全ての戦略の処理を並列に実行
@@ -258,6 +253,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   // タイムフレームでループ
   const timeframePromises = OHLCVTimeFrames.map(async (timeframe) => {
     // const timeframeMs = timeframeToMs(timeframe);
+    // Skip specific timeframes for BCH/JPY
+    if (symbol === 'BCH/JPY' && ['4h', '12h', '1d', '1w'].includes(timeframe)) {
+      console.log(`  Skipping ${symbol} with timeframe ${timeframe} as requested`);
+      return []; // Return empty results array to skip this timeframe
+    }
     const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
     
     console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);

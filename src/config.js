@@ -71,16 +71,6 @@ const config = {
       exchanges: [exchangeBB], // bitbank を使用
     },
 
-    RSI: {
-      enabled: true,
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
-      ohlcvInterval: '15m',
-      function: rsiStrategy,
-      exchanges: [exchangeBB]
-    },
-
     // 逆張り戦略
     MEAN_REVERSION: {
       enabled: true,
@@ -128,6 +118,16 @@ const config = {
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
+    },
+
+    RSI: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '15m',
+      function: rsiStrategy,
+      exchanges: [exchangeBB]
     },
 
     // BOLLINGER_BANDS: {
