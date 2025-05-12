@@ -126,11 +126,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
       }
     }
 
-    // 戦略を並列に処理するためのPromiseの配列
-    const strategyPromises = [];
-
     // runBacktest関数内の戦略処理部分
-
     for (const strategyKey of Object.keys(config.strategies)) {
       if (strategySpecify && strategySpecify !== strategyKey) {
         console.log(`戦略 ${strategyKey} はスキップされました`);
@@ -147,12 +143,11 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
       console.log(`戦略 ${strategyKey} の処理を開始します...`);
       
       for (const exchange of strategy.exchanges) {
-        // ここでexchangeはオブジェクトなので、そのIDを使用する必要があります
         const exchangeId = exchange.id;
         const symbols = symbolsByExchange[exchangeId].sort();
 
         // 並列処理するシンボルの数を制限
-        const MAX_CONCURRENT_SYMBOLS = 6; // 同時に処理するシンボルの数を制限
+        const MAX_CONCURRENT_SYMBOLS = 3; // 同時に処理するシンボルの数を制限
 
         // シンボルを処理するための関数
         async function processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate) {
@@ -160,7 +155,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
           for (let i = 0; i < symbols.length; i += MAX_CONCURRENT_SYMBOLS) {
             const currentBatch = symbols.slice(i, i + MAX_CONCURRENT_SYMBOLS);
             console.log(`${strategyKey}: バッチ ${i/MAX_CONCURRENT_SYMBOLS + 1}/${Math.ceil(symbols.length/MAX_CONCURRENT_SYMBOLS)} (${currentBatch.join(', ')}) の処理を開始`);
-            
+          
             const symbolPromises = currentBatch.map(symbol => {
               return (async () => {
                 let shouldRetry = true;
@@ -271,7 +266,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     // Skip specific timeframes for BCH/JPY
     if (symbol === 'BCH/JPY' && ['4h', '8h', '12h', '1d', '1w'].includes(timeframe)) {
       console.log(`  Skipping ${symbol} with timeframe ${timeframe} as requested`);
-      return []; // Return empty results array to skip this timeframe
+      return [];
     }
     const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
     

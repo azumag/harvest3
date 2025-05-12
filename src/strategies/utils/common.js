@@ -320,8 +320,16 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
   const netPosition = Math.max(_netPosition.toFixed(4), 0.0001);
   // 売り注文を作成
-  const order = await exchange.createMarketSellOrder(symbol, netPosition);
-  addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
+  try {
+    const order = await exchange.createMarketSellOrder(symbol, netPosition);
+    addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
+  } catch (error) {
+    console.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[${exchange.id}] 売り注文の発注に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+    }
+    return { success: false, error };
+  }
 
   return { success: true };
 }
