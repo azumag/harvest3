@@ -100,7 +100,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
             console.log(`fetching ${daysToFetch} days of data`);
           } 
           
-          const limit = calculateLimit(timeframe, daysToFetch);
+          const limit = calculateLimit(timeframe, daysToFetch) + 20;
           await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { forceUpdate: true });
         }
       }
