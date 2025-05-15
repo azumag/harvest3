@@ -72,16 +72,6 @@ const config = {
       exchanges: [exchangeBB], // bitbank を使用
     },
 
-    BOLLINGER_BANDS_MARKET: {
-      enabled: true,
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      orderType: 'market',
-      exchanges: [exchangeBB]
-    }, 
-
     // 逆張り戦略
     MEAN_REVERSION: {
       enabled: true,
@@ -89,6 +79,17 @@ const config = {
       ohlcvInterval: '15m',
       deviationThreshold: 3,
       function: meanReversionStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    // 逆張り戦略
+    MEAN_REVERSION_MARKET: {
+      enabled: true,
+      period: 20,
+      ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
+      orderType: 'market',
       exchanges: [exchangeBB]
     },
 
@@ -102,12 +103,33 @@ const config = {
       exchanges: [exchangeBB]
     },
 
+    MACD_MARKET: {
+      enabled: true,
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
+      ohlcvInterval: '15m',
+      orderType: 'market',
+      function: macdStrategy,
+      exchanges: [exchangeBB]
+    },
+
     BOLLINGER_BANDS: {
       enabled: true,
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
       function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
+    }, 
+
+    BOLLINGER_BANDS_MARKET: {
+      enabled: true,
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      orderType: 'market',
       exchanges: [exchangeBB]
     }, 
 
@@ -121,6 +143,16 @@ const config = {
       exchanges: [exchangeBB]
     },
 
+    MA_MARKET: {
+      enabled: true,
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '15m',
+      function: maStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    },
+
     OSCILLATOR: {
       enabled: true,
       period: 20,
@@ -128,6 +160,17 @@ const config = {
       overboughtThreshold: 80,
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
+      exchanges: [exchangeBB],
+    },
+
+    OSCILLATOR_MARKET: {
+      enabled: true,
+      period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: '15m',
+      function: oscillatorStrategy,
+      orderType: 'market',
       exchanges: [exchangeBB],
     },
 
@@ -141,14 +184,17 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    // BOLLINGER_BANDS: {
-    //   enabled: true,
-    //   period: 20,
-    //   stdDev: 2,
-    //   ohlcvInterval: '15m',
-    //   function: bollingerBandsStrategy,
-    //   exchanges: [exchangeBB]
-    // },
+    RSI_MARKET: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '15m',
+      function: rsiStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    },
+
 
     // アービトラージ戦略
     // INTER_EXCHANGE_ARBITRAGE: {

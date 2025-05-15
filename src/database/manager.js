@@ -141,7 +141,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
         if (options.forceUpdate) {
           return limit;
         }
-        return 100; // 戦略パラメータで100以上必要になったときに増やす
+        return 200; // 戦略パラメータで100以上必要になったときに増やす
         // TODO: 戦略パラメータのMAXをlimit下限にする
       })();
 

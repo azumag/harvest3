@@ -337,8 +337,15 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   // 戦略キーが一致するオーダーのみキャンセル
   const openOrders = await exchange.fetchOpenOrders(symbol);
   await Promise.all(openOrders.map(async (order) => {
-    const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-    return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
+    try {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
+    } catch (error) {
+      console.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+      }
+    }
   }));
 
   // 戦略に買いポジションがある場合、売り注文を作成
