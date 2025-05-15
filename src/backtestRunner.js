@@ -147,7 +147,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         const symbols = symbolsByExchange[exchangeId].sort();
 
         // 並列処理するシンボルの数を制限
-        const MAX_CONCURRENT_SYMBOLS = 3; // 同時に処理するシンボルの数を制限
+        const MAX_CONCURRENT_SYMBOLS = 2; // 同時に処理するシンボルの数を制限
 
         // シンボルを処理するための関数
         async function processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate) {

@@ -23,8 +23,8 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
   // 過去のローソク足データを取得
   const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10, options);
   if (ohlcv.length < period) {
-    console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     if (!options.backtest) {
+      console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
       throw new Error(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     }
     if (options.backtest) {
@@ -112,6 +112,7 @@ async function handleStrategySignals(
       exchange, 
       symbol, 
       strategyKey, 
+      config,
       marketParameters, 
       currentPrice, 
       strategyName,
@@ -153,6 +154,7 @@ async function handleStrategySignals(
 async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
+  const { orderType } = config;
 
   // 利用可能な資金を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
@@ -195,7 +197,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       order = await backtestCreateLimitBuyOrder(symbol, formattedAmount, currentPrice, options);
     } else {
       // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+      // orderType が 'limit' の場合、createLimitBuyOrder を使用
+      // orderType が 'market' の場合、createMarketBuyOrder を使用
+      if (orderType && orderType === 'market') {
+        order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+      } else {
+        order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+      }
     }
 
     if (postOrderToDiscord && !options.backtest) {
@@ -203,7 +211,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    if (orderType && orderType === 'market') {
+      // マーケットオーダーの場合、実際の約定価格を取得
+      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+    } else {
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
 
     return { success: true, order };
   } else {
@@ -221,14 +235,16 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @param {Object} exchange 取引所オブジェクト
  * @param {string} symbol 通貨ペア
  * @param {string} strategyKey 戦略キー
+ * @param {Object} config 設定オブジェクト
  * @param {Object} marketParameters マーケットパラメータ
  * @param {number} currentPrice 現在価格
  * @param {string} strategyName 戦略名（ログ出力用）
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object} 注文結果
  */
-async function executeSellOrder(exchange, symbol, strategyKey, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { amountPrecision, minTradeAmount } = marketParameters;
+  const { orderType } = config;
 
   // 利用可能な資産を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
@@ -277,11 +293,24 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
       order = await backtestCreateLimitSellOrder(symbol, formattedAmount, currentPrice, options);
     } else {
       // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+      // orderType が 'limit' の場合、createLimitSellOrder を使用
+      // orderType が 'market' の場合、createMarketSellOrder を使用
+      if (orderType && orderType === 'market') {
+        order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+      } else {
+        order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+      }
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    if (orderType && orderType === 'market') {
+      // マーケットオーダーの場合、実際の約定価格を取得
+      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+    }
+    else {
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
 
     return { success: true, order };
   } else {

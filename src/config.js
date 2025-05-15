@@ -72,6 +72,16 @@ const config = {
       exchanges: [exchangeBB], // bitbank を使用
     },
 
+    BOLLINGER_BANDS_MARKET: {
+      enabled: true,
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    }, 
+
     // 逆張り戦略
     MEAN_REVERSION: {
       enabled: true,
