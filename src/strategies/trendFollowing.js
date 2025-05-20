@@ -444,12 +444,10 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;
     
-    // 買いシグナル: 価格がバンドの下限に近づいた場合
-    const buySignal = currentPrice <= currentLower * 1.01; // 下限の1%以内
-    
-    // 売りシグナル: 価格がバンドの上限に近づいた場合
-    const sellSignal = currentPrice >= currentUpper * 0.99; // 上限の1%以内
-    
+    // 既存のシグナルロジック
+    const buySignal = currentPrice <= currentLower;// * 1.01;
+    const sellSignal = currentPrice >= currentUpper;// * 0.99;
+
     // シグナルタイプを決定
     const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
     
@@ -500,6 +498,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       formatBollingerBandsLogInfo,
       options
     );
+    
     
   } catch (error) {
     console.error(`ボリンジャーバンド戦略でエラーが発生しました: ${symbol}`, error);

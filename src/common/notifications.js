@@ -87,6 +87,8 @@ async function postResultToDiscord(message, discordWebhookURL = discordResultWeb
     return;
   }
 
+  await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待機
+
   const MAX_LENGTH = 2000;
   const chunks = [];
   let currentChunk = '';

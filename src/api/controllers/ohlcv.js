@@ -20,6 +20,8 @@ async function getOhlcv(req, res) {
     const exchangeInstance = config.exchanges[exchange].instance;
 
     const ohlcv = await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit);
+    // const ohlcv = await fetchOHLCVData(exchangeInstance, symbol, timeframe, limit, { backtest: { timestamp: Date.now() } });
+    // console.log(`[API /ohlcv] Fetched OHLCV data for ${exchange} ${symbol}:`, ohlcv); // 取得したデータログ追加
    
     // 取得したOHLCVデータをJSONで返す
     res.json(ohlcv);

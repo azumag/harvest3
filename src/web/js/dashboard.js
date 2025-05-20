@@ -15,6 +15,9 @@ function initDashboard() {
   // サマリーデータの読み込みと表示
   loadAndDisplaySummary();
 
+  // 日次損益データの読み込みと表示
+  loadAndDisplayDailyPnL();
+
   // タブ切り替えイベントリスナー設定
   const summaryTabs = document.getElementById('summaryTabs');
   if (summaryTabs) {
@@ -90,6 +93,296 @@ async function loadAndDisplaySummary() {
         </div>
       `;
     }
+  }
+}
+/**
+ * 過去24時間の日次損益データを読み込み表示する
+ */
+async function loadAndDisplayDailyPnL() {
+  const loadingElement = document.getElementById('daily-pnl-loading');
+  const containerElement = document.getElementById('daily-pnl-container');
+
+  // 初期表示はローディングスピナー
+  if (loadingElement) loadingElement.classList.remove('d-none');
+  if (containerElement) containerElement.classList.add('d-none');
+
+  try {
+    // 過去24時間の約定履歴を取得
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const startDateTimestamp = twentyFourHoursAgo.getTime();
+
+    const response = await fetch(`/api/trades?startDate=${startDateTimestamp}`);
+    if (!response.ok) {
+      throw new Error(`日次損益データの取得に失敗しました (${response.status})`);
+    }
+
+    const trades = await response.json();
+    console.log('取得した過去24時間の約定履歴:', trades);
+
+    // 銘柄ごとの集計データ初期化
+    const symbolSummaries = {};
+
+    // データの計算
+    let totalSellAmount = 0;  // 売った合計金額
+    let totalBuyAmount = 0;   // 買った合計金額
+    let totalFee = 0;         // 合計手数料
+    let buyCount = 0;         // 買い注文数
+    let sellCount = 0;        // 売り注文数
+    let realizedPnL = 0;      // 実現損益
+
+    // 時間順にソート（古い順）して計算精度を上げる
+    const sortedTrades = [...trades].sort((a, b) => a.timestamp - b.timestamp);
+
+    sortedTrades.forEach(trade => {
+      const price = parseFloat(trade.price);
+      const amount = parseFloat(trade.amount);
+      const fee = parseFloat(trade.fee) || 0;
+      const symbol = trade.symbol || 'unknown';
+
+      // 銘柄ごとの集計データの初期化
+      if (!symbolSummaries[symbol]) {
+        symbolSummaries[symbol] = {
+          buyAmount: 0,         // 買った量
+          sellAmount: 0,        // 売った量
+          totalBuyCost: 0,      // 買った総コスト
+          totalSellValue: 0,    // 売った総価値
+          netPosition: 0,       // 現在のポジション
+          totalFee: 0,          // 手数料
+          realizedPnL: 0        // 実現損益
+        };
+      }
+
+      // 該当銘柄の集計データ
+      const summary = symbolSummaries[symbol];
+
+      if (trade.side === 'sell') {
+        // 売り注文の処理
+        const sellValue = price * amount;
+        totalSellAmount += sellValue;
+        totalFee += fee;
+        sellCount++;
+
+        // 銘柄ごとの集計を更新
+        summary.sellAmount += amount;
+        summary.totalSellValue += sellValue;
+        summary.netPosition -= amount;
+        summary.totalFee += fee;
+
+        // 実現損益を計算 (redisDatabase.jsのロジック)
+        // 平均購入コストに基づいた損益計算
+        if (summary.buyAmount > 0) {
+          const avgBuyCost = summary.totalBuyCost / summary.buyAmount;
+          const soldCost = amount * avgBuyCost;
+          const profit = sellValue - soldCost;
+          summary.realizedPnL += profit;
+          realizedPnL += profit; // 全体の実現損益にも加算
+        }
+      } else if (trade.side === 'buy') {
+        // 買い注文の処理
+        const buyValue = price * amount;
+        totalBuyAmount += buyValue;
+        totalFee += fee;
+        buyCount++;
+
+        // 銘柄ごとの集計を更新
+        summary.buyAmount += amount;
+        summary.totalBuyCost += buyValue;
+        summary.netPosition += amount;
+        summary.totalFee += fee;
+      }
+    });
+
+    // 結果の表示
+    const dailyPnlContainer = document.getElementById('daily-pnl-container');
+    if (dailyPnlContainer) {
+      // マージンを徹底的に調整した改良版
+      dailyPnlContainer.innerHTML = `
+    <div class="row g-3 mb-2">
+      <!-- 主要な損益情報 -->
+      <div class="col-md-6 mb-3">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-primary bg-opacity-10">
+            <h5 class="card-title mb-0">損益サマリー</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="row align-items-center">
+              <div class="col-8">
+                <div class="d-flex flex-column">
+                  <div class="mb-3">
+                    <p class="text-muted mb-1 small">実現損益</p>
+                    <h3 class="${realizedPnL >= 0 ? 'text-success' : 'text-danger'} mb-0">
+                      ${formatNumber(realizedPnL)} 円
+                    </h3>
+                  </div>
+                  <div>
+                    <p class="text-muted mb-1 small">手数料</p>
+                    <h5 class="text-secondary mb-0">${formatNumber(totalFee)} 円</h5>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="rounded-circle p-2 ${realizedPnL >= 0 ? 'bg-success' : 'bg-danger'} bg-opacity-10">
+                  <i class="bi ${realizedPnL >= 0 ? 'bi-graph-up-arrow' : 'bi-graph-down-arrow'} 
+                     ${realizedPnL >= 0 ? 'text-success' : 'text-danger'}" style="font-size: 2rem;"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 取引額情報 -->
+      <div class="col-md-6 mb-3">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-info bg-opacity-10">
+            <h5 class="card-title mb-0">取引額</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="row align-items-center mb-3">
+              <div class="col-7">
+                <p class="text-muted mb-1 small">売った額</p>
+                <h4 class="mb-0">${formatNumber(totalSellAmount)} 円</h4>
+              </div>
+              <div class="col-5 text-end">
+                <span class="badge bg-success rounded-pill px-2 py-1">
+                  <i class="bi bi-arrow-up-circle me-1"></i> ${sellCount}回
+                </span>
+              </div>
+            </div>
+            <div class="row align-items-center">
+              <div class="col-7">
+                <p class="text-muted mb-1 small">買った額</p>
+                <h4 class="mb-0">${formatNumber(totalBuyAmount)} 円</h4>
+              </div>
+              <div class="col-5 text-end">
+                <span class="badge bg-primary rounded-pill px-2 py-1">
+                  <i class="bi bi-arrow-down-circle me-1"></i> ${buyCount}回
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 取引回数比率 -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header py-2 bg-secondary bg-opacity-10">
+            <h5 class="card-title mb-0">取引回数比率</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="progress" style="height: 28px;">
+              <div class="progress-bar bg-success" role="progressbar" 
+                   style="width: ${(sellCount / (buyCount + sellCount) * 100).toFixed(1)}%;" 
+                   aria-valuenow="${sellCount}" aria-valuemin="0" aria-valuemax="${buyCount + sellCount}">
+                売り ${sellCount}回 (${(sellCount / (buyCount + sellCount) * 100).toFixed(1)}%)
+              </div>
+              <div class="progress-bar bg-primary" role="progressbar" 
+                   style="width: ${(buyCount / (buyCount + sellCount) * 100).toFixed(1)}%;" 
+                   aria-valuenow="${buyCount}" aria-valuemin="0" aria-valuemax="${buyCount + sellCount}">
+                買い ${buyCount}回 (${(buyCount / (buyCount + sellCount) * 100).toFixed(1)}%)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+} else {
+  console.error('日次損益を表示するためのコンテナが見つかりません');
+}
+
+// ポジション詳細を表示（続く部分はそのまま）
+renderPositionDetails(symbolSummaries);
+
+    // ローディング表示を非表示にしてコンテンツを表示
+    if (loadingElement) loadingElement.classList.add('d-none');
+    if (containerElement) containerElement.classList.remove('d-none');
+
+  } catch (error) {
+    console.error('日次損益データの取得と表示中にエラーが発生しました:', error);
+
+    // エラーメッセージを表示
+    if (loadingElement) {
+      loadingElement.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          日次損益データの読み込みに失敗しました: ${error.message}
+        </div>
+      `;
+    }
+    // コンテナは非表示のまま
+    if (containerElement) containerElement.classList.add('d-none');
+  }
+}
+
+/**
+ * ポジション詳細を表示する関数
+ * @param {Object} symbolSummaries - 銘柄ごとの集計データ
+ */
+function renderPositionDetails(symbolSummaries) {
+  const container = document.getElementById('position-details-container');
+  
+  if (!container) {
+    // コンテナがなければ作成
+    const dailyPnlContainer = document.getElementById('daily-pnl-container');
+    if (dailyPnlContainer) {
+      const detailsContainer = document.createElement('div');
+      detailsContainer.id = 'position-details-container';
+      detailsContainer.className = 'mt-4';
+      
+      const detailsTitle = document.createElement('h5');
+      detailsTitle.innerText = '銘柄別ポジション詳細';
+      detailsContainer.appendChild(detailsTitle);
+      
+      const tableContainer = document.createElement('div');
+      tableContainer.className = 'table-responsive';
+      tableContainer.innerHTML = `
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>銘柄</th>
+              <th class="text-end">買った量</th>
+              <th class="text-end">売った量</th>
+              <th class="text-end">現在のポジション</th>
+              <th class="text-end">平均購入価格</th>
+              <th class="text-end">実現損益</th>
+            </tr>
+          </thead>
+          <tbody id="symbol-positions-body"></tbody>
+        </table>
+      `;
+      
+      detailsContainer.appendChild(tableContainer);
+      dailyPnlContainer.appendChild(detailsContainer);
+    }
+  }
+  
+  // 銘柄別ポジション詳細の表示
+  const symbolPositionsBody = document.getElementById('symbol-positions-body');
+  if (symbolPositionsBody) {
+    let html = '';
+    
+    Object.entries(symbolSummaries)
+      .filter(([_, data]) => data.netPosition !== 0 || data.realizedPnL !== 0)
+      .sort(([_, a], [__, b]) => b.realizedPnL - a.realizedPnL)
+      .forEach(([symbol, data]) => {
+        const avgBuyPrice = data.buyAmount > 0 ? data.totalBuyCost / data.buyAmount : 0;
+        const pnlClass = data.realizedPnL >= 0 ? 'text-success' : 'text-danger';
+        
+        html += `
+          <tr>
+            <td>${symbol}</td>
+            <td class="text-end">${formatNumber(data.buyAmount, 6)}</td>
+            <td class="text-end">${formatNumber(data.sellAmount, 6)}</td>
+            <td class="text-end">${formatNumber(data.netPosition, 6)}</td>
+            <td class="text-end">${formatNumber(avgBuyPrice)}</td>
+            <td class="text-end ${pnlClass}">${formatNumber(data.realizedPnL)}</td>
+          </tr>
+        `;
+      });
+    
+    symbolPositionsBody.innerHTML = html || '<tr><td colspan="6" class="text-center">表示するポジションがありません</td></tr>';
   }
 }
 
@@ -845,9 +1138,10 @@ function updateOrderPairSymbolDropdown(orderPairs) {
 /**
  * 数値を読みやすい形式にフォーマットする
  * @param {number} num - フォーマットする数値
+ * @param {number} maxDigits - 小数点以下の最大桁数（デフォルト1）
  * @returns {string} - フォーマットされた数値文字列
  */
-function formatNumber(num) {
+function formatNumber(num, maxDigits = 1) {
   if (num === null || num === undefined) return '0';
 
   // 大きな数値の場合は小数点以下を省略
@@ -855,8 +1149,8 @@ function formatNumber(num) {
     return Math.round(num).toLocaleString();
   }
 
-  // 小さな数値の場合は小数点以下1桁まで表示
-  return num.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  // 小さな数値の場合は指定された小数点以下桁数まで表示
+  return num.toLocaleString(undefined, { maximumFractionDigits: maxDigits });
 }
 
 /**

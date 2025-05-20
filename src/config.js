@@ -56,44 +56,20 @@ const config = {
       'ELF/',
       'MATIC/',
       'RNDR/',
+      // 'ATOM/',
     ],
   },
   
   // 戦略固有の デフォルト設定
   strategies: {
 
-    // 高頻度取引戦略
-    // HFT: {
-    //   // enabled: process.env.STRATEGY_HIGH_FREQUENCY_ENABLED === 'true',
-    //   enabled: false,
-    //   interval: 100,
-    //   priceThreshold: 0.001,
-    //   maxOrdersPerMinute: 100,
-    //   amount: 0.0001,
-    //   orderBookDepth: 15,
-    //   function: highFrequencyTrading,
-    //   atomicExec: true,
-    //   exchanges: [exchangeBB],
-    // },
-    BOLLINGER_BANDS: {
-      enabled: true,
-      period: 20,
-      stdDev: 2,
-      ohlcvInterval: '15m',
-      function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
-    },
-
-    
-
-    // トレンドフォロー戦略
-    MA: {
-      enabled: true,
-      shortPeriod: 5,
-      longPeriod: 20,
-      ohlcvInterval: '15m',
-      function: maStrategy,
-      exchanges: [exchangeBB]
+    // 高頻度取引戦略 (bitbank WebSocket)
+    HFT: {
+      enabled: process.env.STRATEGY_HFT_BB_WS_ENABLED === 'true', // .envで制御できるようにする
+      // interval, priceThreshold, orderBookDepth などのパラメータは src/hft/config.js で管理
+      function: require('./hft').startHFTStrategy, // 新しいHFT戦略のエントリポイント
+      atomicExec: true,
+      exchanges: [exchangeBB], // bitbank を使用
     },
 
     // 逆張り戦略
@@ -103,6 +79,17 @@ const config = {
       ohlcvInterval: '15m',
       deviationThreshold: 3,
       function: meanReversionStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    // 逆張り戦略
+    MEAN_REVERSION_MARKET: {
+      enabled: true,
+      period: 20,
+      ohlcvInterval: '15m',
+      deviationThreshold: 3,
+      function: meanReversionStrategy,
+      orderType: 'market',
       exchanges: [exchangeBB]
     },
 
@@ -116,16 +103,56 @@ const config = {
       exchanges: [exchangeBB]
     },
 
-    RSI: {
+    MACD_MARKET: {
       enabled: true,
-      period: 14,
-      oversoldThreshold: 30,
-      overboughtThreshold: 70,
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
       ohlcvInterval: '15m',
-      function: rsiStrategy,
+      orderType: 'market',
+      function: macdStrategy,
       exchanges: [exchangeBB]
     },
-    
+
+    BOLLINGER_BANDS: {
+      enabled: true,
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      exchanges: [exchangeBB]
+    }, 
+
+    BOLLINGER_BANDS_MARKET: {
+      enabled: true,
+      period: 20,
+      stdDev: 2,
+      ohlcvInterval: '15m',
+      function: bollingerBandsStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    }, 
+
+    // トレンドフォロー戦略
+    MA: {
+      enabled: true,
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '15m',
+      function: maStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    MA_MARKET: {
+      enabled: true,
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: '15m',
+      function: maStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    },
+
     OSCILLATOR: {
       enabled: true,
       period: 20,
@@ -135,7 +162,40 @@ const config = {
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
     },
-    
+
+    OSCILLATOR_MARKET: {
+      enabled: true,
+      period: 20,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: '15m',
+      function: oscillatorStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB],
+    },
+
+    RSI: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '15m',
+      function: rsiStrategy,
+      exchanges: [exchangeBB]
+    },
+
+    RSI_MARKET: {
+      enabled: true,
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      ohlcvInterval: '15m',
+      function: rsiStrategy,
+      orderType: 'market',
+      exchanges: [exchangeBB]
+    },
+
+
     // アービトラージ戦略
     // INTER_EXCHANGE_ARBITRAGE: {
     //   enabled: process.env.STRATEGY_ARBITRAGE_ENABLED === 'true',
@@ -149,7 +209,7 @@ const config = {
     //   function: scalpingStrategy,
     //   exchanges: [exchangeBB],
     // },
-    
+
     // マーケットメイキング戦略
     // MARKET_MAKING: {
     //   enabled: process.env.STRATEGY_MARKET_MAKING_ENABLED === 'true',

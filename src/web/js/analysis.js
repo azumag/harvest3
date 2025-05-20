@@ -3,6 +3,7 @@
  * ロウソク足チャートと戦略シグナルを表示する
  */
 
+
 // グローバル変数
 let currentAnalysisParams = {}; // 現在表示中のパラメータ
 let modifiedAnalysisParams = {}; // 変更されたパラメータ
@@ -626,7 +627,8 @@ async function fetchStrategySignals(exchange, symbol, strategy, startDate, ohlcD
         // APIリクエストパラメータの構築
         const params = new URLSearchParams({
             exchange,
-            symbol
+            symbol,
+            strategy
         });
         
         if (ohlcData) {
@@ -723,6 +725,7 @@ function renderChart(ohlcvData, signalData) {
     // シグナルアノテーションを追加
     addSignalsToChart(chart, signalData);
     addBollingerToChart(chart, ohlcvData);
+    addMAToChart(chart, ohlcvData);
     console.log('renderChart - ohlcDataset type:', ohlcDataset.type);
 }
 
@@ -802,6 +805,60 @@ function addBollingerToChart(chart, ohlcvData) {
     // データを追加した後にチャートを更新
     chart.update();
 
+}
+
+function addMAToChart(chart, ohlcvData) {
+    const paramKey = `params:${filterExchangeSelect.value}:${filterSymbolSelect.value}:${filterStrategySelect.value}`;
+    const params = currentAnalysisParams[paramKey] || {};
+    const shortP = Number(params.shortPeriod) || 20;
+    const longP = Number(params.longPeriod) || 9;
+
+    // 終値の配列を作成
+    const closes = ohlcvData.map(candle => candle[4]);
+    // console.log(closes.length); // デバッグ用
+
+    const shortSMA = calculateSMA(closes, shortP);
+    const longSMA = calculateSMA(closes, longP);
+
+    const longMA = ohlcvData.map((candle, index) => ({
+        x: candle[0], // タイムスタンプ
+        y: longSMA[index] 
+    }));
+    const shortMA = ohlcvData.map((candle, index) => ({
+        x: candle[0],
+        y: shortSMA[index]
+    }));
+
+    chart.data.datasets = chart.data.datasets.filter(dataset =>
+        !dataset.label?.startsWith('MA')
+    );
+
+    // 新しいデータセットを追加 (type: 'line' と spanGaps: true を追加)
+    chart.data.datasets.push({
+        label: 'Long MA',
+        data: longMA,
+        borderColor: 'rgba(226, 114, 9, 0.8)',
+        borderWidth: 1,
+        fill: false,
+        type: 'line', // 線グラフとして明示
+        pointRadius: 0, // 点は表示しない
+        tension: 0.1, // 少し滑らかに
+        spanGaps: true // null値を線でつなぐ
+    });
+    chart.data.datasets.push({
+        label: 'Short MA',
+        data: shortMA,
+        borderColor: 'rgba(37, 241, 10, 0.94)',
+        borderWidth: 1,
+        fill: false,
+        type: 'line',
+        pointRadius: 0,
+        tension: 0.1,
+        spanGaps: true
+    });
+
+    // データを追加した後にチャートを更新
+    chart.update();
 }
 
 /**

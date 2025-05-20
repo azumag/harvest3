@@ -11,6 +11,7 @@ const {
   countSignals,
   addOhlcvMongoDB,
   fetchHistoricalOHLCVData,
+  saveTickerMongoDB,
 } = require('./mongoDatabase');
 
 const {
@@ -28,7 +29,9 @@ const {
   getOHLCVRedis,
   updateOHLCVRedis,
   getTickerRedis,
-  updateTickerRedis
+  updateTickerRedis,
+  updateBacktestOHLCVRedisSortedSet,
+  getBacktestOHLCVRedisBeforeTimestamp
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
@@ -44,31 +47,84 @@ async function initializeDB() {
   await connectDB();
 }
 
+/**
+ * バックテスト用のOHLCVデータを取得し、Redisに保存する関数
+ * 
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} timeframe - 時間枠
+ * @param {number} limit - 取得するデータの件数
+ * @returns {Promise<Array>} - 取得したOHLCVデータの配列
+ * @throws {Error} - データ取得に失敗した場合
+**/
+async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, limit = 100) {
+  try {
+    const ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
+    if (!ohlcvs || ohlcvs.length === 0) {
+      console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      return [];
+    }
+    // Redisに保存
+    await updateBacktestOHLCVRedisSortedSet(exchange.id, symbol, timeframe, ohlcvs);
+    console.log(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
+    return ohlcvs;
+  } catch (error) {
+    console.error(`Error loading historical OHLCV data: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Backtest用のOHLCVデータを取得する関数
+ * 
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 通貨ペア
+ * @param {string} timeframe - 時間枠
+ * @param {number} limit - 取得するデータの件数
+ * @param {number} timestamp - タイムスタンプ
+ * @returns {Promise<Array>} - 取得したOHLCVデータの配列
+ * @throws {Error} - データ取得に失敗した場合
+*/
+async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100, timestamp) {
+  try {
+    // console.log(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+    // Redisからデータを取得
+    const redisData = await getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit);
+    if (!redisData || redisData.length === 0) {
+      console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
+      return [];
+    }
+
+    redisData.reverse(); // データを逆順にして最新のデータが末尾に来るようにする
+
+    // データをCCXTフォーマットに変換して返す
+    // CCXTフォーマット: [timestamp, open, high, low, close, volume]
+    return redisData.map(candle => {
+      return [
+        candle.timestamp,
+        candle.open,
+        candle.high,
+        candle.low,
+        candle.close,
+        candle.volume
+      ];
+    });
+   } catch (error) {
+    console.error(`Error fetching historical OHLCV data: ${error.message}`);
+    throw error;
+  }
+}
+
 async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options = {}) {
   try {
     // バックテストモードの場合
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      // mongoDBから過去データを取得
-      const historicalData = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
-      
-      if (!historicalData || historicalData.length === 0) {
-        return [];
-      }
-
-      // 取得したデータをCCXTフォーマットに変換して返す
-      // CCXTフォーマット: [timestamp, open, high, low, close, volume]
-      return historicalData.map(candle => {
-        return [
-          candle.timestamp,
-          candle.open,
-          candle.high,
-          candle.low,
-          candle.close,
-          candle.volume
-        ];
-      });
+      // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+      return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
+
+    // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     
     // 通常モード
     // REDISに最新データがあるか確認
@@ -76,10 +132,19 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
     const timeframeMs = timeframeToMs(timeframe);
     // 前回更新時刻がない、または前回更新時刻から Timeframe 時間以上経過している場合
-    if (!redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+    if (options.forceUpdate || !redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+    // if (true) {
       // TODO: 前回更新時刻をみて取得する limit を調整
       // TODO: 取得したデータを保存する際、redisには更新でなく追記をかける必要がある
-      const _limit = limit > 100 ? limit : 100; // デフォルトの取得数を100に設定, 100を超える場合はその数字にする
+      // forceUpdate が true の場合以外は、limit を 100 にする: REDISに保存するデータ量を固定
+      const _limit = (() => {
+        if (options.forceUpdate) {
+          return limit;
+        }
+        return 200; // 戦略パラメータで100以上必要になったときに増やす
+        // TODO: 戦略パラメータのMAXをlimit下限にする
+      })();
+
       const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
       if (!ohlcvs || ohlcvs.length === 0) {
         console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
@@ -92,7 +157,11 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       // console.log(`lastOhlcv: ${lastOhlcv}`);
       // console.log(`ohlcvs: ${ohlcvs}`);
       for (const ohlcv of ohlcvs) {
-        if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0][0]) {
+        if (options.forceUpdate) {
+          // forceUpdate が true の場合は全て保存
+          // console.log(`forceUpdate: ${ohlcv}`);
+        } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0].timestamp) {
+          // console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0].timestamp}`);
           continue; // 既存のデータより古い場合はスキップ
         }
         try {
@@ -110,14 +179,19 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
           };
           addOhlcvMongoDB(ohlcvData);
         } catch (error) {
-          // console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
+          console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
         }
       }
-      await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+      if (options.forceUpdate) {
+        // forceUpdate が true の場合は REDIS に保存しない
+      } else {
+        await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+      }
       return ohlcvs;
     } else {
       // Redisにデータがある場合はそれを返す
       const redisData = await getOHLCVRedis(exchange.id, symbol, timeframe);
+      // console.log(`Redis data: ${redisData}`);
       // limitが指定されている場合、データを制限
       if (limit && limit > 0) {
         return redisData.slice(-limit);
@@ -316,6 +390,9 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail, opt
       return;
     }
 
+    // シグナルが出過ぎるので一時的にシャットアウト
+    return;
+
     // リアルタイムモードの場合 (既存ロジック)
     const timestamp = Date.now();
 
@@ -506,6 +583,9 @@ async function fetchTicker(exchange, symbol, options = {}) {
 
       // Save to Redis
       await updateTickerRedis(exchange.id, symbol, ticker);
+      // mongoDB にも保存
+      await saveTickerMongoDB(ticker);
+
       return ticker;
     } else {
       // Redisに保存されたティッカーを返す
@@ -782,12 +862,15 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
     }
   }
 
-  // リアルタイムモードの場合 (既存ロジック)
+  // リアルタイムモードの場合
   // この戦略で約定し残っている量（買った量ー売った量）
   const currentTradePosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
   // 今注文に出している買い量
   const currentOrderPosition = await getCurrentOrderPosition(exchange, symbol, strategyKey);
+
+  // 今注文に出している売り量を取得
+  const currentSellOrders = await getCurrentSellOrderPosition(exchange, symbol, strategyKey);
 
   // 可能購入量限度を計算
   const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / price;
@@ -796,31 +879,54 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   // Calculate required funds for the potential buy order
   const requiredFunds = price * formattedAmount;
 
-  // Check if available funds are sufficient
-  if (availableFunds < requiredFunds || formattedAmount <= 0) {
+  // トレードパーセンテージを考慮した利用可能資金を計算
+  const allowedFunds = (availableFunds * tradePercentage) + realizedPnL;
+
+  // Check if available funds are sufficient, considering trade percentage
+  if (requiredFunds > allowedFunds || formattedAmount <= 0) {
     return {
       allowed: false,
-      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能: ${availableFunds}`
+      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能(制限内): ${allowedFunds.toFixed(2)}`
     };
   }
 
-  // Calculate total position after the potential order
-  const totalPositionAfterOrder = currentTradePosition + currentOrderPosition;
-  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${totalPositionAfterOrder}, 注文後のポジション: ${totalPositionAfterOrder + formattedAmount}`);
+  // 実質的なポジションを計算 (売り注文量を差し引く)
+  const effectivePosition = currentTradePosition + currentOrderPosition - currentSellOrders;
 
-  // Determine if a buy order is allowed based on position limits
-  // Allow buy if total position is within maxBuyAmount
-  const isBuyAllowed = totalPositionAfterOrder <= maxBuyAmountWithMinTrade;
+  // 新しい注文を加えた場合の合計ポジションを計算
+  const newEffectivePosition = effectivePosition + formattedAmount;
+
+  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}, 新注文後ポジション: ${newEffectivePosition}`);
+
+  // 新注文を加えた合計ポジションが最大購入量以下かチェック
+  const isBuyAllowed = newEffectivePosition <= maxBuyAmountWithMinTrade;
 
   if (!isBuyAllowed) {
     return {
       allowed: false,
-      reason: `買い注文が許可されません: ${symbol} - 現在のポジション: ${totalPositionAfterOrder}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
+      reason: `買い注文が許可されません: ${symbol} - 新注文後の実質ポジション: ${newEffectivePosition}, 最大購入許可量: ${maxBuyAmountWithMinTrade}`
     };
   }
 
   return { allowed: true };
 }
+
+async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
+  // 未約定の注文を取得
+  const openOrders = await exchange.fetchOpenOrders(symbol);
+
+  // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
+  const sellOrderAmounts = await Promise.all(
+    openOrders.map(async (order) => {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      // sell only
+      return (strategyKey === _strategyKey && order.side === 'sell') ? order.amount : 0;
+    })
+  );
+  const totalAmount = sellOrderAmounts.reduce((sum, amount) => sum + amount, 0);
+
+  return totalAmount;
+};
 
 module.exports = {
   fetchOHLCVData,
@@ -856,4 +962,8 @@ module.exports = {
   checkBuyOrderAllowance,
   getSymbolsByExchange,
   getMarketParameters,
+  getCurrentSellOrderPosition,
+  fetchHistoricalOHLCVData,
+  loadHistoricalOHLCVToBacktestRedis,
+  fetchBacktestOHLCVData,
 };

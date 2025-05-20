@@ -2,15 +2,16 @@ const { listSignals, countSignals } = require('../../database/manager'); // coun
 
 const getSignals = async (req, res) => {
     try {
-        const { exchange, symbol, side, startDate, endDate, start, length } = req.query; // ページングパラメータを追加
+        const { exchange, symbol, strategy, side, startDate, endDate, start, length } = req.query; // ページングパラメータを追加
 
         // ページングパラメータを数値に変換
         const skip = parseInt(start) || 0;
-        const limit = parseInt(length) || 10; // デフォルトは10件とする
+        const limit = parseInt(length) || 0;
         
         const filter = {};
         if (exchange) filter.exchange = exchange;
         if (symbol) filter.symbol = symbol;
+        if (strategy) filter.strategy = strategy;
         if (side) filter.side = side;
 
         // 日付フィルタの追加
@@ -28,10 +29,12 @@ const getSignals = async (req, res) => {
                 filter.timestamp.$lte = end.getTime() - 1;
             }
         }
-        console.log(filter.timestamp)
+        // console.log(filter.timestamp)
 
         // フィルタリングされたシグナルデータを取得 (ページング適用)
         const signals = await listSignals(filter, skip, limit, { timestamp: -1 }); // skip, limit, sort を追加
+
+        // console.log('Filtered signals:', signals);
 
         // フィルタリング条件に一致するシグナルデータの総件数を取得
         const totalFiltered = await countSignals(filter);

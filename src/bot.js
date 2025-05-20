@@ -88,8 +88,9 @@ async function startBot() {
           for (const strategyKey of Object.keys(config.strategies)) {
             const strategy = config.strategies[strategyKey];
             
-            // 戦略が無効の場合はスキップ
-            if (!strategy.enabled) {
+            // 戦略自体か、個別設定で戦略が無効の場合はスキップ
+            const strategyConfig = await getStrategyConfig(exchangeInstance, symbol, strategyKey, config);
+            if (!strategy.enabled || !strategyConfig.enabled) {
               console.log(`戦略 ${strategyKey} が無効です`);
               continue;
             }
@@ -105,10 +106,27 @@ async function startBot() {
               continue;
             }
             
-            // この戦略が対象の取引所をサポートしているか確認
+            // 新しいHFT戦略 (WebSocketベース) の場合
+            if (strategyKey === 'HFT') {
+              // HFTは別コンテナで実行予定
+              continue;
+              // // HFT戦略は内部で通貨ペアのループとWebSocket接続を管理するため、
+              // // ここでは戦略のエントリポイント関数を一度だけ呼び出す
+              // console.log(`--- 戦略 ${strategyKey} を実行中...`);
+              // try {
+              //   await strategy.function(config); // startHFTStrategy(config) を呼び出し
+              // } catch (error) {
+              //   console.error(`戦略 ${strategyKey} の実行中にエラーが発生しました: ${error.message}`);
+              //   await postErrorToDiscord(`戦略 ${strategyKey} でエラー: ${error.message}`).catch(() => {});
+              // }
+              // // HFT戦略は常駐するため、このループの他の通貨ペアでは実行しない
+              // continue;
+            }
+
+            // この戦略が対象の取引所をサポートしているか確認 (HFT_BB_WS以外)
             const supportedExchange = strategy.exchanges.find(e => e.id === exchangeId);
             if (!supportedExchange) continue;
-            
+
             try {
               await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters);
             } catch (error) {

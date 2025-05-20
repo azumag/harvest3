@@ -1,8 +1,13 @@
 const { formattedAvailableAmount, getRealizedPnL, addSignal,
   backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
-  addOrder, fetchOHLCVData, getAvailableFund } = require('../../database/manager');
+  addOrder, fetchOHLCVData, getAvailableFund,
+  checkBuyOrderAllowance,
+  getStrategyParameters,
+  saveStrategyParameters,
+  getTradeCurrentPosition,
+  getOrderStrategyKeyByOrderId,
+} = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
-const { checkBuyOrderAllowance } = require('../../database/manager');
 
 /**
  * OHLCV データを取得して検証する
@@ -20,8 +25,11 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
   if (ohlcv.length < period) {
     if (!options.backtest) {
       console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
+      throw new Error(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     }
-    return null;
+    if (options.backtest) {
+      return null; // バックテストモードではnullを返す
+    }
   }
 
   // 終値の配列を作成
@@ -33,7 +41,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
     if (errorNotificationFn) {
       await errorNotificationFn(`[${strategyName}戦略] 警告: ${exchange.id} - ${symbol} - 無効な価格データが含まれています`);
     }
-    return null;
+    throw new Error(`${strategyName}戦略: ${symbol} - 無効な価格データが含まれています`);
   }
   
   return { ohlcv, closes };
@@ -104,6 +112,7 @@ async function handleStrategySignals(
       exchange, 
       symbol, 
       strategyKey, 
+      config,
       marketParameters, 
       currentPrice, 
       strategyName,
@@ -145,6 +154,7 @@ async function handleStrategySignals(
 async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
+  const { orderType } = config;
 
   // 利用可能な資金を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
@@ -187,7 +197,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       order = await backtestCreateLimitBuyOrder(symbol, formattedAmount, currentPrice, options);
     } else {
       // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+      // orderType が 'limit' の場合、createLimitBuyOrder を使用
+      // orderType が 'market' の場合、createMarketBuyOrder を使用
+      if (orderType && orderType === 'market') {
+        order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+      } else {
+        order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+      }
     }
 
     if (postOrderToDiscord && !options.backtest) {
@@ -195,7 +211,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    if (orderType && orderType === 'market') {
+      // マーケットオーダーの場合、実際の約定価格を取得
+      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+    } else {
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
 
     return { success: true, order };
   } else {
@@ -213,14 +235,16 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @param {Object} exchange 取引所オブジェクト
  * @param {string} symbol 通貨ペア
  * @param {string} strategyKey 戦略キー
+ * @param {Object} config 設定オブジェクト
  * @param {Object} marketParameters マーケットパラメータ
  * @param {number} currentPrice 現在価格
  * @param {string} strategyName 戦略名（ログ出力用）
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object} 注文結果
  */
-async function executeSellOrder(exchange, symbol, strategyKey, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
   const { amountPrecision, minTradeAmount } = marketParameters;
+  const { orderType } = config;
 
   // 利用可能な資産を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
@@ -269,11 +293,24 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
       order = await backtestCreateLimitSellOrder(symbol, formattedAmount, currentPrice, options);
     } else {
       // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+      // orderType が 'limit' の場合、createLimitSellOrder を使用
+      // orderType が 'market' の場合、createMarketSellOrder を使用
+      if (orderType && orderType === 'market') {
+        order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+      } else {
+        order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+      }
     }
 
     // 取引記録を更新
-    addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    if (orderType && orderType === 'market') {
+      // マーケットオーダーの場合、実際の約定価格を取得
+      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+    }
+    else {
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
 
     return { success: true, order };
   } else {
@@ -286,9 +323,61 @@ async function executeSellOrder(exchange, symbol, strategyKey, marketParameters,
   }
 }
 
+async function disableStrategy(exchange, symbol, strategyKey, config, options = {}) {
+  // configを取得
+  const _dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
+  // enabledをfalseに設定
+  _dbParams.enabled = false;
+  // configを保存
+  await saveStrategyParameters(exchange.id, symbol, strategyKey, _dbParams);
+}
+
+async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) {
+
+  // 戦略キーが一致するオーダーのみキャンセル
+  const openOrders = await exchange.fetchOpenOrders(symbol);
+  await Promise.all(openOrders.map(async (order) => {
+    try {
+      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+      return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
+    } catch (error) {
+      console.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+      }
+    }
+  }));
+
+  // 戦略に買いポジションがある場合、売り注文を作成
+  const _netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+
+  // TODO: use market parameters
+  if (_netPosition < 0.0001) {
+    console.log(`ポジションがないため、売り注文は発注しません: ${symbol}`);
+    return { success: false, reason: 'no position' };
+  }
+
+  const netPosition = Math.max(_netPosition.toFixed(4), 0.0001);
+  // 売り注文を作成
+  try {
+    const order = await exchange.createMarketSellOrder(symbol, netPosition);
+    addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
+  } catch (error) {
+    console.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[${exchange.id}] 売り注文の発注に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+    }
+    return { success: false, error };
+  }
+
+  return { success: true };
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
   executeBuyOrder,
-  executeSellOrder
+  executeSellOrder,
+  disableStrategy,
+  clearPositionMarket,
 };
