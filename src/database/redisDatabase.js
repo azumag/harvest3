@@ -482,6 +482,25 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
   return result.map(item => JSON.parse(item));
 }
 
+/**
+ * 戦略パラメータを削除する関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @returns {Promise<Boolean>} - 削除が成功したかどうか
+ */
+async function deleteStrategyParametersRedis(exchangeId, symbol, strategyKey) {
+  const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
+  try {
+    const result = await client.del(key);
+    console.log(`戦略パラメータを削除しました: ${key}`);
+    return result > 0;
+  } catch (error) {
+    console.error(`戦略パラメータの削除中にエラーが発生しました: ${key}`, error);
+    return false;
+  }
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
   initialize,
@@ -491,6 +510,7 @@ module.exports = {
   updateTradeSummary,
   saveStrategyParametersRedis,
   getStrategyParametersRedis,
+  deleteStrategyParametersRedis,
   getTradeSummaryTimestamp,
   updateTradeSummaryTimestamp,
   getTradeSummaries,
