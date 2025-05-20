@@ -174,29 +174,37 @@ async function closeAllMarketPositionsOnAllExchanges() {
  * @returns {Promise<Boolean>} MARKET戦略が存在するかどうか
  */
 async function hasMarketStrategyForSymbol(exchangeId, symbol) {
-  // すべての戦略パラメータを取得
-  const allParams = await getAllStrategyParametersRedis();
-  
-  // この通貨ペアにMARKET戦略があるか検索
-  for (const key in allParams) {
-    // キーの形式: params:exchangeId:symbol:strategyKey
-    const parts = key.split(':');
-    if (parts.length < 4) continue;
+  try {
+    // すべての戦略パラメータを取得
+    const allParams = await getAllStrategyParametersRedis();
     
-    const keyExchangeId = parts[1];
-    const keySymbol = parts[2];
-    const strategyKey = parts[3];
-    
-    if (keyExchangeId === exchangeId && keySymbol === symbol && strategyKey.includes('_MARKET')) {
-      return true;
+    // この通貨ペアにMARKET戦略があるか検索
+    for (const key in allParams) {
+      // キーの形式: params:exchangeId:symbol:strategyKey
+      const parts = key.split(':');
+      if (parts.length < 4) continue;
+      
+      const keyExchangeId = parts[1];
+      const keySymbol = parts[2];
+      const strategyKey = parts[3];
+      
+      if (keyExchangeId === exchangeId && keySymbol === symbol && strategyKey.includes('_MARKET')) {
+        console.log(`MARKET戦略が見つかりました: ${key}`);
+        return true;
+      }
     }
+    
+    return false;
+  } catch (error) {
+    console.error(`MARKET戦略の検索中にエラーが発生しました: ${exchangeId}, ${symbol}`, error);
+    // エラーが発生した場合は安全側に倒して true を返す（ポジションを閉じる）
+    return true;
   }
-  
-  return false;
 }
 
 /**
  * すべてのMARKET戦略のパラメータをRedisから削除する関数
+ * @returns {Promise<Number>} 削除したパラメータの数
  */
 async function deleteAllMarketStrategyParameters() {
   try {
@@ -206,32 +214,52 @@ async function deleteAllMarketStrategyParameters() {
     // すべての戦略パラメータを取得
     const allParams = await getAllStrategyParametersRedis();
     let deletedCount = 0;
+    let errorCount = 0;
+    
+    if (!allParams || Object.keys(allParams).length === 0) {
+      console.log('戦略パラメータが見つかりませんでした。');
+      await postOrderToDiscord('[INFO] 戦略パラメータが見つかりませんでした。');
+      return 0;
+    }
     
     // MARKET戦略を検索して削除
     for (const key in allParams) {
       // キーの形式: params:exchangeId:symbol:strategyKey
       const parts = key.split(':');
-      if (parts.length < 4) continue;
+      if (parts.length < 4) {
+        console.log(`無効なキー形式をスキップします: ${key}`);
+        continue;
+      }
       
       const exchangeId = parts[1];
       const symbol = parts[2];
       const strategyKey = parts[3];
       
       if (strategyKey.includes('_MARKET')) {
-        const success = await deleteStrategyParametersRedis(exchangeId, symbol, strategyKey);
-        if (success) {
-          console.log(`MARKET戦略パラメータを削除しました: ${key}`);
-          deletedCount++;
+        try {
+          const success = await deleteStrategyParametersRedis(exchangeId, symbol, strategyKey);
+          if (success) {
+            console.log(`MARKET戦略パラメータを削除しました: ${key}`);
+            deletedCount++;
+          } else {
+            console.error(`MARKET戦略パラメータの削除に失敗しました: ${key}`);
+            errorCount++;
+          }
+        } catch (deleteError) {
+          console.error(`MARKET戦略パラメータの削除中に例外が発生しました: ${key}`, deleteError);
+          errorCount++;
+          // 個々の削除エラーは全体のプロセスを停止させない
         }
       }
     }
     
-    if (deletedCount === 0) {
+    if (deletedCount === 0 && errorCount === 0) {
       console.log('削除すべきMARKET戦略パラメータはありませんでした。');
       await postOrderToDiscord('[INFO] 削除すべきMARKET戦略パラメータはありませんでした。');
     } else {
-      console.log(`合計 ${deletedCount} 個のMARKET戦略パラメータを削除しました。`);
-      await postOrderToDiscord(`[INFO] 合計 ${deletedCount} 個のMARKET戦略パラメータを削除しました。`);
+      const message = `合計 ${deletedCount} 個のMARKET戦略パラメータを削除しました。${errorCount > 0 ? `(${errorCount}個の削除に失敗)` : ''}`;
+      console.log(message);
+      await postOrderToDiscord(`[INFO] ${message}`);
     }
     
     return deletedCount;
@@ -251,6 +279,7 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('  --delete-only    パラメータを削除するだけで、ポジションは閉じない');
   console.log('  --bitbank, -bb   BitBankのMARKET戦略のみを対象にする');
   console.log('  --bitflyer, -bf  BitFlyerのMARKET戦略のみを対象にする');
+  console.log('  --dry-run        実際の変更を行わずに何が行われるかを表示する');
   console.log('  --help, -h       このヘルプメッセージを表示');
   console.log('オプションなしで実行すると、すべての取引所のMARKET戦略のポジションを閉じ、パラメータを削除します。');
   process.exit(0);
@@ -260,27 +289,96 @@ if (args.includes('--help') || args.includes('-h')) {
 async function main() {
   try {
     // Redis初期化
-    await initialize();
+    console.log('Redisデータベースに接続しています...');
+    try {
+      await initialize();
+      console.log('Redisデータベースに接続しました');
+    } catch (redisError) {
+      console.error('Redisデータベースへの接続中にエラーが発生しました:', redisError);
+      await postErrorToDiscord(`[ERROR] Redisデータベースへの接続中にエラーが発生しました: ${redisError.message}`);
+      process.exit(1);
+    }
     
     const closeOnly = args.includes('--close-only');
     const deleteOnly = args.includes('--delete-only');
+    const dryRun = args.includes('--dry-run');
+    
+    if (dryRun) {
+      console.log('=============================================');
+      console.log('ドライラン: 実際の変更は行われません');
+      console.log('=============================================');
+      await postOrderToDiscord('[INFO] ドライラン: 実際の変更は行われません');
+    }
     
     // ポジションを閉じる
     if (!deleteOnly) {
-      if (args.includes('--bitbank') || args.includes('-bb')) {
-        console.log('BitBankのMARKET戦略のポジションのみを解消します...');
-        await closeMarketPositions(exchangeBB);
-      } else if (args.includes('--bitflyer') || args.includes('-bf')) {
-        console.log('BitFlyerのMARKET戦略のポジションのみを解消します...');
-        await closeMarketPositions(exchangeBF);
-      } else {
-        await closeAllMarketPositionsOnAllExchanges();
+      try {
+        if (dryRun) {
+          console.log('[ドライラン] MARKET戦略のポジションを解消する対象を確認します');
+          // ドライランの場合は実際の取引を行わない
+          // 対象となる戦略のパラメータのみを表示
+          const allParams = await getAllStrategyParametersRedis();
+          for (const key in allParams) {
+            const parts = key.split(':');
+            if (parts.length < 4) continue;
+            
+            const exchangeId = parts[1];
+            const symbol = parts[2];
+            const strategyKey = parts[3];
+            
+            if (strategyKey.includes('_MARKET')) {
+              console.log(`[ドライラン] ポジション解消対象: ${exchangeId} - ${symbol} - ${strategyKey}`);
+            }
+          }
+        } else {
+          if (args.includes('--bitbank') || args.includes('-bb')) {
+            console.log('BitBankのMARKET戦略のポジションのみを解消します...');
+            await closeMarketPositions(exchangeBB);
+          } else if (args.includes('--bitflyer') || args.includes('-bf')) {
+            console.log('BitFlyerのMARKET戦略のポジションのみを解消します...');
+            await closeMarketPositions(exchangeBF);
+          } else {
+            await closeAllMarketPositionsOnAllExchanges();
+          }
+        }
+      } catch (closeError) {
+        console.error('ポジション解消中にエラーが発生しました:', closeError);
+        await postErrorToDiscord(`[ERROR] ポジション解消中にエラーが発生しました: ${closeError.message}`);
+        // ポジション解消に失敗してもパラメータ削除は続行
       }
     }
     
     // パラメータを削除
     if (!closeOnly) {
-      await deleteAllMarketStrategyParameters();
+      try {
+        if (dryRun) {
+          console.log('[ドライラン] 削除対象のMARKET戦略パラメータを確認します');
+          // ドライランの場合は実際の削除を行わない
+          // 削除対象となるパラメータのみを表示
+          const allParams = await getAllStrategyParametersRedis();
+          let count = 0;
+          for (const key in allParams) {
+            const parts = key.split(':');
+            if (parts.length < 4) continue;
+            
+            const exchangeId = parts[1];
+            const symbol = parts[2];
+            const strategyKey = parts[3];
+            
+            if (strategyKey.includes('_MARKET')) {
+              console.log(`[ドライラン] 削除対象: ${key}`);
+              count++;
+            }
+          }
+          console.log(`[ドライラン] 合計 ${count} 個のMARKET戦略パラメータが削除対象です`);
+        } else {
+          await deleteAllMarketStrategyParameters();
+        }
+      } catch (deleteError) {
+        console.error('パラメータ削除中にエラーが発生しました:', deleteError);
+        await postErrorToDiscord(`[ERROR] パラメータ削除中にエラーが発生しました: ${deleteError.message}`);
+        process.exit(1);
+      }
     }
     
     console.log('処理が完了しました。');
