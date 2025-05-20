@@ -390,6 +390,9 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail, opt
       return;
     }
 
+    // シグナルが出過ぎるので一時的にシャットアウト
+    return;
+
     // リアルタイムモードの場合 (既存ロジック)
     const timestamp = Date.now();
 

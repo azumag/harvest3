@@ -56,7 +56,7 @@ const config = {
       'ELF/',
       'MATIC/',
       'RNDR/',
-      'ATOM/',
+      // 'ATOM/',
     ],
   },
   
