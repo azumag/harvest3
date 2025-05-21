@@ -929,6 +929,14 @@ async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
   return totalAmount;
 };
 
+/**
+ * Deletes the trade summary for a specific exchange, symbol, and strategy key.
+ * 
+ * @param {string} exchangeId - The ID of the exchange.
+ * @param {string} symbol - The trading pair symbol (e.g., "BTC/USD").
+ * @param {string} strategyKey - The unique key identifying the trading strategy.
+ * @returns {Promise<boolean>} - Returns `true` if the trade summary was successfully deleted, otherwise `false`.
+ */
 async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
   try {
     const key = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
