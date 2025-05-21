@@ -24,7 +24,7 @@
     "mongodb": "^6.16.0",
     "morgan": "^1.10.0",
     "node-fetch": "^2.6.7",
-    "redis": "^4.7.0",
+    "redis": "^4.7.1",
     "socket.io-client": "^4.7.2",
     "ws": "^8.18.2"
   }
