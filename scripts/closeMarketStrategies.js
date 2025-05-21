@@ -4,14 +4,15 @@
 
 // モジュールのインポート
 const { exchangeBB, exchangeBF } = require('../src/config');
-const { getMarketParameters } = require('../src/database/manager');
+const { getMarketParameters, deleteTradeSummary } = require('../src/database/manager');
 const { postErrorToDiscord, postOrderToDiscord } = require('../src/common/notifications');
 const { sleep } = require('../src/common/utils');
 const { 
   getAllStrategyParametersRedis, 
   deleteStrategyParametersRedis,
   getStrategyParametersRedis,
-  initialize
+  initialize,
+  getTradeSummary
 } = require('../src/database/redisDatabase');
 
 /**
@@ -23,26 +24,29 @@ async function closeMarketPositions(exchange) {
     console.log(`取引所 ${exchange.id} のMARKET戦略のポジションを解消します...`);
     await postOrderToDiscord(`[INFO] 取引所 ${exchange.id} のMARKET戦略のポジションを解消します...`);
 
-    // 残高を取得
-    const balance = await exchange.fetchBalance();
-    
     // 利用可能な通貨ペアを取得
     const markets = await exchange.loadMarkets();
+    
+    // すべての戦略パラメータを取得
+    const allParams = await getAllStrategyParametersRedis();
     
     // 売却した通貨の数をカウント
     let soldCount = 0;
     
-    // 各通貨について処理
-    for (const currency in balance.free) {
-      // JPYは売却対象外
-      if (currency === 'JPY') continue;
+    // MARKETパラメータを持つ各戦略について処理
+    for (const key in allParams) {
+      // キーの形式: params:exchangeId:symbol:strategyKey
+      const parts = key.split(':');
+      if (parts.length < 4) continue;
       
-      // 残高が十分にある場合のみ処理
-      const amount = balance.free[currency];
-      if (amount <= 0) continue;
+      const keyExchangeId = parts[1];
+      const symbol = parts[2];
+      const strategyKey = parts[3];
       
-      // 通貨ペアを構築（例: BTC → BTC/JPY）
-      const symbol = `${currency}/JPY`;
+      // この取引所のMARKET戦略のみを処理
+      if (keyExchangeId !== exchange.id || !strategyKey.includes('_MARKET')) {
+        continue;
+      }
       
       // 通貨ペアが存在するか確認
       if (!markets[symbol]) {
@@ -50,13 +54,19 @@ async function closeMarketPositions(exchange) {
         continue;
       }
 
-      // この通貨ペアにMARKET戦略があるか確認
-      const hasMarketStrategy = await hasMarketStrategyForSymbol(exchange.id, symbol);
-      if (!hasMarketStrategy) {
-        console.log(`通貨ペア ${symbol} にMARKET戦略がありません。スキップします。`);
+      // tradeSummaryからポジションを取得
+      const summary = await getTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      });
+      
+      // ポジションがない場合はスキップ
+      if (!summary || !summary.netPosition || summary.netPosition <= 0) {
+        console.log(`${symbol} のMARKET戦略 (${strategyKey}) にポジションがありません。スキップします。`);
         continue;
       }
-
+      
       const params = await getMarketParameters(exchange, symbol);
       if (!params) continue;
       
@@ -69,17 +79,20 @@ async function closeMarketPositions(exchange) {
         // 最小取引量を取得
         const minAmount = market.limits?.amount?.min || 0.0001;
         
+        // ポジション量を取得
+        const amount = summary.netPosition;
+        
         // 取引量が最小取引量より小さい場合はスキップ
         if (amount < minAmount) {
-          console.log(`${currency} の残高 (${amount}) が最小取引量 (${minAmount}) より小さいためスキップします。`);
+          console.log(`${symbol} のポジション (${amount}) が最小取引量 (${minAmount}) より小さいためスキップします。`);
           continue;
         }
         
         // 精度を考慮して取引量を調整
         const formattedAmount = parseFloat(amount.toFixed(amountPrecision));
         
-        console.log(`MARKET戦略 - ${symbol} を成行で売却します。数量: ${formattedAmount}`);
-        postOrderToDiscord(`[INFO] MARKET戦略 - ${exchange.id}: ${symbol} を成行で売却します。数量: ${formattedAmount}`);
+        console.log(`MARKET戦略 - ${symbol} (${strategyKey}) を成行で売却します。数量: ${formattedAmount}`);
+        await postOrderToDiscord(`[INFO] MARKET戦略 - ${exchange.id}: ${symbol} (${strategyKey}) を成行で売却します。数量: ${formattedAmount}`);
         
         // 成行売り注文を作成
         const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
@@ -102,13 +115,23 @@ async function closeMarketPositions(exchange) {
           executedPrice = ticker.last;
         }
         
-        console.log(`MARKET戦略 - ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
-        await postOrderToDiscord(`[SUCCESS] MARKET戦略 - ${exchange.id}: ${symbol} の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
+        console.log(`MARKET戦略 - ${symbol} (${strategyKey}) の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
+        await postOrderToDiscord(`[SUCCESS] MARKET戦略 - ${exchange.id}: ${symbol} (${strategyKey}) の売却が完了しました。数量: ${formattedAmount}, 約定価格: ${executedPrice}`);
+        
+        // tradeSummaryを削除
+        const deleted = await deleteTradeSummary(exchange.id, symbol, strategyKey);
+        if (deleted) {
+          console.log(`${symbol} (${strategyKey}) のトレードサマリーを削除しました。`);
+          await postOrderToDiscord(`[INFO] ${exchange.id}: ${symbol} (${strategyKey}) のトレードサマリーを削除しました。`);
+        } else {
+          console.log(`${symbol} (${strategyKey}) のトレードサマリー削除に失敗しました。`);
+          await postOrderToDiscord(`[WARNING] ${exchange.id}: ${symbol} (${strategyKey}) のトレードサマリー削除に失敗しました。`);
+        }
         
         soldCount++;
       } catch (error) {
-        console.error(`${symbol} の売却中にエラーが発生しました:`, error);
-        await postErrorToDiscord(`[ERROR] MARKET戦略 - ${exchange.id}: ${symbol} の売却中にエラーが発生しました: ${error.message}`);
+        console.error(`${symbol} (${strategyKey}) の売却中にエラーが発生しました:`, error);
+        await postErrorToDiscord(`[ERROR] MARKET戦略 - ${exchange.id}: ${symbol} (${strategyKey}) の売却中にエラーが発生しました: ${error.message}`);
       }
       
       // APIレート制限を考慮して少し待機

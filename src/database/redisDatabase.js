@@ -483,6 +483,21 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
 }
 
 /**
+ * 指定されたキーをRedisから削除する
+ * @param {String} key - 削除するキー
+ * @returns {Promise<Boolean>} 削除に成功したかどうか
+ */
+async function deleteKey(key) {
+  try {
+    const result = await client.del(key);
+    return result > 0;
+  } catch (error) {
+    console.error(`Redisからキーの削除に失敗しました: ${key}`, error);
+    return false;
+  }
+}
+
+/**
  * 戦略パラメータを削除する関数
  * @param {String} exchangeId - 取引所ID
  * @param {String} symbol - 通貨ペア
@@ -526,4 +541,5 @@ module.exports = {
   getBacktestOHLCVRedisByTimeRange,
   getAllBacktestOHLCVRedisSortedSet,
   getBacktestOHLCVRedisBeforeTimestamp,
+  deleteKey,
 };

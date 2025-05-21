@@ -31,7 +31,8 @@ const {
   getTickerRedis,
   updateTickerRedis,
   updateBacktestOHLCVRedisSortedSet,
-  getBacktestOHLCVRedisBeforeTimestamp
+  getBacktestOHLCVRedisBeforeTimestamp,
+  deleteKey
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
@@ -928,6 +929,21 @@ async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
   return totalAmount;
 };
 
+async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
+  try {
+    const key = `trade:${exchangeId}:${symbol}:${strategyKey}`;
+    const result = await deleteKey(key);
+    if (result) {
+      console.log(`トレードサマリーを削除しました: ${key}`);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`トレードサマリー削除中にエラーが発生しました: ${error.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   fetchOHLCVData,
   updateFilledTrades,
@@ -966,4 +982,5 @@ module.exports = {
   fetchHistoricalOHLCVData,
   loadHistoricalOHLCVToBacktestRedis,
   fetchBacktestOHLCVData,
+  deleteTradeSummary,
 };
