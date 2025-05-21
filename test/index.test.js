@@ -5,7 +5,5 @@
 
 // Import all test files
 require('./unit/common/utils.test');
-
-// Skipping these tests for now as they require complex mocking
-// require('./unit/database/manager.test');
-// require('./unit/strategies/utils/common.test');
+require('./unit/database/manager.test');
+require('./unit/strategies/utils/common.test');
