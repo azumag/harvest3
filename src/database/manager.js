@@ -931,7 +931,7 @@ async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
 
 async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
   try {
-    const key = `trade:${exchangeId}:${symbol}:${strategyKey}`;
+    const key = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const result = await deleteKey(key);
     if (result) {
       console.log(`トレードサマリーを削除しました: ${key}`);
