@@ -207,6 +207,35 @@ const config = {
 
 **注意:** Dockerを使用している場合、RedisおよびMongoDBのデータは通常ボリュームに永続化されるように設定されています (`docker-compose.yml` を参照)。これにより、コンテナを再作成してもデータは保持されます。
 
+## テストフレームワーク
+
+プロジェクトには Jest を使用したユニットテストが含まれています。以下のコマンドでテストを実行できます：
+
+```bash
+# すべてのテストを実行
+npm run test
+
+# ユニットテストのみ実行
+npm run test:unit
+
+# 監視モードでテストを実行（ファイル変更時に自動で再実行）
+npm run test:watch
+```
+
+テスト済みの主要関数：
+
+- `src/common/utils.js` の関数
+  - `weightedAverage` - 加重平均計算
+  - `timeframeToMs` - タイムフレーム文字列をミリ秒に変換
+  - `sleep` - 非同期待機
+  - `fetchTotal` - 取引所から総損益を取得
+
+- `src/database/manager.js` の関数
+  - `timeframeToTimestamp` - タイムフレームを基準とした過去のタイムスタンプを取得
+
+- `src/strategies/utils/common.js` のユーティリティ関数
+  - `validateOHLCVData` - OHLCV（ローソク足）データの検証
+
 ## Web UI
 
 Web UIが実装されており、Webブラウザからボットの状態を監視したり、履歴を確認したりすることができます。
