@@ -334,19 +334,38 @@ async function disableStrategy(exchange, symbol, strategyKey, config, options = 
 
 async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) {
 
-  // 戦略キーが一致するオーダーのみキャンセル
-  const openOrders = await exchange.fetchOpenOrders(symbol);
-  await Promise.all(openOrders.map(async (order) => {
-    try {
-      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-      return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
-    } catch (error) {
-      console.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
-      if (postErrorToDiscord) {
-        await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
-      }
+  try {
+    // 取引所がシンボルをサポートしているか確認
+    if (!exchange.markets) {
+      await exchange.loadMarkets();
     }
-  }));
+    
+    // シンボルが取引所でサポートされているか確認
+    if (!(symbol in exchange.markets)) {
+      console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。オープンオーダーの確認をスキップします。`);
+      return { success: false, reason: 'unsupported symbol' };
+    }
+    
+    // 戦略キーが一致するオーダーのみキャンセル
+    const openOrders = await exchange.fetchOpenOrders(symbol);
+    await Promise.all(openOrders.map(async (order) => {
+      try {
+        const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+        return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
+      } catch (error) {
+        console.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+        }
+      }
+    }));
+  } catch (error) {
+    console.error(`オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}`);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[${exchange.id}] オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+    }
+    return { success: false, error };
+  }
 
   // 戦略に買いポジションがある場合、売り注文を作成
   const _netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
