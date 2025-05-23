@@ -1,0 +1,10 @@
+# GitHub Actions firewall configuration
+# This file defines domains that are allowed through the firewall
+
+# Allow the domains needed by ccxt and other dependencies
+allow:
+  domains:
+    - "api.bitbank.cc"
+    - "api.github.com"
+    - "opencollective.com"
+    - "public.bitbank.cc"  # Include public API endpoint too

@@ -289,6 +289,15 @@ Web UIが実装されており、Webブラウザからボットの状態を監�
 
 テスト結果やカバレッジレポートはGitHub Actionsのワークフロー実行結果から確認できます。
 
+### CI ファイアウォール設定
+
+CIの実行時には、一部の外部APIへのアクセスに関するファイアウォール設定が必要です。`.github/firewall.yml` ファイルに以下のドメインへのアクセスを許可しています：
+
+- api.bitbank.cc - 取引所APIへのアクセス
+- api.github.com - GitHub APIへのアクセス（ccxtライブラリが使用）
+- opencollective.com - Open Collectiveへのアクセス（ccxtライブラリが使用）
+- public.bitbank.cc - パブリックAPI（価格情報など）へのアクセス
+
 ## ライセンス
 
 MIT
