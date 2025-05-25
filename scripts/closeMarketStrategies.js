@@ -273,6 +273,20 @@ async function deleteAllMarketStrategyParameters() {
           errorCount++;
           // 個々の削除エラーは全体のプロセスを停止させない
         }
+          try {
+            const success = await deleteTradeSummary(exchange.id, symbol, strategyKey);
+            if (success) {
+              console.log(`MARKET戦略Summaryを削除しました: ${key}`);
+              deletedCount++;
+            } else {
+              console.error(`MARKET戦略Summaryの削除に失敗しました: ${key}`);
+              errorCount++;
+            }
+          } catch (deleteError) {
+            console.error(`MARKET戦略Summaryの削除中に例外が発生しました: ${key}`, deleteError);
+            errorCount++;
+            // 個々の削除エラーは全体のプロセスを停止させない
+          }
       }
     }
     
