@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1748018166769" clover="3.2.0">
-  <project timestamp="1748018166769" name="All files">
+<coverage generated="1748548191727" clover="3.2.0">
+  <project timestamp="1748548191727" name="All files">
     <metrics statements="37" coveredstatements="37" conditionals="13" coveredconditionals="12" methods="7" coveredmethods="7" elements="57" coveredelements="56" complexity="0" loc="37" ncloc="37" packages="1" files="1" classes="1"/>
     <file name="utils.js" path="/home/runner/work/harvest3/harvest3/src/common/utils.js">
       <metrics statements="37" coveredstatements="37" conditionals="13" coveredconditionals="12" methods="7" coveredmethods="7"/>
