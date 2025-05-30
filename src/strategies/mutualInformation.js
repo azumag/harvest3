@@ -97,7 +97,7 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
             exchangeId: refExchange.id,
             closes: refValidatedData.closes
           });
-          console.log(`参照シンボル ${refSymbol} のデータを取引所 ${refExchange.id} から取得しました`);
+          // console.log(`参照シンボル ${refSymbol} のデータを取引所 ${refExchange.id} から取得しました`);
         }
       } catch (error) {
         console.log(`参照シンボル ${refSymbol} のデータ取得に失敗: ${error.message}`);
