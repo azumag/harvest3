@@ -5,6 +5,7 @@ dotenv.config(); // .envファイルから環境変数を読み込む
 // strategies 
 const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./strategies/trendFollowing');
 const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/meanReversion');
+const { mutualInformationStrategy } = require('./strategies/mutualInformation');
 // const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
 
 // APIキーとシークレットを設定
@@ -65,11 +66,21 @@ const config = {
 
     // 高頻度取引戦略 (bitbank WebSocket)
     HFT: {
-      enabled: process.env.STRATEGY_HFT_BB_WS_ENABLED === 'true', // .envで制御できるようにする
-      // interval, priceThreshold, orderBookDepth などのパラメータは src/hft/config.js で管理
-      function: require('./hft').startHFTStrategy, // 新しいHFT戦略のエントリポイント
+      enabled: process.env.STRATEGY_HFT_BB_WS_ENABLED === 'true',
+      function: require('./hft').startHFTStrategy,
       atomicExec: true,
-      exchanges: [exchangeBB], // bitbank を使用
+      exchanges: [exchangeBB],
+    },
+
+    MUTUAL_INFO: {
+      enabled: true,
+      threshold: 0.5,
+      ohlcvInterval: '5m',
+      deviationThreshold: 3,
+      useReturns: true,
+      referenceSymbols: 'all', // すべてのシンボルを参照シンボルとして使用
+      function: mutualInformationStrategy,
+      exchanges: [exchangeBB]
     },
 
     // 逆張り戦略

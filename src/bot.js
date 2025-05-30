@@ -128,7 +128,7 @@ async function startBot() {
             if (!supportedExchange) continue;
 
             try {
-              await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters);
+              await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config });
             } catch (error) {
               console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
               await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
@@ -170,6 +170,16 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
     if (strategyConfig.enabled === false) {
       console.log(`戦略 ${strategyKey}:${symbol} は個別に無効化されています`);
       return null;
+    }
+
+    // MUTUAL_INFO戦略の場合は、referenceSymbolsを設定
+    if (strategyKey === 'MUTUAL_INFO' && options.allExchangeSymbolPairs) {
+      // 同じ取引所のシンボルのみを抽出し、自分自身を除外
+      const sameExchangeSymbols = options.allExchangeSymbolPairs
+        .filter(pair => pair.exchangeId === exchange.id && pair.symbol !== symbol)
+        .map(pair => pair.symbol);
+      
+      options.referenceSymbols = sameExchangeSymbols;
     }
 
     console.log(`--- 戦略 ${strategyKey} を実行中...`);

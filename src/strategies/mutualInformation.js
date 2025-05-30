@@ -25,10 +25,19 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
   const { 
     period = 50, 
     threshold = 0.5, 
-    referenceSymbols = ['BTC/USDT'], 
     ohlcvInterval = '5m',
     useReturns = true 
   } = config;
+  
+  let { referenceSymbols = ['BTC/USDT'] } = config;
+
+  // optionsからreferenceSymbolsが提供されている場合はそれを使用
+  if (options.referenceSymbols && Array.isArray(options.referenceSymbols)) {
+    referenceSymbols = options.referenceSymbols;
+  } else if (referenceSymbols === 'all' && options.referenceSymbols) {
+    // configでreferenceSymbols: 'all'が設定され、optionsで具体的なシンボル配列が提供された場合
+    referenceSymbols = options.referenceSymbols;
+  }
 
   try {
     // メインシンボルのOHLCVデータを取得
@@ -55,8 +64,25 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
       if (refSymbol === symbol) continue; // 同じシンボルはスキップ
       
       try {
+        // 参照シンボルに対応する取引所を見つける
+        let refExchange = exchange; // デフォルトは現在の取引所
+        
+        if (options.allExchangeSymbolPairs) {
+          const symbolPair = options.allExchangeSymbolPairs.find(pair => pair.symbol === refSymbol);
+          if (symbolPair && symbolPair.exchangeId !== exchange.id) {
+            // 異なる取引所の場合、適切な取引所インスタンスを取得
+            // configは引数で受け取ったものを使用
+            if (options.config && options.config.exchanges) {
+              const refExchangeConfig = options.config.exchanges[symbolPair.exchangeId];
+              if (refExchangeConfig) {
+                refExchange = refExchangeConfig.instance;
+              }
+            }
+          }
+        }
+        
         const refValidatedData = await fetchAndValidateOHLCVData(
-          exchange, 
+          refExchange, 
           refSymbol, 
           ohlcvInterval, 
           period + 10,
@@ -68,8 +94,10 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
         if (refValidatedData) {
           referenceData.push({
             symbol: refSymbol,
+            exchangeId: refExchange.id,
             closes: refValidatedData.closes
           });
+          console.log(`参照シンボル ${refSymbol} のデータを取引所 ${refExchange.id} から取得しました`);
         }
       } catch (error) {
         console.log(`参照シンボル ${refSymbol} のデータ取得に失敗: ${error.message}`);
@@ -256,12 +284,17 @@ async function calculateMutualInformationSignals(
  */
 function formatMutualInformationLogInfo(signalResult) {
   const { currentPrice, avgMutualInfo, currentTrend, strategyResults } = signalResult;
-  const { threshold, analysisType } = strategyResults;
+  const { threshold, analysisType, mutualInfoScores } = strategyResults;
+  
+  // 参照シンボル情報を文字列で作成
+  const referenceInfo = mutualInfoScores.map(score => 
+    `${score.symbol}:${score.mutualInfo.toFixed(3)}`
+  ).join(', ');
   
   return {
-    buy: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}`,
-    sell: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}`,
-    none: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}`,
+    buy: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}, 参照: [${referenceInfo}]`,
+    sell: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}, 参照: [${referenceInfo}]`,
+    none: `相互情報量: ${avgMutualInfo.toFixed(4)}, トレンド: ${currentTrend.toFixed(6)}, 分析: ${analysisType}, 参照: [${referenceInfo}]`,
     orderInfo: { avgMutualInfo, currentTrend, threshold },
     result: { 
       avgMutualInfo, 

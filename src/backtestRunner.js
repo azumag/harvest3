@@ -65,6 +65,22 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     const symbolsByExchange = await getSymbolsByExchange(config);
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
 
+    // すべての取引所とシンボルの組み合わせを作成
+    const allExchangeSymbolPairs = [];
+    for (const exchangeId in symbolsByExchange) {
+      for (const symbol of symbolsByExchange[exchangeId]) {
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol && symbol !== targetSymbol) {
+          continue;
+        }
+        allExchangeSymbolPairs.push({ 
+          exchangeId, 
+          symbol, 
+          marketParameters: marketParametersByExchange[exchangeId][symbol] 
+        });
+      }
+    }
+
     // バックテスト期間の設定 
     // const endDate = new Date('2025-04-20T00:00:00Z'); // UTCで指定
     const days = 7; // n日間のOHLCVデータを取得
@@ -150,7 +166,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         const MAX_CONCURRENT_SYMBOLS = 3; // 同時に処理するシンボルの数を制限
 
         // シンボルを処理するための関数
-        async function processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate) {
+        async function processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, allExchangeSymbolPairs) {
           // シンボルをMAX_CONCURRENT_SYMBOLS個ずつ処理
           for (let i = 0; i < symbols.length; i += MAX_CONCURRENT_SYMBOLS) {
             const currentBatch = symbols.slice(i, i + MAX_CONCURRENT_SYMBOLS);
@@ -172,7 +188,8 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                     gridSearch,
                     startDate,
                     endDate,
-                    retryCount
+                    retryCount,
+                    allExchangeSymbolPairs
                   );
                   shouldRetry = result.shouldRetry;
                   retryCount++;
@@ -206,7 +223,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
           }
         }
 
-        await processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate);
+        await processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, allExchangeSymbolPairs);
       }
       
       console.log(`戦略 ${strategyKey} の処理が完了しました`);
@@ -250,9 +267,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
  * @param {Date} startDate - バックテスト開始日
  * @param {Date} endDate - バックテスト終了日
  * @param {number} retryCount - 再試行回数
+ * @param {Array} allExchangeSymbolPairs - 全取引所とシンボルの組み合わせ
  * @returns {Object} バックテスト結果と再試行フラグ
  */
-async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, retryCount) {
+async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, retryCount, allExchangeSymbolPairs) {
   const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
 
   console.log(`${symbol} のバックテストを開始...`);
@@ -353,7 +371,19 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         },
         postOrderToDiscord: async () => {},
         postErrorToDiscord: async () => {},
+        allExchangeSymbolPairs,
+        config,
       };
+
+      // MUTUAL_INFO戦略の場合は、referenceSymbolsを設定
+      if (strategyKey === 'MUTUAL_INFO' && allExchangeSymbolPairs) {
+        // 同じ取引所のシンボルのみを抽出し、自分自身を除外
+        const sameExchangeSymbols = allExchangeSymbolPairs
+          .filter(pair => pair.exchangeId === exchange.id && pair.symbol !== symbol)
+          .map(pair => pair.symbol);
+        
+        options.referenceSymbols = sameExchangeSymbols;
+      }
 
       const totalIterations = Math.floor((endDate.getTime() - startDate.getTime()) / timeframeMs) + 1;
       let currentIteration = 0;
