@@ -240,10 +240,118 @@ function calculateBollingerBands(prices, period = 20, multiplier = 2) {
   };
 }
 
+/**
+ * 相互情報量を計算
+ * @param {Array} series1 - 第1の時系列データ
+ * @param {Array} series2 - 第2の時系列データ
+ * @param {Number} bins - ヒストグラムのビン数（デフォルト10）
+ * @returns {Number} - 相互情報量
+ */
+function calculateMutualInformation(series1, series2, bins = 10) {
+  if (!series1 || !series2 || series1.length !== series2.length || series1.length === 0) {
+    return 0;
+  }
+
+  // データの正規化（0-1の範囲に）
+  const normalize = (data) => {
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min;
+    if (range === 0) return data.map(() => 0.5);
+    return data.map(x => (x - min) / range);
+  };
+
+  const norm1 = normalize(series1);
+  const norm2 = normalize(series2);
+  
+  // ヒストグラムの作成
+  const getBin = (value, bins) => Math.min(Math.floor(value * bins), bins - 1);
+  
+  // 結合確率分布を計算
+  const jointCounts = Array(bins).fill().map(() => Array(bins).fill(0));
+  const marginal1 = Array(bins).fill(0);
+  const marginal2 = Array(bins).fill(0);
+  
+  for (let i = 0; i < norm1.length; i++) {
+    const bin1 = getBin(norm1[i], bins);
+    const bin2 = getBin(norm2[i], bins);
+    jointCounts[bin1][bin2]++;
+    marginal1[bin1]++;
+    marginal2[bin2]++;
+  }
+  
+  const n = norm1.length;
+  let mutualInfo = 0;
+  
+  // 相互情報量の計算: MI(X,Y) = Σ p(x,y) * log(p(x,y) / (p(x) * p(y)))
+  for (let i = 0; i < bins; i++) {
+    for (let j = 0; j < bins; j++) {
+      const jointProb = jointCounts[i][j] / n;
+      const marginalProb1 = marginal1[i] / n;
+      const marginalProb2 = marginal2[j] / n;
+      
+      if (jointProb > 0 && marginalProb1 > 0 && marginalProb2 > 0) {
+        mutualInfo += jointProb * Math.log2(jointProb / (marginalProb1 * marginalProb2));
+      }
+    }
+  }
+  
+  return mutualInfo;
+}
+
+/**
+ * 複数時系列間の相互情報量マトリックスを計算
+ * @param {Array} seriesArray - 時系列データの配列
+ * @param {Number} bins - ヒストグラムのビン数（デフォルト10）
+ * @returns {Array} - 相互情報量マトリックス
+ */
+function calculateMutualInformationMatrix(seriesArray, bins = 10) {
+  if (!seriesArray || seriesArray.length < 1) {
+    return [];
+  }
+  
+  const n = seriesArray.length;
+  const matrix = Array(n).fill().map(() => Array(n).fill(0));
+  
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) {
+        matrix[i][j] = 1; // 自分自身との相互情報量は最大値として1を設定
+      } else {
+        matrix[i][j] = calculateMutualInformation(seriesArray[i], seriesArray[j], bins);
+      }
+    }
+  }
+  
+  return matrix;
+}
+
+/**
+ * 価格変化率を計算
+ * @param {Array} prices - 価格データの配列
+ * @returns {Array} - 価格変化率の配列
+ */
+function calculateReturns(prices) {
+  if (!prices || prices.length < 2) {
+    return [];
+  }
+  
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    const returnValue = (prices[i] - prices[i - 1]) / prices[i - 1];
+    returns.push(returnValue);
+  }
+  
+  return returns;
+}
+
 module.exports = {
   calculateSMA,
   calculateEMA,
   calculateMACD,
   calculateRSI,
-  calculateBollingerBands
+  calculateBollingerBands,
+  calculateMutualInformation,
+  calculateMutualInformationMatrix,
+  calculateReturns
 };

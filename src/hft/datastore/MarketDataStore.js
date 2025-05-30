@@ -58,7 +58,8 @@ class MarketDataStore extends EventEmitter {
     // データ受信をログに出力
     console.log(`Received ticker for ${pair}: ${JSON.stringify(data)}`);
     
-    this.tickers[pair] = data;
+    const pairData = this.getOrCreatePairData(pair);
+    pairData.ticker = data;
     this.emit('tickerUpdate', pair, data);
   }
 
