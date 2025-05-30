@@ -12,7 +12,8 @@ const WS_CONFIG = {
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
-  timeout: 10000 // WebSocketClientで使用
+  timeout: 10000, // WebSocketClientで使用
+  mockMode: process.env.HFT_MOCK_MODE === 'true' // テスト用モック機能
 };
 
 // 戦略パラメータ
