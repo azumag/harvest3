@@ -20,8 +20,8 @@ const WS_CONFIG = {
 // 戦略パラメータ
 const STRATEGY_PARAMS = {
   priceThreshold: parseFloat(process.env.HFT_PRICE_THRESHOLD) || 0.001,      // 価格変動閾値（%）
-  orderBookDepth: parseInt(process.env.HFT_ORDER_BOOK_DEPTH) || 15,         // 注文板の深さ
-  interval: parseInt(process.env.HFT_INTERVAL) || 100,              // 評価間隔（ms）
+  orderBookDepth: parseInt(process.env.HFT_ORDER_BOOK_DEPTH, 10) || 15,         // 注文板の深さ
+  interval: parseInt(process.env.HFT_INTERVAL, 10) || 100,              // 評価間隔（ms）
   tradePercentage: parseFloat(process.env.HFT_TRADE_PERCENTAGE) || 0.001       // 資金の使用割合
 };
 
