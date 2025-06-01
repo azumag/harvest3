@@ -517,8 +517,13 @@ async function saveTickerMongoDB(tickerData) {
  * @returns {Object|null} ティッカーデータまたはnull
  */
 async function fetchTickerFromMongoDB(exchange, symbol, timestamp, maxTimeDiff = 5 * 60 * 1000) {
-  await connectDB();
+  // Check if MongoDB is available
+  if (!mongoUrl || !mongoDbName) {
+    return null;
+  }
+
   try {
+    await connectDB();
     // 指定時刻の前後のティッカーデータを検索
     const tickers = await module.exports.tickersCollection
       .find({
