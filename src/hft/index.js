@@ -20,12 +20,17 @@ const strategies = {}; // 通貨ペアごとの戦略インスタンスを保持
  * @param {object} config - アプリケーション全体のconfig
  */
 async function startHFTStrategy(config) {
-  logger.info('Starting Bitbank HFT Strategy...');
+  logger.header('🚀 Bitbank HFT Strategy Initialization');
   
   if (!config || !config.strategies || !config.strategies.HFT || config.strategies.HFT.enabled !== true) {
     logger.warn('HFT Strategy is disabled in the config.');
+    logger.info('To enable HFT, set HFT_ENABLED=true in your .env file');
     return; // HFT戦略が無効な場合は何もしない
   }
+
+  logger.info('✓ HFT Strategy is enabled');
+  logger.info(`Trading pairs: ${TRADING_PAIRS.join(', ')}`);
+  logger.info(`Mock mode: ${WS_CONFIG.mockMode ? 'ON' : 'OFF'}`);
 
   // データストアの初期化
   dataStore = new MarketDataStore();
@@ -42,26 +47,31 @@ async function startHFTStrategy(config) {
 
   try {
     // WebSocket 接続
+    logger.info('🔌 Connecting to WebSocket streams...');
     await publicClient.connect();
+    logger.success('Public stream connected successfully');
     // TODO: プライベートストリームに接続
     // await privateClient.connect();
 
+    logger.info('⚙️  Initializing trading strategies...');
     // 取引ペアごとにストラテジー作成と購読開始
     for (const pair of TRADING_PAIRS) {
       // ストラテジーインスタンスの作成
       // TODO: HFTStrategy に必要な依存関係 (OrderProcessor, DBマネージャーなど) を渡す
       strategies[pair] = new HFTStrategy(pair, { STRATEGY_PARAMS, ...config }, dataStore, orderProcessor);
-      logger.info(`Initialized strategy for pair: ${pair}`);
+      logger.info(`  ✓ Strategy initialized for ${pair.toUpperCase()}`);
 
       // パブリックチャネルの購読
       publicClient.subscribePair(pair);
+      logger.debug(`  📊 Subscribed to market data for ${pair.toUpperCase()}`);
 
       // TODO: プライベートチャネルの購読 (必要に応じて)
       // privateClient.subscribe('my_orders', { pair });
       // privateClient.subscribe('my_positions', { pair });
     }
 
-    logger.info('Bitbank HFT Strategy started successfully.');
+    logger.success('🎯 Bitbank HFT Strategy started successfully');
+    logger.separator();
 
     // データストアのイベントとストラテジーの連携
     dataStore.on('orderBookUpdate', (pair, data) => {
@@ -77,7 +87,8 @@ async function startHFTStrategy(config) {
     // TODO: transactionsUpdate イベントのハンドリング
 
   } catch (error) {
-    logger.error('Failed to start Bitbank HFT Strategy:', error);
+    logger.error('❌ Failed to start Bitbank HFT Strategy:', error.message);
+    logger.debug('Error details:', error);
     // エラー発生時のクリーンアップ
     stopHFTStrategy();
     throw error; // 起動失敗を通知
@@ -88,17 +99,20 @@ async function startHFTStrategy(config) {
  * HFT 戦略を停止します。
  */
 function stopHFTStrategy() {
-  logger.info('Stopping Bitbank HFT Strategy...');
+  logger.header('🛑 Stopping Bitbank HFT Strategy');
   if (publicClient) {
     publicClient.disconnect();
     publicClient = null;
+    logger.info('✓ Public stream disconnected');
   }
   if (privateClient) {
     privateClient.disconnect();
     privateClient = null;
+    logger.info('✓ Private stream disconnected');
   }
   // TODO: その他のリソース解放
-  logger.info('Bitbank HFT Strategy stopped.');
+  logger.success('🏁 Bitbank HFT Strategy stopped successfully');
+  logger.separator();
 }
 
 // src/config.js から呼び出せるようにエクスポート
