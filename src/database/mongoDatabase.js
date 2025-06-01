@@ -58,7 +58,7 @@ async function ensureCollectionsExist() {
     const collectionNames = collections.map(c => c.name);
     
     // 必要なコレクションのリスト
-    const requiredCollections = ['orders', 'trades', 'signals', 'ohlcv'];
+    const requiredCollections = ['orders', 'trades', 'signals', 'ohlcv', 'tickers'];
     
     // 存在しないコレクションを作成
     for (const name of requiredCollections) {
@@ -508,6 +508,58 @@ async function saveTickerMongoDB(tickerData) {
   }
 }
 
+/**
+ * MongoDBから指定された時刻に最も近いtickerデータを取得する
+ * @param {string} exchange - 取引所ID
+ * @param {string} symbol - 通貨ペア
+ * @param {number} timestamp - 取得したい時刻のタイムスタンプ
+ * @param {number} maxTimeDiff - 最大時間差（ミリ秒、デフォルト: 5分）
+ * @returns {Object|null} ティッカーデータまたはnull
+ */
+async function fetchTickerFromMongoDB(exchange, symbol, timestamp, maxTimeDiff = 5 * 60 * 1000) {
+  // Check if MongoDB is available
+  if (!mongoUrl || !mongoDbName) {
+    return null;
+  }
+
+  try {
+    await connectDB();
+    // 指定時刻の前後のティッカーデータを検索
+    const tickers = await module.exports.tickersCollection
+      .find({
+        exchange: exchange,
+        symbol: symbol,
+        timestamp: {
+          $gte: timestamp - maxTimeDiff,
+          $lte: timestamp + maxTimeDiff
+        }
+      })
+      .sort({ timestamp: 1 })
+      .toArray();
+
+    if (tickers.length === 0) {
+      return null;
+    }
+
+    // 最も近い時刻のティッカーデータを選択
+    let closestTicker = tickers[0];
+    let minTimeDiff = Math.abs(tickers[0].timestamp - timestamp);
+
+    for (const ticker of tickers) {
+      const timeDiff = Math.abs(ticker.timestamp - timestamp);
+      if (timeDiff < minTimeDiff) {
+        minTimeDiff = timeDiff;
+        closestTicker = ticker;
+      }
+    }
+
+    return closestTicker;
+  } catch (error) {
+    console.error('Error fetching ticker from MongoDB:', error);
+    return null;
+  }
+}
+
 // モジュールエクスポートに追加
 module.exports = {
   connectDB,
@@ -518,6 +570,7 @@ module.exports = {
   addSignalMongoDB,
   addOhlcvMongoDB, 
   saveTickerMongoDB,
+  fetchTickerFromMongoDB,
   listOrders,
   listTrades,
   listSignals, 

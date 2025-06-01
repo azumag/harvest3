@@ -12,6 +12,7 @@ const {
   addOhlcvMongoDB,
   fetchHistoricalOHLCVData,
   saveTickerMongoDB,
+  fetchTickerFromMongoDB,
 } = require('./mongoDatabase');
 
 const {
@@ -41,6 +42,61 @@ const { sleep, timeframeToMs } = require('../common/utils');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
+
+/**
+ * バックテスト用の実行確率とスリッページを計算する
+ * @param {number} volume - ボリューム 
+ * @param {number} high - 高値
+ * @param {number} low - 安値
+ * @param {number} targetPrice - 目標執行価格
+ * @returns {Object} { executionProbability, slippage }
+ */
+function calculateExecutionAccuracy(volume, high, low, targetPrice) {
+  // ボリュームベースの流動性評価
+  const volumeNormalized = Math.min(volume / 1000, 1); // 1000を基準値として正規化
+  const spreadRatio = (high - low) / low; // 相対的なスプレッド
+  
+  // 流動性が高いほど実行確率が高く、スリッページが小さい
+  const liquidityFactor = volumeNormalized * (1 - spreadRatio);
+  
+  // 実行確率（流動性が高いほど高い、基本確率85%）
+  const executionProbability = Math.min(0.85 + liquidityFactor * 0.14, 0.99);
+  
+  // スリッページ（価格の0.01%〜0.1%、流動性によって変動）
+  const baseSlippage = 0.0001; // 0.01%
+  const maxSlippage = 0.001;   // 0.1%
+  const slippageRatio = baseSlippage + (1 - liquidityFactor) * (maxSlippage - baseSlippage);
+  const slippage = targetPrice * slippageRatio;
+  
+  return {
+    executionProbability,
+    slippage,
+    liquidityFactor
+  };
+}
+
+/**
+ * スプレッドを考慮したビッド/アスク価格を生成
+ * @param {number} midPrice - 中間価格
+ * @param {number} volume - ボリューム
+ * @param {number} volatility - ボラティリティ（high-low比率）
+ * @returns {Object} { bid, ask }
+ */
+function generateRealisticSpread(midPrice, volume, volatility) {
+  // ボリュームが低いほど、ボラティリティが高いほどスプレッドが広い
+  const volumeNormalized = Math.min(volume / 1000, 1);
+  const baseSpread = 0.0002; // 0.02%
+  const maxSpread = 0.002;   // 0.2%
+  
+  const spreadMultiplier = 1 + volatility * 2 - volumeNormalized;
+  const spreadRatio = baseSpread + (Math.max(0, spreadMultiplier - 1)) * (maxSpread - baseSpread);
+  const halfSpread = midPrice * spreadRatio / 2;
+  
+  return {
+    bid: midPrice - halfSpread,
+    ask: midPrice + halfSpread
+  };
+}
 
 async function initializeDB() {
   // MongoDBとRedisの初期化を行う
@@ -524,45 +580,97 @@ async function fetchTicker(exchange, symbol, options = {}) {
 
       // 最新のOHLCVデータを取得 (配列の最後の要素)
       const latestOHLCV = options.backtest.ohlcvData[options.backtest.ohlcvData.length - 1];
+      const timestamp = latestOHLCV[0];
       
-      // Open, High, Low, Close の平均値を計算
+      // まずMongoDBから該当時刻のティッカーデータを取得を試行
+      const mongoTicker = await fetchTickerFromMongoDB(exchange.id, symbol, timestamp);
+      if (mongoTicker) {
+        // MongoDBにデータがある場合はそれを使用
+        options.backtest.currentPrice = mongoTicker.last || mongoTicker.close;
+        return {
+          symbol: symbol,
+          timestamp: mongoTicker.timestamp,
+          datetime: new Date(mongoTicker.timestamp).toISOString(),
+          bid: mongoTicker.bid || mongoTicker.last,
+          ask: mongoTicker.ask || mongoTicker.last,
+          last: mongoTicker.last,
+          close: mongoTicker.close || mongoTicker.last,
+          average: mongoTicker.average || mongoTicker.last,
+          baseVolume: mongoTicker.baseVolume || latestOHLCV[5],
+          info: {
+            backtest: true,
+            source: 'mongodb'
+          }
+        };
+      }
+      
+      // MongoDBにデータがない場合は従来の擬似処理を使用
       // OHLCV データ形式: [timestamp, open, high, low, close, volume]
       const open = latestOHLCV[1];
       const high = latestOHLCV[2];
       const low = latestOHLCV[3];
       const close = latestOHLCV[4];
+      const volume = latestOHLCV[5];
       
-      // highとlowの間のランダムな値を生成
-      // 一様分布の代わりに正規分布を使用
-      const mean = (high + low) / 2; // 平均値（中央値）
-      const stdDev = (high - low) / 6; // 標準偏差（範囲の1/6で約99.7%が範囲内に収まる）
+      // ボリュームを考慮した価格生成の改善
+      let randomPrice;
       
-      // 標準正規分布の乱数を生成（Box-Muller変換）
-      const u1 = Math.random();
-      const u2 = Math.random();
-      const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-      
-      // 指定された平均と標準偏差の正規分布に変換
-      let randomPrice = mean + stdDev * z;
+      if (volume > 0) {
+        // ボリュームが高い場合はより中心価格に近づける（流動性が高い）
+        // ボリュームが低い場合はより広く分散させる（スプレッドが広い）
+        const volumeNormalized = Math.min(volume / 1000, 1); // 正規化（1000を基準値とする）
+        const spreadFactor = 1 - volumeNormalized * 0.5; // ボリュームが高いとスプレッドが狭くなる
+        
+        // 終値に近い値を重み付きで選択
+        const closeWeight = 0.7;
+        const meanPrice = close * closeWeight + ((high + low) / 2) * (1 - closeWeight);
+        const adjustedStdDev = (high - low) / 6 * spreadFactor;
+        
+        // 標準正規分布の乱数を生成（Box-Muller変換）
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        
+        randomPrice = meanPrice + adjustedStdDev * z;
+      } else {
+        // ボリュームが0の場合は従来の方法
+        const mean = (high + low) / 2;
+        const stdDev = (high - low) / 6;
+        
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        
+        randomPrice = mean + stdDev * z;
+      }
       
       // 範囲外の値を切り詰める
       randomPrice = Math.max(low, Math.min(high, randomPrice));
+
+      // ボラティリティとスプレッドを計算
+      const volatility = (high - low) / close;
+      const { bid, ask } = generateRealisticSpread(randomPrice, volume, volatility);
+      
+      // 実行精度情報を計算（将来の注文実行時に参考値として使用可能）
+      const executionAccuracy = calculateExecutionAccuracy(volume, high, low, randomPrice);
 
       options.backtest.currentPrice = randomPrice; // 現在価格を更新
       
       // バックテスト用のティッカーオブジェクトを作成
       return {
         symbol: symbol,
-        timestamp: latestOHLCV[0],
-        datetime: new Date(latestOHLCV[0]).toISOString(),
-        bid: randomPrice,
-        ask: randomPrice,
+        timestamp: timestamp,
+        datetime: new Date(timestamp).toISOString(),
+        bid: bid,
+        ask: ask,
         last: randomPrice,
         close: close,
         average: randomPrice,
-        baseVolume: latestOHLCV[5],
+        baseVolume: volume,
         info: {
-          backtest: true
+          backtest: true,
+          source: 'generated',
+          executionAccuracy: executionAccuracy
         }
       };
     }
@@ -584,8 +692,13 @@ async function fetchTicker(exchange, symbol, options = {}) {
 
       // Save to Redis
       await updateTickerRedis(exchange.id, symbol, ticker);
-      // mongoDB にも保存
-      await saveTickerMongoDB(ticker);
+      // mongoDB にも保存 - exchange と symbol を追加
+      const tickerWithMeta = {
+        ...ticker,
+        exchange: exchange.id,
+        symbol: symbol
+      };
+      await saveTickerMongoDB(tickerWithMeta);
 
       return ticker;
     } else {
