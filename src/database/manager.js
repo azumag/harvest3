@@ -148,7 +148,7 @@ async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100
     // Redisからデータを取得
     const redisData = await getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit);
     if (!redisData || redisData.length === 0) {
-      console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
+      // console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
       return [];
     }
 
