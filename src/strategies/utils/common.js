@@ -347,7 +347,19 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
     }
     
     // 戦略キーが一致するオーダーのみキャンセル
-    const openOrders = await exchange.fetchOpenOrders(symbol);
+    let openOrders;
+    try {
+      openOrders = await exchange.fetchOpenOrders(symbol);
+    } catch (fetchError) {
+      // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
+      if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
+        console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+        return { success: false, reason: 'unsupported symbol for private API' };
+      }
+      // その他のエラーは再スロー
+      throw fetchError;
+    }
+    
     await Promise.all(openOrders.map(async (order) => {
       try {
         const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);

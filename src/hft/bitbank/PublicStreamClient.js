@@ -20,7 +20,7 @@ class PublicStreamClient {
   async connect() {
     try {
       await this.client.connect();
-      this.logger.info('Public stream connected.');
+      this.logger.success('📡 Public stream connected to Bitbank');
 
       // 接続成功後にイベントハンドラーを設定
       this._setupEventHandlers();
@@ -28,10 +28,10 @@ class PublicStreamClient {
       // 接続維持のためのping
       this.pingInterval = setInterval(() => {
         this.client.emit('ping');
-        this.logger.debug('Sent ping to server');
+        this.logger.debug('💓 Heartbeat sent to server');
       }, 30000); // 30秒ごと
     } catch (error) {
-      this.logger.error('Failed to connect public stream:', error);
+      this.logger.error('❌ Failed to connect public stream:', error.message);
       throw error; // 接続失敗を通知
     }
   }
@@ -58,7 +58,7 @@ class PublicStreamClient {
    * @param {string} channel - チャネル名 (例: 'ticker_btc_jpy')
    */
   subscribeChannel(channel) {
-    this.logger.debug(`Subscribing to channel: ${channel}`);
+    this.logger.debug(`📻 Subscribing to: ${channel}`);
     // bitbankの形式: socket.emit('join-room', 'channel_name')
     this.client.emit('join-room', channel);
   }
@@ -69,12 +69,12 @@ class PublicStreamClient {
   _setupEventHandlers() {
     // WebSocketの標準イベント
     this.client.on('message', (data) => {
-      this.logger.debug(`Received message event`);
+      this.logger.debug(`📨 Message received`);
       this._handleMessage(data);
     });
 
     this.client.on('disconnect', (data) => {
-      this.logger.warn(`WebSocket disconnected:`, data);
+      this.logger.warn(`🔌 WebSocket disconnected:`, data);
     });
   }
 
@@ -120,7 +120,14 @@ class PublicStreamClient {
     const subType = roomParts[1]; // 例: 'btc', 'whole', 'diff'
     const pair = roomParts.slice(-2).join('_'); // 例: 'btc_jpy'
 
-    this.logger.debug(`Processing ${dataType} data for pair ${pair}`);
+    const emojis = {
+      'ticker': '💱',
+      'transactions': '💰',
+      'depth': '📊'
+    };
+    const emoji = emojis[dataType] || '📈';
+
+    this.logger.debug(`${emoji} Processing ${dataType} data for ${pair.toUpperCase()}`);
 
     switch (dataType) {
       case 'ticker':

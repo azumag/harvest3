@@ -62,11 +62,11 @@ class HFTStrategy {
       // 価格変動を計算
       const priceChange = ((midPrice - this.previousPrice) / this.previousPrice) * 100;
 
-      this.logger.debug(`Pair: ${this.pair}, MidPrice: ${midPrice}, PriceChange: ${priceChange.toFixed(4)}%`);
+      this.logger.debug(`💹 ${this.pair.toUpperCase()} | Mid: ¥${midPrice.toLocaleString()} | Change: ${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(4)}%`);
 
       // 取引判断
       if (Math.abs(priceChange) >= this.priceThreshold) {
-        this.logger.info(`Price change threshold met for ${this.pair}. Change: ${priceChange.toFixed(4)}%`);
+        this.logger.info(`🎯 ${this.pair.toUpperCase()} | Threshold triggered! Change: ${priceChange >= 0 ? '📈+' : '📉'}${priceChange.toFixed(4)}%`);
         // TODO: 取引実行ロジックをここに実装
         // 例: 買い圧力/売り圧力の分析、注文処理の呼び出し
       }
