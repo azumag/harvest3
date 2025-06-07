@@ -275,8 +275,30 @@ async function setCurrentOrderPair(exchange, symbol, strategyKey, orderPair) {
 }
 
 async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
+  // 取引所がシンボルをサポートしているか確認
+  if (!exchange.markets) {
+    await exchange.loadMarkets();
+  }
+  
+  // シンボルが取引所でサポートされているか確認
+  if (!(symbol in exchange.markets)) {
+    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。注文ポジション計算をスキップします。`);
+    return 0; // サポートされていない場合は0を返す
+  }
+
   // 未約定の注文を取得
-  const openOrders = await exchange.fetchOpenOrders(symbol);
+  let openOrders;
+  try {
+    openOrders = await exchange.fetchOpenOrders(symbol);
+  } catch (fetchError) {
+    // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
+    if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
+      console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+      return 0; // エラーの場合は0を返す
+    }
+    // その他のエラーは再スロー
+    throw fetchError;
+  }
 
   // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
   const buyOrderAmounts = await Promise.all(
@@ -517,11 +539,33 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
   // リアルタイムモードの場合 (既存ロジック)
   try {
+    // 取引所がシンボルをサポートしているか確認
+    if (!exchange.markets) {
+      await exchange.loadMarkets();
+    }
+    
+    // シンボルが取引所でサポートされているか確認
+    if (!(symbol in exchange.markets)) {
+      console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。利用可能量計算をスキップします。`);
+      return 0; // サポートされていない場合は0を返す
+    }
+
     // 取引記録から買った量を取得（ネットポジション）
     const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
     // 未約定の注文を取得
-    const openOrders = await exchange.fetchOpenOrders(symbol);
+    let openOrders;
+    try {
+      openOrders = await exchange.fetchOpenOrders(symbol);
+    } catch (fetchError) {
+      // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
+      if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
+        console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+        return 0; // エラーの場合は0を返す
+      }
+      // その他のエラーは再スロー
+      throw fetchError;
+    }
 
     // 未約定の売り注文のうち、売り注文を戦略キーでフィルタリングして合計量を計算
     // つまり、戦略で売りに出ている量を取得
@@ -1026,8 +1070,30 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
 }
 
 async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
+  // 取引所がシンボルをサポートしているか確認
+  if (!exchange.markets) {
+    await exchange.loadMarkets();
+  }
+  
+  // シンボルが取引所でサポートされているか確認
+  if (!(symbol in exchange.markets)) {
+    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。売り注文ポジション計算をスキップします。`);
+    return 0; // サポートされていない場合は0を返す
+  }
+
   // 未約定の注文を取得
-  const openOrders = await exchange.fetchOpenOrders(symbol);
+  let openOrders;
+  try {
+    openOrders = await exchange.fetchOpenOrders(symbol);
+  } catch (fetchError) {
+    // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
+    if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
+      console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+      return 0; // エラーの場合は0を返す
+    }
+    // その他のエラーは再スロー
+    throw fetchError;
+  }
 
   // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
   const sellOrderAmounts = await Promise.all(
