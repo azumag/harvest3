@@ -77,6 +77,7 @@ async function loadAndDisplaySummary() {
     renderSymbolSummary(processedData.bySymbol); // 銘柄別サマリーのレンダリングを追加
     renderStrategySummary(processedData.byStrategy);
     renderOrderPairsSummary(processedData.orderPairs); // 注文ペアサマリーのレンダリングを再度追加
+    renderOverallSummary(processedData.orderPairs); // 全体統合サマリーのレンダリングを追加
 
     // ローディング表示を非表示にしてコンテンツを表示
     if (loadingElement) loadingElement.classList.add('d-none');
@@ -1063,6 +1064,19 @@ function renderOrderPairsSummary(orderPairs) {
     const sellStatus = sellOrder.status || '-';
     const amount = item.pair?.amount || buyOrder.amount || sellOrder.amount || 0;
 
+    // サマリー情報のフォーマット
+    const buyAmount = item.buyAmount || 0;
+    const sellAmount = item.sellAmount || 0;
+    const netPosition = item.netPosition || 0;
+    const totalBuyCost = item.totalBuyCost || 0;
+    const totalSellValue = item.totalSellValue || 0;
+    const realizedPnL = item.realizedPnL || 0;
+    const totalFee = item.totalFee || 0;
+
+    // ポジション状態の色分け
+    const positionClass = netPosition > 0 ? 'text-success' : netPosition < 0 ? 'text-danger' : 'text-muted';
+    const pnlClass = realizedPnL > 0 ? 'text-success' : realizedPnL < 0 ? 'text-danger' : 'text-muted';
+
     html += `
     <div class="col-md-6 col-lg-4 mb-3">
       <div class="card h-100 order-pair-card">
@@ -1091,6 +1105,35 @@ function renderOrderPairsSummary(orderPairs) {
             <span>売: <span class="badge ${getStatusBadgeClass(sellStatus)}">${sellStatus}</span></span>
           </div>
 
+          <!-- サマリー情報セクション -->
+          <div class="border-top pt-2 mb-2">
+            <h6 class="small text-muted mb-1">ポジション情報</h6>
+            <div class="d-flex justify-content-between small">
+              <span>買った量:</span>
+              <span>${formatNumber(buyAmount, 4)}</span>
+            </div>
+            <div class="d-flex justify-content-between small">
+              <span>売った量:</span>
+              <span>${formatNumber(sellAmount, 4)}</span>
+            </div>
+            <div class="d-flex justify-content-between small">
+              <span>現在ポジション:</span>
+              <span class="${positionClass}">${formatNumber(netPosition, 4)}</span>
+            </div>
+          </div>
+
+          <div class="border-top pt-2 mb-2">
+            <h6 class="small text-muted mb-1">損益情報</h6>
+            <div class="d-flex justify-content-between small">
+              <span>実現損益:</span>
+              <span class="${pnlClass}">${formatNumber(realizedPnL, 2)}</span>
+            </div>
+            <div class="d-flex justify-content-between small">
+              <span>手数料合計:</span>
+              <span>${formatNumber(totalFee, 2)}</span>
+            </div>
+          </div>
+
           <div class="border-top pt-2 small text-muted">
             <div>買: ${formatDate(buyOrder.timestamp)}</div>
             <div>売: ${formatDate(sellOrder.timestamp)}</div>
@@ -1100,6 +1143,224 @@ function renderOrderPairsSummary(orderPairs) {
     </div>
     `;
   });
+
+  container.innerHTML = html;
+}
+
+/**
+ * 全体統合サマリーを表示する
+ * @param {Array} orderPairs - 注文ペアデータの配列
+ */
+function renderOverallSummary(orderPairs) {
+  const container = document.getElementById('overall-summary-container');
+  if (!container) return;
+
+  // データがない場合
+  if (!orderPairs || orderPairs.length === 0) {
+    container.innerHTML = '<div class="col-12"><div class="alert alert-info">表示するデータがありません</div></div>';
+    return;
+  }
+
+  // 全体のサマリーを計算
+  let totalBuyAmount = 0;
+  let totalSellAmount = 0;
+  let totalNetPosition = 0;
+  let totalBuyCost = 0;
+  let totalSellValue = 0;
+  let totalRealizedPnL = 0;
+  let totalFee = 0;
+
+  // 取引所別・銘柄別の集計
+  const byExchange = {};
+  const bySymbol = {};
+
+  orderPairs.forEach(item => {
+    totalBuyAmount += item.buyAmount || 0;
+    totalSellAmount += item.sellAmount || 0;
+    totalNetPosition += item.netPosition || 0;
+    totalBuyCost += item.totalBuyCost || 0;
+    totalSellValue += item.totalSellValue || 0;
+    totalRealizedPnL += item.realizedPnL || 0;
+    totalFee += item.totalFee || 0;
+
+    // 取引所別集計
+    if (!byExchange[item.exchangeId]) {
+      byExchange[item.exchangeId] = {
+        buyAmount: 0,
+        sellAmount: 0,
+        netPosition: 0,
+        realizedPnL: 0,
+        totalFee: 0
+      };
+    }
+    byExchange[item.exchangeId].buyAmount += item.buyAmount || 0;
+    byExchange[item.exchangeId].sellAmount += item.sellAmount || 0;
+    byExchange[item.exchangeId].netPosition += item.netPosition || 0;
+    byExchange[item.exchangeId].realizedPnL += item.realizedPnL || 0;
+    byExchange[item.exchangeId].totalFee += item.totalFee || 0;
+
+    // 銘柄別集計
+    if (!bySymbol[item.symbol]) {
+      bySymbol[item.symbol] = {
+        buyAmount: 0,
+        sellAmount: 0,
+        netPosition: 0,
+        realizedPnL: 0,
+        totalFee: 0
+      };
+    }
+    bySymbol[item.symbol].buyAmount += item.buyAmount || 0;
+    bySymbol[item.symbol].sellAmount += item.sellAmount || 0;
+    bySymbol[item.symbol].netPosition += item.netPosition || 0;
+    bySymbol[item.symbol].realizedPnL += item.realizedPnL || 0;
+    bySymbol[item.symbol].totalFee += item.totalFee || 0;
+  });
+
+  // 損益率を計算
+  const pnlPercentage = totalBuyCost > 0 ? (totalRealizedPnL / totalBuyCost * 100) : 0;
+  const pnlClass = totalRealizedPnL > 0 ? 'text-success' : totalRealizedPnL < 0 ? 'text-danger' : 'text-muted';
+
+  let html = `
+    <!-- 全体サマリーカード -->
+    <div class="col-12 mb-3">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <h6 class="mb-0">全戦略統合サマリー</h6>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <h6 class="text-muted small">ポジション情報</h6>
+              <div class="d-flex justify-content-between">
+                <span>総買付額:</span>
+                <span>${formatNumber(totalBuyCost, 2)}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>総売却額:</span>
+                <span>${formatNumber(totalSellValue, 2)}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>ポジション取得価額:</span>
+                <span>${formatNumber(totalNetPosition * (totalBuyCost / totalBuyAmount || 0), 2)}</span>
+              </div>
+              <div class="small text-muted mt-1">
+                ※市場価格での評価は取引所APIから別途取得してください
+              </div>
+            </div>
+            <div class="col-md-4">
+              <h6 class="text-muted small">数量情報</h6>
+              <div class="d-flex justify-content-between">
+                <span>買った量:</span>
+                <span>${formatNumber(totalBuyAmount, 4)}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>売った量:</span>
+                <span>${formatNumber(totalSellAmount, 4)}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>現在ポジション:</span>
+                <span class="${totalNetPosition > 0 ? 'text-success' : totalNetPosition < 0 ? 'text-danger' : 'text-muted'}">${formatNumber(totalNetPosition, 4)}</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <h6 class="text-muted small">損益情報</h6>
+              <div class="d-flex justify-content-between">
+                <span>実現損益:</span>
+                <span class="${pnlClass}">${formatNumber(totalRealizedPnL, 2)}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>損益率:</span>
+                <span class="${pnlClass}">${formatNumber(pnlPercentage, 2)}%</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>手数料合計:</span>
+                <span>${formatNumber(totalFee, 2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 取引所別サマリー -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-header">
+          <h6 class="mb-0">取引所別サマリー</h6>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>取引所</th>
+                <th>ポジション</th>
+                <th>実現損益</th>
+              </tr>
+            </thead>
+            <tbody>
+  `;
+
+  Object.entries(byExchange).forEach(([exchangeId, data]) => {
+    const exchangePnlClass = data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : 'text-muted';
+    const positionClass = data.netPosition > 0 ? 'text-success' : data.netPosition < 0 ? 'text-danger' : 'text-muted';
+    html += `
+              <tr>
+                <td>${exchangeId}</td>
+                <td class="${positionClass}">${formatNumber(data.netPosition, 4)}</td>
+                <td class="${exchangePnlClass}">${formatNumber(data.realizedPnL, 2)}</td>
+              </tr>
+    `;
+  });
+
+  html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 銘柄別サマリー（上位5件） -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-header">
+          <h6 class="mb-0">銘柄別サマリー（上位5件）</h6>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>銘柄</th>
+                <th>ポジション</th>
+                <th>実現損益</th>
+              </tr>
+            </thead>
+            <tbody>
+  `;
+
+  // 実現損益の絶対値でソートして上位5件を取得
+  const topSymbols = Object.entries(bySymbol)
+    .sort((a, b) => Math.abs(b[1].realizedPnL) - Math.abs(a[1].realizedPnL))
+    .slice(0, 5);
+
+  topSymbols.forEach(([symbol, data]) => {
+    const symbolPnlClass = data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : 'text-muted';
+    const positionClass = data.netPosition > 0 ? 'text-success' : data.netPosition < 0 ? 'text-danger' : 'text-muted';
+    html += `
+              <tr>
+                <td>${symbol}</td>
+                <td class="${positionClass}">${formatNumber(data.netPosition, 4)}</td>
+                <td class="${symbolPnlClass}">${formatNumber(data.realizedPnL, 2)}</td>
+              </tr>
+    `;
+  });
+
+  html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
 
   container.innerHTML = html;
 }
