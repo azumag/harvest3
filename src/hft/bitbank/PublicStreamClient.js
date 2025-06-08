@@ -90,17 +90,29 @@ class PublicStreamClient {
       return;
     }
 
-    // bitbankのメッセージ形式: ["message", { "room_name": "...", "message": {...} }]
-    if (Array.isArray(message) && message.length === 2 && message[0] === 'message') {
-      const messageData = message[1];
-      if (messageData && messageData.room_name && messageData.message) {
-        this._processRoomMessage(messageData.room_name, messageData.message);
-      } else {
-        this.logger.warn('Invalid message format from bitbank:', message);
+    try {
+      // bitbankの直接オブジェクト形式に対応 (最も一般的)
+      if (message && typeof message === 'object' && message.room_name && message.message) {
+        this.logger.debug(`📨 Processing direct object format for room: ${message.room_name}`);
+        this._processRoomMessage(message.room_name, message.message);
+        return;
       }
-    } else {
-      // 他の形式のメッセージもログに記録
-      this.logger.debug('Received non-standard message format:', message);
+      
+      // 配列形式にも対応（後方互換性のため）
+      if (Array.isArray(message) && message.length === 2 && message[0] === 'message') {
+        const messageData = message[1];
+        if (messageData && messageData.room_name && messageData.message) {
+          this.logger.debug(`📨 Processing array format for room: ${messageData.room_name}`);
+          this._processRoomMessage(messageData.room_name, messageData.message);
+          return;
+        }
+      }
+      
+      // どちらの形式にも該当しない場合
+      this.logger.warn('Unexpected message format:', JSON.stringify(message).substring(0, 200));
+    } catch (error) {
+      this.logger.error('Error handling message:', error.message);
+      this.logger.debug('Error stack:', error.stack);
     }
   }
 

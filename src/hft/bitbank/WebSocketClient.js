@@ -9,6 +9,11 @@ class WebSocketClient {
     this.logger = new Logger('WebSocketClient');
     this.eventHandlers = {};
     this.mockMode = config.mockMode || false;
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
+    this.reconnectDelay = config.reconnectDelay || 1000;
+    this.shouldReconnect = true;
   }
 
   connect() {
@@ -32,6 +37,8 @@ class WebSocketClient {
         
         this.socket.on('connect', () => {
           this.logger.info(`Socket.IO connected to ${this.endpoint}`);
+          this.isConnected = true;
+          this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           resolve();
         });
         
@@ -53,7 +60,13 @@ class WebSocketClient {
         
         this.socket.on('disconnect', (reason) => {
           this.logger.info(`Socket.IO disconnected: ${reason}`);
+          this.isConnected = false;
           this._notifyHandlers('disconnect', reason);
+          
+          // Attempt reconnection if not intentionally disconnected
+          if (this.shouldReconnect && reason !== 'io client disconnect') {
+            this._attemptReconnection();
+          }
         });
       } catch (error) {
         this.logger.error(`Failed to create Socket.IO client: ${error.message}`);
@@ -89,7 +102,8 @@ class WebSocketClient {
 
     switch (dataType) {
       case 'ticker':
-        mockData = ["message", {
+        // 新しいオブジェクト形式に対応
+        mockData = {
           "room_name": roomName,
           "message": {
             "pid": 123456789,
@@ -104,10 +118,11 @@ class WebSocketClient {
               "timestamp": Date.now()
             }
           }
-        }];
+        };
         break;
       case 'transactions':
-        mockData = ["message", {
+        // 新しいオブジェクト形式に対応
+        mockData = {
           "room_name": roomName,
           "message": {
             "pid": 123456790,
@@ -121,10 +136,11 @@ class WebSocketClient {
               }]
             }
           }
-        }];
+        };
         break;
       case 'depth':
-        mockData = ["message", {
+        // 新しいオブジェクト形式に対応
+        mockData = {
           "room_name": roomName,
           "message": {
             "data": {
@@ -140,7 +156,7 @@ class WebSocketClient {
               "sequenceId": "1234567890"
             }
           }
-        }];
+        };
         break;
       default:
         this.logger.warn(`Unknown room type for simulation: ${dataType}`);
@@ -178,11 +194,49 @@ class WebSocketClient {
   }
 
   disconnect() {
+    this.shouldReconnect = false; // Prevent automatic reconnection
+    this.isConnected = false;
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
       this.logger.info(`Socket.IO disconnected from ${this.endpoint}`);
     }
+  }
+
+  /**
+   * 再接続を試みます
+   * @private
+   */
+  _attemptReconnection() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.logger.error(`Max reconnection attempts (${this.maxReconnectAttempts}) reached`);
+      this._notifyHandlers('max_reconnect_failed', this.reconnectAttempts);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    
+    this.logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    
+    setTimeout(() => {
+      if (!this.shouldReconnect) {
+        this.logger.debug('Reconnection cancelled');
+        return;
+      }
+      
+      this.connect()
+        .then(() => {
+          this.logger.info('✅ Reconnection successful');
+          this._notifyHandlers('reconnected', this.reconnectAttempts);
+        })
+        .catch((error) => {
+          this.logger.error(`❌ Reconnection failed: ${error.message}`);
+          if (this.shouldReconnect) {
+            this._attemptReconnection();
+          }
+        });
+    }, delay);
   }
 }
 
