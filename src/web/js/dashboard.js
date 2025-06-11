@@ -70,7 +70,7 @@ async function loadAndDisplaySummary() {
     console.log('取得したサマリーデータ:', data);
 
     // データの処理と集計
-    const processedData = processSummaryData(data);
+    const processedData = processSummaryData(data.positions || []);
 
     // 各セクションの表示
     renderExchangeSummary(processedData.byExchange);
@@ -78,6 +78,11 @@ async function loadAndDisplaySummary() {
     renderStrategySummary(processedData.byStrategy);
     renderOrderPairsSummary(processedData.orderPairs); // 注文ペアサマリーのレンダリングを再度追加
     renderOverallSummary(processedData.orderPairs); // 全体統合サマリーのレンダリングを追加
+    
+    // 購入可能額の表示
+    if (data.availableAmounts) {
+      renderAvailableAmounts(data.availableAmounts);
+    }
 
     // ローディング表示を非表示にしてコンテンツを表示
     if (loadingElement) loadingElement.classList.add('d-none');
@@ -1415,6 +1420,27 @@ function formatNumber(num, maxDigits = 1) {
 }
 
 /**
+ * 通貨フォーマット関数
+ * @param {number} num - フォーマットする数値
+ * @param {string} currency - 通貨コード（例：'JPY', 'USD'）
+ * @returns {string} フォーマットされた通貨文字列
+ */
+function formatCurrency(num, currency = 'JPY') {
+  if (num === null || num === undefined) return '0';
+  
+  // 通貨に応じて小数点以下の桁数を決定
+  const minimumFractionDigits = currency === 'JPY' ? 0 : 2;
+  const maximumFractionDigits = currency === 'JPY' ? 0 : 8;
+  
+  return num.toLocaleString('ja-JP', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: minimumFractionDigits,
+    maximumFractionDigits: maximumFractionDigits
+  });
+}
+
+/**
  * テーブルヘッダーにツールチップを適用する関数
  */
 function applyHeaderTooltips() {
@@ -1455,3 +1481,136 @@ document.addEventListener('DOMContentLoaded', function() {
 // 動的にテーブルが生成される場合、生成後に以下の関数を呼び出す
 // 例：テーブルデータ読み込み完了時のコールバック内などで
 // applyHeaderTooltips();
+
+/**
+ * 購入可能額を表示
+ * @param {Object} availableAmounts - 購入可能額データ（戦略別）
+ */
+function renderAvailableAmounts(availableAmounts) {
+  const container = document.getElementById('available-amounts-container');
+  if (!container) return;
+
+  let html = '';
+  
+  // 戦略別にグループ化して表示
+  Object.entries(availableAmounts).forEach(([strategyName, symbols]) => {
+    html += `
+      <div class="col-12 mb-4">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+              <i class="bi bi-graph-up-arrow"></i> ${strategyName}
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+    `;
+    
+    // 各通貨ペアの購入可能額を表示
+    Object.entries(symbols).forEach(([symbol, data]) => {
+      if (data.error) {
+        html += `
+          <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card h-100 border-danger">
+              <div class="card-header bg-danger text-white">
+                <h6 class="mb-0">${symbol}</h6>
+              </div>
+              <div class="card-body">
+                <p class="text-danger mb-0">
+                  <i class="bi bi-exclamation-triangle"></i> エラー: ${data.error}
+                </p>
+              </div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      const {
+        baseCurrency,
+        quoteCurrency,
+        availableFunds,
+        currentPrice,
+        realizedPnL,
+        tradePercentage,
+        availableAmount,
+        availableValue,
+        totalAvailableValue,
+        minTradeAmount
+      } = data;
+      
+      // 購入可能かどうかの判定
+      const canBuy = availableAmount > (minTradeAmount || 0) && totalAvailableValue > 0;
+      const cardClass = canBuy ? 'border-success' : 'border-warning';
+      const statusBadge = canBuy 
+        ? '<span class="badge bg-success">購入可能</span>' 
+        : '<span class="badge bg-warning">購入不可</span>';
+      
+      html += `
+        <div class="col-md-6 col-lg-4 mb-3">
+          <div class="card h-100 ${cardClass}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">${symbol}</h6>
+              ${statusBadge}
+            </div>
+            <div class="card-body">
+              <div class="mb-2">
+                <small class="text-muted">現在価格</small>
+                <div class="fw-bold">${formatCurrency(currentPrice, baseCurrency)}</div>
+              </div>
+              
+              <div class="mb-2">
+                <small class="text-muted">利用可能資金</small>
+                <div class="fw-bold">${formatCurrency(availableFunds, baseCurrency)}</div>
+              </div>
+              
+              <div class="mb-2">
+                <small class="text-muted">取引割合</small>
+                <div class="fw-bold">${tradePercentage.toFixed(1)}%</div>
+              </div>
+              
+              <div class="mb-2">
+                <small class="text-muted">実現損益</small>
+                <div class="fw-bold ${realizedPnL >= 0 ? 'text-success' : 'text-danger'}">
+                  ${realizedPnL >= 0 ? '+' : ''}${formatCurrency(realizedPnL, baseCurrency)}
+                </div>
+              </div>
+              
+              <hr>
+              
+              <div class="mb-2">
+                <small class="text-muted">購入可能額（実現損益込み）</small>
+                <div class="fw-bold text-primary">${formatCurrency(totalAvailableValue, baseCurrency)}</div>
+              </div>
+              
+              <div class="mb-2">
+                <small class="text-muted">購入可能数量</small>
+                <div class="fw-bold">${availableAmount.toFixed(8)} ${quoteCurrency}</div>
+              </div>
+              
+              ${minTradeAmount ? `
+                <div class="mb-2">
+                  <small class="text-muted">最小取引数量</small>
+                  <div class="fw-bold">${minTradeAmount.toFixed(8)} ${quoteCurrency}</div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  if (html === '') {
+    html = '<div class="col-12"><p class="text-center text-muted">購入可能額データがありません</p></div>';
+  }
+  
+  container.innerHTML = html;
+}

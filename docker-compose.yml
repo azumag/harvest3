@@ -76,7 +76,7 @@ services:
   hft:
     image: harvest3-bot-image
     container_name: hft
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./src:/usr/src/app/src
       - ./package.json:/usr/src/app/package.json
