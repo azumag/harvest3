@@ -235,35 +235,98 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   const { amountPrecision, minTradeAmount } = marketParameters;
   
   try {
-    // 売却量を計算
-    const sellAmount = Math.max(position.amount, minTradeAmount);
+    // 実際の残高を確認
+    const balance = await exchange.fetchBalance();
+    const baseAsset = symbol.split('/')[0];
+    const availableAmount = balance.free[baseAsset] || 0;
+    
+    console.log(`[DEBUG] Stop-loss for ${symbol}: Position amount: ${position.amount}, Available balance: ${availableAmount}`);
+    
+    // 売却可能量を計算（実際の残高と最小取引量を考慮）
+    let sellAmount = Math.min(position.amount, availableAmount);
+    
+    // 最小取引量を満たさない場合はエラー
+    if (sellAmount < minTradeAmount) {
+      throw new Error(`Insufficient balance for stop-loss: available ${availableAmount}, required ${minTradeAmount}`);
+    }
+    
     const formattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
+    
+    console.log(`[DEBUG] Executing stop-loss sell order: ${formattedAmount} ${baseAsset}`);
     
     // マーケット注文で即座に決済
     const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
     
-    // 注文を記録
-    await addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, order.price, order.id, 'market');
+    // デバッグ用：注文構造をログ出力
+    console.log(`[DEBUG] Stop-loss order structure for ${symbol}:`, JSON.stringify(order, null, 2));
     
-    // ポジションを閉じる
-    position.status = 'closed';
-    position.closePrice = order.price;
-    position.closedAt = Date.now();
+    // 実行価格を取得（異なる取引所の注文構造に対応）
+    let executionPrice = null;
+    
+    if (order.price && !isNaN(order.price)) {
+      executionPrice = order.price;
+    } else if (order.average && !isNaN(order.average)) {
+      executionPrice = order.average;
+    } else if (order.cost && order.amount && order.cost > 0 && order.amount > 0) {
+      executionPrice = order.cost / order.amount;
+    } else {
+      // フォールバック：現在の市場価格を取得
+      try {
+        const ticker = await exchange.fetchTicker(symbol);
+        executionPrice = ticker.last || ticker.close;
+        console.log(`[DEBUG] Using fallback price from ticker: ${executionPrice}`);
+      } catch (tickerError) {
+        console.warn(`[WARNING] Could not get execution price for ${symbol}:`, tickerError.message);
+        executionPrice = null;
+      }
+    }
+    
+    // 注文を記録
+    await addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executionPrice, order.id, 'market');
+    
+    // ポジション更新（部分決済か完全決済かを判定）
+    const isPartialClose = formattedAmount < position.amount;
+    
+    if (isPartialClose) {
+      // 部分決済：残ポジション量を更新
+      position.amount = parseFloat((position.amount - formattedAmount).toFixed(amountPrecision));
+      position.updatedAt = Date.now();
+      console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
+    } else {
+      // 完全決済：ポジションを閉じる
+      position.status = 'closed';
+      position.closePrice = executionPrice;
+      position.closedAt = Date.now();
+      console.log(`[DEBUG] Complete stop-loss: position closed`);
+    }
+    
     await savePosition(position.key, position);
     
     // 通知
-    const lossPercent = ((order.price - position.entryPrice) / position.entryPrice * 100).toFixed(2);
+    const lossPercent = executionPrice && position.entryPrice ? 
+                       ((executionPrice - position.entryPrice) / position.entryPrice * 100).toFixed(2) : 
+                       'N/A';
     const message = `[リスク管理] ストップロス実行: ${exchange.id} - ${symbol}\n` +
                    `理由: ${position.reason === 'time-based' ? '時間切れ' : '価格到達'}\n` +
-                   `エントリー価格: ${position.entryPrice}\n` +
-                   `決済価格: ${order.price}\n` +
-                   `損益: ${lossPercent}%`;
+                   `${isPartialClose ? '部分決済' : '完全決済'}: ${formattedAmount}\n` +
+                   `エントリー価格: ${position.entryPrice || 'N/A'}\n` +
+                   `決済価格: ${executionPrice || 'N/A'}\n` +
+                   `損益: ${lossPercent}%` +
+                   (isPartialClose ? `\n残ポジション: ${position.amount}` : '');
     
     if (postOrderToDiscord) {
       await postOrderToDiscord(message);
     }
     
-    return { success: true, order, lossPercent };
+    return { 
+      success: true, 
+      order, 
+      lossPercent, 
+      executionPrice, 
+      soldAmount: formattedAmount,
+      isPartialClose,
+      remainingAmount: isPartialClose ? position.amount : 0
+    };
   } catch (error) {
     console.error(`ストップロス注文の実行に失敗: ${symbol} - ${error.message}`);
     if (postErrorToDiscord) {
@@ -363,6 +426,43 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
 }
 
 /**
+ * 現在の残高を取得（JPY換算）
+ * @param {Object} exchange - 取引所オブジェクト
+ * @returns {number} - JPY換算の総資産
+ */
+async function getCurrentBalance(exchange) {
+  try {
+    const balance = await exchange.fetchBalance();
+    let totalJPY = 0;
+    
+    // JPY残高を加算
+    if (balance.total.JPY) {
+      totalJPY += balance.total.JPY;
+    }
+    
+    // その他の通貨をJPY換算
+    const currencies = ['BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'SOL', 'DOT'];
+    for (const currency of currencies) {
+      if (balance.total[currency] && balance.total[currency] > 0) {
+        try {
+          const symbol = `${currency}/JPY`;
+          const ticker = await exchange.fetchTicker(symbol);
+          const jpyValue = balance.total[currency] * (ticker.last || ticker.close);
+          totalJPY += jpyValue;
+        } catch (error) {
+          console.warn(`${currency}/JPY の価格取得に失敗:`, error.message);
+        }
+      }
+    }
+    
+    return totalJPY;
+  } catch (error) {
+    console.error('残高取得に失敗:', error.message);
+    return 100000; // フォールバック値
+  }
+}
+
+/**
  * ドローダウンをチェック
  * @param {Object} exchange - 取引所オブジェクト
  * @param {string} strategyKey - 戦略キー
@@ -370,20 +470,21 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
  * @returns {Object} - ドローダウン状態
  */
 async function checkDrawdown(exchange, strategyKey, riskSettings = DEFAULT_RISK_SETTINGS) {
-  // 初期資金を取得（設定から取得するか、デフォルト値を使用）
-  const initialCapital = riskSettings.initialCapital || 100000; // デフォルト10万円
+  // 現在の残高を動的に取得
+  const currentBalance = await getCurrentBalance(exchange);
   
   // 各期間の損益を計算
   const dailyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 1);
   const weeklyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 7);
   const monthlyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 30);
   
-  // 損失率を計算
-  const dailyLossRate = dailyPnL < 0 ? Math.abs(dailyPnL) / initialCapital : 0;
-  const weeklyLossRate = weeklyPnL < 0 ? Math.abs(weeklyPnL) / initialCapital : 0;
-  const monthlyLossRate = monthlyPnL < 0 ? Math.abs(monthlyPnL) / initialCapital : 0;
+  // 損失率を計算（現在残高基準）
+  const dailyLossRate = dailyPnL < 0 ? Math.abs(dailyPnL) / currentBalance : 0;
+  const weeklyLossRate = weeklyPnL < 0 ? Math.abs(weeklyPnL) / currentBalance : 0;
+  const monthlyLossRate = monthlyPnL < 0 ? Math.abs(monthlyPnL) / currentBalance : 0;
   
   return {
+    currentBalance,
     daily: {
       pnl: dailyPnL,
       loss: dailyLossRate,
@@ -628,6 +729,7 @@ module.exports = {
   calculateStopLossPrice,
   checkStopLoss,
   executeStopLoss,
+  getCurrentBalance,
   checkDrawdown,
   checkPositionLimits,
   recordBuyPosition,
