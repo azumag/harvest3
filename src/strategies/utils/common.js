@@ -95,7 +95,20 @@ async function handleStrategySignals(
     // ドローダウンチェック
     const drawdownStatus = await checkDrawdown(exchange, strategyKey, config.riskSettings);
     if (drawdownStatus.daily.exceeded) {
+      const message = `🚨 [リスク管理] 日次最大損失制限到達 🚨\n` +
+                     `取引所: ${exchange.id}\n` +
+                     `戦略: ${strategyName}\n` +
+                     `本日の損失: ${drawdownStatus.daily.pnl.toLocaleString()}円\n` +
+                     `損失率: ${(drawdownStatus.daily.loss * 100).toFixed(2)}%\n` +
+                     `制限値: ${(drawdownStatus.daily.limit * 100).toFixed(2)}%\n` +
+                     `⚠️ 新規取引を停止しました`;
+      
       console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
+      
+      if (postOrderToDiscord) {
+        await postOrderToDiscord(message);
+      }
+      
       return {
         strategy: strategyId,
         symbol,
@@ -103,6 +116,35 @@ async function handleStrategySignals(
         signal: 'none',
         reason: 'daily drawdown limit exceeded'
       };
+    }
+    
+    // 週次・月次ドローダウンの警告通知
+    if (drawdownStatus.weekly.exceeded) {
+      const message = `🔥 [リスク管理] 週次最大損失制限到達 🔥\n` +
+                     `取引所: ${exchange.id}\n` +
+                     `戦略: ${strategyName}\n` +
+                     `今週の損失: ${drawdownStatus.weekly.pnl.toLocaleString()}円\n` +
+                     `損失率: ${(drawdownStatus.weekly.loss * 100).toFixed(2)}%\n` +
+                     `制限値: ${(drawdownStatus.weekly.limit * 100).toFixed(2)}%\n` +
+                     `⚠️ 戦略を一時停止することを検討してください`;
+      
+      if (postOrderToDiscord) {
+        await postOrderToDiscord(message);
+      }
+    }
+    
+    if (drawdownStatus.monthly.exceeded) {
+      const message = `💀 [リスク管理] 月次最大損失制限到達 💀\n` +
+                     `取引所: ${exchange.id}\n` +
+                     `戦略: ${strategyName}\n` +
+                     `今月の損失: ${drawdownStatus.monthly.pnl.toLocaleString()}円\n` +
+                     `損失率: ${(drawdownStatus.monthly.loss * 100).toFixed(2)}%\n` +
+                     `制限値: ${(drawdownStatus.monthly.limit * 100).toFixed(2)}%\n` +
+                     `🚨 戦略の見直しが必要です`;
+      
+      if (postOrderToDiscord) {
+        await postOrderToDiscord(message);
+      }
     }
   }
   
@@ -191,10 +233,20 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   if (!options.backtest && config.enableRiskManagement !== false) {
     const positionLimitCheck = await checkPositionLimits(exchange, symbol, strategyKey, config.riskSettings);
     if (!positionLimitCheck.allowed) {
+      const message = `⛔ [リスク管理] ポジション制限到達 ⛔\n` +
+                     `取引所: ${exchange.id}\n` +
+                     `通貨ペア: ${symbol}\n` +
+                     `戦略: ${strategyName}\n` +
+                     `制限理由: ${positionLimitCheck.reason}\n` +
+                     `現在価格: ${currentPrice.toLocaleString()}円\n` +
+                     `🛑 新規買い注文をスキップしました`;
+      
       console.log(`${strategyName}: ${positionLimitCheck.reason}`);
+      
       if (postOrderToDiscord) {
-        await postOrderToDiscord(`[${strategyName}] ポジション制限: ${exchange.id} - ${symbol} - ${positionLimitCheck.reason}`);
+        await postOrderToDiscord(message);
       }
+      
       return { success: false, reason: positionLimitCheck.reason };
     }
   }

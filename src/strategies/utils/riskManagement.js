@@ -171,10 +171,34 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
       continue;
     }
     
-    // 最高値を更新
-    if (currentPrice > (position.highestPrice || position.entryPrice)) {
+    // 最高値を更新とトレーリングストップ通知
+    const previousHighest = position.highestPrice || position.entryPrice;
+    if (currentPrice > previousHighest) {
       position.highestPrice = currentPrice;
       await savePosition(position.key, position);
+      
+      // トレーリングストップ発動条件をチェック
+      const profitPercent = (currentPrice - position.entryPrice) / position.entryPrice;
+      if (profitPercent >= riskSettings.trailingStopTriggerPercent) {
+        const priceIncrease = ((currentPrice - previousHighest) / previousHighest * 100);
+        
+        // 大幅な価格上昇時（1%以上）のみ通知
+        if (priceIncrease >= 1.0) {
+          const message = `📈 [リスク管理] トレーリングストップ更新 📈\n` +
+                         `取引所: ${exchange.id}\n` +
+                         `通貨ペア: ${symbol}\n` +
+                         `戦略: ${strategyKey}\n` +
+                         `注文ID: ${position.orderId}\n` +
+                         `エントリー価格: ${position.entryPrice.toLocaleString()}円\n` +
+                         `新最高値: ${currentPrice.toLocaleString()}円\n` +
+                         `現在利益: ${(profitPercent * 100).toFixed(2)}%\n` +
+                         `📊 トレーリングストップが追従中です`;
+          
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(message);
+          }
+        }
+      }
     }
     
     // ストップロス価格を計算
@@ -461,6 +485,139 @@ async function recordBuyPosition(exchange, symbol, strategyKey, order, entryPric
   };
   
   await savePosition(positionKey, positionData);
+  
+  // ポジション開始通知
+  const message = `🎯 [リスク管理] 新規ポジション開始 🎯\n` +
+                 `取引所: ${exchange.id}\n` +
+                 `通貨ペア: ${symbol}\n` +
+                 `戦略: ${strategyKey}\n` +
+                 `注文ID: ${order.id}\n` +
+                 `エントリー価格: ${entryPrice.toLocaleString()}円\n` +
+                 `数量: ${order.amount}\n` +
+                 `💰 ポジション管理を開始しました`;
+  
+  if (postOrderToDiscord) {
+    await postOrderToDiscord(message);
+  }
+}
+
+/**
+ * リスク管理の統計情報を報告
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} riskSettings - リスク設定
+ * @returns {Object} - 統計情報
+ */
+async function generateRiskManagementReport(exchange, strategyKey, riskSettings = DEFAULT_RISK_SETTINGS) {
+  try {
+    // 現在のポジション情報を取得
+    const allPositions = [];
+    const majorPairs = ['BTC/JPY', 'ETH/JPY', 'XRP/JPY', 'SOL/JPY', 'DOT/JPY'];
+    
+    for (const symbol of majorPairs) {
+      const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
+      allPositions.push(...positions);
+    }
+    
+    const openPositions = allPositions.filter(p => p.status !== 'closed');
+    
+    // 損益情報を取得
+    const dailyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 1);
+    const weeklyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 7);
+    const monthlyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 30);
+    
+    // ドローダウン状況を計算
+    const drawdownStatus = await checkDrawdown(exchange, strategyKey, riskSettings);
+    
+    const report = {
+      timestamp: new Date().toISOString(),
+      exchange: exchange.id,
+      strategy: strategyKey,
+      positions: {
+        total: openPositions.length,
+        bySymbol: {},
+        maxAllowed: riskSettings.maxTotalPositions
+      },
+      pnl: {
+        daily: dailyPnL,
+        weekly: weeklyPnL,
+        monthly: monthlyPnL
+      },
+      drawdown: {
+        daily: {
+          current: (drawdownStatus.daily.loss * 100).toFixed(2),
+          limit: (drawdownStatus.daily.limit * 100).toFixed(2),
+          status: drawdownStatus.daily.exceeded ? '🚨 制限超過' : '✅ 正常'
+        },
+        weekly: {
+          current: (drawdownStatus.weekly.loss * 100).toFixed(2),
+          limit: (drawdownStatus.weekly.limit * 100).toFixed(2),
+          status: drawdownStatus.weekly.exceeded ? '🚨 制限超過' : '✅ 正常'
+        },
+        monthly: {
+          current: (drawdownStatus.monthly.loss * 100).toFixed(2),
+          limit: (drawdownStatus.monthly.limit * 100).toFixed(2),
+          status: drawdownStatus.monthly.exceeded ? '🚨 制限超過' : '✅ 正常'
+        }
+      }
+    };
+    
+    // シンボル別ポジション数を計算
+    for (const position of openPositions) {
+      const symbol = position.symbol;
+      if (!report.positions.bySymbol[symbol]) {
+        report.positions.bySymbol[symbol] = 0;
+      }
+      report.positions.bySymbol[symbol]++;
+    }
+    
+    return report;
+  } catch (error) {
+    console.error('リスク管理レポート生成エラー:', error.message);
+    return null;
+  }
+}
+
+/**
+ * リスク管理レポートをDiscordに送信
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} riskSettings - リスク設定
+ */
+async function sendRiskManagementReport(exchange, strategyKey, riskSettings = DEFAULT_RISK_SETTINGS) {
+  const report = await generateRiskManagementReport(exchange, strategyKey, riskSettings);
+  
+  if (!report) {
+    return;
+  }
+  
+  let symbolPositions = '';
+  for (const [symbol, count] of Object.entries(report.positions.bySymbol)) {
+    symbolPositions += `  ${symbol}: ${count}ポジション\n`;
+  }
+  
+  const message = `📊 [リスク管理] 定期レポート 📊\n` +
+                 `取引所: ${report.exchange}\n` +
+                 `戦略: ${report.strategy}\n` +
+                 `レポート時刻: ${new Date().toLocaleString('ja-JP')}\n\n` +
+                 
+                 `📈 ポジション状況:\n` +
+                 `  合計: ${report.positions.total}/${report.positions.maxAllowed}\n` +
+                 `${symbolPositions || '  (オープンポジションなし)\n'}\n` +
+                 
+                 `💰 損益状況:\n` +
+                 `  本日: ${report.pnl.daily.toLocaleString()}円\n` +
+                 `  今週: ${report.pnl.weekly.toLocaleString()}円\n` +
+                 `  今月: ${report.pnl.monthly.toLocaleString()}円\n\n` +
+                 
+                 `⚠️ ドローダウン監視:\n` +
+                 `  日次: ${report.drawdown.daily.current}%/${report.drawdown.daily.limit}% ${report.drawdown.daily.status}\n` +
+                 `  週次: ${report.drawdown.weekly.current}%/${report.drawdown.weekly.limit}% ${report.drawdown.weekly.status}\n` +
+                 `  月次: ${report.drawdown.monthly.current}%/${report.drawdown.monthly.limit}% ${report.drawdown.monthly.status}`;
+  
+  if (postOrderToDiscord) {
+    await postOrderToDiscord(message);
+  }
 }
 
 module.exports = {
@@ -475,6 +632,8 @@ module.exports = {
   checkPositionLimits,
   recordBuyPosition,
   recordPnL,
+  generateRiskManagementReport,
+  sendRiskManagementReport,
   // テスト用
   clearPositionStore,
   clearPnLTracker

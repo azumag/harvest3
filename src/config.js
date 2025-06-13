@@ -80,7 +80,22 @@ const config = {
       useReturns: true,
       referenceSymbols: 'all', // すべてのシンボルを参照シンボルとして使用
       function: mutualInformationStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.02,        // 2%の固定ストップロス
+        trailingStopTriggerPercent: 0.01,  // 1%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.01, // 最高値から1%でトレーリング
+        timeBasedStopHours: 24,            // 24時間でタイムストップ
+        dailyMaxLossPercent: 0.05,         // 日次最大損失5%
+        weeklyMaxLossPercent: 0.10,        // 週次最大損失10%
+        monthlyMaxLossPercent: 0.15,       // 月次最大損失15%
+        maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
+        maxTotalPositions: 10,             // 全体の最大ポジション
+        initialCapital: 100000             // 初期資金（ドローダウン計算用）
+      }
     },
 
     // 逆張り戦略
@@ -90,7 +105,22 @@ const config = {
       ohlcvInterval: '15m',
       deviationThreshold: 3,
       function: meanReversionStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.018,       // 1.8%の固定ストップロス
+        trailingStopTriggerPercent: 0.012, // 1.2%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.012, // 最高値から1.2%でトレーリング
+        timeBasedStopHours: 20,            // 20時間でタイムストップ
+        dailyMaxLossPercent: 0.04,         // 日次最大損失4%
+        weeklyMaxLossPercent: 0.08,        // 週次最大損失8%
+        monthlyMaxLossPercent: 0.12,       // 月次最大損失12%
+        maxPositionsPerPair: 2,            // 同一ペアの最大ポジション
+        maxTotalPositions: 8,              // 全体の最大ポジション
+        initialCapital: 80000              // 初期資金（ドローダウン計算用）
+      }
     },
 
     MACD: {
@@ -100,7 +130,22 @@ const config = {
       signalPeriod: 9,
       ohlcvInterval: '15m',
       function: macdStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.022,       // 2.2%の固定ストップロス
+        trailingStopTriggerPercent: 0.018, // 1.8%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.018, // 最高値から1.8%でトレーリング
+        timeBasedStopHours: 36,            // 36時間でタイムストップ
+        dailyMaxLossPercent: 0.06,         // 日次最大損失6%
+        weeklyMaxLossPercent: 0.12,        // 週次最大損失12%
+        monthlyMaxLossPercent: 0.18,       // 月次最大損失18%
+        maxPositionsPerPair: 4,            // 同一ペアの最大ポジション
+        maxTotalPositions: 12,             // 全体の最大ポジション
+        initialCapital: 120000             // 初期資金（ドローダウン計算用）
+      }
     },
 
     BOLLINGER_BANDS: {
@@ -109,7 +154,22 @@ const config = {
       stdDev: 2,
       ohlcvInterval: '15m',
       function: bollingerBandsStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.019,       // 1.9%の固定ストップロス
+        trailingStopTriggerPercent: 0.014, // 1.4%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.014, // 最高値から1.4%でトレーリング
+        timeBasedStopHours: 28,            // 28時間でタイムストップ
+        dailyMaxLossPercent: 0.045,        // 日次最大損失4.5%
+        weeklyMaxLossPercent: 0.09,        // 週次最大損失9%
+        monthlyMaxLossPercent: 0.135,      // 月次最大損失13.5%
+        maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
+        maxTotalPositions: 9,              // 全体の最大ポジション
+        initialCapital: 90000              // 初期資金（ドローダウン計算用）
+      }
     }, 
 
     // トレンドフォロー戦略
@@ -119,7 +179,22 @@ const config = {
       longPeriod: 20,
       ohlcvInterval: '15m',
       function: maStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.02,        // 2%の固定ストップロス
+        trailingStopTriggerPercent: 0.016, // 1.6%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.016, // 最高値から1.6%でトレーリング
+        timeBasedStopHours: 30,            // 30時間でタイムストップ
+        dailyMaxLossPercent: 0.055,        // 日次最大損失5.5%
+        weeklyMaxLossPercent: 0.11,        // 週次最大損失11%
+        monthlyMaxLossPercent: 0.165,      // 月次最大損失16.5%
+        maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
+        maxTotalPositions: 10,             // 全体の最大ポジション
+        initialCapital: 100000             // 初期資金（ドローダウン計算用）
+      }
     },
 
     OSCILLATOR: {
@@ -130,6 +205,21 @@ const config = {
       ohlcvInterval: '15m',
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.017,       // 1.7%の固定ストップロス
+        trailingStopTriggerPercent: 0.013, // 1.3%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.013, // 最高値から1.3%でトレーリング
+        timeBasedStopHours: 18,            // 18時間でタイムストップ
+        dailyMaxLossPercent: 0.042,        // 日次最大損失4.2%
+        weeklyMaxLossPercent: 0.084,       // 週次最大損失8.4%
+        monthlyMaxLossPercent: 0.126,      // 月次最大損失12.6%
+        maxPositionsPerPair: 2,            // 同一ペアの最大ポジション
+        maxTotalPositions: 8,              // 全体の最大ポジション
+        initialCapital: 85000              // 初期資金（ドローダウン計算用）
+      }
     },
 
     RSI: {
@@ -139,7 +229,22 @@ const config = {
       overboughtThreshold: 70,
       ohlcvInterval: '15m',
       function: rsiStrategy,
-      exchanges: [exchangeBB]
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // リスク管理設定（実装に合わせた形式）
+      riskSettings: {
+        fixedStopLossPercent: 0.0195,      // 1.95%の固定ストップロス
+        trailingStopTriggerPercent: 0.0145, // 1.45%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.0145, // 最高値から1.45%でトレーリング
+        timeBasedStopHours: 26,            // 26時間でタイムストップ
+        dailyMaxLossPercent: 0.048,        // 日次最大損失4.8%
+        weeklyMaxLossPercent: 0.096,       // 週次最大損失9.6%
+        monthlyMaxLossPercent: 0.144,      // 月次最大損失14.4%
+        maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
+        maxTotalPositions: 9,              // 全体の最大ポジション
+        initialCapital: 95000              // 初期資金（ドローダウン計算用）
+      }
     },
 
     // アービトラージ戦略
