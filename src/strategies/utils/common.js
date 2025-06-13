@@ -8,6 +8,14 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   getOrderStrategyKeyByOrderId,
 } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
+const { 
+  checkStopLoss, 
+  executeStopLoss, 
+  checkPositionLimits, 
+  checkDrawdown,
+  recordBuyPosition,
+  recordPnL
+} = require('./riskManagement');
 
 /**
  * OHLCV データを取得して検証する
@@ -74,6 +82,29 @@ async function handleStrategySignals(
 ) {
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
   const logInfo = formatLogInfo(signalResult);
+  
+  // リスク管理: ストップロスチェック（バックテストモードではスキップ）
+  if (!options.backtest && config.enableRiskManagement !== false) {
+    const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
+    
+    // ストップロスが必要なポジションを処理
+    for (const position of stopLossPositions) {
+      await executeStopLoss(exchange, symbol, strategyKey, position, marketParameters);
+    }
+    
+    // ドローダウンチェック
+    const drawdownStatus = await checkDrawdown(exchange, strategyKey, config.riskSettings);
+    if (drawdownStatus.daily.exceeded) {
+      console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
+      return {
+        strategy: strategyId,
+        symbol,
+        ...logInfo.result,
+        signal: 'none',
+        reason: 'daily drawdown limit exceeded'
+      };
+    }
+  }
   
   // 注文を作成
   if (buySignal) {
@@ -156,6 +187,18 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
 
+  // リスク管理: ポジション制限チェック（バックテストモードではスキップ）
+  if (!options.backtest && config.enableRiskManagement !== false) {
+    const positionLimitCheck = await checkPositionLimits(exchange, symbol, strategyKey, config.riskSettings);
+    if (!positionLimitCheck.allowed) {
+      console.log(`${strategyName}: ${positionLimitCheck.reason}`);
+      if (postOrderToDiscord) {
+        await postOrderToDiscord(`[${strategyName}] ポジション制限: ${exchange.id} - ${symbol} - ${positionLimitCheck.reason}`);
+      }
+      return { success: false, reason: positionLimitCheck.reason };
+    }
+  }
+
   // 利用可能な資金を確認
   // const balance = await exchange.fetchBalance(); // 既存の呼び出し
   const balance = await getAvailableFund(exchange, symbol, options); // getAvailableFund を呼び出すように変更
@@ -211,12 +254,17 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     }
 
     // 取引記録を更新
+    const executedPrice = (orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice;
     if (orderType && orderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
-      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
       addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
     } else {
       addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
+
+    // リスク管理: ポジション情報を記録（バックテストモードではスキップ）
+    if (!options.backtest && config.enableRiskManagement !== false) {
+      recordBuyPosition(exchange, symbol, strategyKey, order, executedPrice);
     }
 
     return { success: true, order };
