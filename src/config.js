@@ -94,7 +94,6 @@ const config = {
         monthlyMaxLossPercent: 0.15,       // 月次最大損失15%
         maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
         maxTotalPositions: 10,             // 全体の最大ポジション
-        initialCapital: 100000             // 初期資金（ドローダウン計算用）
       }
     },
 
@@ -119,7 +118,6 @@ const config = {
         monthlyMaxLossPercent: 0.12,       // 月次最大損失12%
         maxPositionsPerPair: 2,            // 同一ペアの最大ポジション
         maxTotalPositions: 8,              // 全体の最大ポジション
-        initialCapital: 80000              // 初期資金（ドローダウン計算用）
       }
     },
 
@@ -144,7 +142,6 @@ const config = {
         monthlyMaxLossPercent: 0.18,       // 月次最大損失18%
         maxPositionsPerPair: 4,            // 同一ペアの最大ポジション
         maxTotalPositions: 12,             // 全体の最大ポジション
-        initialCapital: 120000             // 初期資金（ドローダウン計算用）
       }
     },
 
@@ -168,7 +165,6 @@ const config = {
         monthlyMaxLossPercent: 0.135,      // 月次最大損失13.5%
         maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
         maxTotalPositions: 9,              // 全体の最大ポジション
-        initialCapital: 90000              // 初期資金（ドローダウン計算用）
       }
     }, 
 
@@ -193,7 +189,6 @@ const config = {
         monthlyMaxLossPercent: 0.165,      // 月次最大損失16.5%
         maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
         maxTotalPositions: 10,             // 全体の最大ポジション
-        initialCapital: 100000             // 初期資金（ドローダウン計算用）
       }
     },
 
@@ -218,7 +213,6 @@ const config = {
         monthlyMaxLossPercent: 0.126,      // 月次最大損失12.6%
         maxPositionsPerPair: 2,            // 同一ペアの最大ポジション
         maxTotalPositions: 8,              // 全体の最大ポジション
-        initialCapital: 85000              // 初期資金（ドローダウン計算用）
       }
     },
 
@@ -243,7 +237,6 @@ const config = {
         monthlyMaxLossPercent: 0.144,      // 月次最大損失14.4%
         maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
         maxTotalPositions: 9,              // 全体の最大ポジション
-        initialCapital: 95000              // 初期資金（ドローダウン計算用）
       }
     },
 
