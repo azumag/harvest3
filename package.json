@@ -13,7 +13,8 @@
     "test:watch": "jest --watch",
     "test:unit": "jest test/unit",
     "check-balance": "node scripts/balanceConsistencyChecker.js",
-    "check-balance-symbol": "node scripts/balanceConsistencyChecker.js"
+    "check-balance-symbol": "node scripts/balanceConsistencyChecker.js",
+    "compare-balance": "node scripts/compareExchangeVsSummary.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

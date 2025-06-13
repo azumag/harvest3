@@ -1,17 +1,10 @@
 const { config } = require('../src/config');
-const { 
-  getStrategyPositionsRedis,
-  recordPnLRedis,
-  calculatePeriodPnLRedis 
-} = require('../src/database/redisDatabase');
+const { initRedisClient } = require('../src/database/redisClient');
+const { getStrategyPositionsRedis } = require('../src/database/redisDatabase');
 const { postOrderToDiscord, postErrorToDiscord } = require('../src/common/notifications');
 
-// Redis接続を初期化
-const { initRedisClient } = require('../src/database/redisClient');
-
 /**
- * 残高整合性チェッカー
- * Redisで管理されているポジションと取引所の実際の残高を比較し、不整合を検出する
+ * 通貨別に全戦略を合算して残高整合性をチェック
  */
 class BalanceConsistencyChecker {
   constructor() {
@@ -24,151 +17,167 @@ class BalanceConsistencyChecker {
    * 全戦略の残高整合性をチェック
    */
   async checkAllStrategies() {
-    console.log('🔍 残高整合性チェックを開始します...\n');
+    console.log('🔍 通貨別合算残高整合性チェックを開始します...\n');
     
-    const strategies = Object.keys(config.strategies).filter(key => 
-      config.strategies[key].enabled
-    );
+    const exchanges = Object.keys(config.exchanges);
     
-    for (const strategyKey of strategies) {
-      const strategyConfig = config.strategies[strategyKey];
+    for (const exchangeId of exchanges) {
+      const exchange = config.exchanges[exchangeId]?.instance;
+      if (!exchange) continue;
       
-      if (!strategyConfig.exchanges || strategyConfig.exchanges.length === 0) {
-        continue;
-      }
-      
-      for (const exchange of strategyConfig.exchanges) {
-        await this.checkStrategyBalance(exchange, strategyKey);
-      }
+      await this.checkExchangeBalancesBySymbol(exchange, exchangeId);
     }
     
     await this.generateReport();
   }
 
   /**
-   * 特定戦略の残高をチェック
+   * 取引所の通貨別残高をチェック（全戦略合算）
    */
-  async checkStrategyBalance(exchange, strategyKey) {
+  async checkExchangeBalancesBySymbol(exchange, exchangeId) {
     try {
-      console.log(`📊 ${strategyKey} 戦略の残高をチェック中... (${exchange.id})`);
+      console.log(`📊 ${exchangeId} の通貨別残高をチェック中...`);
       
-      // 取引所の実際の残高を取得
+      // 実際の残高を取得
       const actualBalance = await exchange.fetchBalance();
       
-      // 全通貨ペアを取得
-      const markets = await exchange.fetchMarkets();
-      const symbols = markets.map(market => market.symbol);
-      
-      // 通貨別のポジション残高を集計
-      const positionBalances = await this.calculatePositionBalances(
-        exchange.id, 
-        strategyKey, 
-        symbols
+      // 全戦略を取得
+      const enabledStrategies = Object.keys(config.strategies).filter(key => 
+        config.strategies[key].enabled
       );
       
-      // 残高比較
-      await this.compareBalances(
-        exchange.id,
-        strategyKey,
+      // 通貨別にポジションを合算
+      const currencyPositions = await this.aggregatePositionsByCurrency(
+        exchangeId, 
+        enabledStrategies
+      );
+      
+      // 通貨ごとに残高比較
+      await this.compareBalancesByCurrency(
+        exchangeId,
         actualBalance,
-        positionBalances
+        currencyPositions
       );
       
     } catch (error) {
-      const warning = `⚠️ ${strategyKey} 戦略の残高チェックでエラー: ${error.message}`;
+      const warning = `⚠️ ${exchangeId} の残高チェックでエラー: ${error.message}`;
       this.warnings.push(warning);
       console.error(warning);
     }
   }
 
   /**
-   * Redis上のポジションから残高を計算
+   * 通貨別にポジションを合算
    */
-  async calculatePositionBalances(exchangeId, strategyKey, symbols) {
-    const positionBalances = {};
+  async aggregatePositionsByCurrency(exchangeId, strategies) {
+    const currencyPositions = {};
     
-    for (const symbol of symbols) {
-      try {
-        const positions = await getStrategyPositionsRedis(exchangeId, symbol, strategyKey);
-        const openPositions = positions.filter(pos => pos.status === 'open' && pos.side === 'buy');
-        
-        if (openPositions.length > 0) {
-          const baseAsset = symbol.split('/')[0];
+    // 主要通貨ペアを取得
+    const markets = ['BTC/JPY', 'ETH/JPY', 'XRP/JPY', 'LTC/JPY', 'BCH/JPY', 
+                   'SOL/JPY', 'DOT/JPY', 'XLM/JPY', 'LINK/JPY', 'GALA/JPY',
+                   'APE/JPY', 'MANA/JPY', 'SAND/JPY', 'CHZ/JPY', 'OAS/JPY'];
+    
+    for (const symbol of markets) {
+      const baseAsset = symbol.split('/')[0];
+      
+      // この通貨の全戦略ポジションを合算
+      let totalAmount = 0;
+      const strategyBreakdown = {};
+      
+      for (const strategyKey of strategies) {
+        try {
+          const positions = await getStrategyPositionsRedis(exchangeId, symbol, strategyKey);
+          const openPositions = positions.filter(pos => pos.status === 'open' && pos.side === 'buy');
           
-          if (!positionBalances[baseAsset]) {
-            positionBalances[baseAsset] = {
-              total: 0,
-              positions: []
+          const strategyAmount = openPositions.reduce((sum, pos) => sum + pos.amount, 0);
+          
+          if (strategyAmount > 0) {
+            totalAmount += strategyAmount;
+            strategyBreakdown[strategyKey] = {
+              amount: strategyAmount,
+              positions: openPositions.map(pos => ({
+                orderId: pos.orderId,
+                amount: pos.amount,
+                entryPrice: pos.entryPrice,
+                createdAt: new Date(pos.createdAt).toLocaleString('ja-JP')
+              }))
             };
           }
-          
-          for (const position of openPositions) {
-            positionBalances[baseAsset].total += position.amount;
-            positionBalances[baseAsset].positions.push({
-              symbol,
-              orderId: position.orderId,
-              amount: position.amount,
-              entryPrice: position.entryPrice,
-              createdAt: new Date(position.createdAt).toLocaleString('ja-JP')
-            });
-          }
+        } catch (error) {
+          console.warn(`ポジション取得エラー: ${symbol} ${strategyKey} - ${error.message}`);
         }
-        
-      } catch (error) {
-        console.warn(`ポジション取得エラー: ${symbol} - ${error.message}`);
+      }
+      
+      if (totalAmount > 0) {
+        currencyPositions[baseAsset] = {
+          symbol,
+          totalAmount,
+          strategies: strategyBreakdown
+        };
       }
     }
     
-    return positionBalances;
+    return currencyPositions;
   }
 
   /**
-   * 実残高とポジション残高を比較
+   * 通貨ごとの残高比較
    */
-  async compareBalances(exchangeId, strategyKey, actualBalance, positionBalances) {
+  async compareBalancesByCurrency(exchangeId, actualBalance, currencyPositions) {
+    // チェック対象通貨を取得
     const currencies = new Set([
-      ...Object.keys(actualBalance.free || {}),
-      ...Object.keys(positionBalances)
+      ...Object.keys(actualBalance.used || {}),
+      ...Object.keys(currencyPositions)
     ]);
 
     for (const currency of currencies) {
-      const actualFree = actualBalance.free[currency] || 0;
       const actualUsed = actualBalance.used[currency] || 0;
+      const actualFree = actualBalance.free[currency] || 0;
       const actualTotal = actualBalance.total[currency] || 0;
-      const positionTotal = positionBalances[currency]?.total || 0;
+      
+      const positionData = currencyPositions[currency];
+      const positionTotal = positionData?.totalAmount || 0;
 
       // 最小量閾値（0.0001未満は無視）
       const threshold = 0.0001;
       
-      if (positionTotal > threshold || actualTotal > threshold) {
+      if (positionTotal > threshold || actualUsed > threshold) {
         this.totalChecked++;
         
         const discrepancy = Math.abs(positionTotal - actualUsed);
         const discrepancyPercent = actualUsed > 0 ? (discrepancy / actualUsed) * 100 : 0;
         
-        // 1%以上の乖離または0.001以上の絶対差がある場合は警告
-        if (discrepancy > 0.001 && discrepancyPercent > 1) {
+        // 1%以上の乖離または0.001以上の絶対差がある場合は記録
+        if (discrepancy > 0.001 && (discrepancyPercent > 1 || discrepancy > 0.01)) {
           const issue = {
             exchangeId,
-            strategyKey,
             currency,
+            symbol: positionData?.symbol || `${currency}/JPY`,
             actualFree,
             actualUsed,
             actualTotal,
             positionTotal,
             discrepancy,
             discrepancyPercent: discrepancyPercent.toFixed(2),
-            positions: positionBalances[currency]?.positions || []
+            strategiesBreakdown: positionData?.strategies || {}
           };
           
           this.discrepancies.push(issue);
           
-          console.log(`❌ 不整合検出: ${exchangeId} ${strategyKey} ${currency}`);
-          console.log(`   実残高: ${actualUsed.toFixed(6)} (使用中) / ${actualTotal.toFixed(6)} (合計)`);
-          console.log(`   ポジション合計: ${positionTotal.toFixed(6)}`);
-          console.log(`   乖離: ${discrepancy.toFixed(6)} (${discrepancyPercent.toFixed(2)}%)\n`);
+          console.log(`❌ 不整合検出: ${exchangeId} ${currency}`);
+          console.log(`   実残高(used): ${actualUsed.toFixed(6)} / 総残高: ${actualTotal.toFixed(6)}`);
+          console.log(`   全戦略ポジション合計: ${positionTotal.toFixed(6)}`);
+          console.log(`   乖離: ${discrepancy.toFixed(6)} (${discrepancyPercent.toFixed(2)}%)`);
+          
+          if (positionData?.strategies) {
+            console.log(`   戦略別内訳:`);
+            for (const [strategy, data] of Object.entries(positionData.strategies)) {
+              console.log(`     ${strategy}: ${data.amount.toFixed(6)}`);
+            }
+          }
+          console.log();
         } else {
-          console.log(`✅ ${currency}: 整合性OK (実: ${actualUsed.toFixed(6)}, ポジション: ${positionTotal.toFixed(6)})`);
+          console.log(`✅ ${currency}: 整合性OK (実used: ${actualUsed.toFixed(6)}, 全ポジション: ${positionTotal.toFixed(6)})`);
         }
       }
     }
@@ -179,7 +188,7 @@ class BalanceConsistencyChecker {
    */
   async generateReport() {
     console.log('\n' + '='.repeat(80));
-    console.log('📋 残高整合性チェック結果レポート');
+    console.log('📋 通貨別残高整合性チェック結果レポート');
     console.log('='.repeat(80));
     
     console.log(`📊 チェック件数: ${this.totalChecked}件`);
@@ -191,18 +200,20 @@ class BalanceConsistencyChecker {
       console.log('-'.repeat(60));
       
       for (const issue of this.discrepancies) {
-        console.log(`\n[${issue.exchangeId}] ${issue.strategyKey} - ${issue.currency}`);
-        console.log(`  実残高(使用中): ${issue.actualUsed}`);
-        console.log(`  ポジション合計: ${issue.positionTotal}`);
+        console.log(`\n[${issue.exchangeId}] ${issue.currency}`);
+        console.log(`  実残高(used): ${issue.actualUsed}`);
+        console.log(`  全戦略ポジション合計: ${issue.positionTotal}`);
         console.log(`  乖離: ${issue.discrepancy} (${issue.discrepancyPercent}%)`);
         
-        if (issue.positions.length > 0) {
-          console.log(`  関連ポジション:`);
-          for (const pos of issue.positions) {
-            console.log(`    - ${pos.symbol}: ${pos.amount} (注文ID: ${pos.orderId}, エントリー: ${pos.entryPrice}, 作成: ${pos.createdAt})`);
+        if (Object.keys(issue.strategiesBreakdown).length > 0) {
+          console.log(`  戦略別詳細:`);
+          for (const [strategy, data] of Object.entries(issue.strategiesBreakdown)) {
+            console.log(`    ${strategy}: ${data.amount} (${data.positions.length}ポジション)`);
           }
         }
       }
+    } else {
+      console.log('✅ 不整合は検出されませんでした。全通貨で残高が一致しています。');
     }
 
     if (this.warnings.length > 0) {
@@ -217,7 +228,7 @@ class BalanceConsistencyChecker {
     await this.sendDiscordNotification();
     
     console.log('\n' + '='.repeat(80));
-    console.log('チェック完了');
+    console.log('残高整合性チェック完了');
     console.log('='.repeat(80));
   }
 
@@ -228,21 +239,22 @@ class BalanceConsistencyChecker {
     const severity = this.discrepancies.length > 0 ? '🚨' : '✅';
     const status = this.discrepancies.length > 0 ? '不整合検出' : '正常';
     
-    let message = `${severity} [残高整合性チェック] ${status}\n\n`;
+    let message = `${severity} [残高チェック] ${status}\n\n`;
     message += `📊 チェック件数: ${this.totalChecked}件\n`;
     message += `❌ 不整合件数: ${this.discrepancies.length}件\n`;
     message += `⚠️ 警告件数: ${this.warnings.length}件\n`;
     message += `🕐 実行時刻: ${new Date().toLocaleString('ja-JP')}\n`;
 
     if (this.discrepancies.length > 0) {
-      message += '\n🚨 主要な不整合:\n';
-      // 上位5件の不整合を表示
+      message += '\n🚨 主要な不整合：\n';
+      
       const topIssues = this.discrepancies
         .sort((a, b) => parseFloat(b.discrepancyPercent) - parseFloat(a.discrepancyPercent))
         .slice(0, 5);
       
       for (const issue of topIssues) {
-        message += `• ${issue.exchangeId} ${issue.strategyKey} ${issue.currency}: ${issue.discrepancyPercent}%乖離\n`;
+        message += `• ${issue.exchangeId} ${issue.currency}: ${issue.discrepancyPercent}%乖離\n`;
+        message += `  実used: ${issue.actualUsed}, 全ポジション: ${issue.positionTotal}\n`;
       }
       
       if (this.discrepancies.length > 5) {
@@ -260,72 +272,27 @@ class BalanceConsistencyChecker {
       console.error('Discord通知の送信に失敗:', error.message);
     }
   }
-
-  /**
-   * 特定通貨ペアの詳細チェック
-   */
-  async checkSpecificSymbol(exchangeId, symbol, strategyKey) {
-    console.log(`🔍 ${symbol} の詳細チェックを実行中...`);
-    
-    try {
-      const exchange = config.exchanges[exchangeId]?.instance;
-      if (!exchange) {
-        throw new Error(`取引所 ${exchangeId} が見つかりません`);
-      }
-
-      const actualBalance = await exchange.fetchBalance();
-      const positions = await getStrategyPositionsRedis(exchangeId, symbol, strategyKey);
-      const baseAsset = symbol.split('/')[0];
-
-      console.log(`\n📊 ${symbol} (${strategyKey}) の詳細:`);
-      console.log(`実残高: ${actualBalance.free[baseAsset] || 0} (Free) / ${actualBalance.used[baseAsset] || 0} (Used)`);
-      console.log(`ポジション数: ${positions.length}件`);
-
-      const openPositions = positions.filter(pos => pos.status === 'open');
-      if (openPositions.length > 0) {
-        console.log(`\nオープンポジション:`);
-        for (const pos of openPositions) {
-          console.log(`  注文ID ${pos.orderId}: ${pos.amount} @ ${pos.entryPrice} (${new Date(pos.createdAt).toLocaleString('ja-JP')})`);
-        }
-        
-        const totalAmount = openPositions.reduce((sum, pos) => sum + pos.amount, 0);
-        console.log(`ポジション合計: ${totalAmount}`);
-        
-        const usedBalance = actualBalance.used[baseAsset] || 0;
-        const discrepancy = Math.abs(totalAmount - usedBalance);
-        console.log(`乖離: ${discrepancy} (${usedBalance > 0 ? (discrepancy/usedBalance*100).toFixed(2) : 'N/A'}%)`);
-      }
-
-    } catch (error) {
-      console.error(`詳細チェックエラー: ${error.message}`);
-    }
-  }
 }
 
 /**
  * メイン実行関数
  */
 async function main() {
-  const args = process.argv.slice(2);
   const checker = new BalanceConsistencyChecker();
 
   try {
-    // Redis接続を初期化
     console.log('Redis接続を初期化中...');
     await initRedisClient();
     console.log('Redis接続完了\n');
 
-    if (args.length === 3) {
-      // 特定通貨ペアのチェック
-      const [exchangeId, symbol, strategyKey] = args;
-      await checker.checkSpecificSymbol(exchangeId, symbol, strategyKey);
-    } else {
-      // 全戦略のチェック
-      await checker.checkAllStrategies();
-    }
+    await checker.checkAllStrategies();
+    
   } catch (error) {
     console.error('チェック実行エラー:', error);
     process.exit(1);
+  } finally {
+    console.log('🔍 残高整合性チェック完了');
+    process.exit(0);
   }
 }
 

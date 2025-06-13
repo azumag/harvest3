@@ -119,6 +119,11 @@
     npm run start-web
     ```
 
+-   **残高整合性チェック:** Redis管理残高と実際の取引所残高の整合性をチェックします。
+    ```bash
+    npm run check-balance
+    ```
+
 ### Dockerでの実行
 
 `docker-compose.yml` を使用して、各サービスをコンテナとして実行できます。
@@ -141,6 +146,10 @@
     # MongoDBサーバーのみ起動
     docker compose up -d mongo
     ```
+-   **残高整合性チェック (Docker内で実行):**
+    ```bash
+    docker compose exec nodejs node scripts/balanceConsistencyChecker.js
+    ```
 -   **ログの確認:**
     ```bash
     docker compose logs -f <サービス名> # 例: docker compose logs -f bot
@@ -156,6 +165,7 @@ Discord Webhookが設定されている場合、以下のレポートが送信�
 
 1.  **全体資産計算レポート:** 1時間ごとに、各取引所の全資産をJPY換算で計算し、Discordに投稿します。
 2.  **戦略と銘柄ごとの損益レポート:** 1時間ごとに、各取引所の戦略と銘柄ごとの損益、保有量、評価額などを計算し、Discordに投稿します。
+3.  **残高整合性チェックレポート:** Redis管理残高と実際の取引所残高を通貨別に合算比較し、不整合があればDiscordに警告を送信します。
 
 ## 設定
 

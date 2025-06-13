@@ -235,19 +235,29 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   const { amountPrecision, minTradeAmount } = marketParameters;
   
   try {
-    // 実際の残高を確認
-    const balance = await exchange.fetchBalance();
-    const baseAsset = symbol.split('/')[0];
-    const availableAmount = balance.free[baseAsset] || 0;
+    // formattedAvailableAmountを使用して利用可能量を取得
+    const { formattedAvailableAmount } = require('../../database/manager');
+    const availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
     
-    console.log(`[DEBUG] Stop-loss for ${symbol}: Position amount: ${position.amount}, Available balance: ${availableAmount}`);
+    console.log(`[DEBUG] Stop-loss for ${symbol}: Strategy ${strategyKey}`);
+    console.log(`[DEBUG] Position amount: ${position.amount}, Available to sell: ${availableToSell}`);
     
-    // 売却可能量を計算（実際の残高と最小取引量を考慮）
-    let sellAmount = Math.min(position.amount, availableAmount);
+    // 売却可能量がゼロまたはマイナスの場合はスキップ
+    if (availableToSell <= 0) {
+      console.log(`[INFO] Skip stop-loss: Available to sell is ${availableToSell} (no actual available holdings)`);
+      return { 
+        success: false, 
+        reason: 'no_available_amount',
+        message: `戦略 ${strategyKey} の売却可能量が ${availableToSell} のため、ストップロスをスキップしました`
+      };
+    }
+    
+    // 売却可能量を計算（個別ポジション量と利用可能量の最小値）
+    let sellAmount = Math.min(position.amount, availableToSell);
     
     // 最小取引量を満たさない場合はエラー
     if (sellAmount < minTradeAmount) {
-      throw new Error(`Insufficient balance for stop-loss: available ${availableAmount}, required ${minTradeAmount}`);
+      throw new Error(`Insufficient balance for stop-loss: available to sell ${availableToSell}, required ${minTradeAmount}`);
     }
     
     const formattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
