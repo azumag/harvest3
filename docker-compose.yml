@@ -19,7 +19,10 @@ services:
       - redis
       - mongodb
     logging:
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
   redis:
     image: redis:8-alpine
@@ -33,7 +36,10 @@ services:
     networks:
       - harvest-network
     logging:
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
   mongodb:
     image: mongo:7.0
@@ -46,7 +52,10 @@ services:
     networks:
       - harvest-network
     logging:
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
   bot:
     image: harvest3-bot-image
@@ -71,7 +80,10 @@ services:
       - redis
       - mongodb
     logging:
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
   hft:
     image: harvest3-bot-image
@@ -89,6 +101,11 @@ services:
     depends_on:
       - redis
       - mongodb
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
   backtest:
     image: harvest3-bot-image
@@ -108,7 +125,10 @@ services:
       - redis
       - mongodb
     logging:
-      driver: "none"
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
  
   # mm:
   #   image: harvest3-bot-image
@@ -157,6 +177,11 @@ services:
     networks:
       - harvest-network
     command: npm run start-web
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
 
 volumes:
   redis_data:
