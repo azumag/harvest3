@@ -264,7 +264,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
     // リスク管理: ポジション情報を記録（バックテストモードではスキップ）
     if (!options.backtest && config.enableRiskManagement !== false) {
-      recordBuyPosition(exchange, symbol, strategyKey, order, executedPrice);
+      await recordBuyPosition(exchange, symbol, strategyKey, order, executedPrice);
     }
 
     return { success: true, order };

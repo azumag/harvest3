@@ -1,5 +1,16 @@
 const { getTradeCurrentPosition, updateTradeSummary, getTradeSummary, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
+const { 
+  savePositionRedis, 
+  getPositionRedis, 
+  getStrategyPositionsRedis, 
+  deletePositionRedis,
+  recordPnLRedis,
+  calculatePeriodPnLRedis,
+  clearPnLRedis,
+  clearAllPositionsRedis,
+  clearAllPnLRedis
+} = require('../../database/redisDatabase');
 
 /**
  * リスク管理設定のデフォルト値
@@ -22,28 +33,46 @@ const DEFAULT_RISK_SETTINGS = {
 };
 
 /**
- * ポジション情報を取得・保存するためのメモリストレージ
- * 本来はRedisに保存すべきだが、まずはメモリで実装
+ * Redis接続エラー時のフォールバック用メモリストレージ
  */
-const positionStore = new Map();
+const fallbackPositionStore = new Map();
 
 /**
  * ポジション情報を保存
  * @param {string} positionKey - ポジションキー (exchange:symbol:strategy:orderId)
  * @param {Object} positionData - ポジション情報
  */
-function savePosition(positionKey, positionData) {
-  positionStore.set(positionKey, {
-    ...positionData,
-    updatedAt: Date.now()
-  });
+async function savePosition(positionKey, positionData) {
+  try {
+    const success = await savePositionRedis(positionKey, positionData);
+    if (!success) {
+      // Redis失敗時はメモリにフォールバック
+      fallbackPositionStore.set(positionKey, {
+        ...positionData,
+        updatedAt: Date.now()
+      });
+      console.warn(`Redis保存失敗、メモリにフォールバック: ${positionKey}`);
+    }
+  } catch (error) {
+    // Redis接続エラー時はメモリにフォールバック
+    fallbackPositionStore.set(positionKey, {
+      ...positionData,
+      updatedAt: Date.now()
+    });
+    console.warn(`Redis接続エラー、メモリにフォールバック: ${positionKey}`, error.message);
+  }
 }
 
 /**
  * テスト用: ポジションストレージをクリア
  */
-function clearPositionStore() {
-  positionStore.clear();
+async function clearPositionStore() {
+  try {
+    await clearAllPositionsRedis();
+  } catch (error) {
+    console.warn('Redis クリア失敗、メモリストレージのみクリア:', error.message);
+  }
+  fallbackPositionStore.clear();
 }
 
 /**
@@ -51,8 +80,18 @@ function clearPositionStore() {
  * @param {string} positionKey - ポジションキー
  * @returns {Object|null} - ポジション情報
  */
-function getPosition(positionKey) {
-  return positionStore.get(positionKey) || null;
+async function getPosition(positionKey) {
+  try {
+    const position = await getPositionRedis(positionKey);
+    if (position) {
+      return position;
+    }
+  } catch (error) {
+    console.warn(`Redis取得エラー、メモリにフォールバック: ${positionKey}`, error.message);
+  }
+  
+  // Redis失敗時はメモリから取得
+  return fallbackPositionStore.get(positionKey) || null;
 }
 
 /**
@@ -62,9 +101,19 @@ function getPosition(positionKey) {
  * @param {string} strategyKey - 戦略キー
  * @returns {Array} - ポジション配列
  */
-function getStrategyPositions(exchangeId, symbol, strategyKey) {
+async function getStrategyPositions(exchangeId, symbol, strategyKey) {
+  try {
+    const positions = await getStrategyPositionsRedis(exchangeId, symbol, strategyKey);
+    if (positions.length > 0) {
+      return positions;
+    }
+  } catch (error) {
+    console.warn(`Redis取得エラー、メモリにフォールバック: ${exchangeId}:${symbol}:${strategyKey}`, error.message);
+  }
+  
+  // Redis失敗時はメモリから取得
   const positions = [];
-  for (const [key, position] of positionStore.entries()) {
+  for (const [key, position] of fallbackPositionStore.entries()) {
     if (key.startsWith(`${exchangeId}:${symbol}:${strategyKey}:`)) {
       positions.push({ key, ...position });
     }
@@ -113,7 +162,7 @@ function calculateStopLossPrice(position, currentPrice, riskSettings = DEFAULT_R
  * @returns {Array} - ストップロスが必要なポジション
  */
 async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSettings = DEFAULT_RISK_SETTINGS) {
-  const positions = getStrategyPositions(exchange.id, symbol, strategyKey);
+  const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
   const stopLossPositions = [];
   
   for (const position of positions) {
@@ -125,7 +174,7 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
     // 最高値を更新
     if (currentPrice > (position.highestPrice || position.entryPrice)) {
       position.highestPrice = currentPrice;
-      savePosition(position.key, position);
+      await savePosition(position.key, position);
     }
     
     // ストップロス価格を計算
@@ -176,7 +225,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     position.status = 'closed';
     position.closePrice = order.price;
     position.closedAt = Date.now();
-    savePosition(position.key, position);
+    await savePosition(position.key, position);
     
     // 通知
     const lossPercent = ((order.price - position.entryPrice) / position.entryPrice * 100).toFixed(2);
@@ -201,15 +250,20 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 }
 
 /**
- * 期間ごとの損益を追跡するためのストレージ
+ * Redis接続エラー時のフォールバック用損益追跡ストレージ
  */
-const pnlTracker = new Map();
+const fallbackPnlTracker = new Map();
 
 /**
  * テスト用: PnLトラッカーをクリア
  */
-function clearPnLTracker() {
-  pnlTracker.clear();
+async function clearPnLTracker() {
+  try {
+    await clearAllPnLRedis();
+  } catch (error) {
+    console.warn('Redis 損益クリア失敗、メモリストレージのみクリア:', error.message);
+  }
+  fallbackPnlTracker.clear();
 }
 
 /**
@@ -218,13 +272,30 @@ function clearPnLTracker() {
  * @param {string} strategyKey - 戦略キー
  * @param {number} pnl - 損益
  */
-function recordPnL(exchangeId, strategyKey, pnl) {
+async function recordPnL(exchangeId, strategyKey, pnl) {
+  try {
+    const success = await recordPnLRedis(exchangeId, strategyKey, pnl);
+    if (!success) {
+      // Redis失敗時はメモリにフォールバック
+      recordPnLFallback(exchangeId, strategyKey, pnl);
+    }
+  } catch (error) {
+    // Redis接続エラー時はメモリにフォールバック
+    console.warn(`Redis損益記録エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
+    recordPnLFallback(exchangeId, strategyKey, pnl);
+  }
+}
+
+/**
+ * フォールバック用の損益記録
+ */
+function recordPnLFallback(exchangeId, strategyKey, pnl) {
   const now = new Date();
   const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
   const key = `${exchangeId}:${strategyKey}:${dateKey}`;
   
-  const current = pnlTracker.get(key) || { pnl: 0, trades: 0 };
-  pnlTracker.set(key, {
+  const current = fallbackPnlTracker.get(key) || { pnl: 0, trades: 0 };
+  fallbackPnlTracker.set(key, {
     pnl: current.pnl + pnl,
     trades: current.trades + 1,
     lastUpdated: now
@@ -238,7 +309,17 @@ function recordPnL(exchangeId, strategyKey, pnl) {
  * @param {number} days - 過去何日分を計算するか
  * @returns {number} - 期間の合計損益
  */
-function calculatePeriodPnL(exchangeId, strategyKey, days) {
+async function calculatePeriodPnL(exchangeId, strategyKey, days) {
+  try {
+    const totalPnL = await calculatePeriodPnLRedis(exchangeId, strategyKey, days);
+    if (totalPnL !== 0) {
+      return totalPnL;
+    }
+  } catch (error) {
+    console.warn(`Redis期間損益計算エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
+  }
+  
+  // Redis失敗時はメモリから計算
   const now = new Date();
   let totalPnL = 0;
   
@@ -248,7 +329,7 @@ function calculatePeriodPnL(exchangeId, strategyKey, days) {
     const dateKey = date.toISOString().split('T')[0];
     const key = `${exchangeId}:${strategyKey}:${dateKey}`;
     
-    const dayData = pnlTracker.get(key);
+    const dayData = fallbackPnlTracker.get(key);
     if (dayData) {
       totalPnL += dayData.pnl;
     }
@@ -269,9 +350,9 @@ async function checkDrawdown(exchange, strategyKey, riskSettings = DEFAULT_RISK_
   const initialCapital = riskSettings.initialCapital || 100000; // デフォルト10万円
   
   // 各期間の損益を計算
-  const dailyPnL = calculatePeriodPnL(exchange.id, strategyKey, 1);
-  const weeklyPnL = calculatePeriodPnL(exchange.id, strategyKey, 7);
-  const monthlyPnL = calculatePeriodPnL(exchange.id, strategyKey, 30);
+  const dailyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 1);
+  const weeklyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 7);
+  const monthlyPnL = await calculatePeriodPnL(exchange.id, strategyKey, 30);
   
   // 損失率を計算
   const dailyLossRate = dailyPnL < 0 ? Math.abs(dailyPnL) / initialCapital : 0;
@@ -310,7 +391,7 @@ async function checkDrawdown(exchange, strategyKey, riskSettings = DEFAULT_RISK_
  */
 async function checkPositionLimits(exchange, symbol, strategyKey, riskSettings = DEFAULT_RISK_SETTINGS) {
   // 戦略の全ポジションを取得
-  const positions = getStrategyPositions(exchange.id, symbol, strategyKey);
+  const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
   const openPositions = positions.filter(p => p.status !== 'closed');
   
   // 同一通貨ペアのポジション数をチェック
@@ -324,10 +405,25 @@ async function checkPositionLimits(exchange, symbol, strategyKey, riskSettings =
   
   // 全体のポジション数をチェック
   const allSymbols = new Set();
-  for (const [key] of positionStore.entries()) {
-    const [exchangeId, sym, strategy] = key.split(':');
-    if (exchangeId === exchange.id && strategy === strategyKey) {
-      allSymbols.add(sym);
+  
+  // Redisから全ポジションを取得してカウント
+  try {
+    // 簡易実装: 主要通貨ペアのポジションをチェック
+    const majorPairs = ['BTC/JPY', 'ETH/JPY', 'XRP/JPY', 'LTC/JPY', 'BCH/JPY'];
+    for (const pair of majorPairs) {
+      const pairPositions = await getStrategyPositions(exchange.id, pair, strategyKey);
+      if (pairPositions.length > 0) {
+        allSymbols.add(pair);
+      }
+    }
+  } catch (error) {
+    console.warn('全ポジション数チェックでエラー、フォールバック処理:', error.message);
+    // フォールバック: メモリストレージから取得
+    for (const [key] of fallbackPositionStore.entries()) {
+      const [exchangeId, sym, strategy] = key.split(':');
+      if (exchangeId === exchange.id && strategy === strategyKey) {
+        allSymbols.add(sym);
+      }
     }
   }
   
@@ -349,7 +445,7 @@ async function checkPositionLimits(exchange, symbol, strategyKey, riskSettings =
  * @param {Object} order - 注文情報
  * @param {number} entryPrice - エントリー価格
  */
-function recordBuyPosition(exchange, symbol, strategyKey, order, entryPrice) {
+async function recordBuyPosition(exchange, symbol, strategyKey, order, entryPrice) {
   const positionKey = `${exchange.id}:${symbol}:${strategyKey}:${order.id}`;
   const positionData = {
     exchangeId: exchange.id,
@@ -364,7 +460,7 @@ function recordBuyPosition(exchange, symbol, strategyKey, order, entryPrice) {
     createdAt: Date.now()
   };
   
-  savePosition(positionKey, positionData);
+  await savePosition(positionKey, positionData);
 }
 
 module.exports = {

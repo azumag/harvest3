@@ -38,7 +38,7 @@ async function testRiskManagement() {
   
   // 2. ポジション制限テスト
   console.log('2. ポジション制限テスト');
-  clearPositionStore();
+  await clearPositionStore();
   
   const exchange = { id: 'bitbank' };
   const symbol = 'BTC/JPY';
@@ -46,7 +46,7 @@ async function testRiskManagement() {
   
   // 複数ポジションを追加
   for (let i = 0; i < 3; i++) {
-    savePosition(`bitbank:BTC/JPY:testStrategy:order${i}`, {
+    await savePosition(`bitbank:BTC/JPY:testStrategy:order${i}`, {
       exchangeId: 'bitbank',
       symbol: 'BTC/JPY',
       strategyKey: 'testStrategy',
@@ -57,7 +57,7 @@ async function testRiskManagement() {
     });
   }
   
-  const positions = getStrategyPositions('bitbank', 'BTC/JPY', 'testStrategy');
+  const positions = await getStrategyPositions('bitbank', 'BTC/JPY', 'testStrategy');
   console.log(`  現在のポジション数: ${positions.length}`);
   
   const limitCheck = await checkPositionLimits(exchange, symbol, strategyKey, {
@@ -72,10 +72,10 @@ async function testRiskManagement() {
   
   // 3. ストップロス検出テスト
   console.log('3. ストップロス検出テスト');
-  clearPositionStore();
+  await clearPositionStore();
   
   // テスト用ポジションを作成
-  savePosition('bitbank:BTC/JPY:testStrategy:order1', {
+  await savePosition('bitbank:BTC/JPY:testStrategy:order1', {
     exchangeId: 'bitbank',
     symbol: 'BTC/JPY',
     strategyKey: 'testStrategy',
@@ -103,12 +103,12 @@ async function testRiskManagement() {
   
   // 4. 損益記録テスト
   console.log('4. 損益記録テスト');
-  clearPnLTracker();
+  await clearPnLTracker();
   
   // 損益を記録
-  recordPnL('bitbank', 'testStrategy', -50000);   // 5万円の損失
-  recordPnL('bitbank', 'testStrategy', 30000);    // 3万円の利益
-  recordPnL('bitbank', 'testStrategy', -20000);   // 2万円の損失
+  await recordPnL('bitbank', 'testStrategy', -50000);   // 5万円の損失
+  await recordPnL('bitbank', 'testStrategy', 30000);    // 3万円の利益
+  await recordPnL('bitbank', 'testStrategy', -20000);   // 2万円の損失
   
   console.log('  本日の取引:');
   console.log('    -50,000円');

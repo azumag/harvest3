@@ -14,9 +14,9 @@ const {
 
 describe('リスク管理機能のテスト', () => {
   // テスト前にポジションストレージをクリア
-  beforeEach(() => {
-    clearPositionStore();
-    clearPnLTracker();
+  beforeEach(async () => {
+    await clearPositionStore();
+    await clearPnLTracker();
   });
 
   describe('calculateStopLossPrice', () => {
@@ -105,7 +105,7 @@ describe('リスク管理機能のテスト', () => {
 
       // 2つのポジションを追加
       for (let i = 0; i < 2; i++) {
-        savePosition(`bitbank:BTC/JPY:testStrategy:order${i}`, {
+        await savePosition(`bitbank:BTC/JPY:testStrategy:order${i}`, {
           exchangeId: 'bitbank',
           symbol: 'BTC/JPY',
           strategyKey: 'testStrategy',
@@ -122,7 +122,7 @@ describe('リスク管理機能のテスト', () => {
   });
 
   describe('recordBuyPosition', () => {
-    it('買いポジションを正しく記録する', () => {
+    it('買いポジションを正しく記録する', async () => {
       const exchange = { id: 'bitbank' };
       const symbol = 'BTC/JPY';
       const strategyKey = 'testStrategy';
@@ -132,10 +132,10 @@ describe('リスク管理機能のテスト', () => {
       };
       const entryPrice = 5000000;
 
-      recordBuyPosition(exchange, symbol, strategyKey, order, entryPrice);
+      await recordBuyPosition(exchange, symbol, strategyKey, order, entryPrice);
 
       const positionKey = 'bitbank:BTC/JPY:testStrategy:order123';
-      const position = getPosition(positionKey);
+      const position = await getPosition(positionKey);
 
       expect(position).toBeTruthy();
       expect(position.exchangeId).toBe('bitbank');
@@ -159,7 +159,7 @@ describe('リスク管理機能のテスト', () => {
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
 
       // ポジションを追加
-      savePosition('bitbank:BTC/JPY:testStrategy:order1', {
+      await savePosition('bitbank:BTC/JPY:testStrategy:order1', {
         exchangeId: 'bitbank',
         symbol: 'BTC/JPY',
         strategyKey: 'testStrategy',
@@ -187,7 +187,7 @@ describe('リスク管理機能のテスト', () => {
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
 
       // 25時間前のポジションを追加
-      savePosition('bitbank:BTC/JPY:testStrategy:order1', {
+      await savePosition('bitbank:BTC/JPY:testStrategy:order1', {
         exchangeId: 'bitbank',
         symbol: 'BTC/JPY',
         strategyKey: 'testStrategy',
@@ -215,7 +215,7 @@ describe('リスク管理機能のテスト', () => {
 
       // ポジションを追加
       const positionKey = 'bitbank:BTC/JPY:testStrategy:order1';
-      savePosition(positionKey, {
+      await savePosition(positionKey, {
         exchangeId: 'bitbank',
         symbol: 'BTC/JPY',
         strategyKey: 'testStrategy',
@@ -230,20 +230,20 @@ describe('リスク管理機能のテスト', () => {
 
       await checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSettings);
 
-      const updatedPosition = getPosition(positionKey);
+      const updatedPosition = await getPosition(positionKey);
       expect(updatedPosition.highestPrice).toBe(105);
     });
   });
 
   describe('recordPnL', () => {
-    it('損益を正しく記録する', () => {
+    it('損益を正しく記録する', async () => {
       const exchangeId = 'bitbank';
       const strategyKey = 'testStrategy';
       
       // 利益を記録
-      recordPnL(exchangeId, strategyKey, 1000);
-      recordPnL(exchangeId, strategyKey, -500);
-      recordPnL(exchangeId, strategyKey, 200);
+      await recordPnL(exchangeId, strategyKey, 1000);
+      await recordPnL(exchangeId, strategyKey, -500);
+      await recordPnL(exchangeId, strategyKey, 200);
       
       // 内部的なpnlTrackerにアクセスできないため、
       // checkDrawdown関数を通じて間接的にテスト

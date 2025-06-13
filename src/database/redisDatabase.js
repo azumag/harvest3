@@ -497,6 +497,240 @@ async function deleteKey(key) {
   }
 }
 
+// ===== ポジション管理機能 =====
+
+/**
+ * ポジション情報を保存
+ * @param {String} positionKey - ポジションキー (exchange:symbol:strategy:orderId)
+ * @param {Object} positionData - ポジション情報
+ * @returns {Promise<Boolean>} 保存に成功したかどうか
+ */
+async function savePositionRedis(positionKey, positionData) {
+  const key = `position:${positionKey}`;
+  try {
+    const dataWithTimestamp = {
+      ...positionData,
+      updatedAt: Date.now()
+    };
+    await client.hSet(key, dataWithTimestamp);
+    return true;
+  } catch (error) {
+    console.error(`ポジション情報の保存に失敗しました: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * ポジション情報を取得
+ * @param {String} positionKey - ポジションキー
+ * @returns {Promise<Object|null>} ポジション情報
+ */
+async function getPositionRedis(positionKey) {
+  const key = `position:${positionKey}`;
+  try {
+    const position = await client.hGetAll(key);
+    
+    if (Object.keys(position).length === 0) {
+      return null;
+    }
+    
+    // 数値フィールドを変換
+    return {
+      exchangeId: position.exchangeId,
+      symbol: position.symbol,
+      strategyKey: position.strategyKey,
+      orderId: position.orderId,
+      side: position.side,
+      amount: parseFloat(position.amount || 0),
+      entryPrice: parseFloat(position.entryPrice || 0),
+      highestPrice: parseFloat(position.highestPrice || 0),
+      status: position.status,
+      createdAt: parseInt(position.createdAt || 0),
+      updatedAt: parseInt(position.updatedAt || 0)
+    };
+  } catch (error) {
+    console.error(`ポジション情報の取得に失敗しました: ${key}`, error);
+    return null;
+  }
+}
+
+/**
+ * 戦略に関連する全ポジションを取得
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - シンボル
+ * @param {String} strategyKey - 戦略キー
+ * @returns {Promise<Array>} ポジション配列
+ */
+async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
+  try {
+    const pattern = `position:${exchangeId}:${symbol}:${strategyKey}:*`;
+    const keys = await client.keys(pattern);
+    const positions = [];
+    
+    for (const key of keys) {
+      const position = await client.hGetAll(key);
+      if (Object.keys(position).length > 0) {
+        const positionKey = key.replace('position:', '');
+        positions.push({
+          key: positionKey,
+          exchangeId: position.exchangeId,
+          symbol: position.symbol,
+          strategyKey: position.strategyKey,
+          orderId: position.orderId,
+          side: position.side,
+          amount: parseFloat(position.amount || 0),
+          entryPrice: parseFloat(position.entryPrice || 0),
+          highestPrice: parseFloat(position.highestPrice || 0),
+          status: position.status,
+          createdAt: parseInt(position.createdAt || 0),
+          updatedAt: parseInt(position.updatedAt || 0)
+        });
+      }
+    }
+    
+    return positions;
+  } catch (error) {
+    console.error(`戦略ポジションの取得に失敗しました: ${exchangeId}:${symbol}:${strategyKey}`, error);
+    return [];
+  }
+}
+
+/**
+ * ポジション情報を削除
+ * @param {String} positionKey - ポジションキー
+ * @returns {Promise<Boolean>} 削除に成功したかどうか
+ */
+async function deletePositionRedis(positionKey) {
+  const key = `position:${positionKey}`;
+  try {
+    const result = await client.del(key);
+    return result > 0;
+  } catch (error) {
+    console.error(`ポジション情報の削除に失敗しました: ${key}`, error);
+    return false;
+  }
+}
+
+// ===== 損益追跡機能 =====
+
+/**
+ * 損益を記録
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} strategyKey - 戦略キー
+ * @param {Number} pnl - 損益
+ * @returns {Promise<Boolean>} 記録に成功したかどうか
+ */
+async function recordPnLRedis(exchangeId, strategyKey, pnl) {
+  const now = new Date();
+  const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const key = `pnl:${exchangeId}:${strategyKey}:${dateKey}`;
+  
+  try {
+    // 既存データを取得
+    const existingData = await client.hGetAll(key);
+    const currentPnL = parseFloat(existingData.pnl || 0);
+    const currentTrades = parseInt(existingData.trades || 0);
+    
+    // データを更新
+    await client.hSet(key, {
+      pnl: currentPnL + pnl,
+      trades: currentTrades + 1,
+      lastUpdated: now.toISOString()
+    });
+    
+    // TTLを設定（90日後に自動削除）
+    await client.expire(key, 90 * 24 * 60 * 60);
+    
+    return true;
+  } catch (error) {
+    console.error(`損益の記録に失敗しました: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * 期間の損益を計算
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} strategyKey - 戦略キー
+ * @param {Number} days - 過去何日分を計算するか
+ * @returns {Promise<Number>} 期間の合計損益
+ */
+async function calculatePeriodPnLRedis(exchangeId, strategyKey, days) {
+  try {
+    const now = new Date();
+    let totalPnL = 0;
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateKey = date.toISOString().split('T')[0];
+      const key = `pnl:${exchangeId}:${strategyKey}:${dateKey}`;
+      
+      const dayData = await client.hGetAll(key);
+      if (Object.keys(dayData).length > 0) {
+        totalPnL += parseFloat(dayData.pnl || 0);
+      }
+    }
+    
+    return totalPnL;
+  } catch (error) {
+    console.error(`期間損益の計算に失敗しました: ${exchangeId}:${strategyKey}:${days}日`, error);
+    return 0;
+  }
+}
+
+/**
+ * 指定日の損益データをクリア
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} strategyKey - 戦略キー
+ * @param {String} date - 日付 (YYYY-MM-DD)
+ * @returns {Promise<Boolean>} クリアに成功したかどうか
+ */
+async function clearPnLRedis(exchangeId, strategyKey, date) {
+  const key = `pnl:${exchangeId}:${strategyKey}:${date}`;
+  try {
+    const result = await client.del(key);
+    return result > 0;
+  } catch (error) {
+    console.error(`損益データのクリアに失敗しました: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * テスト用: 全ポジションデータをクリア
+ * @returns {Promise<Boolean>} クリアに成功したかどうか
+ */
+async function clearAllPositionsRedis() {
+  try {
+    const keys = await client.keys('position:*');
+    if (keys.length > 0) {
+      await client.del(keys);
+    }
+    return true;
+  } catch (error) {
+    console.error('全ポジションデータのクリアに失敗しました:', error);
+    return false;
+  }
+}
+
+/**
+ * テスト用: 全損益データをクリア
+ * @returns {Promise<Boolean>} クリアに成功したかどうか
+ */
+async function clearAllPnLRedis() {
+  try {
+    const keys = await client.keys('pnl:*');
+    if (keys.length > 0) {
+      await client.del(keys);
+    }
+    return true;
+  } catch (error) {
+    console.error('全損益データのクリアに失敗しました:', error);
+    return false;
+  }
+}
+
 /**
  * 戦略パラメータを削除する関数
  * @param {String} exchangeId - 取引所ID
@@ -542,4 +776,16 @@ module.exports = {
   getAllBacktestOHLCVRedisSortedSet,
   getBacktestOHLCVRedisBeforeTimestamp,
   deleteKey,
+  // ポジション管理機能
+  savePositionRedis,
+  getPositionRedis,
+  getStrategyPositionsRedis,
+  deletePositionRedis,
+  // 損益追跡機能
+  recordPnLRedis,
+  calculatePeriodPnLRedis,
+  clearPnLRedis,
+  // テスト用
+  clearAllPositionsRedis,
+  clearAllPnLRedis,
 };
