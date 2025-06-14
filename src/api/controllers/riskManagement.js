@@ -1,7 +1,7 @@
 /**
  * リスク管理API コントローラー
  */
-const { getAllPositionsRedis, calculatePeriodPnLRedis } = require('../../database/redisDatabase');
+const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis } = require('../../database/redisDatabase');
 const { getTradeSummary } = require('../../database/manager');
 
 /**
@@ -30,54 +30,67 @@ async function getRiskPositions(req, res) {
       filteredPositions = filteredPositions.filter(pos => pos.strategy === strategy);
     }
 
-    // 各ポジションに追加情報を付与
-    const enrichedPositions = filteredPositions.map((position) => {
-      try {
-        // 現在の損益を計算
-        const currentPrice = position.currentPrice || position.entryPrice || 0;
-        const entryPrice = position.entryPrice || 0;
-        const amount = position.amount || 0;
-        const unrealizedPnL = amount > 0 ? (currentPrice - entryPrice) * amount : 0;
-        const unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+    // 各ポジションに追加情報を付与（ティッカーデータから現在価格を取得）
+    const enrichedPositions = await Promise.all(
+      filteredPositions.map(async (position) => {
+        try {
+          // Redisからティッカーデータを取得して現在価格を更新
+          let currentPrice = position.entryPrice || 0; // フォールバック値
+          
+          try {
+            const ticker = await getTickerRedis(position.exchange, position.symbol);
+            if (ticker && ticker.last && ticker.last > 0) {
+              currentPrice = ticker.last;
+            }
+          } catch (tickerError) {
+            console.warn(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
+            // フォールバック値を使用
+          }
 
-        // ストップロス条件のチェック（固定2%のストップロス）
-        const defaultStopLossPercent = 2; // 2%のストップロス
-        const stopLossTriggered = unrealizedPnLPercent <= -defaultStopLossPercent;
+          const entryPrice = position.entryPrice || 0;
+          const amount = position.amount || 0;
+          const unrealizedPnL = amount > 0 ? (currentPrice - entryPrice) * amount : 0;
+          const unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
 
-        // 経過時間の計算
-        const elapsedTime = Date.now() - position.timestamp;
-        const elapsedHours = elapsedTime / (1000 * 60 * 60);
-        const defaultTimeBasedStopHours = 24; // 24時間のタイムストップ
-        const timeStopTriggered = elapsedHours >= defaultTimeBasedStopHours;
+          // ストップロス条件のチェック（固定2%のストップロス）
+          const defaultStopLossPercent = 2; // 2%のストップロス
+          const stopLossTriggered = unrealizedPnLPercent <= -defaultStopLossPercent;
 
-        return {
-          ...position,
-          // 現在価格を更新
-          currentPrice,
-          
-          // 損益計算
-          unrealizedPnL,
-          unrealizedPnLPercent,
-          
-          // リスク管理状態
-          stopLossTriggered,
-          timeStopTriggered,
-          elapsedHours: Math.round(elapsedHours * 100) / 100,
-          
-          // 日時情報
-          createdAt: new Date(position.timestamp).toISOString(),
-          
-          // ポジション状態
-          status: (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active'
-        };
-      } catch (error) {
-        console.error(`Error enriching position ${position.positionKey}:`, error);
-        return {
-          ...position,
-          error: 'Failed to enrich position data'
-        };
-      }
-    });
+          // 経過時間の計算
+          const elapsedTime = Date.now() - position.timestamp;
+          const elapsedHours = elapsedTime / (1000 * 60 * 60);
+          const defaultTimeBasedStopHours = 24; // 24時間のタイムストップ
+          const timeStopTriggered = elapsedHours >= defaultTimeBasedStopHours;
+
+          return {
+            ...position,
+            // Redisのティッカーデータから取得した現在価格
+            currentPrice,
+            
+            // 損益計算
+            unrealizedPnL,
+            unrealizedPnLPercent,
+            
+            // リスク管理状態
+            stopLossTriggered,
+            timeStopTriggered,
+            elapsedHours: Math.round(elapsedHours * 100) / 100,
+            
+            // 日時情報
+            createdAt: new Date(position.timestamp).toISOString(),
+            
+            // ポジション状態
+            status: (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active'
+          };
+        } catch (error) {
+          console.error(`Error enriching position ${position.positionKey}:`, error);
+          return {
+            ...position,
+            error: 'Failed to enrich position data'
+          };
+        }
+      })
+    );
 
     // 統計情報を計算
     const stats = {
