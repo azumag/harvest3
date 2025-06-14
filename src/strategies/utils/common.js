@@ -89,6 +89,10 @@ async function handleStrategySignals(
   
   // リスク管理: ストップロスチェック（バックテストモードではスキップ）
   if (!options.backtest && config.enableRiskManagement !== false) {
+    // リスク管理前に約定情報を更新
+    console.log(`[リスク管理] ${symbol} の約定情報を更新中...`);
+    await updateFilledTrades(exchange, symbol);
+    
     const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
     
     // ストップロスが必要なポジションを処理

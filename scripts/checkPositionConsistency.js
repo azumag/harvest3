@@ -12,6 +12,7 @@
 
 const { getAllTradeSummaries, initialize } = require('../src/database/redisDatabase');
 const { config } = require('../src/config');
+const { updateFilledTrades } = require('../src/database/manager');
 
 /**
  * 取引所の残高情報を取得
@@ -293,7 +294,29 @@ async function main() {
     const redisAggregates = aggregateNetPositionsBySymbol(summaries);
     console.log('✓ 集計完了\n');
     
-    // 3. 各取引所の残高を取得
+    // 3. 約定情報を更新（各銘柄）
+    console.log('🔄 約定情報を更新中...');
+    const uniqueSymbols = new Set();
+    summaries.forEach(summary => {
+      uniqueSymbols.add(summary.symbol);
+    });
+    
+    for (const [exchangeId, exchangeConfig] of Object.entries(config.exchanges)) {
+      if (exchangeConfig.instance) {
+        console.log(`\n📊 ${exchangeId} の約定情報を更新中...`);
+        for (const symbol of uniqueSymbols) {
+          try {
+            await updateFilledTrades(exchangeConfig.instance, symbol);
+            console.log(`  ✓ ${symbol} の約定情報を更新しました`);
+          } catch (error) {
+            console.warn(`  ⚠️ ${symbol} の約定情報更新に失敗: ${error.message}`);
+          }
+        }
+      }
+    }
+    console.log('\n');
+    
+    // 4. 各取引所の残高を取得
     console.log('🏦 取引所の残高情報を取得中...');
     const exchangeBalances = {};
     
@@ -307,14 +330,14 @@ async function main() {
     }
     console.log('\n');
     
-    // 4. 整合性チェック
+    // 5. 整合性チェック
     console.log('🔍 整合性をチェック中...');
     const results = analyzeConsistency(redisAggregates, exchangeBalances);
     
-    // 5. 結果出力
+    // 6. 結果出力
     printResults(results);
     
-    // 6. 終了ステータス
+    // 7. 終了ステータス
     if (results.summary.inconsistentCount > 0 || results.summary.redisOnlyCount > 0) {
       console.log('\n⚠️  不整合が検出されました。上記の詳細を確認してください。');
       process.exit(1);
