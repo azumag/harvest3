@@ -26,6 +26,12 @@ function initDashboard() {
       const activeTabId = event.target.id;
       console.log(`タブが切り替えられました: ${activeTabId}`);
 
+      // リスク管理タブが表示された場合はデータを読み込み
+      if (activeTabId === 'risk-management-tab') {
+        loadAndDisplayRiskPositions();
+        loadAndDisplayRiskStats();
+      }
+
       // 必要に応じて各タブのコンテンツを再レンダリング（データは既にロード済み）
       // loadAndDisplaySummary() で一度ロード・集計したデータを使用
       // ここでは特に再レンダリングは不要だが、複雑なUIの場合は必要になることも
@@ -477,6 +483,7 @@ function processSummaryData(data) {
         totalFee: 0,
         realizedPnL: 0,
         netPnL: 0,
+        totalNetPosition: 0, // netPositionを集計
         byExchange: {}, // 取引所別の内訳
         byStrategy: {} // 戦略別の内訳
       };
@@ -485,6 +492,7 @@ function processSummaryData(data) {
     result.bySymbol[symbol].totalSellValue += totalSellValue || 0;
     result.bySymbol[symbol].totalFee += totalFee || 0;
     result.bySymbol[symbol].realizedPnL += realizedPnL || 0;
+    result.bySymbol[symbol].totalNetPosition += entry.netPosition || 0;
 
     // 銘柄内の取引所別内訳の集計
     if (!result.bySymbol[symbol].byExchange[exchangeId]) {
@@ -846,6 +854,12 @@ function renderSymbolSummary(symbolData) {
               <tr>
                 <td>売った額</td>
                 <td class="text-end">${formatNumber(data.totalSellValue)} 円</td>
+              </tr>
+              <tr>
+                <td>現在保有量</td>
+                <td class="text-end ${data.totalNetPosition > 0 ? 'text-success' : data.totalNetPosition < 0 ? 'text-danger' : ''}">
+                  ${formatAmount(data.totalNetPosition, 8)} ${extractBaseAsset(symbol)}
+                </td>
               </tr>
               <tr>
                 <td>手数料</td>
@@ -1613,4 +1627,336 @@ function renderAvailableAmounts(availableAmounts) {
   }
   
   container.innerHTML = html;
+}
+
+/**
+ * 数量を適切な小数点で表示するためのフォーマット関数
+ * @param {number} amount - フォーマットする数量
+ * @param {number} precision - 小数点以下の桁数
+ * @returns {string} フォーマットされた数量文字列
+ */
+function formatAmount(amount, precision = 8) {
+  if (amount === null || amount === undefined || amount === 0) return '0';
+  
+  // 非常に小さい値の場合は科学的記数法を使用
+  if (Math.abs(amount) < 0.000001 && amount !== 0) {
+    return amount.toExponential(2);
+  }
+  
+  // 通常の場合は指定された精度でフォーマット
+  return parseFloat(amount.toFixed(precision)).toString();
+}
+
+/**
+ * シンボルからベースアセット（通貨単位）を抽出する関数
+ * @param {string} symbol - 通貨ペア（例：BTC/JPY）
+ * @returns {string} ベースアセット（例：BTC）
+ */
+function extractBaseAsset(symbol) {
+  if (!symbol || typeof symbol !== 'string') return '';
+  
+  const parts = symbol.split('/');
+  return parts.length > 0 ? parts[0] : symbol;
+}
+
+/**
+ * リスク管理ポジション情報を読み込み表示
+ */
+async function loadAndDisplayRiskPositions() {
+  try {
+    const response = await fetch('/api/risk-positions');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    renderRiskPositions(data);
+  } catch (error) {
+    console.error('リスク管理ポジション情報の取得に失敗しました:', error);
+    showRiskPositionsError(error.message);
+  }
+}
+
+/**
+ * リスク管理統計情報を読み込み表示
+ */
+async function loadAndDisplayRiskStats() {
+  try {
+    const response = await fetch('/api/risk-stats');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    renderRiskStats(data);
+  } catch (error) {
+    console.error('リスク管理統計情報の取得に失敗しました:', error);
+    showRiskStatsError(error.message);
+  }
+}
+
+/**
+ * リスク管理ポジション情報を表示
+ * @param {Object} data - リスク管理データ
+ */
+function renderRiskPositions(data) {
+  const container = document.getElementById('risk-positions-container');
+  if (!container) return;
+
+  const { positions = [], stats = {} } = data;
+
+  if (positions.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-4">
+        <i class="bi bi-info-circle text-muted" style="font-size: 2rem;"></i>
+        <p class="text-muted mt-2">現在アクティブなリスク管理ポジションはありません。</p>
+      </div>
+    `;
+    return;
+  }
+
+  // ポジションをステータスと取引所別にグループ化
+  const groupedPositions = {};
+  positions.forEach(position => {
+    const key = `${position.exchange}_${position.status}`;
+    if (!groupedPositions[key]) {
+      groupedPositions[key] = [];
+    }
+    groupedPositions[key].push(position);
+  });
+
+  let html = `
+    <div class="row mb-3">
+      <div class="col-md-3">
+        <div class="card bg-primary text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">総ポジション数</h6>
+            <h4>${stats.totalPositions || 0}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-success text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">アクティブ</h6>
+            <h4>${stats.activePositions || 0}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-warning text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">リスク状態</h6>
+            <h4>${stats.atRiskPositions || 0}</h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-info text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">未実現損益</h6>
+            <h4>${(stats.totalUnrealizedPnL || 0).toLocaleString()}円</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ポジション一覧テーブル
+  html += `
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>取引所</th>
+            <th>通貨ペア</th>
+            <th>戦略</th>
+            <th>数量</th>
+            <th>エントリー価格</th>
+            <th>現在価格</th>
+            <th>未実現損益</th>
+            <th>経過時間</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  positions.forEach(position => {
+    const statusBadge = position.status === 'active' ? 
+      '<span class="badge bg-success">アクティブ</span>' :
+      '<span class="badge bg-warning">リスク状態</span>';
+
+    const pnlClass = (position.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
+    const pnlPrefix = (position.unrealizedPnL || 0) >= 0 ? '+' : '';
+
+    html += `
+      <tr>
+        <td>${position.exchange || 'N/A'}</td>
+        <td><strong>${position.symbol || 'N/A'}</strong></td>
+        <td><span class="badge bg-secondary">${position.strategy || 'N/A'}</span></td>
+        <td>${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}</td>
+        <td>¥${(position.entryPrice || 0).toLocaleString()}</td>
+        <td>¥${(position.currentPrice || 0).toLocaleString()}</td>
+        <td class="${pnlClass}">
+          <strong>${pnlPrefix}${(position.unrealizedPnL || 0).toLocaleString()}円</strong><br>
+          <small>(${pnlPrefix}${(position.unrealizedPnLPercent || 0).toFixed(2)}%)</small>
+        </td>
+        <td>${(position.elapsedHours || 0).toFixed(1)}時間</td>
+        <td>${statusBadge}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+/**
+ * リスク管理統計情報を表示
+ * @param {Object} data - 統計データ
+ */
+function renderRiskStats(data) {
+  const container = document.getElementById('risk-stats-container');
+  if (!container) return;
+
+  const { exchangeStats = {}, totalPositions = 0, periodPnL = 0 } = data;
+
+  let html = `
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card border-info">
+          <div class="card-body">
+            <h6 class="card-title">期間損益</h6>
+            <h4 class="${periodPnL >= 0 ? 'text-success' : 'text-danger'}">
+              ${periodPnL >= 0 ? '+' : ''}${periodPnL.toLocaleString()}円
+            </h4>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card border-primary">
+          <div class="card-body">
+            <h6 class="card-title">総ポジション数</h6>
+            <h4 class="text-primary">${totalPositions}</h4>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (Object.keys(exchangeStats).length > 0) {
+    html += `
+      <div class="row mt-3">
+        <div class="col-12">
+          <h6>取引所別統計</h6>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>取引所</th>
+                  <th>ポジション数</th>
+                  <th>総数量</th>
+                  <th>未実現損益</th>
+                </tr>
+              </thead>
+              <tbody>
+    `;
+
+    Object.entries(exchangeStats).forEach(([exchange, stats]) => {
+      const pnlClass = (stats.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
+      const pnlPrefix = (stats.unrealizedPnL || 0) >= 0 ? '+' : '';
+
+      html += `
+        <tr>
+          <td><strong>${exchange}</strong></td>
+          <td>${stats.positions || 0}</td>
+          <td>${formatAmount(stats.totalAmount || 0, 4)}</td>
+          <td class="${pnlClass}">${pnlPrefix}${(stats.unrealizedPnL || 0).toLocaleString()}円</td>
+        </tr>
+      `;
+    });
+
+    html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+/**
+ * リスク管理ポジションエラー表示
+ * @param {string} errorMessage - エラーメッセージ
+ */
+function showRiskPositionsError(errorMessage) {
+  const container = document.getElementById('risk-positions-container');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="alert alert-danger" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <strong>エラー:</strong> リスク管理ポジション情報の取得に失敗しました。<br>
+      <small>${errorMessage}</small>
+    </div>
+  `;
+}
+
+/**
+ * リスク管理統計エラー表示
+ * @param {string} errorMessage - エラーメッセージ
+ */
+function showRiskStatsError(errorMessage) {
+  const container = document.getElementById('risk-stats-container');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="alert alert-danger" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <strong>エラー:</strong> リスク管理統計の取得に失敗しました。<br>
+      <small>${errorMessage}</small>
+    </div>
+  `;
+}
+
+/**
+ * リスク管理ポジション情報を更新
+ */
+function refreshRiskPositions() {
+  // ローディング状態に戻す
+  const positionsContainer = document.getElementById('risk-positions-container');
+  const statsContainer = document.getElementById('risk-stats-container');
+
+  if (positionsContainer) {
+    positionsContainer.innerHTML = `
+      <div class="text-center py-3">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">読み込み中...</span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (statsContainer) {
+    statsContainer.innerHTML = `
+      <div class="text-center py-3">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">読み込み中...</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // データを再読み込み
+  loadAndDisplayRiskPositions();
+  loadAndDisplayRiskStats();
 }

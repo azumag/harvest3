@@ -14,7 +14,10 @@
     "test:unit": "jest test/unit",
     "check-balance": "node scripts/balanceConsistencyChecker.js",
     "check-balance-symbol": "node scripts/balanceConsistencyChecker.js",
-    "compare-balance": "node scripts/compareExchangeVsSummary.js"
+    "compare-balance": "node scripts/compareExchangeVsSummary.js",
+    "check-position-consistency": "node scripts/checkPositionConsistency.js",
+    "fix-position-inconsistencies": "node scripts/fixPositionInconsistencies.js",
+    "fix-position-inconsistencies-dry": "node scripts/fixPositionInconsistencies.js --dry-run"
   },
   "dependencies": {
     "axios": "^1.7.7",
