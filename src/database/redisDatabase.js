@@ -596,6 +596,49 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
 }
 
 /**
+ * すべてのポジション情報を取得
+ * @returns {Promise<Array>} 全ポジション配列
+ */
+async function getAllPositionsRedis() {
+  try {
+    const pattern = `position:*`;
+    const keys = await client.keys(pattern);
+    const positions = [];
+    
+    for (const key of keys) {
+      const position = await client.hGetAll(key);
+      if (Object.keys(position).length > 0) {
+        const positionKey = key.replace('position:', '');
+        positions.push({
+          key: positionKey,
+          positionKey: positionKey, // API互換性のため
+          exchangeId: position.exchangeId,
+          exchange: position.exchangeId, // API互換性のため
+          symbol: position.symbol,
+          strategyKey: position.strategyKey,
+          strategy: position.strategyKey, // API互換性のため
+          orderId: position.orderId,
+          side: position.side,
+          amount: parseFloat(position.amount || 0),
+          entryPrice: parseFloat(position.entryPrice || 0),
+          highestPrice: parseFloat(position.highestPrice || 0),
+          currentPrice: parseFloat(position.currentPrice || position.entryPrice || 0),
+          status: position.status,
+          createdAt: parseInt(position.createdAt || 0),
+          updatedAt: parseInt(position.updatedAt || 0),
+          timestamp: parseInt(position.createdAt || 0) // API互換性のため
+        });
+      }
+    }
+    
+    return positions;
+  } catch (error) {
+    console.error(`全ポジションの取得に失敗しました:`, error);
+    return [];
+  }
+}
+
+/**
  * ポジション情報を削除
  * @param {String} positionKey - ポジションキー
  * @returns {Promise<Boolean>} 削除に成功したかどうか
@@ -1010,6 +1053,7 @@ module.exports = {
   savePositionRedis,
   getPositionRedis,
   getStrategyPositionsRedis,
+  getAllPositionsRedis,
   deletePositionRedis,
   // ポジションクリーンアップ機能
   savePositionHistoryToMongoDB,

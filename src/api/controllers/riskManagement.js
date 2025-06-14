@@ -1,7 +1,7 @@
 /**
  * リスク管理API コントローラー
  */
-const { getStrategyPositionsRedis, calculatePeriodPnLRedis } = require('../../database/redisDatabase');
+const { getAllPositionsRedis, calculatePeriodPnLRedis } = require('../../database/redisDatabase');
 const { getTradeSummary } = require('../../database/manager');
 
 /**
@@ -15,7 +15,7 @@ async function getRiskPositions(req, res) {
     const { exchange, symbol, strategy } = req.query;
 
     // 全ての戦略ポジションを取得
-    const allPositions = await getStrategyPositionsRedis();
+    const allPositions = await getAllPositionsRedis();
     
     // フィルタ条件を適用
     let filteredPositions = allPositions;
@@ -31,63 +31,53 @@ async function getRiskPositions(req, res) {
     }
 
     // 各ポジションに追加情報を付与
-    const enrichedPositions = await Promise.all(
-      filteredPositions.map(async (position) => {
-        try {
-          // 現在のトレードサマリーを取得してnetPositionと比較
-          const tradeSummary = await getTradeSummary({
-            exchangeId: position.exchange,
-            symbol: position.symbol,
-            strategyKey: position.strategy
-          });
+    const enrichedPositions = filteredPositions.map((position) => {
+      try {
+        // 現在の損益を計算
+        const currentPrice = position.currentPrice || position.entryPrice || 0;
+        const entryPrice = position.entryPrice || 0;
+        const amount = position.amount || 0;
+        const unrealizedPnL = amount > 0 ? (currentPrice - entryPrice) * amount : 0;
+        const unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
 
-          // 現在の損益を計算
-          const currentPrice = position.currentPrice || 0;
-          const entryPrice = position.entryPrice || 0;
-          const amount = position.amount || 0;
-          const unrealizedPnL = amount > 0 ? (currentPrice - entryPrice) * amount : 0;
-          const unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+        // ストップロス条件のチェック（固定2%のストップロス）
+        const defaultStopLossPercent = 2; // 2%のストップロス
+        const stopLossTriggered = unrealizedPnLPercent <= -defaultStopLossPercent;
 
-          // ストップロス条件のチェック
-          const stopLossTriggered = position.fixedStopLossPercent && 
-            unrealizedPnLPercent <= -(position.fixedStopLossPercent * 100);
+        // 経過時間の計算
+        const elapsedTime = Date.now() - position.timestamp;
+        const elapsedHours = elapsedTime / (1000 * 60 * 60);
+        const defaultTimeBasedStopHours = 24; // 24時間のタイムストップ
+        const timeStopTriggered = elapsedHours >= defaultTimeBasedStopHours;
 
-          // 経過時間の計算
-          const elapsedTime = Date.now() - position.timestamp;
-          const elapsedHours = elapsedTime / (1000 * 60 * 60);
-          const timeStopTriggered = position.timeBasedStopHours && 
-            elapsedHours >= position.timeBasedStopHours;
-
-          return {
-            ...position,
-            // トレードサマリー情報
-            netPosition: tradeSummary?.netPosition || 0,
-            realizedPnL: tradeSummary?.realizedPnL || 0,
-            
-            // 損益計算
-            unrealizedPnL,
-            unrealizedPnLPercent,
-            
-            // リスク管理状態
-            stopLossTriggered,
-            timeStopTriggered,
-            elapsedHours: Math.round(elapsedHours * 100) / 100,
-            
-            // 日時情報
-            createdAt: new Date(position.timestamp).toISOString(),
-            
-            // ポジション状態
-            status: stopLossTriggered || timeStopTriggered ? 'at_risk' : 'active'
-          };
-        } catch (error) {
-          console.error(`Error enriching position ${position.positionKey}:`, error);
-          return {
-            ...position,
-            error: 'Failed to enrich position data'
-          };
-        }
-      })
-    );
+        return {
+          ...position,
+          // 現在価格を更新
+          currentPrice,
+          
+          // 損益計算
+          unrealizedPnL,
+          unrealizedPnLPercent,
+          
+          // リスク管理状態
+          stopLossTriggered,
+          timeStopTriggered,
+          elapsedHours: Math.round(elapsedHours * 100) / 100,
+          
+          // 日時情報
+          createdAt: new Date(position.timestamp).toISOString(),
+          
+          // ポジション状態
+          status: (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active'
+        };
+      } catch (error) {
+        console.error(`Error enriching position ${position.positionKey}:`, error);
+        return {
+          ...position,
+          error: 'Failed to enrich position data'
+        };
+      }
+    });
 
     // 統計情報を計算
     const stats = {
@@ -126,7 +116,7 @@ async function getRiskStats(req, res) {
     const periodPnL = await calculatePeriodPnLRedis(period);
     
     // 全ポジション取得
-    const allPositions = await getStrategyPositionsRedis();
+    const allPositions = await getAllPositionsRedis();
     
     // 取引所別統計
     const exchangeStats = {};
