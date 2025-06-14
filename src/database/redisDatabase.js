@@ -611,6 +611,236 @@ async function deletePositionRedis(positionKey) {
   }
 }
 
+/**
+ * ポジション履歴をMongoDBに保存
+ * @param {Object} positionData - ポジション情報
+ * @returns {Promise<Boolean>} 保存に成功したかどうか
+ */
+async function savePositionHistoryToMongoDB(positionData) {
+  try {
+    // MongoDB接続の取得
+    const { connectDB } = require('./mongoDatabase');
+    await connectDB();
+    
+    // positions履歴コレクションへの保存
+    const { MongoClient } = require('mongodb');
+    const mongoUrl = process.env.MONGO_URL;
+    const mongoDbName = process.env.MONGO_DB_NAME;
+    
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(mongoDbName);
+    
+    // positionsコレクションが存在しない場合は作成
+    const collections = await db.listCollections().toArray();
+    const collectionNames = collections.map(c => c.name);
+    
+    if (!collectionNames.includes('positions')) {
+      await db.createCollection('positions');
+      console.log('positions コレクションを作成しました');
+    }
+    
+    const positionsCollection = db.collection('positions');
+    
+    // インデックスを作成（一度だけ）
+    try {
+      await positionsCollection.createIndex({ positionKey: 1 }, { unique: true });
+      await positionsCollection.createIndex({ exchangeId: 1, symbol: 1, strategyKey: 1 });
+      await positionsCollection.createIndex({ createdAt: 1 });
+      await positionsCollection.createIndex({ closedAt: 1 });
+    } catch (indexError) {
+      // インデックスが既に存在する場合は無視
+    }
+    
+    // ポジション履歴データを準備
+    const historyData = {
+      ...positionData,
+      savedToHistoryAt: new Date(),
+      // 数値フィールドを確実に数値として保存
+      amount: parseFloat(positionData.amount || 0),
+      entryPrice: parseFloat(positionData.entryPrice || 0),
+      highestPrice: parseFloat(positionData.highestPrice || 0),
+      closePrice: parseFloat(positionData.closePrice || 0),
+      createdAt: new Date(positionData.createdAt || Date.now()),
+      updatedAt: new Date(positionData.updatedAt || Date.now()),
+      closedAt: positionData.closedAt ? new Date(positionData.closedAt) : null
+    };
+    
+    // 重複チェック用のキーを作成
+    const positionKey = `${positionData.exchangeId}:${positionData.symbol}:${positionData.strategyKey}:${positionData.orderId}`;
+    historyData.positionKey = positionKey;
+    
+    // upsert操作で保存（既存データがあれば更新、なければ挿入）
+    await positionsCollection.replaceOne(
+      { positionKey: positionKey },
+      historyData,
+      { upsert: true }
+    );
+    
+    await client.close();
+    
+    console.log(`ポジション履歴をMongoDBに保存しました: ${positionKey}`);
+    return true;
+  } catch (error) {
+    console.error('ポジション履歴のMongoDB保存に失敗しました:', error);
+    return false;
+  }
+}
+
+/**
+ * ポジションを完全決済し、履歴保存後にRedisから削除
+ * @param {String} positionKey - ポジションキー  
+ * @param {Object} options - オプション設定
+ * @param {Boolean} options.saveHistory - 履歴をMongoDBに保存するか (default: true)
+ * @param {Number} options.delayHours - 削除までの遅延時間（時間単位）(default: 0 - 即座に削除)
+ * @returns {Promise<Object>} 処理結果
+ */
+async function closeAndCleanupPosition(positionKey, options = {}) {
+  const { saveHistory = true, delayHours = 0 } = options;
+  const key = `position:${positionKey}`;
+  
+  try {
+    // 現在のポジション情報を取得
+    const positionData = await getPositionRedis(positionKey);
+    if (!positionData) {
+      return { success: false, reason: 'position_not_found' };
+    }
+    
+    // ポジションを閉じた状態に更新
+    const closedPositionData = {
+      ...positionData,
+      status: 'closed',
+      closedAt: positionData.closedAt || Date.now(),
+      updatedAt: Date.now()
+    };
+    
+    // 履歴を保存（オプションで有効な場合）
+    if (saveHistory) {
+      const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
+      if (!historySaved) {
+        console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+      }
+    }
+    
+    // 削除処理
+    if (delayHours > 0) {
+      // 遅延削除: TTLを設定
+      const ttlSeconds = delayHours * 60 * 60;
+      await client.expire(key, ttlSeconds);
+      console.log(`ポジションを${delayHours}時間後に自動削除するよう設定しました: ${positionKey}`);
+      
+      return {
+        success: true,
+        action: 'delayed_cleanup',
+        delayHours,
+        historyKey: saveHistory ? closedPositionData.positionKey : null
+      };
+    } else {
+      // 即座に削除
+      const deleted = await deletePositionRedis(positionKey);
+      if (deleted) {
+        console.log(`ポジションをRedisから削除しました: ${positionKey}`);
+        return {
+          success: true,
+          action: 'immediate_cleanup',
+          historyKey: saveHistory ? closedPositionData.positionKey : null
+        };
+      } else {
+        return { success: false, reason: 'delete_failed' };
+      }
+    }
+  } catch (error) {
+    console.error(`ポジションクリーンアップに失敗しました: ${positionKey}`, error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 指定された期間より古い完了ポジションを一括削除
+ * @param {Number} olderThanHours - この時間より古いポジションを削除（時間単位）
+ * @param {Boolean} saveHistory - 削除前に履歴を保存するか (default: true)
+ * @returns {Promise<Object>} 削除結果
+ */
+async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true) {
+  try {
+    const pattern = 'position:*';
+    const keys = await client.keys(pattern);
+    
+    let processed = 0;
+    let deleted = 0;
+    let historySaved = 0;
+    let errors = 0;
+    
+    const cutoffTime = Date.now() - (olderThanHours * 60 * 60 * 1000);
+    
+    for (const key of keys) {
+      try {
+        const position = await client.hGetAll(key);
+        
+        if (Object.keys(position).length > 0) {
+          processed++;
+          
+          // ポジションがクローズ済みで、指定時間より古い場合
+          const closedAt = parseInt(position.closedAt || 0);
+          const updatedAt = parseInt(position.updatedAt || 0);
+          const isOld = Math.max(closedAt, updatedAt) < cutoffTime;
+          
+          if (position.status === 'closed' && isOld) {
+            // 履歴保存
+            if (saveHistory) {
+              const historyResult = await savePositionHistoryToMongoDB({
+                exchangeId: position.exchangeId,
+                symbol: position.symbol,
+                strategyKey: position.strategyKey,
+                orderId: position.orderId,
+                side: position.side,
+                amount: parseFloat(position.amount || 0),
+                entryPrice: parseFloat(position.entryPrice || 0),
+                highestPrice: parseFloat(position.highestPrice || 0),
+                closePrice: parseFloat(position.closePrice || 0),
+                status: position.status,
+                createdAt: parseInt(position.createdAt || 0),
+                updatedAt: parseInt(position.updatedAt || 0),
+                closedAt: parseInt(position.closedAt || 0)
+              });
+              
+              if (historyResult) {
+                historySaved++;
+              }
+            }
+            
+            // Redis から削除
+            const result = await client.del(key);
+            if (result > 0) {
+              deleted++;
+              const positionKey = key.replace('position:', '');
+              console.log(`古いポジションを削除しました: ${positionKey}`);
+            }
+          }
+        }
+      } catch (error) {
+        errors++;
+        console.error(`ポジション処理エラー: ${key}`, error.message);
+      }
+    }
+    
+    const result = {
+      success: true,
+      processed,
+      deleted,
+      historySaved,
+      errors,
+      cutoffTime: new Date(cutoffTime).toISOString()
+    };
+    
+    console.log(`古いポジションクリーンアップ完了:`, result);
+    return result;
+  } catch (error) {
+    console.error('古いポジションクリーンアップに失敗しました:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // ===== 損益追跡機能 =====
 
 /**
@@ -781,6 +1011,10 @@ module.exports = {
   getPositionRedis,
   getStrategyPositionsRedis,
   deletePositionRedis,
+  // ポジションクリーンアップ機能
+  savePositionHistoryToMongoDB,
+  closeAndCleanupPosition,
+  cleanupOldClosedPositions,
   // 損益追跡機能
   recordPnLRedis,
   calculatePeriodPnLRedis,

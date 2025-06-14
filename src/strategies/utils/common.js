@@ -16,6 +16,10 @@ const {
   recordBuyPosition,
   recordPnL
 } = require('./riskManagement');
+const { 
+  getStrategyPositionsRedis,
+  closeAndCleanupPosition 
+} = require('../../database/redisDatabase');
 
 /**
  * OHLCV データを取得して検証する
@@ -493,6 +497,63 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   try {
     const order = await exchange.createMarketSellOrder(symbol, netPosition);
     addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
+    
+    // 売り注文成功後、関連するポジションをクリーンアップ
+    try {
+      console.log(`[INFO] Cleaning up positions for strategy ${strategyKey} after market sell`);
+      
+      // 戦略の全ポジションを取得
+      const positions = await getStrategyPositionsRedis(exchange.id, symbol, strategyKey);
+      let cleanedCount = 0;
+      let cleanupErrors = 0;
+      
+      for (const position of positions) {
+        // オープンポジションのみクリーンアップ対象とする
+        if (position.status === 'open' && position.side === 'buy') {
+          try {
+            const cleanupResult = await closeAndCleanupPosition(position.key, {
+              saveHistory: true,  // 履歴をMongoDBに保存
+              delayHours: 0      // 即座に削除
+            });
+            
+            if (cleanupResult.success) {
+              cleanedCount++;
+              console.log(`[INFO] Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
+              if (cleanupResult.historyKey) {
+                console.log(`[INFO] Position history saved to MongoDB: ${cleanupResult.historyKey}`);
+              }
+            } else {
+              cleanupErrors++;
+              console.warn(`[WARNING] Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
+            }
+          } catch (cleanupError) {
+            cleanupErrors++;
+            console.error(`[ERROR] Position cleanup error: ${position.key}`, cleanupError.message);
+          }
+        }
+      }
+      
+      if (cleanedCount > 0 || cleanupErrors > 0) {
+        const cleanupMessage = `🧹 [ポジション整理] 戦略クリア後のクリーンアップ完了\n` +
+                              `取引所: ${exchange.id}\n` +
+                              `通貨ペア: ${symbol}\n` +
+                              `戦略: ${strategyKey}\n` +
+                              `✅ クリーンアップ成功: ${cleanedCount}件\n` +
+                              `❌ クリーンアップ失敗: ${cleanupErrors}件\n` +
+                              `💰 売却量: ${netPosition}\n` +
+                              `📅 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+        
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(cleanupMessage);
+        }
+        
+        console.log(`[INFO] Position cleanup completed: ${cleanedCount} cleaned, ${cleanupErrors} errors`);
+      }
+    } catch (cleanupError) {
+      console.error(`[ERROR] Position cleanup process failed: ${symbol}`, cleanupError.message);
+      // クリーンアップ失敗は売り注文成功を妨げない
+    }
+    
   } catch (error) {
     console.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
     if (postErrorToDiscord) {

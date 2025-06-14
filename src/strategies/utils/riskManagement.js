@@ -5,6 +5,8 @@ const {
   getPositionRedis, 
   getStrategyPositionsRedis, 
   deletePositionRedis,
+  closeAndCleanupPosition,
+  cleanupOldClosedPositions,
   recordPnLRedis,
   calculatePeriodPnLRedis,
   clearPnLRedis,
@@ -235,16 +237,86 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   const { amountPrecision, minTradeAmount } = marketParameters;
   
   try {
+    // シンボルからベースアセットを抽出
+    const baseAsset = symbol.split('/')[0];
+    
     // formattedAvailableAmountを使用して利用可能量を取得
-    const { formattedAvailableAmount } = require('../../database/manager');
-    const availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+    const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId } = require('../../database/manager');
+    let availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+    let ordersCanceled = false; // 注文キャンセルが行われたかを追跡
     
     console.log(`[DEBUG] Stop-loss for ${symbol}: Strategy ${strategyKey}`);
     console.log(`[DEBUG] Position amount: ${position.amount}, Available to sell: ${availableToSell}`);
     
-    // 売却可能量がゼロまたはマイナスの場合はスキップ
+    // 売却可能量がゼロまたはマイナスの場合、未約定の売り注文をキャンセルしてからリトライ
     if (availableToSell <= 0) {
-      console.log(`[INFO] Skip stop-loss: Available to sell is ${availableToSell} (no actual available holdings)`);
+      console.log(`[INFO] Available to sell is ${availableToSell}, checking for open sell orders to cancel...`);
+      
+      try {
+        // 未約定の注文を取得
+        const openOrders = await exchange.fetchOpenOrders(symbol);
+        
+        // 戦略に関連する売り注文を特定
+        const strategySellOrders = [];
+        for (const order of openOrders) {
+          if (order.side === 'sell') {
+            const orderStrategyKey = await getOrderStrategyKeyByOrderId(order.id);
+            if (orderStrategyKey === strategyKey) {
+              strategySellOrders.push(order);
+            }
+          }
+        }
+        
+        if (strategySellOrders.length > 0) {
+          console.log(`[INFO] Found ${strategySellOrders.length} open sell orders for strategy ${strategyKey}, canceling for stop-loss...`);
+          
+          // 売り注文をキャンセル
+          let canceledAmount = 0;
+          for (const order of strategySellOrders) {
+            try {
+              await exchange.cancelOrder(order.id, symbol);
+              canceledAmount += order.amount;
+              console.log(`[INFO] Canceled sell order ${order.id}: ${order.amount} ${baseAsset} for stop-loss`);
+            } catch (cancelError) {
+              console.warn(`[WARNING] Failed to cancel order ${order.id}:`, cancelError.message);
+            }
+          }
+          
+          // キャンセル後の利用可能量を再計算
+          if (canceledAmount > 0) {
+            ordersCanceled = true; // 注文がキャンセルされたことを記録
+            // 短時間待機してから再計算（注文キャンセルが反映されるまで）
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+            console.log(`[INFO] After canceling orders, available to sell: ${availableToSell}`);
+          }
+        }
+        
+        // それでも売却可能量がない場合はnetPositionを直接確認
+        if (availableToSell <= 0) {
+          const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+          console.log(`[INFO] Net position: ${netPosition}`);
+          
+          if (netPosition > 0) {
+            availableToSell = Math.min(position.amount, netPosition);
+            console.log(`[INFO] Using net position for stop-loss: ${availableToSell}`);
+          }
+        }
+        
+      } catch (orderError) {
+        console.warn(`[WARNING] Error handling open orders:`, orderError.message);
+        // エラーの場合はnetPositionを使用
+        const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+        if (netPosition > 0) {
+          availableToSell = Math.min(position.amount, netPosition);
+          console.log(`[INFO] Fallback to net position: ${availableToSell}`);
+        }
+      }
+    }
+    
+    // 最終的に売却可能量がない場合はスキップ
+    if (availableToSell <= 0) {
+      console.log(`[INFO] Skip stop-loss: Final available to sell is ${availableToSell}`);
       return { 
         success: false, 
         reason: 'no_available_amount',
@@ -301,28 +373,55 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       // 部分決済：残ポジション量を更新
       position.amount = parseFloat((position.amount - formattedAmount).toFixed(amountPrecision));
       position.updatedAt = Date.now();
+      await savePosition(position.key, position);
       console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
     } else {
-      // 完全決済：ポジションを閉じる
+      // 完全決済：ポジションを閉じて履歴保存後にRedisから削除
       position.status = 'closed';
       position.closePrice = executionPrice;
       position.closedAt = Date.now();
-      console.log(`[DEBUG] Complete stop-loss: position closed`);
+      console.log(`[DEBUG] Complete stop-loss: position closed, cleaning up from Redis`);
+      
+      // ポジションクリーンアップ（履歴保存後にRedisから削除）
+      try {
+        const cleanupResult = await closeAndCleanupPosition(position.key, {
+          saveHistory: true,  // 履歴をMongoDBに保存
+          delayHours: 0      // 即座に削除
+        });
+        
+        if (cleanupResult.success) {
+          console.log(`[INFO] Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
+          if (cleanupResult.historyKey) {
+            console.log(`[INFO] Position history saved to MongoDB: ${cleanupResult.historyKey}`);
+          }
+        } else {
+          console.warn(`[WARNING] Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
+          // クリーンアップに失敗した場合は通常の保存に戻す
+          await savePosition(position.key, position);
+        }
+      } catch (cleanupError) {
+        console.error(`[ERROR] Position cleanup error: ${position.key}`, cleanupError.message);
+        // エラーの場合は通常の保存に戻す
+        await savePosition(position.key, position);
+      }
     }
-    
-    await savePosition(position.key, position);
     
     // 通知
     const lossPercent = executionPrice && position.entryPrice ? 
                        ((executionPrice - position.entryPrice) / position.entryPrice * 100).toFixed(2) : 
                        'N/A';
+    
+    // 売り注文がキャンセルされた場合のメッセージ
+    const cancelMessage = ordersCanceled ? '\n⚠️ 未約定売り注文をキャンセルして実行' : '';
+    
     const message = `[リスク管理] ストップロス実行: ${exchange.id} - ${symbol}\n` +
                    `理由: ${position.reason === 'time-based' ? '時間切れ' : '価格到達'}\n` +
-                   `${isPartialClose ? '部分決済' : '完全決済'}: ${formattedAmount}\n` +
+                   `${isPartialClose ? '部分決済' : '完全決済'}: ${formattedAmount} ${baseAsset}\n` +
                    `エントリー価格: ${position.entryPrice || 'N/A'}\n` +
                    `決済価格: ${executionPrice || 'N/A'}\n` +
                    `損益: ${lossPercent}%` +
-                   (isPartialClose ? `\n残ポジション: ${position.amount}` : '');
+                   (isPartialClose ? `\n残ポジション: ${position.amount}` : '') +
+                   cancelMessage;
     
     if (postOrderToDiscord) {
       await postOrderToDiscord(message);
@@ -731,6 +830,62 @@ async function sendRiskManagementReport(exchange, strategyKey, riskSettings = DE
   }
 }
 
+/**
+ * 古い完了ポジションを定期的にクリーンアップ
+ * @param {number} olderThanHours - この時間より古いポジションを削除（デフォルト: 24時間）
+ * @param {boolean} saveHistory - 削除前に履歴を保存するか（デフォルト: true）
+ * @returns {Object} - クリーンアップ結果
+ */
+async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
+  try {
+    console.log(`🧹 [リスク管理] ポジションクリーンアップを開始 (${olderThanHours}時間以上前の完了ポジション)`);
+    
+    const result = await cleanupOldClosedPositions(olderThanHours, saveHistory);
+    
+    if (result.success) {
+      const message = `🧹 [リスク管理] ポジションクリーンアップ完了\n` +
+                     `📊 処理件数: ${result.processed}\n` +
+                     `🗑️ 削除件数: ${result.deleted}\n` +
+                     `💾 履歴保存件数: ${result.historySaved}\n` +
+                     `⚠️ エラー件数: ${result.errors}\n` +
+                     `🕒 基準時刻: ${result.cutoffTime}\n` +
+                     `⏰ 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+      
+      // 削除件数が0でない場合、または重要な結果の場合はDiscordに通知
+      if (result.deleted > 0 || result.errors > 0) {
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(message);
+        }
+      }
+      
+      console.log(`[INFO] ポジションクリーンアップ完了: ${result.deleted}件削除, ${result.historySaved}件履歴保存`);
+    } else {
+      const errorMessage = `❌ [リスク管理] ポジションクリーンアップ失敗\n` +
+                          `エラー: ${result.error}\n` +
+                          `⏰ 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+      
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(errorMessage);
+      }
+      
+      console.error(`[ERROR] ポジションクリーンアップ失敗:`, result.error);
+    }
+    
+    return result;
+  } catch (error) {
+    const errorMessage = `❌ [リスク管理] ポジションクリーンアップで予期しないエラー\n` +
+                        `エラー: ${error.message}\n` +
+                        `⏰ 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+    
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(errorMessage);
+    }
+    
+    console.error(`[ERROR] ポジションクリーンアップで予期しないエラー:`, error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   DEFAULT_RISK_SETTINGS,
   savePosition,
@@ -746,6 +901,7 @@ module.exports = {
   recordPnL,
   generateRiskManagementReport,
   sendRiskManagementReport,
+  performPositionCleanup,
   // テスト用
   clearPositionStore,
   clearPnLTracker
