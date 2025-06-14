@@ -6,6 +6,7 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   saveStrategyParameters,
   getTradeCurrentPosition,
   getOrderStrategyKeyByOrderId,
+  updateFilledTrades,
 } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { 
