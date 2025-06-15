@@ -260,6 +260,42 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     console.log(`[DEBUG] Stop-loss for ${symbol}: Strategy ${strategyKey}`);
     console.log(`[DEBUG] Position amount: ${position.amount}, Available to sell: ${availableToSell}`);
     
+    // 初期段階での不整合チェック
+    if (availableToSell <= 0) {
+      const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+      
+      // 実際の取引所残高も確認
+      let actualBalance = 0;
+      try {
+        const balance = await exchange.fetchBalance();
+        actualBalance = balance.total[baseAsset] || 0;
+      } catch (balanceError) {
+        console.warn(`[WARNING] Failed to fetch actual balance: ${balanceError.message}`);
+      }
+      
+      // 早期修復チェック
+      const shouldRepairEarly = netPosition < 0 || (netPosition > 0 && actualBalance === 0);
+      
+      if (shouldRepairEarly) {
+        console.warn(`[WARNING] Early position repair needed: net=${netPosition}, actual=${actualBalance}`);
+        
+        try {
+          await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
+          
+          // 修復後に再計算
+          availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+          console.log(`[INFO] After early repair - Available to sell: ${availableToSell}`);
+          
+          // 修復が成功したら、以降の処理を続行
+          if (availableToSell > 0) {
+            console.log(`[INFO] Early repair successful, proceeding with stop-loss`);
+          }
+        } catch (repairError) {
+          console.warn(`[WARNING] Early position repair failed: ${repairError.message}`);
+        }
+      }
+    }
+    
     // 売却可能量がゼロまたはマイナスの場合、未約定の売り注文をキャンセルしてからリトライ
     if (availableToSell <= 0) {
       console.log(`[INFO] Available to sell is ${availableToSell}, checking for open sell orders to cancel...`);
@@ -320,10 +356,14 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           }
           
           // ポジション管理の不整合を検出・修復
-          const positionInconsistency = netPosition <= 0 && actualBalance > 0;
-          const negativePosition = netPosition < 0;
+          // 以下の場合に修復を実行：
+          // 1. ネットポジションが負の値
+          // 2. ネットポジションと実際の残高が両方とも0でないのに売却可能量が0
+          const shouldRepair = netPosition < 0 || 
+                               (netPosition !== actualBalance && availableToSell <= 0) ||
+                               (netPosition > 0 && actualBalance === 0);
           
-          if (positionInconsistency || negativePosition) {
+          if (shouldRepair) {
             console.warn(`[WARNING] Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
             
             // 不整合修復を試行
@@ -376,10 +416,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         }
         
         // フォールバック時も不整合チェック・修復
-        const positionInconsistency = netPosition <= 0 && actualBalance > 0;
-        const negativePosition = netPosition < 0;
+        const shouldRepair = netPosition < 0 || 
+                             (netPosition !== actualBalance && availableToSell <= 0) ||
+                             (netPosition > 0 && actualBalance === 0);
         
-        if (positionInconsistency || negativePosition) {
+        if (shouldRepair) {
           console.warn(`[WARNING] Fallback - Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
           
           try {
