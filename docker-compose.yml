@@ -62,15 +62,12 @@ services:
     build: .
     container_name: strategy-runner
     restart: always
+    env_file:
+      - .env
     volumes:
-      - ./src:/usr/src/app/src
       - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
       - ./test:/usr/src/app/test
       - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
     command: npm run start
     environment:
       - REDIS_URL=redis://redis:6379
@@ -111,10 +108,10 @@ services:
     image: harvest3-bot-image
     container_name: backtest
     restart: always
+    env_file:
+      - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
+      - ./data:/usr/src/app/data
     command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
@@ -160,12 +157,10 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     volumes:
-      - ./src:/usr/src/app/src
       - ./data:/usr/src/app/data
-      - ./package.json:/usr/src/app/package.json
-      - ./package-lock.json:/usr/src/app/package-lock.json
-      - .env:/usr/src/app/.env
     depends_on:
       - redis
       - mongodb
