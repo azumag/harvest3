@@ -285,6 +285,13 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     }
 
     let availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+    
+    // 実際の残高がある場合の特別処理
+    if (availableToSell <= 0 && actualBalance > 0) {
+      console.warn(`[WARNING] Available to sell is ${availableToSell} but actual balance is ${actualBalance}. Using actual balance.`);
+      availableToSell = Math.min(position.amount, actualBalance);
+      console.log(`[INFO] Overriding with actual balance: ${availableToSell} ${baseAsset}`);
+    }
     let ordersCanceled = false; // 注文キャンセルが行われたかを追跡
     
     console.log(`[DEBUG] Stop-loss for ${symbol}: Strategy ${strategyKey}`);
@@ -453,36 +460,53 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     if (availableToSell <= 0) {
       console.log(`[WARNING] Stop-loss skipped: No available amount to sell (${availableToSell})`);
       
-      // Discord通知で詳細な状況を報告
+      // 最終チェック：実際の残高があるかもう一度確認
+      let finalActualBalance = 0;
       try {
-        const { getTradeCurrentPosition } = require('../../database/manager');
-        const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
         const balance = await exchange.fetchBalance();
-        const actualBalance = balance.total[baseAsset] || 0;
-        
-        const detailMessage = `⚠️ [リスク管理] ストップロス実行不可: ${exchange.id} - ${symbol}\n` +
-                             `理由: 売却可能量不足\n` +
-                             `戦略: ${strategyKey}\n` +
-                             `ポジション量: ${position.amount}\n` +
-                             `ネットポジション: ${netPosition}\n` +
-                             `実際の残高: ${actualBalance}\n` +
-                             `計算された売却可能量: ${availableToSell}\n` +
-                             `🔍 ポジション管理の同期確認が必要です`;
-        
-        if (postErrorToDiscord) {
-          await postErrorToDiscord(detailMessage);
-        }
-      } catch (notificationError) {
-        console.warn(`[WARNING] Failed to send detailed notification: ${notificationError.message}`);
+        finalActualBalance = balance.total[baseAsset] || 0;
+        console.log(`[INFO] Final actual balance check: ${finalActualBalance} ${baseAsset}`);
+      } catch (balanceError) {
+        console.warn(`[WARNING] Failed to get final actual balance: ${balanceError.message}`);
       }
       
-      return { 
-        success: false, 
-        reason: 'no_available_amount',
-        availableToSell,
-        positionAmount: position.amount,
-        message: `戦略 ${strategyKey} の売却可能量が ${availableToSell} のため、ストップロスをスキップしました`
-      };
+      // 実際の残高がある場合は、それを使って処理を続行
+      if (finalActualBalance > 0 && finalActualBalance >= minTradeAmount) {
+        availableToSell = Math.min(position.amount, finalActualBalance);
+        console.log(`[WARNING] Final fallback to actual balance: ${availableToSell} ${baseAsset}`);
+        
+        // 処理を続行
+      } else {
+        // Discord通知で詳細な状況を報告
+        try {
+          const { getTradeCurrentPosition } = require('../../database/manager');
+          const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+          
+          const detailMessage = `⚠️ [リスク管理] ストップロス実行不可: ${exchange.id} - ${symbol}\n` +
+                               `理由: 売却可能量不足\n` +
+                               `戦略: ${strategyKey}\n` +
+                               `ポジション量: ${position.amount}\n` +
+                               `ネットポジション: ${netPosition}\n` +
+                               `実際の残高: ${finalActualBalance}\n` +
+                               `計算された売却可能量: ${availableToSell}\n` +
+                               `🔍 ポジション管理の同期確認が必要です`;
+          
+          if (postErrorToDiscord) {
+            await postErrorToDiscord(detailMessage);
+          }
+        } catch (notificationError) {
+          console.warn(`[WARNING] Failed to send detailed notification: ${notificationError.message}`);
+        }
+        
+        return { 
+          success: false, 
+          reason: 'no_available_amount',
+          availableToSell,
+          actualBalance: finalActualBalance,
+          positionAmount: position.amount,
+          message: `戦略 ${strategyKey} の売却可能量が ${availableToSell} のため、ストップロスをスキップしました`
+        };
+      }
     }
     
     // 売却可能量を計算（個別ポジション量と利用可能量の最小値）
