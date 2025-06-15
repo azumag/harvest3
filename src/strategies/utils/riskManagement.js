@@ -1156,13 +1156,14 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
  * @param {string} baseAsset - ベースアセット
  */
 async function repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset) {
-  console.log(`[INFO] Starting simplified position repair for ${exchange.id}:${symbol}:${strategyKey}`);
+  console.log(`[INFO] Starting comprehensive position repair for ${exchange.id}:${symbol}:${strategyKey}`);
+  console.log(`[INFO] Current state - Net: ${netPosition}, Actual: ${actualBalance}`);
   
   try {
-    let repairAction = 'close_all_positions';
+    let repairAction = 'comprehensive_repair';
     let closedCount = 0;
     
-    // シンプルな修復: すべてのオープンポジションをクローズ
+    // 1. すべてのオープンポジションをクローズ
     const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
     const openPositions = positions.filter(p => p.status !== 'closed');
     
@@ -1171,7 +1172,7 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
       
       for (const position of openPositions) {
         position.status = 'closed';
-        position.closeReason = 'position_inconsistency_repair';
+        position.closeReason = 'comprehensive_repair';
         position.closedAt = Date.now();
         
         try {
@@ -1190,13 +1191,69 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
       }
       
       console.log(`[INFO] Closed ${closedCount} positions for repair`);
+    }
+    
+    // 2. ネットポジションと実際残高の強制同期
+    if (actualBalance === 0 && netPosition !== 0) {
+      console.log(`[INFO] Forcing net position sync: ${netPosition} -> 0 (actual balance is 0)`);
+      
+      // ネットポジションを実際残高（0）に合わせる
+      const currentSummary = await getTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      });
+      
+      if (currentSummary) {
+        const correctedSummary = {
+          ...currentSummary,
+          netPosition: 0, // 実際残高に合わせて0に
+          lastUpdated: Date.now()
+        };
+        
+        await updateTradeSummary({
+          exchangeId: exchange.id,
+          symbol,
+          strategyKey
+        }, correctedSummary);
+        
+        console.log(`[INFO] Synchronized net position to 0 for strategy ${strategyKey}`);
+        repairAction = 'net_position_sync';
+      }
+    } else if (netPosition !== actualBalance && Math.abs(netPosition - actualBalance) > 0.0001) {
+      console.log(`[INFO] Synchronizing net position: ${netPosition} -> ${actualBalance}`);
+      
+      const currentSummary = await getTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      });
+      
+      if (currentSummary) {
+        const difference = actualBalance - netPosition;
+        const correctedSummary = {
+          ...currentSummary,
+          netPosition: actualBalance,
+          totalBuy: (currentSummary.totalBuy || 0) + (difference > 0 ? difference : 0),
+          totalSell: (currentSummary.totalSell || 0) + (difference < 0 ? Math.abs(difference) : 0),
+          lastUpdated: Date.now()
+        };
+        
+        await updateTradeSummary({
+          exchangeId: exchange.id,
+          symbol,
+          strategyKey
+        }, correctedSummary);
+        
+        console.log(`[INFO] Synchronized net position to actual balance: ${actualBalance}`);
+        repairAction = 'balance_sync';
+      }
     } else {
-      console.log(`[INFO] No open positions found to close`);
-      return;
+      console.log(`[INFO] Position and balance already synchronized`);
     }
     
     // Discord通知
-    const repairMessage = `🔧 [リスク管理] ポジション不整合修復実行\n` +
+    const repairMessage = `🔧 [リスク管理] 包括的ポジション修復実行\n` +
                          `取引所: ${exchange.id}\n` +
                          `通貨ペア: ${symbol}\n` +
                          `戦略: ${strategyKey}\n` +
@@ -1204,13 +1261,13 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
                          `実際の残高: ${actualBalance}\n` +
                          `修復アクション: ${repairAction}\n` +
                          `クローズしたポジション数: ${closedCount}\n` +
-                         `🔄 ポジション記録をクリーンアップしました`;
+                         `🔄 ネットポジションと実際残高を同期完了`;
     
     if (postOrderToDiscord) {
       await postOrderToDiscord(repairMessage);
     }
     
-    console.log(`[INFO] Position repair completed: ${repairAction}, closed ${closedCount} positions`);
+    console.log(`[INFO] Comprehensive position repair completed: ${repairAction}, closed ${closedCount} positions`);
     
   } catch (error) {
     console.error(`[ERROR] Position repair failed: ${error.message}`);
