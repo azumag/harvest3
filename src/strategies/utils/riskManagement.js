@@ -1040,49 +1040,81 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
 async function repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset) {
   console.log(`[INFO] Starting position repair for ${exchange.id}:${symbol}:${strategyKey}`);
   
-  const { addTrade } = require('../../database/manager');
+  const { updateTradeSummary, getTradeSummary } = require('../../database/manager');
   
   try {
     let repairAction = '';
     let repairAmount = 0;
     
+    // 現在のサマリーを取得
+    const currentSummary = await getTradeSummary({
+      exchangeId: exchange.id,
+      symbol,
+      strategyKey
+    });
+    
     if (netPosition < 0) {
       // 負のネットポジション: 過剰な売り記録を修正
       repairAmount = Math.abs(netPosition);
-      repairAction = 'add_buy_record';
+      repairAction = 'adjust_position_to_zero';
       
-      // 修復用の買い記録を追加（価格は直近の市場価格を使用）
-      let marketPrice = 1;
-      try {
-        const ticker = await exchange.fetchTicker(symbol);
-        marketPrice = ticker.last || ticker.close || 1;
-      } catch (priceError) {
-        console.warn(`[WARNING] Failed to get market price for repair: ${priceError.message}`);
-      }
+      // ネットポジションを0に調整
+      const updatedSummary = {
+        ...currentSummary,
+        netPosition: 0,
+        totalBuy: (currentSummary?.totalBuy || 0) + repairAmount,
+        lastUpdated: Date.now()
+      };
       
-      // 修復用の買い取引を記録
-      await addTrade(exchange, symbol, strategyKey, 'buy', repairAmount, marketPrice, 'POSITION_REPAIR', 'market');
+      await updateTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      }, updatedSummary);
       
-      console.log(`[INFO] Added repair buy record: ${repairAmount} ${baseAsset} at ${marketPrice}`);
+      console.log(`[INFO] Adjusted negative net position to zero: was ${netPosition}, adjusted by ${repairAmount} ${baseAsset}`);
       
     } else if (netPosition === 0 && actualBalance > 0) {
-      // ネットポジション0で実際の残高あり: 買い記録が不足
+      // ネットポジション0で実際の残高あり: ポジションを実際の残高に合わせる
       repairAmount = actualBalance;
-      repairAction = 'add_buy_record';
+      repairAction = 'sync_to_actual_balance';
       
-      // 現在価格で買い記録を追加
-      let marketPrice = 1;
-      try {
-        const ticker = await exchange.fetchTicker(symbol);
-        marketPrice = ticker.last || ticker.close || 1;
-      } catch (priceError) {
-        console.warn(`[WARNING] Failed to get market price for repair: ${priceError.message}`);
-      }
+      // ネットポジションを実際の残高に調整
+      const updatedSummary = {
+        ...currentSummary,
+        netPosition: actualBalance,
+        totalBuy: (currentSummary?.totalBuy || 0) + actualBalance,
+        lastUpdated: Date.now()
+      };
       
-      // 修復用の買い取引を記録
-      await addTrade(exchange, symbol, strategyKey, 'buy', repairAmount, marketPrice, 'POSITION_REPAIR', 'market');
+      await updateTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      }, updatedSummary);
       
-      console.log(`[INFO] Added missing buy record: ${repairAmount} ${baseAsset} at ${marketPrice}`);
+      console.log(`[INFO] Synced position to actual balance: ${actualBalance} ${baseAsset}`);
+      
+    } else if (netPosition > 0 && actualBalance === 0) {
+      // ネットポジション正で実際の残高なし: 記録上のポジションをクリア
+      repairAmount = netPosition;
+      repairAction = 'clear_phantom_position';
+      
+      // ネットポジションを0に調整
+      const updatedSummary = {
+        ...currentSummary,
+        netPosition: 0,
+        totalSell: (currentSummary?.totalSell || 0) + netPosition,
+        lastUpdated: Date.now()
+      };
+      
+      await updateTradeSummary({
+        exchangeId: exchange.id,
+        symbol,
+        strategyKey
+      }, updatedSummary);
+      
+      console.log(`[INFO] Cleared phantom position: was ${netPosition}, now 0`);
       
     } else {
       console.log(`[INFO] No specific repair action needed for net=${netPosition}, actual=${actualBalance}`);
