@@ -1,4 +1,4 @@
-const { getTradeCurrentPosition, updateTradeSummary, getTradeSummary, addOrder } = require('../../database/manager');
+const { getTradeCurrentPosition, updateTradeSummary, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { 
   savePositionRedis, 
@@ -11,7 +11,8 @@ const {
   calculatePeriodPnLRedis,
   clearPnLRedis,
   clearAllPositionsRedis,
-  clearAllPnLRedis
+  clearAllPnLRedis,
+  getTradeSummary
 } = require('../../database/redisDatabase');
 
 /**
@@ -1040,8 +1041,6 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
 async function repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset) {
   console.log(`[INFO] Starting position repair for ${exchange.id}:${symbol}:${strategyKey}`);
   
-  const { updateTradeSummary, getTradeSummary } = require('../../database/manager');
-  
   try {
     let repairAction = '';
     let repairAmount = 0;
@@ -1071,6 +1070,33 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
         symbol,
         strategyKey
       }, updatedSummary);
+      
+      // オープンポジションがある場合はクローズ
+      const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
+      const openPositions = positions.filter(p => p.status !== 'closed');
+      
+      if (openPositions.length > 0) {
+        console.log(`[INFO] Closing ${openPositions.length} open positions due to negative net position`);
+        
+        for (const position of openPositions) {
+          position.status = 'closed';
+          position.closeReason = 'negative_net_position_repair';
+          position.closedAt = Date.now();
+          
+          // 履歴保存とクリーンアップ
+          try {
+            await closeAndCleanupPosition(position.key, {
+              saveHistory: true,
+              delayHours: 0
+            });
+            console.log(`[INFO] Closed position: ${position.key}`);
+          } catch (closeError) {
+            console.warn(`[WARNING] Failed to close position ${position.key}: ${closeError.message}`);
+            // フォールバック: 通常の保存
+            await savePosition(position.key, position);
+          }
+        }
+      }
       
       console.log(`[INFO] Adjusted negative net position to zero: was ${netPosition}, adjusted by ${repairAmount} ${baseAsset}`);
       
@@ -1114,7 +1140,67 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
         strategyKey
       }, updatedSummary);
       
+      // オープンポジションをクローズ
+      const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
+      const openPositions = positions.filter(p => p.status !== 'closed');
+      
+      if (openPositions.length > 0) {
+        console.log(`[INFO] Closing ${openPositions.length} phantom positions`);
+        
+        for (const position of openPositions) {
+          position.status = 'closed';
+          position.closeReason = 'phantom_position_repair';
+          position.closedAt = Date.now();
+          
+          try {
+            await closeAndCleanupPosition(position.key, {
+              saveHistory: true,
+              delayHours: 0
+            });
+            console.log(`[INFO] Closed phantom position: ${position.key}`);
+          } catch (closeError) {
+            console.warn(`[WARNING] Failed to close phantom position ${position.key}: ${closeError.message}`);
+            await savePosition(position.key, position);
+          }
+        }
+      }
+      
       console.log(`[INFO] Cleared phantom position: was ${netPosition}, now 0`);
+      
+    } else if (netPosition === 0 && actualBalance === 0) {
+      // ネットポジション0で実際の残高も0: 残っているポジション記録をクリア
+      repairAction = 'clear_orphaned_positions';
+      
+      // オープンポジションをクローズ
+      const positions = await getStrategyPositions(exchange.id, symbol, strategyKey);
+      const openPositions = positions.filter(p => p.status !== 'closed');
+      
+      if (openPositions.length > 0) {
+        repairAmount = openPositions.length;
+        console.log(`[INFO] Found ${openPositions.length} orphaned positions to close`);
+        
+        for (const position of openPositions) {
+          position.status = 'closed';
+          position.closeReason = 'orphaned_position_repair';
+          position.closedAt = Date.now();
+          
+          try {
+            await closeAndCleanupPosition(position.key, {
+              saveHistory: true,
+              delayHours: 0
+            });
+            console.log(`[INFO] Closed orphaned position: ${position.key}`);
+          } catch (closeError) {
+            console.warn(`[WARNING] Failed to close orphaned position ${position.key}: ${closeError.message}`);
+            await savePosition(position.key, position);
+          }
+        }
+        
+        console.log(`[INFO] Cleared ${openPositions.length} orphaned positions`);
+      } else {
+        console.log(`[INFO] No orphaned positions found`);
+        return;
+      }
       
     } else {
       console.log(`[INFO] No specific repair action needed for net=${netPosition}, actual=${actualBalance}`);
