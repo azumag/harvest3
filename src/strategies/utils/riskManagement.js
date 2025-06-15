@@ -236,9 +236,10 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
 async function executeStopLoss(exchange, symbol, strategyKey, position, marketParameters) {
   const { amountPrecision, minTradeAmount } = marketParameters;
   
+  // シンボルからベースアセットを抽出（エラーハンドリングでも使用するため外に移動）
+  const baseAsset = symbol.split('/')[0];
+  
   try {
-    // シンボルからベースアセットを抽出
-    const baseAsset = symbol.split('/')[0];
     
     // formattedAvailableAmountを使用して利用可能量を取得
     const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades } = require('../../database/manager');
@@ -316,7 +317,36 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             console.warn(`[WARNING] Failed to fetch actual balance: ${balanceError.message}`);
           }
           
-          if (netPosition > 0) {
+          // ポジション管理の不整合を検出・修復
+          const positionInconsistency = netPosition <= 0 && actualBalance > 0;
+          const negativePosition = netPosition < 0;
+          
+          if (positionInconsistency || negativePosition) {
+            console.warn(`[WARNING] Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
+            
+            // 不整合修復を試行
+            try {
+              await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
+              
+              // 修復後に再計算
+              const repairedNetPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+              const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+              
+              console.log(`[INFO] After repair - Net position: ${repairedNetPosition}, Available: ${repairedAvailable}`);
+              
+              if (repairedAvailable > 0) {
+                availableToSell = Math.min(position.amount, repairedAvailable);
+                console.log(`[INFO] Using repaired available amount: ${availableToSell}`);
+              }
+            } catch (repairError) {
+              console.warn(`[WARNING] Position repair failed: ${repairError.message}`);
+              // 修復失敗時は実際の残高を使用
+              if (actualBalance > 0) {
+                availableToSell = Math.min(position.amount, actualBalance);
+                console.log(`[INFO] Fallback to actual balance after repair failure: ${availableToSell}`);
+              }
+            }
+          } else if (netPosition > 0) {
             // netPositionと実際の残高の小さい方を使用
             const safeAmount = actualBalance > 0 ? Math.min(netPosition, actualBalance) : netPosition;
             availableToSell = Math.min(position.amount, safeAmount);
@@ -343,7 +373,35 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           console.warn(`[WARNING] Fallback - Failed to fetch actual balance: ${balanceError.message}`);
         }
         
-        if (netPosition > 0) {
+        // フォールバック時も不整合チェック・修復
+        const positionInconsistency = netPosition <= 0 && actualBalance > 0;
+        const negativePosition = netPosition < 0;
+        
+        if (positionInconsistency || negativePosition) {
+          console.warn(`[WARNING] Fallback - Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
+          
+          try {
+            await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
+            
+            // 修復後に再計算
+            const repairedNetPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
+            const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+            
+            console.log(`[INFO] Fallback - After repair: Net position: ${repairedNetPosition}, Available: ${repairedAvailable}`);
+            
+            if (repairedAvailable > 0) {
+              availableToSell = Math.min(position.amount, repairedAvailable);
+              console.log(`[INFO] Fallback - Using repaired available amount: ${availableToSell}`);
+            }
+          } catch (repairError) {
+            console.warn(`[WARNING] Fallback - Position repair failed: ${repairError.message}`);
+            // 修復失敗時は実際の残高を使用
+            if (actualBalance > 0) {
+              availableToSell = Math.min(position.amount, actualBalance);
+              console.log(`[INFO] Fallback - Using actual balance after repair failure: ${availableToSell}`);
+            }
+          }
+        } else if (netPosition > 0) {
           const safeAmount = actualBalance > 0 ? Math.min(netPosition, actualBalance) : netPosition;
           availableToSell = Math.min(position.amount, safeAmount);
           console.log(`[INFO] Fallback to safe amount: ${availableToSell} (net: ${netPosition}, actual: ${actualBalance})`);
@@ -967,6 +1025,102 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
     
     console.error(`[ERROR] ポジションクリーンアップで予期しないエラー:`, error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * ポジション管理の不整合を修復する
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - シンボル
+ * @param {string} strategyKey - 戦略キー
+ * @param {number} netPosition - 現在のネットポジション
+ * @param {number} actualBalance - 実際の残高
+ * @param {string} baseAsset - ベースアセット
+ */
+async function repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset) {
+  console.log(`[INFO] Starting position repair for ${exchange.id}:${symbol}:${strategyKey}`);
+  
+  const { addTrade } = require('../../database/manager');
+  
+  try {
+    let repairAction = '';
+    let repairAmount = 0;
+    
+    if (netPosition < 0) {
+      // 負のネットポジション: 過剰な売り記録を修正
+      repairAmount = Math.abs(netPosition);
+      repairAction = 'add_buy_record';
+      
+      // 修復用の買い記録を追加（価格は直近の市場価格を使用）
+      let marketPrice = 1;
+      try {
+        const ticker = await exchange.fetchTicker(symbol);
+        marketPrice = ticker.last || ticker.close || 1;
+      } catch (priceError) {
+        console.warn(`[WARNING] Failed to get market price for repair: ${priceError.message}`);
+      }
+      
+      // 修復用の買い取引を記録
+      await addTrade(exchange, symbol, strategyKey, 'buy', repairAmount, marketPrice, 'POSITION_REPAIR', 'market');
+      
+      console.log(`[INFO] Added repair buy record: ${repairAmount} ${baseAsset} at ${marketPrice}`);
+      
+    } else if (netPosition === 0 && actualBalance > 0) {
+      // ネットポジション0で実際の残高あり: 買い記録が不足
+      repairAmount = actualBalance;
+      repairAction = 'add_buy_record';
+      
+      // 現在価格で買い記録を追加
+      let marketPrice = 1;
+      try {
+        const ticker = await exchange.fetchTicker(symbol);
+        marketPrice = ticker.last || ticker.close || 1;
+      } catch (priceError) {
+        console.warn(`[WARNING] Failed to get market price for repair: ${priceError.message}`);
+      }
+      
+      // 修復用の買い取引を記録
+      await addTrade(exchange, symbol, strategyKey, 'buy', repairAmount, marketPrice, 'POSITION_REPAIR', 'market');
+      
+      console.log(`[INFO] Added missing buy record: ${repairAmount} ${baseAsset} at ${marketPrice}`);
+      
+    } else {
+      console.log(`[INFO] No specific repair action needed for net=${netPosition}, actual=${actualBalance}`);
+      return;
+    }
+    
+    // Discord通知
+    const repairMessage = `🔧 [リスク管理] ポジション不整合修復実行\n` +
+                         `取引所: ${exchange.id}\n` +
+                         `通貨ペア: ${symbol}\n` +
+                         `戦略: ${strategyKey}\n` +
+                         `修復前ネットポジション: ${netPosition}\n` +
+                         `実際の残高: ${actualBalance}\n` +
+                         `修復アクション: ${repairAction}\n` +
+                         `修復量: ${repairAmount} ${baseAsset}\n` +
+                         `🔄 ポジション同期を完了しました`;
+    
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(repairMessage);
+    }
+    
+    console.log(`[INFO] Position repair completed: ${repairAction} for ${repairAmount} ${baseAsset}`);
+    
+  } catch (error) {
+    console.error(`[ERROR] Position repair failed: ${error.message}`);
+    
+    const errorMessage = `❌ [リスク管理] ポジション修復失敗\n` +
+                         `取引所: ${exchange.id}\n` +
+                         `通貨ペア: ${symbol}\n` +
+                         `戦略: ${strategyKey}\n` +
+                         `エラー: ${error.message}\n` +
+                         `⚠️ 手動でのポジション確認が必要です`;
+    
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(errorMessage);
+    }
+    
+    throw error;
   }
 }
 
