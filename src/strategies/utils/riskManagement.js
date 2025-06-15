@@ -274,7 +274,10 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
       
       // 早期修復チェック
-      const shouldRepairEarly = netPosition < 0 || (netPosition > 0 && actualBalance === 0);
+      const shouldRepairEarly = netPosition < 0 || 
+                                (netPosition > 0 && actualBalance === 0) ||
+                                (netPosition === 0 && actualBalance > 0) ||
+                                (Math.abs(netPosition - actualBalance) > 0.0001); // ポジションと残高の大きな差異
       
       if (shouldRepairEarly) {
         console.warn(`[WARNING] Early position repair needed: net=${netPosition}, actual=${actualBalance}`);
@@ -494,9 +497,31 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     // 売却可能量を計算（個別ポジション量と利用可能量の最小値）
     let sellAmount = Math.min(position.amount, availableToSell);
     
-    // 最小取引量を満たさない場合はエラー
-    if (sellAmount < minTradeAmount) {
-      throw new Error(`Insufficient balance for stop-loss: available to sell ${availableToSell}, required ${minTradeAmount}`);
+    // 売却可能量がゼロでも実際の残高がある場合の最終チェック
+    if (sellAmount <= 0 || sellAmount < minTradeAmount) {
+      // 実際の残高を再度確認
+      let finalActualBalance = 0;
+      try {
+        const balance = await exchange.fetchBalance();
+        finalActualBalance = balance.total[baseAsset] || 0;
+        console.log(`[INFO] Final balance check for ${baseAsset}: ${finalActualBalance}`);
+      } catch (balanceError) {
+        console.warn(`[WARNING] Final balance check failed: ${balanceError.message}`);
+      }
+      
+      // 実際の残高がある場合は、それを使用
+      if (finalActualBalance > 0) {
+        sellAmount = Math.min(position.amount, finalActualBalance);
+        console.log(`[WARNING] Using actual balance as fallback: ${sellAmount} ${baseAsset}`);
+        
+        // それでも最小取引量を満たさない場合のみエラー
+        if (sellAmount < minTradeAmount) {
+          throw new Error(`Insufficient balance for stop-loss: final balance ${finalActualBalance}, available ${availableToSell}, required ${minTradeAmount}`);
+        }
+      } else {
+        // 実際の残高もない場合はエラー
+        throw new Error(`Insufficient balance for stop-loss: available to sell ${availableToSell}, actual balance ${finalActualBalance}, required ${minTradeAmount}`);
+      }
     }
     
     const formattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
@@ -504,7 +529,39 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     console.log(`[DEBUG] Executing stop-loss sell order: ${formattedAmount} ${baseAsset}`);
     
     // マーケット注文で即座に決済
-    const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+    let order;
+    try {
+      order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+    } catch (orderError) {
+      // 注文失敗時、実際の残高で再試行
+      console.error(`[ERROR] Initial stop-loss order failed: ${orderError.message}`);
+      
+      // 実際の残高を再確認
+      let retryBalance = 0;
+      try {
+        const balance = await exchange.fetchBalance();
+        retryBalance = balance.total[baseAsset] || 0;
+        console.log(`[INFO] Retry with actual balance: ${retryBalance} ${baseAsset}`);
+      } catch (balanceError) {
+        console.warn(`[WARNING] Failed to get retry balance: ${balanceError.message}`);
+      }
+      
+      if (retryBalance > minTradeAmount) {
+        const retryAmount = Math.min(retryBalance, position.amount);
+        const formattedRetryAmount = parseFloat(retryAmount.toFixed(amountPrecision));
+        console.log(`[INFO] Retrying stop-loss with actual balance: ${formattedRetryAmount} ${baseAsset}`);
+        
+        // 実際の残高で再試行
+        order = await exchange.createMarketSellOrder(symbol, formattedRetryAmount);
+        console.log(`[INFO] Stop-loss retry successful`);
+        
+        // 売却量を更新（後続処理で使用）
+        sellAmount = retryAmount;
+      } else {
+        // 再試行も失敗
+        throw orderError;
+      }
+    }
     
     // デバッグ用：注文構造をログ出力
     console.log(`[DEBUG] Stop-loss order structure for ${symbol}:`, JSON.stringify(order, null, 2));
@@ -530,15 +587,18 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
     }
     
+    // 最終的な売却量を確定（再試行があった場合を考慮）
+    const finalFormattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
+    
     // 注文を記録
-    await addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executionPrice, order.id, 'market');
+    await addOrder(exchange, symbol, strategyKey, 'sell', finalFormattedAmount, executionPrice, order.id, 'market');
     
     // ポジション更新（部分決済か完全決済かを判定）
-    const isPartialClose = formattedAmount < position.amount;
+    const isPartialClose = finalFormattedAmount < position.amount;
     
     if (isPartialClose) {
       // 部分決済：残ポジション量を更新
-      position.amount = parseFloat((position.amount - formattedAmount).toFixed(amountPrecision));
+      position.amount = parseFloat((position.amount - finalFormattedAmount).toFixed(amountPrecision));
       position.updatedAt = Date.now();
       await savePosition(position.key, position);
       console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
@@ -583,7 +643,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     
     const message = `[リスク管理] ストップロス実行: ${exchange.id} - ${symbol}\n` +
                    `理由: ${position.reason === 'time-based' ? '時間切れ' : '価格到達'}\n` +
-                   `${isPartialClose ? '部分決済' : '完全決済'}: ${formattedAmount} ${baseAsset}\n` +
+                   `${isPartialClose ? '部分決済' : '完全決済'}: ${finalFormattedAmount} ${baseAsset}\n` +
                    `エントリー価格: ${position.entryPrice || 'N/A'}\n` +
                    `決済価格: ${executionPrice || 'N/A'}\n` +
                    `損益: ${lossPercent}%` +
@@ -599,7 +659,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       order, 
       lossPercent, 
       executionPrice, 
-      soldAmount: formattedAmount,
+      soldAmount: finalFormattedAmount,
       isPartialClose,
       remainingAmount: isPartialClose ? position.amount : 0
     };
