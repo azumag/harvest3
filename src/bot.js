@@ -1,6 +1,7 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { postErrorToDiscord } = require('./common/notifications');
+const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
 const { 
   initializeDB,
@@ -130,13 +131,11 @@ async function startBot() {
             try {
               await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config });
             } catch (error) {
-              console.error(`戦略 ${strategyKey}、通貨ペア ${symbol} の実行中にエラーが発生しました: ${error.message}`);
-              await postErrorToDiscord(`戦略 ${strategyKey}、通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+              await errorHandler.handleError(error, `戦略 ${strategyKey}、通貨ペア ${symbol}`, false);
             }
           }
         } catch (error) {
-          console.error(`通貨ペア ${symbol} の処理中にエラーが発生しました: ${error.message}`);
-          await postErrorToDiscord(`通貨ペア ${symbol} でエラー: ${error.message}`).catch(() => {});
+          await errorHandler.handleError(error, `通貨ペア ${symbol}`, false);
         }
       }
       

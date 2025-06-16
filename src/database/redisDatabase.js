@@ -3,6 +3,7 @@
  * SQLiteからRedisへの移行の一部として実装
  */
 const { client, initRedisClient } = require('./redisClient');
+const { errorHandler } = require('../common/errorHandler');
 
 // 初期化関数
 async function initialize() {
@@ -286,8 +287,7 @@ async function getAllStrategyParametersRedis() {
     console.log(`全ての戦略パラメータを取得しました (${Object.keys(allParams).length}件)`);
     return allParams;
   } catch (error) {
-    console.error('全ての戦略パラメータの読み出し中にエラーが発生しました:', error);
-    return {}; // エラー時は空のオブジェクトを返す
+    await errorHandler.handleError(error, '全ての戦略パラメータの読み出し', true);
   }
 }
 
@@ -328,8 +328,7 @@ async function getTradeKeys() {
 
     return JSON.stringify(exchanges);
   } catch (error) {
-    console.error('取引所情報の取得に失敗しました:', error);
-    return [];
+    await errorHandler.handleError(error, '取引所情報の取得', true);
   }
 }
 

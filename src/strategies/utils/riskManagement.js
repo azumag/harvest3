@@ -1,5 +1,6 @@
 const { getTradeCurrentPosition, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
+const { errorHandler } = require('../../common/errorHandler');
 const { 
   savePositionRedis, 
   getPositionRedis, 
@@ -353,7 +354,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             actualBalance = balance.total[baseAsset] || 0;
             console.log(`[INFO] Actual exchange balance for ${baseAsset}: ${actualBalance}`);
           } catch (balanceError) {
-            console.warn(`[WARNING] Failed to fetch actual balance: ${balanceError.message}`);
+            await errorHandler.handleError(balanceError, `残高取得 - ${baseAsset}`, false);
           }
           
           // ポジション管理の不整合を検出・修復
@@ -438,7 +439,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
               console.log(`[INFO] Fallback - Using repaired available amount: ${availableToSell}`);
             }
           } catch (repairError) {
-            console.warn(`[WARNING] Fallback - Position repair failed: ${repairError.message}`);
+            await errorHandler.handleError(repairError, 'ポジション修復フォールバック', false);
             // 修復失敗時は実際の残高を使用
             if (actualBalance > 0) {
               availableToSell = Math.min(position.amount, actualBalance);
@@ -495,7 +496,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             await postErrorToDiscord(detailMessage);
           }
         } catch (notificationError) {
-          console.warn(`[WARNING] Failed to send detailed notification: ${notificationError.message}`);
+          await errorHandler.handleError(notificationError, '詳細通知送信', false);
         }
         
         return { 

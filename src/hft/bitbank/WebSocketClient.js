@@ -1,5 +1,6 @@
 const io = require('socket.io-client');
 const Logger = require('../utils/Logger');
+const { errorHandler } = require('../../common/errorHandler');
 
 class WebSocketClient {
   constructor(endpoint, config) {
@@ -184,11 +185,11 @@ class WebSocketClient {
 
   _notifyHandlers(event, data) {
     const handlers = this.eventHandlers[event] || [];
-    handlers.forEach(handler => {
+    handlers.forEach(async (handler) => {
       try {
         handler(data);
       } catch (error) {
-        this.logger.error(`Error in event handler: ${error.message}`);
+        await errorHandler.handleError(error, `WebSocket event handler - ${event}`, false);
       }
     });
   }
