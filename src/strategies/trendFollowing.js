@@ -69,7 +69,8 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       'MA戦略',
       'MA Cross',
       formatMACrossLogInfo,
-      options
+      options,
+      options.config
     );
   } catch (error) {
     console.error(`移動平均線戦略でエラーが発生しました: ${symbol}`, error);
@@ -249,7 +250,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       'MACD戦略',
       'MACD',
       formatMACDLogInfo,
-      options
+      options,
+      options.config
     );
   } catch (error) {
     console.error(`MACD戦略でエラーが発生しました: ${symbol}`, error);
@@ -368,7 +370,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       'RSI戦略',
       'RSI',
       formatRSILogInfo,
-      options
+      options,
+      options.config
     );
     
   } catch (error) {
@@ -496,7 +499,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       'BB戦略',
       'Bollinger Bands',
       formatBollingerBandsLogInfo,
-      options
+      options,
+      options.config
     );
     
     

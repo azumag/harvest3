@@ -140,7 +140,8 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
       'Mutual Information',
       strategyKey,
       formatMutualInformationLogInfo,
-      options
+      options,
+      options.config
     );
   } catch (error) {
     console.error(`相互情報量戦略でエラーが発生しました: ${symbol}`, error);

@@ -345,6 +345,82 @@ function calculateReturns(prices) {
   return returns;
 }
 
+/**
+ * ATR（Average True Range）を計算
+ * @param {Array} ohlcData - OHLC データの配列 [{high, low, close}, ...]
+ * @param {Number} period - 期間（デフォルト14）
+ * @returns {Array} - ATRの配列
+ */
+function calculateATR(ohlcData, period = 14) {
+  if (!ohlcData || ohlcData.length < period + 1) {
+    return [];
+  }
+  
+  const trueRanges = [];
+  const result = [];
+  
+  // True Range を計算
+  for (let i = 1; i < ohlcData.length; i++) {
+    const current = ohlcData[i];
+    const previous = ohlcData[i - 1];
+    
+    // True Range = max(H-L, H-C_prev, C_prev-L)
+    const highLow = current.high - current.low;
+    const highClosePrev = Math.abs(current.high - previous.close);
+    const lowClosePrev = Math.abs(current.low - previous.close);
+    
+    const trueRange = Math.max(highLow, highClosePrev, lowClosePrev);
+    trueRanges.push(trueRange);
+  }
+  
+  // 最初のperiod分はnullで埋める
+  for (let i = 0; i < period; i++) {
+    result.push(null);
+  }
+  
+  // 最初のATRは単純平均
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += trueRanges[i];
+  }
+  let atr = sum / period;
+  result.push(atr);
+  
+  // 以降はSmoothed Moving Average (Wilder's smoothing)
+  for (let i = period; i < trueRanges.length; i++) {
+    atr = (atr * (period - 1) + trueRanges[i]) / period;
+    result.push(atr);
+  }
+  
+  return result;
+}
+
+/**
+ * ボラティリティベースのポジションサイズを計算
+ * @param {number} accountBalance - アカウント残高
+ * @param {number} riskPerTrade - 1取引あたりのリスク (0.01 = 1%)
+ * @param {number} atr - ATR値
+ * @param {number} atrMultiplier - ATR乗数（デフォルト2）
+ * @param {number} currentPrice - 現在価格
+ * @returns {number} - 推奨ポジションサイズ
+ */
+function calculateVolatilityBasedPositionSize(accountBalance, riskPerTrade, atr, atrMultiplier = 2, currentPrice) {
+  if (!accountBalance || !riskPerTrade || !atr || !currentPrice) {
+    return 0;
+  }
+  
+  // リスク金額を計算
+  const riskAmount = accountBalance * riskPerTrade;
+  
+  // ATRベースのストップロス距離
+  const stopLossDistance = atr * atrMultiplier;
+  
+  // ポジションサイズ = リスク金額 / ストップロス距離
+  const positionSize = riskAmount / stopLossDistance;
+  
+  return positionSize;
+}
+
 module.exports = {
   calculateSMA,
   calculateEMA,
@@ -353,5 +429,7 @@ module.exports = {
   calculateBollingerBands,
   calculateMutualInformation,
   calculateMutualInformationMatrix,
-  calculateReturns
+  calculateReturns,
+  calculateATR,
+  calculateVolatilityBasedPositionSize
 };

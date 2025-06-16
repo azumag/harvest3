@@ -15,12 +15,28 @@ const {
   checkPositionLimits, 
   checkDrawdown,
   recordBuyPosition,
-  recordPnL
+  recordPnL,
+  clearStrategyRiskData
 } = require('./riskManagement');
 const { 
   getStrategyPositionsRedis,
   closeAndCleanupPosition 
 } = require('../../database/redisDatabase');
+const { DynamicPositionSizing } = require('./positionSizing');
+const { performanceTracker } = require('./performanceTracker');
+
+// 動的ポジションサイジングのインスタンス（設定注入用）
+let dynamicSizing = null;
+
+/**
+ * 動的ポジションサイジングを初期化
+ * @param {Object} config - グローバル設定
+ */
+function initializeDynamicSizing(config) {
+  if (config?.global?.dynamicPositionSizing) {
+    dynamicSizing = new DynamicPositionSizing(config.global.dynamicPositionSizing);
+  }
+}
 
 /**
  * OHLCV データを取得して検証する
@@ -83,8 +99,14 @@ async function handleStrategySignals(
   strategyName,
   strategyId,
   formatLogInfo,
-  options = {}
+  options = {},
+  globalConfig = null
 ) {
+  // 動的ポジションサイジングの初期化（初回のみ）
+  if (globalConfig && !dynamicSizing) {
+    initializeDynamicSizing(globalConfig);
+  }
+  
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
   const logInfo = formatLogInfo(signalResult);
   
@@ -177,7 +199,8 @@ async function handleStrategySignals(
       currentPrice, 
       strategyName,
       logInfo.orderInfo,
-      options
+      options,
+      globalConfig
     );
     
   } else if (sellSignal) {
@@ -199,7 +222,8 @@ async function handleStrategySignals(
       currentPrice, 
       strategyName,
       logInfo.orderInfo,
-      options
+      options,
+      globalConfig
     );
     
     // 特定条件で早期リターン
@@ -233,7 +257,7 @@ async function handleStrategySignals(
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object|void} 注文結果
  */
-async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
@@ -269,12 +293,70 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   // 損益を取得
   const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options); // options を渡すように変更
 
-  // 利用可能な資金の割合に基づいて取引量を計算
-  const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
-  // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
-  const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
-  // 精度を考慮して、最小精度以上の値を確保
-  let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+  let formattedAmount;
+  
+  // 動的ポジションサイジングが有効かチェック
+  if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
+    try {
+      // OHLCV データを取得（ATR計算用）
+      const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
+      
+      if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
+        // 動的ポジションサイジングを計算
+        const accountBalance = availableFunds + realizedPnL;
+        const ohlcData = ohlcv.map(candle => ({
+          high: candle[2],
+          low: candle[3],
+          close: candle[4]
+        }));
+        
+        const positionResult = dynamicSizing.calculateATRBasedPosition({
+          accountBalance,
+          ohlcData,
+          currentPrice,
+          strategyKey
+        });
+        
+        if (positionResult.reason === 'success' && positionResult.positionSize > 0) {
+          formattedAmount = parseFloat(positionResult.positionSize.toFixed(amountPrecision));
+          
+          // Discord通知
+          if (postOrderToDiscord) {
+            const sizeInfo = `📊 [動的サイジング] ATRベース計算適用\n` +
+                           `ATR: ${positionResult.atr?.toFixed(6) || 'N/A'}\n` +
+                           `リスク: ${(positionResult.adjustedRisk * 100).toFixed(2)}%\n` +
+                           `計算サイズ: ${formattedAmount}\n` +
+                           `ストップロス距離: ${positionResult.stopLossDistance?.toFixed(6) || 'N/A'}`;
+            
+            console.log(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
+          }
+        } else {
+          // 動的サイジング失敗時は従来の方式にフォールバック
+          console.log(`[動的サイジング] 計算失敗、従来方式を使用: ${positionResult.reason}`);
+          const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+          const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+          formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+        }
+      } else {
+        // データ不足時は従来の方式にフォールバック
+        const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+        const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+        formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      }
+    } catch (error) {
+      console.error(`[動的サイジング] エラー、従来方式を使用: ${error.message}`);
+      // エラー時は従来の方式にフォールバック
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    }
+  } else {
+    // 動的ポジションサイジング無効時は従来の方式を使用
+    const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+    const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+    formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+  }
+  
   // 最小精度（0.0001）を下回らないようにする
   formattedAmount = Math.max(formattedAmount, 0.0001);
 
@@ -351,7 +433,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object} 注文結果
  */
-async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
 
@@ -412,13 +494,36 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
     }
 
     // 取引記録を更新
+    const executedPrice = (orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice;
+    
     if (orderType && orderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
-      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
       addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
     }
     else {
       addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
+
+    // パフォーマンス追跡（バックテスト以外）
+    if (!options.backtest && globalConfig?.global?.dynamicPositionSizing?.enabled) {
+      try {
+        // 簡易的なPnL計算（正確な計算はaddOrderで行われる）
+        const estimatedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options);
+        
+        if (estimatedPnL !== null && estimatedPnL !== 0) {
+          await performanceTracker.recordTrade(exchange.id, symbol, strategyKey, {
+            side: 'sell',
+            amount: formattedAmount,
+            price: executedPrice,
+            pnl: estimatedPnL,
+            timestamp: Date.now()
+          });
+          
+          console.log(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${estimatedPnL.toFixed(2)}`);
+        }
+      } catch (trackingError) {
+        console.error(`[パフォーマンス追跡] エラー: ${trackingError.message}`);
+      }
     }
 
     return { success: true, order };
@@ -559,6 +664,40 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
       // クリーンアップ失敗は売り注文成功を妨げない
     }
     
+    // リスク管理データのクリア（バックテスト強制決済時に重要）
+    try {
+      console.log(`[INFO] Clearing risk management data for strategy ${strategyKey}`);
+      const riskClearResult = await clearStrategyRiskData(exchange.id, symbol, strategyKey);
+      
+      if (riskClearResult.success) {
+        console.log(`[INFO] Risk management data cleared successfully: ${riskClearResult.message}`);
+        
+        if (postOrderToDiscord) {
+          const riskMessage = `🛡️ [リスク管理] データクリア完了\\n` +
+                             `取引所: ${exchange.id}\\n` +
+                             `通貨ペア: ${symbol}\\n` +
+                             `戦略: ${strategyKey}\\n` +
+                             `結果: ${riskClearResult.message}\\n` +
+                             `📅 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+          
+          await postOrderToDiscord(riskMessage);
+        }
+      } else {
+        console.warn(`[WARNING] Risk management data clear had issues: ${riskClearResult.message}`);
+        
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(`[${exchange.id}] リスク管理データクリアで問題発生: ${symbol} - ${riskClearResult.message}`);
+        }
+      }
+    } catch (riskClearError) {
+      console.error(`[ERROR] Risk management data clear failed: ${symbol}`, riskClearError.message);
+      
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(`[${exchange.id}] リスク管理データクリア失敗: ${symbol} - エラー: ${riskClearError.message}`);
+      }
+      // リスク管理データクリア失敗は売り注文成功を妨げない
+    }
+    
   } catch (error) {
     console.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
     if (postErrorToDiscord) {
@@ -577,4 +716,6 @@ module.exports = {
   executeSellOrder,
   disableStrategy,
   clearPositionMarket,
+  initializeDynamicSizing,
+  performanceTracker
 };
