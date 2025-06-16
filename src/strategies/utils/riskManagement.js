@@ -724,6 +724,106 @@ async function clearPnLTracker() {
 }
 
 /**
+ * 特定戦略のリスク管理データをクリア（強制決済時用）
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ */
+async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
+  console.log(`[リスク管理] 戦略データクリア開始: ${exchangeId}/${symbol}/${strategyKey}`);
+  
+  let clearedCount = 0;
+  let errorCount = 0;
+  
+  try {
+    // 1. 戦略のポジション情報をクリア
+    const positions = await getStrategyPositionsRedis(exchangeId, symbol, strategyKey);
+    
+    for (const position of positions) {
+      try {
+        // ポジションキーを生成
+        const positionKey = `position:${exchangeId}:${symbol}:${strategyKey}:${position.orderId || position.timestamp}`;
+        
+        // メモリから削除
+        if (fallbackPositionStore.has(positionKey)) {
+          fallbackPositionStore.delete(positionKey);
+          clearedCount++;
+        }
+        
+        // Redis からも削除（closeAndCleanupPosition を使用）
+        const cleanupResult = await closeAndCleanupPosition(positionKey, {
+          saveHistory: true,  // 履歴は保存
+          delayHours: 0      // 即座に削除
+        });
+        
+        if (cleanupResult.success) {
+          clearedCount++;
+        } else {
+          errorCount++;
+        }
+        
+      } catch (positionError) {
+        console.warn(`ポジションクリア失敗: ${position.key || 'unknown'}`, positionError.message);
+        errorCount++;
+      }
+    }
+    
+    // 2. 戦略の損益データをクリア（当日分）
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const pnlKey = `${exchangeId}:${strategyKey}:${today}`;
+      
+      // メモリから削除
+      if (fallbackPnlTracker.has(pnlKey)) {
+        fallbackPnlTracker.delete(pnlKey);
+        console.log(`[リスク管理] 損益データクリア: ${pnlKey}`);
+      }
+      
+      // Redis からも削除（個別削除のためのヘルパー関数が必要）
+      // 注意: 完全削除ではなく、当日分のみリセット
+      await recordPnL(exchangeId, strategyKey, 0); // リセット
+      
+    } catch (pnlError) {
+      console.warn(`損益データクリア失敗: ${exchangeId}:${strategyKey}`, pnlError.message);
+      errorCount++;
+    }
+    
+    // 3. ストップロス情報をクリア（メモリベース）
+    try {
+      // stopLossTracker から該当戦略のエントリを削除
+      const stopLossKey = `${exchangeId}:${symbol}:${strategyKey}`;
+      // 注意: stopLossTracker は実装によってはグローバルではない可能性があるため、
+      // ここでは基本的なログ出力のみ
+      console.log(`[リスク管理] ストップロス情報確認: ${stopLossKey}`);
+      
+    } catch (stopLossError) {
+      console.warn(`ストップロス情報クリア失敗: ${exchangeId}:${symbol}:${strategyKey}`, stopLossError.message);
+      errorCount++;
+    }
+    
+    const result = {
+      success: errorCount === 0,
+      clearedCount,
+      errorCount,
+      message: `ポジション: ${clearedCount}件クリア, エラー: ${errorCount}件`
+    };
+    
+    console.log(`[リスク管理] 戦略データクリア完了: ${exchangeId}/${symbol}/${strategyKey} - ${result.message}`);
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`[リスク管理] 戦略データクリアエラー: ${exchangeId}/${symbol}/${strategyKey}`, error.message);
+    return {
+      success: false,
+      clearedCount,
+      errorCount: errorCount + 1,
+      error: error.message
+    };
+  }
+}
+
+/**
  * 損益を記録
  * @param {string} exchangeId - 取引所ID
  * @param {string} strategyKey - 戦略キー
@@ -1304,6 +1404,7 @@ module.exports = {
   generateRiskManagementReport,
   sendRiskManagementReport,
   performPositionCleanup,
+  clearStrategyRiskData, // 新機能：戦略固有のリスク管理データクリア
   // テスト用
   clearPositionStore,
   clearPnLTracker

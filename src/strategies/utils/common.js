@@ -15,7 +15,8 @@ const {
   checkPositionLimits, 
   checkDrawdown,
   recordBuyPosition,
-  recordPnL
+  recordPnL,
+  clearStrategyRiskData
 } = require('./riskManagement');
 const { 
   getStrategyPositionsRedis,
@@ -661,6 +662,40 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
     } catch (cleanupError) {
       console.error(`[ERROR] Position cleanup process failed: ${symbol}`, cleanupError.message);
       // クリーンアップ失敗は売り注文成功を妨げない
+    }
+    
+    // リスク管理データのクリア（バックテスト強制決済時に重要）
+    try {
+      console.log(`[INFO] Clearing risk management data for strategy ${strategyKey}`);
+      const riskClearResult = await clearStrategyRiskData(exchange.id, symbol, strategyKey);
+      
+      if (riskClearResult.success) {
+        console.log(`[INFO] Risk management data cleared successfully: ${riskClearResult.message}`);
+        
+        if (postOrderToDiscord) {
+          const riskMessage = `🛡️ [リスク管理] データクリア完了\\n` +
+                             `取引所: ${exchange.id}\\n` +
+                             `通貨ペア: ${symbol}\\n` +
+                             `戦略: ${strategyKey}\\n` +
+                             `結果: ${riskClearResult.message}\\n` +
+                             `📅 実行時刻: ${new Date().toLocaleString('ja-JP')}`;
+          
+          await postOrderToDiscord(riskMessage);
+        }
+      } else {
+        console.warn(`[WARNING] Risk management data clear had issues: ${riskClearResult.message}`);
+        
+        if (postErrorToDiscord) {
+          await postErrorToDiscord(`[${exchange.id}] リスク管理データクリアで問題発生: ${symbol} - ${riskClearResult.message}`);
+        }
+      }
+    } catch (riskClearError) {
+      console.error(`[ERROR] Risk management data clear failed: ${symbol}`, riskClearError.message);
+      
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(`[${exchange.id}] リスク管理データクリア失敗: ${symbol} - エラー: ${riskClearError.message}`);
+      }
+      // リスク管理データクリア失敗は売り注文成功を妨げない
     }
     
   } catch (error) {
