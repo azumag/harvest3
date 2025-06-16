@@ -43,7 +43,13 @@
       "Bash(docker restart:*)",
       "Bash(gh pr create:*)",
       "Bash(git worktree:*)",
-      "Bash(npm run check-position-consistency:*)"
+      "Bash(npm run check-position-consistency:*)",
+      "Bash(source ~/.bashrc)",
+      "Bash(deno:*)",
+      "Bash(/home/node/.deno/bin/deno --version)",
+      "Bash(sudo apt-get:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(tmux:*)"
     ],
     "deny": []
   }

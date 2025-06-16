@@ -21,6 +21,12 @@ const {
   getStrategyPositionsRedis,
   closeAndCleanupPosition 
 } = require('../../database/redisDatabase');
+const { DynamicPositionSizing } = require('./positionSizing');
+const { performanceTracker } = require('./performanceTracker');
+const { config: globalConfig } = require('../../config');
+
+// 動的ポジションサイジングのインスタンスを作成
+const dynamicSizing = new DynamicPositionSizing(globalConfig.global.dynamicPositionSizing);
 
 /**
  * OHLCV データを取得して検証する
@@ -269,12 +275,70 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   // 損益を取得
   const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options); // options を渡すように変更
 
-  // 利用可能な資金の割合に基づいて取引量を計算
-  const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
-  // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
-  const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
-  // 精度を考慮して、最小精度以上の値を確保
-  let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+  let formattedAmount;
+  
+  // 動的ポジションサイジングが有効かチェック
+  if (globalConfig.global.dynamicPositionSizing?.enabled && !options.backtest) {
+    try {
+      // OHLCV データを取得（ATR計算用）
+      const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
+      
+      if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
+        // 動的ポジションサイジングを計算
+        const accountBalance = availableFunds + realizedPnL;
+        const ohlcData = ohlcv.map(candle => ({
+          high: candle[2],
+          low: candle[3],
+          close: candle[4]
+        }));
+        
+        const positionResult = dynamicSizing.calculateATRBasedPosition({
+          accountBalance,
+          ohlcData,
+          currentPrice,
+          strategyKey
+        });
+        
+        if (positionResult.reason === 'success' && positionResult.positionSize > 0) {
+          formattedAmount = parseFloat(positionResult.positionSize.toFixed(amountPrecision));
+          
+          // Discord通知
+          if (postOrderToDiscord) {
+            const sizeInfo = `📊 [動的サイジング] ATRベース計算適用\n` +
+                           `ATR: ${positionResult.atr?.toFixed(6) || 'N/A'}\n` +
+                           `リスク: ${(positionResult.adjustedRisk * 100).toFixed(2)}%\n` +
+                           `計算サイズ: ${formattedAmount}\n` +
+                           `ストップロス距離: ${positionResult.stopLossDistance?.toFixed(6) || 'N/A'}`;
+            
+            console.log(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
+          }
+        } else {
+          // 動的サイジング失敗時は従来の方式にフォールバック
+          console.log(`[動的サイジング] 計算失敗、従来方式を使用: ${positionResult.reason}`);
+          const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+          const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+          formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+        }
+      } else {
+        // データ不足時は従来の方式にフォールバック
+        const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+        const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+        formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+      }
+    } catch (error) {
+      console.error(`[動的サイジング] エラー、従来方式を使用: ${error.message}`);
+      // エラー時は従来の方式にフォールバック
+      const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+      const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+      formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+    }
+  } else {
+    // 動的ポジションサイジング無効時は従来の方式を使用
+    const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
+    const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
+    formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
+  }
+  
   // 最小精度（0.0001）を下回らないようにする
   formattedAmount = Math.max(formattedAmount, 0.0001);
 
@@ -412,13 +476,36 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
     }
 
     // 取引記録を更新
+    const executedPrice = (orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice;
+    
     if (orderType && orderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
-      const executedPrice = order.price || currentPrice; // 注文が約定した場合の価格を取得
       addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
     }
     else {
       addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+    }
+
+    // パフォーマンス追跡（バックテスト以外）
+    if (!options.backtest && globalConfig.global.dynamicPositionSizing?.enabled) {
+      try {
+        // 簡易的なPnL計算（正確な計算はaddOrderで行われる）
+        const estimatedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options);
+        
+        if (estimatedPnL !== null && estimatedPnL !== 0) {
+          await performanceTracker.recordTrade(exchange.id, symbol, strategyKey, {
+            side: 'sell',
+            amount: formattedAmount,
+            price: executedPrice,
+            pnl: estimatedPnL,
+            timestamp: Date.now()
+          });
+          
+          console.log(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${estimatedPnL.toFixed(2)}`);
+        }
+      } catch (trackingError) {
+        console.error(`[パフォーマンス追跡] エラー: ${trackingError.message}`);
+      }
     }
 
     return { success: true, order };
@@ -577,4 +664,6 @@ module.exports = {
   executeSellOrder,
   disableStrategy,
   clearPositionMarket,
+  dynamicSizing,
+  performanceTracker
 };

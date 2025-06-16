@@ -50,7 +50,7 @@ const config = {
   global: {
     // 共通設定
     amount: 0.0001,  // 最小取引単位
-    tradePercentage: 0.01,  // 資金の%で取引
+    tradePercentage: 0.01,  // 資金の%で取引（動的サイジング無効時）
 
     // 除外シンボル
     excludeSymbols: [
@@ -59,6 +59,24 @@ const config = {
       'RNDR/',
       // 'ATOM/',
     ],
+    
+    // 動的ポジションサイジング設定
+    dynamicPositionSizing: {
+      enabled: true,
+      baseRiskPerTrade: 0.01, // 1%
+      atrPeriod: 14,
+      atrMultiplier: 2,
+      maxPositionPercent: 0.1, // 10%
+      minPositionPercent: 0.001, // 0.1%
+      
+      // Kelly基準設定
+      kellyEnabled: false, // Phase 1では無効
+      kellyFraction: 0.25,
+      
+      // パフォーマンス調整
+      performanceAdjustment: true,
+      lookbackDays: 30
+    }
   },
   
   // 戦略固有の デフォルト設定
