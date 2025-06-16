@@ -57,7 +57,8 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       '平均回帰戦略',
       'Mean Reversion',
       formatMeanReversionLogInfo,
-      options
+      options,
+      options.config
     );
     
   } catch (error) {
@@ -121,7 +122,8 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
         'オシレーター戦略',
         'Oscillator',
         formatOscillatorLogInfo,
-        options
+        options,
+        options.config
       );
 
     } catch (error) {

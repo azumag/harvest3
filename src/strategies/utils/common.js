@@ -23,10 +23,19 @@ const {
 } = require('../../database/redisDatabase');
 const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
-const { config: globalConfig } = require('../../config');
 
-// 動的ポジションサイジングのインスタンスを作成
-const dynamicSizing = new DynamicPositionSizing(globalConfig.global.dynamicPositionSizing);
+// 動的ポジションサイジングのインスタンス（設定注入用）
+let dynamicSizing = null;
+
+/**
+ * 動的ポジションサイジングを初期化
+ * @param {Object} config - グローバル設定
+ */
+function initializeDynamicSizing(config) {
+  if (config?.global?.dynamicPositionSizing) {
+    dynamicSizing = new DynamicPositionSizing(config.global.dynamicPositionSizing);
+  }
+}
 
 /**
  * OHLCV データを取得して検証する
@@ -89,8 +98,14 @@ async function handleStrategySignals(
   strategyName,
   strategyId,
   formatLogInfo,
-  options = {}
+  options = {},
+  globalConfig = null
 ) {
+  // 動的ポジションサイジングの初期化（初回のみ）
+  if (globalConfig && !dynamicSizing) {
+    initializeDynamicSizing(globalConfig);
+  }
+  
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
   const logInfo = formatLogInfo(signalResult);
   
@@ -183,7 +198,8 @@ async function handleStrategySignals(
       currentPrice, 
       strategyName,
       logInfo.orderInfo,
-      options
+      options,
+      globalConfig
     );
     
   } else if (sellSignal) {
@@ -205,7 +221,8 @@ async function handleStrategySignals(
       currentPrice, 
       strategyName,
       logInfo.orderInfo,
-      options
+      options,
+      globalConfig
     );
     
     // 特定条件で早期リターン
@@ -239,7 +256,7 @@ async function handleStrategySignals(
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object|void} 注文結果
  */
-async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
@@ -278,7 +295,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   let formattedAmount;
   
   // 動的ポジションサイジングが有効かチェック
-  if (globalConfig.global.dynamicPositionSizing?.enabled && !options.backtest) {
+  if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
     try {
       // OHLCV データを取得（ATR計算用）
       const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
@@ -415,7 +432,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @param {Object} signalInfo シグナル情報（ログ出力用）
  * @returns {Object} 注文結果
  */
-async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}) { // options を追加
+async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
 
@@ -487,7 +504,7 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
     }
 
     // パフォーマンス追跡（バックテスト以外）
-    if (!options.backtest && globalConfig.global.dynamicPositionSizing?.enabled) {
+    if (!options.backtest && globalConfig?.global?.dynamicPositionSizing?.enabled) {
       try {
         // 簡易的なPnL計算（正確な計算はaddOrderで行われる）
         const estimatedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options);
@@ -664,6 +681,6 @@ module.exports = {
   executeSellOrder,
   disableStrategy,
   clearPositionMarket,
-  dynamicSizing,
+  initializeDynamicSizing,
   performanceTracker
 };
