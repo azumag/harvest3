@@ -31,6 +31,11 @@ function initDashboard() {
         loadAndDisplayRiskPositions();
         loadAndDisplayRiskStats();
       }
+      
+      // 約定済みポジションタブが表示された場合はデータを読み込み
+      if (activeTabId === 'filled-positions-tab') {
+        loadAndDisplayFilledPositions();
+      }
 
       // 必要に応じて各タブのコンテンツを再レンダリング（データは既にロード済み）
       // loadAndDisplaySummary() で一度ロード・集計したデータを使用
@@ -1959,4 +1964,160 @@ function refreshRiskPositions() {
   // データを再読み込み
   loadAndDisplayRiskPositions();
   loadAndDisplayRiskStats();
+}
+
+/**
+ * 約定済みポジションデータの読み込みと表示
+ */
+async function loadAndDisplayFilledPositions() {
+  try {
+    const response = await fetch('/api/filled-positions');
+    const data = await response.json();
+    
+    if (response.ok) {
+      displayFilledPositionsStats(data.stats);
+      displayFilledPositionsTable(data.positions);
+    } else {
+      console.error('約定済みポジションの読み込みエラー:', data.error);
+      showFilledPositionsError('データの読み込みに失敗しました: ' + data.error);
+    }
+  } catch (error) {
+    console.error('約定済みポジションの読み込みエラー:', error);
+    showFilledPositionsError('データの読み込みに失敗しました: ' + error.message);
+  }
+}
+
+/**
+ * 約定済みポジション統計情報の表示
+ */
+function displayFilledPositionsStats(stats) {
+  const totalPositionsElement = document.getElementById('filled-total-positions');
+  const totalPnLElement = document.getElementById('filled-total-pnl');
+  const avgTimeElement = document.getElementById('filled-avg-time');
+  const lastUpdatedElement = document.getElementById('filled-last-updated');
+  
+  if (totalPositionsElement) {
+    totalPositionsElement.textContent = stats.totalFilledPositions || 0;
+  }
+  
+  if (totalPnLElement) {
+    const totalPnL = stats.totalUnrealizedPnL || 0;
+    totalPnLElement.textContent = formatCurrency(totalPnL);
+    totalPnLElement.className = totalPnL >= 0 ? 'text-success' : 'text-danger';
+  }
+  
+  if (avgTimeElement) {
+    const avgTime = stats.averageHoldingTime || 0;
+    avgTimeElement.textContent = formatHours(avgTime);
+  }
+  
+  if (lastUpdatedElement) {
+    lastUpdatedElement.textContent = formatDateTime(Date.now());
+  }
+}
+
+/**
+ * 約定済みポジションテーブルの表示
+ */
+function displayFilledPositionsTable(positions) {
+  const tbody = document.getElementById('filled-positions-tbody');
+  
+  if (!tbody) return;
+  
+  if (!positions || positions.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="text-center text-muted">
+          約定済みポジションが見つかりません
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = positions.map(position => {
+    const pnl = position.unrealizedPnL || 0;
+    const pnlPercent = position.unrealizedPnLPercent || 0;
+    const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
+    
+    const elapsedHours = (Date.now() - position.timestamp) / (1000 * 60 * 60);
+    
+    return `
+      <tr>
+        <td><small>${position.exchange}</small></td>
+        <td><strong>${position.symbol}</strong></td>
+        <td><span class="badge bg-secondary">${position.strategy}</span></td>
+        <td><span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span></td>
+        <td><small>${formatNumber(position.amount)}</small></td>
+        <td><small>¥${formatNumber(position.entryPrice)}</small></td>
+        <td><small>¥${formatNumber(position.currentPrice)}</small></td>
+        <td class="${pnlClass}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
+        <td class="${pnlClass}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
+        <td><small>${formatHours(elapsedHours)}</small></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * 約定済みポジションエラー表示
+ */
+function showFilledPositionsError(message) {
+  const tbody = document.getElementById('filled-positions-tbody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="text-center text-danger">
+          <i class="fas fa-exclamation-triangle"></i> ${message}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+/**
+ * 通貨フォーマット
+ */
+function formatCurrency(value) {
+  return `¥${formatNumber(value)}`;
+}
+
+/**
+ * パーセント フォーマット
+ */
+function formatPercent(value) {
+  if (typeof value !== 'number') return '-';
+  return value.toFixed(2);
+}
+
+/**
+ * 時間フォーマット
+ */
+function formatHours(hours) {
+  if (typeof hours !== 'number') return '-';
+  
+  if (hours < 1) {
+    return `${Math.round(hours * 60)}分`;
+  } else if (hours < 24) {
+    return `${hours.toFixed(1)}時間`;
+  } else {
+    const days = Math.floor(hours / 24);
+    const remainingHours = Math.round(hours % 24);
+    return `${days}日${remainingHours}時間`;
+  }
+}
+
+/**
+ * 日時フォーマット
+ */
+function formatDateTime(timestamp) {
+  if (!timestamp) return '-';
+  const date = new Date(timestamp);
+  return date.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }

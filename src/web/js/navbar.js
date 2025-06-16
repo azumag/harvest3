@@ -27,6 +27,8 @@ $(document).ready(function() {
             activeNavId = 'nav-analysis';
         } else if (pageName === 'signal-history.html') {
             activeNavId = 'nav-signal-history';
+        } else if (pageName === 'filled-positions.html') {
+            activeNavId = 'nav-filled-positions';
         } else if (pageName === 'parameter-settings.html') {
             activeNavId = 'nav-parameter-settings';
         }

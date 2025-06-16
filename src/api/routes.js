@@ -73,6 +73,7 @@ router.get('/all-parameters', parametersController.getAllParameters); // 新し�
 // リスク管理API
 router.get('/risk-positions', riskManagementController.getRiskPositions);
 router.get('/risk-stats', riskManagementController.getRiskStats);
+router.get('/filled-positions', riskManagementController.getFilledPositions);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {

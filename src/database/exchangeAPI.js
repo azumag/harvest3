@@ -5,6 +5,7 @@ const BITBANK_PUBLIC_API_URL = 'https://public.bitbank.cc';
 
 // ccxtのtimeframeとbitbankのcandle-typeのマッピング
 const TIMEFRAME_TO_CANDLE_TYPE = {
+  '1h': '1hour',
   '4h': '4hour',
   '8h': '8hour',
   '12h': '12hour',
