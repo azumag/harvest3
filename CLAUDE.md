@@ -8,6 +8,11 @@
 
 このプロセスにより、プロジェクトのルールを継続的に改善していきます
 
+## 重要: 実行結果や応答を以下のコマンドでDiscordに送信                                                                                                                                                 
+```bash
+claude-discord-bot send-to-discord "あなたの応答内容" --session claude-harvest
+```                                                                                                                                                   
+
 ## ⚠️ データベース操作における重要な制約
 
 ### RedisとMongoDBのデータ削除禁止

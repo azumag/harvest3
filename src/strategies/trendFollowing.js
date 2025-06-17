@@ -7,13 +7,16 @@ const {
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
+  calculateADX
 } = require('./utils/indicators');
 
 const { 
   fetchAndValidateOHLCVData, 
   handleStrategySignals, 
   executeBuyOrder, 
-  executeSellOrder 
+  executeSellOrder,
+  confirmMultipleIndicators,
+  identifyMarketEnvironment
 } = require('./utils/common');
 
 const { addSignal, fetchTicker } = require('../database/manager');
@@ -534,9 +537,262 @@ function formatBollingerBandsLogInfo(signalResult) {
   };
 }
 
+/**
+ * マルチ指標確認戦略
+ * 複数の指標が同じ方向を示す場合のみ取引を実行
+ */
+async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
+  const { 
+    ohlcvInterval,
+    // マルチ指標設定（フラット化構造 - バックテスト対応）
+    requiredConfirmations = 3,
+    
+    // 重み設定
+    weightMACD = 1.0,
+    weightEMA = 0.8,
+    weightRSI = 0.7,
+    weightVolume = 0.5,
+    weightADX = 0.9,
+    
+    // 期間設定
+    macdFastPeriod = 12,
+    macdSlowPeriod = 26,
+    macdSignalPeriod = 9,
+    emaShortPeriod = 12,
+    emaLongPeriod = 26,
+    rsiPeriod = 14,
+    adxPeriod = 14,
+    volumeMAPeriod = 20
+  } = config;
+
+  try {
+    // 必要な期間の最大値を計算
+    const maxPeriod = Math.max(
+      macdSlowPeriod + macdSignalPeriod,
+      emaLongPeriod,
+      rsiPeriod,
+      adxPeriod + 10, // ADXには追加データが必要
+      volumeMAPeriod
+    );
+
+    // OHLCVデータを取得して検証
+    const validatedData = await fetchAndValidateOHLCVData(
+      exchange, 
+      symbol, 
+      ohlcvInterval, 
+      maxPeriod + 10, 
+      postErrorToDiscord,
+      'マルチ指標',
+      options
+    );
+    if (!validatedData) return;
+    
+    const { closes, ohlcv } = validatedData;
+    if (options.backtest) {
+      options.backtest.ohlcvData = ohlcv;
+    }
+
+    // 各種指標を計算
+    const indicators = {};
+
+    // MACD
+    indicators.macd = calculateMACD(
+      closes, 
+      macdFastPeriod,
+      macdSlowPeriod,
+      macdSignalPeriod
+    );
+
+    // EMA（短期・長期）
+    indicators.emaShort = calculateEMA(closes, emaShortPeriod);
+    indicators.emaLong = calculateEMA(closes, emaLongPeriod);
+
+    // RSI
+    indicators.rsi = calculateRSI(closes, rsiPeriod);
+
+    // 出来高データ（利用可能な場合）
+    if (ohlcv.length > 0 && ohlcv[0].length > 5) {
+      const volumes = ohlcv.map(candle => candle[5]);
+      indicators.volume = volumes;
+      indicators.volumeMA = calculateSMA(volumes, volumeMAPeriod);
+    }
+
+    // ADX（OHLC データが必要）
+    const ohlcData = ohlcv.map(candle => ({
+      high: candle[2],
+      low: candle[3],
+      close: candle[4]
+    }));
+    indicators.adx = calculateADX(ohlcData, adxPeriod);
+
+    // 価格変化を計算
+    indicators.priceChange = closes[closes.length - 1] - closes[closes.length - 2];
+
+    // 現在の価格を取得
+    const ticker = await fetchTicker(exchange, symbol, options);
+    const currentPrice = ticker.last;
+
+    // 市場環境を識別
+    const marketEnvironment = identifyMarketEnvironment(indicators.adx, {
+      strongTrendThreshold: 40,
+      trendThreshold: 25,
+      weakTrendThreshold: 20
+    });
+
+    // マルチ指標確認を実行
+    const multiIndicatorConfig = {
+      requiredConfirmations,
+      weights: {
+        macd: weightMACD,
+        ema: weightEMA,
+        rsi: weightRSI,
+        volume: weightVolume,
+        adx: weightADX
+      }
+    };
+    const confirmation = confirmMultipleIndicators(indicators, multiIndicatorConfig);
+
+    // シグナル決定ロジック
+    let buySignal = false;
+    let sellSignal = false;
+    let signalReason = 'no_confirmation';
+
+    if (confirmation.confirmed) {
+      // 市場環境に応じたフィルタリング
+      if (marketEnvironment.environment === 'range' && confirmation.direction === 'bullish') {
+        // レンジ相場では買いシグナルを慎重に判断
+        if (confirmation.bullishScore > 70) {
+          buySignal = true;
+          signalReason = 'confirmed_bullish_in_range';
+        }
+      } else if (marketEnvironment.environment === 'range' && confirmation.direction === 'bearish') {
+        // レンジ相場では売りシグナルを慎重に判断
+        if (confirmation.bearishScore > 70) {
+          sellSignal = true;
+          signalReason = 'confirmed_bearish_in_range';
+        }
+      } else if (marketEnvironment.environment !== 'range') {
+        // トレンド相場では通常の判定
+        if (confirmation.direction === 'bullish' && marketEnvironment.direction === 'bullish') {
+          buySignal = true;
+          signalReason = 'confirmed_bullish_trend';
+        } else if (confirmation.direction === 'bearish' && marketEnvironment.direction === 'bearish') {
+          sellSignal = true;
+          signalReason = 'confirmed_bearish_trend';
+        }
+      }
+    }
+
+    // シグナルタイプを決定
+    const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
+
+    // 戦略固有の計算結果
+    const strategyResults = {
+      confirmation,
+      marketEnvironment,
+      signalReason,
+      indicators: {
+        macd: indicators.macd.macd[indicators.macd.macd.length - 1],
+        emaShort: indicators.emaShort[indicators.emaShort.length - 1],
+        emaLong: indicators.emaLong[indicators.emaLong.length - 1],
+        rsi: indicators.rsi[indicators.rsi.length - 1],
+        adx: indicators.adx.adx[indicators.adx.adx.length - 1]
+      }
+    };
+
+    // シグナルがある場合のみ保存
+    if (signalType !== 'none') {
+      addSignal(
+        exchange,
+        symbol,
+        strategyKey,
+        signalType,
+        currentPrice,
+        strategyResults,
+        options
+      );
+    }
+
+    // シグナル結果をまとめる
+    const signalResult = {
+      currentPrice,
+      signalType,
+      buySignal,
+      sellSignal,
+      confirmation,
+      marketEnvironment,
+      signalReason,
+      strategyResults
+    };
+
+    // シグナル処理を共通関数で行う
+    return await handleStrategySignals(
+      exchange,
+      symbol,
+      strategyKey,
+      config,
+      marketParameters,
+      signalResult,
+      'マルチ指標戦略',
+      'Multi-Indicator',
+      formatMultiIndicatorLogInfo,
+      options,
+      options.config
+    );
+
+  } catch (error) {
+    console.error(`マルチ指標戦略でエラーが発生しました: ${symbol}`, error);
+    if (postErrorToDiscord) {
+      await postErrorToDiscord(`[マルチ指標戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    }
+    return {
+      strategy: 'Multi-Indicator',
+      symbol,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * マルチ指標戦略のログ情報をフォーマットする
+ * @param {Object} signalResult シグナル計算結果
+ * @returns {Object} フォーマットされたログ情報
+ */
+function formatMultiIndicatorLogInfo(signalResult) {
+  const { 
+    currentPrice, 
+    confirmation, 
+    marketEnvironment, 
+    signalReason 
+  } = signalResult;
+  
+  const confirmationInfo = `確認数: ${confirmation.actualConfirmations.bullish}/${confirmation.actualConfirmations.bearish}, ` +
+                          `スコア: ${confirmation.bullishScore}/${confirmation.bearishScore}`;
+  
+  const marketInfo = `市場: ${marketEnvironment.description} (ADX: ${marketEnvironment.strength?.toFixed(1) || 'N/A'})`;
+  
+  return {
+    buy: `${confirmationInfo}, ${marketInfo}, 理由: ${signalReason}`,
+    sell: `${confirmationInfo}, ${marketInfo}, 理由: ${signalReason}`,
+    none: `${confirmationInfo}, ${marketInfo}`,
+    orderInfo: { 
+      confirmation, 
+      marketEnvironment, 
+      signalReason 
+    },
+    result: { 
+      currentPrice, 
+      confirmation, 
+      marketEnvironment,
+      signalReason
+    }
+  };
+}
+
 module.exports = {
   maStrategy,
   macdStrategy,
   rsiStrategy,
-  bollingerBandsStrategy
+  bollingerBandsStrategy,
+  multiIndicatorStrategy
 };
