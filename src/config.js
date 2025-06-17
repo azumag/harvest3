@@ -76,6 +76,44 @@ const config = {
       // パフォーマンス調整
       performanceAdjustment: true,
       lookbackDays: 30
+    },
+    
+    // 高度注文管理設定（Issue #147）
+    advancedOrderManagement: {
+      enabled: true,
+      defaultUrgency: 'medium', // low, medium, high
+      maxSlippage: 0.005, // 0.5%
+      orderTimeout: 60000, // 60秒
+      maxRetries: 3,
+      retryDelay: 1000, // 1秒
+      
+      // 注文タイプ別設定
+      orderTypes: {
+        market: {
+          enabled: true,
+          urgencyLevel: 'high'
+        },
+        limit: {
+          enabled: true,
+          urgencyLevel: 'medium'
+        },
+        postOnly: {
+          enabled: true,
+          urgencyLevel: 'low'
+        },
+        ioc: {
+          enabled: true,
+          urgencyLevel: 'medium'
+        },
+        iceberg: {
+          enabled: true,
+          largeOrderThreshold: {
+            'BTC': 0.1,
+            'ETH': 1.0,
+            'default': 10.0
+          }
+        }
+      }
     }
   },
   

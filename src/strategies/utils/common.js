@@ -24,9 +24,13 @@ const {
 } = require('../../database/redisDatabase');
 const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
+const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
 let dynamicSizing = null;
+
+// 高度注文管理のインスタンス（取引所別）
+const orderManagers = new Map();
 
 /**
  * 動的ポジションサイジングを初期化
@@ -36,6 +40,18 @@ function initializeDynamicSizing(config) {
   if (config?.global?.dynamicPositionSizing) {
     dynamicSizing = new DynamicPositionSizing(config.global.dynamicPositionSizing);
   }
+}
+
+/**
+ * 高度注文管理インスタンスを取得
+ * @param {Object} exchange - 取引所オブジェクト
+ * @returns {AdvancedOrderManager} 注文管理インスタンス
+ */
+function getOrderManager(exchange) {
+  if (!orderManagers.has(exchange.id)) {
+    orderManagers.set(exchange.id, new AdvancedOrderManager(exchange));
+  }
+  return orderManagers.get(exchange.id);
 }
 
 /**
@@ -375,34 +391,74 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   );
 
   if (allowanceCheck.allowed) {
-    // 買い注文を作成
-    const params = { 'post_only': true };
     let order;
+    let orderResult = { success: false };
+    
     if (options.backtest) {
       // バックテストモードの場合、バックテスト用の注文関数を呼び出す
       order = await backtestCreateLimitBuyOrder(symbol, formattedAmount, currentPrice, options);
+      orderResult = { success: true, order };
     } else {
-      // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      // orderType が 'limit' の場合、createLimitBuyOrder を使用
-      // orderType が 'market' の場合、createMarketBuyOrder を使用
-      if (orderType && orderType === 'market') {
-        order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+      // リアルタイムモードの場合、高度注文管理システムを使用
+      const orderManager = getOrderManager(exchange);
+      
+      // 注文オプションを設定（グローバル設定から取得）
+      const orderConfig = globalConfig?.global?.advancedOrderManagement || {};
+      const defaultUrgency = orderConfig.defaultUrgency || 'medium';
+      let urgency = URGENCY_LEVELS.MEDIUM;
+      
+      // 注文タイプに基づいて緊急度を決定
+      if (orderType === 'market') {
+        urgency = URGENCY_LEVELS.HIGH;
+      } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
+        urgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
       } else {
-        order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+        urgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
+      }
+      
+      const orderOptions = {
+        urgency,
+        strategy: strategyName,
+        backtest: false,
+        maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
+        enableRetry: orderConfig.maxRetries > 0
+      };
+      
+      // 高度注文実行
+      orderResult = await orderManager.executeAdvancedOrder(
+        symbol, 'buy', formattedAmount, currentPrice, orderOptions
+      );
+      
+      if (orderResult.success) {
+        order = orderResult.order;
+      } else {
+        // 高度注文が失敗した場合、従来方式にフォールバック
+        console.warn(`[${strategyName}] 高度注文失敗、従来方式を使用`);
+        const params = { 'post_only': true };
+        
+        if (orderType && orderType === 'market') {
+          order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+        } else {
+          order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+        }
       }
     }
 
     if (postOrderToDiscord && !options.backtest) {
-      postOrderToDiscord(`[${strategyName}] 買い注文実行: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}`);
+      const orderTypeInfo = orderResult.orderType ? ` (${orderResult.orderType})` : '';
+      const attemptInfo = orderResult.attempts ? ` - 試行: ${orderResult.attempts}回` : '';
+      postOrderToDiscord(`[${strategyName}] 買い注文実行${orderTypeInfo}: ${exchange.id} - ${symbol} - 価格: ${currentPrice}, 数量: ${formattedAmount}${attemptInfo}`);
     }
 
     // 取引記録を更新
-    const executedPrice = (orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice;
+    // 高度注文の場合、調整された価格を使用
+    const executedPrice = orderResult.adjustedPrice || 
+                        ((orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice);
     if (orderType && orderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
       addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
     } else {
-      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'limit', options); // options を渡すように変更
     }
 
     // リスク管理: ポジション情報を記録（バックテストモードではスキップ）
@@ -476,32 +532,70 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
   // リアルタイムモードの availableAsset >= formattedAmount && formattedAmount > 0 はそのまま残す。
 
   if (options.backtest || (availableAsset >= formattedAmount && formattedAmount > 0)) { // バックテストモードの場合は formattedAmount > 0 のみチェック
-    // 売り注文を作成
-    const params = { 'post_only': true };
     let order;
+    let orderResult = { success: false };
+    
     if (options.backtest) {
       // バックテストモードの場合、バックテスト用の注文関数を呼び出す
       order = await backtestCreateLimitSellOrder(symbol, formattedAmount, currentPrice, options);
+      orderResult = { success: true, order };
     } else {
-      // リアルタイムモードの場合、既存の exchange メソッドを呼び出す
-      // orderType が 'limit' の場合、createLimitSellOrder を使用
-      // orderType が 'market' の場合、createMarketSellOrder を使用
-      if (orderType && orderType === 'market') {
-        order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+      // リアルタイムモードの場合、高度注文管理システムを使用
+      const orderManager = getOrderManager(exchange);
+      
+      // 注文オプションを設定（グローバル設定から取得）
+      const orderConfig = globalConfig?.global?.advancedOrderManagement || {};
+      const defaultUrgency = orderConfig.defaultUrgency || 'medium';
+      let urgency = URGENCY_LEVELS.MEDIUM;
+      
+      // 注文タイプに基づいて緊急度を決定
+      if (orderType === 'market') {
+        urgency = URGENCY_LEVELS.HIGH;
+      } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
+        urgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
       } else {
-        order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+        urgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
+      }
+      
+      const orderOptions = {
+        urgency,
+        strategy: strategyName,
+        backtest: false,
+        maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
+        enableRetry: orderConfig.maxRetries > 0
+      };
+      
+      // 高度注文実行
+      orderResult = await orderManager.executeAdvancedOrder(
+        symbol, 'sell', formattedAmount, currentPrice, orderOptions
+      );
+      
+      if (orderResult.success) {
+        order = orderResult.order;
+      } else {
+        // 高度注文が失敗した場合、従来方式にフォールバック
+        console.warn(`[${strategyName}] 高度注文失敗、従来方式を使用`);
+        const params = { 'post_only': true };
+        
+        if (orderType && orderType === 'market') {
+          order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+        } else {
+          order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+        }
       }
     }
 
     // 取引記録を更新
-    const executedPrice = (orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice;
+    // 高度注文の場合、調整された価格を使用
+    const executedPrice = orderResult.adjustedPrice || 
+                        ((orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice);
     
     if (orderType && orderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
       addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
     }
     else {
-      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, currentPrice, order.id, 'limit', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'limit', options); // options を渡すように変更
     }
 
     // パフォーマンス追跡（バックテスト以外）
