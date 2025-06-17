@@ -2,7 +2,7 @@
  * リスク管理API コントローラー
  */
 const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis } = require('../../database/redisDatabase');
-const { getTradeSummary, listTrades } = require('../../database/manager');
+const { getTradeSummary, listTrades, listFilledPositions } = require('../../database/manager');
 
 /**
  * リスク管理ポジション情報を取得するAPIエンドポイント
@@ -195,28 +195,24 @@ async function getFilledPositions(req, res) {
     // クエリパラメータからフィルタ条件を取得
     const { exchange, symbol, strategy } = req.query;
 
-    // 全ての戦略ポジションを取得
-    const allPositions = await getAllPositionsRedis();
-    
-    // 約定済み取引を取得
-    const trades = await listTrades();
-    const filledOrderIds = new Set(trades.map(trade => trade.orderId));
-    
-    // 約定済みポジションのみをフィルタ
-    let filledPositions = allPositions.filter(position => 
-      filledOrderIds.has(position.orderId)
-    );
-    
-    // さらにフィルタ条件を適用
+    // フィルタ条件を構築
+    const filter = {};
     if (exchange) {
-      filledPositions = filledPositions.filter(pos => pos.exchange === exchange);
+      filter.exchangeId = exchange;
     }
     if (symbol) {
-      filledPositions = filledPositions.filter(pos => pos.symbol === symbol);
+      filter.symbol = symbol;
     }
     if (strategy) {
-      filledPositions = filledPositions.filter(pos => pos.strategy === strategy);
+      filter.strategyKey = strategy;
     }
+
+    console.log('getFilledPositions filter:', filter);
+
+    // MongoDBから約定済みポジションを取得
+    let filledPositions = await listFilledPositions(filter);
+    
+    console.log(`getFilledPositions received ${filledPositions.length} positions`);
 
     // 各ポジションに追加情報を付与
     const enrichedPositions = await Promise.all(
@@ -226,12 +222,12 @@ async function getFilledPositions(req, res) {
           let currentPrice = position.entryPrice || 0;
           
           try {
-            const ticker = await getTickerRedis(position.exchange, position.symbol);
+            const ticker = await getTickerRedis(position.exchangeId, position.symbol);
             if (ticker && ticker.last && ticker.last > 0) {
               currentPrice = ticker.last;
             }
           } catch (tickerError) {
-            console.warn(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
+            console.warn(`Failed to get ticker for ${position.exchangeId}:${position.symbol}:`, tickerError.message);
           }
 
           const entryPrice = position.entryPrice || 0;
@@ -249,12 +245,24 @@ async function getFilledPositions(req, res) {
             unrealizedPnLPercent = entryPrice > 0 ? ((entryPrice - currentPrice) / entryPrice) * 100 : 0;
           }
 
+          // 保有時間を計算（時間単位）
+          let holdingTimeHours = 0;
+          if (position.createdAt && position.closedAt) {
+            const createdTime = new Date(position.createdAt).getTime();
+            const closedTime = new Date(position.closedAt).getTime();
+            holdingTimeHours = (closedTime - createdTime) / (1000 * 60 * 60);
+          }
+
           return {
             ...position,
+            exchange: position.exchangeId, // WebUIの互換性のため
+            strategy: position.strategyKey, // WebUIの互換性のため
             currentPrice,
             unrealizedPnL,
             unrealizedPnLPercent,
-            createdAt: new Date(position.timestamp).toISOString(),
+            holdingTimeHours, // 保有時間（時間単位）
+            createdAt: position.createdAt ? new Date(position.createdAt).toISOString() : null,
+            closedAt: position.closedAt ? new Date(position.closedAt).toISOString() : null,
             filled: true // 約定済みフラグ
           };
         } catch (error) {
@@ -272,7 +280,11 @@ async function getFilledPositions(req, res) {
       totalFilledPositions: enrichedPositions.length,
       totalUnrealizedPnL: enrichedPositions.reduce((sum, p) => sum + (p.unrealizedPnL || 0), 0),
       averageHoldingTime: enrichedPositions.length > 0 ? 
-        enrichedPositions.reduce((sum, p) => sum + ((Date.now() - p.timestamp) / (1000 * 60 * 60)), 0) / enrichedPositions.length : 0
+        enrichedPositions.reduce((sum, p) => {
+          const createdAt = p.createdAt ? new Date(p.createdAt).getTime() : Date.now();
+          const closedAt = p.closedAt ? new Date(p.closedAt).getTime() : Date.now();
+          return sum + ((closedAt - createdAt) / (1000 * 60 * 60));
+        }, 0) / enrichedPositions.length : 0
     };
 
     res.json({

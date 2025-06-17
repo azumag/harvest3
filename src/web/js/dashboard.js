@@ -1423,10 +1423,10 @@ function updateOrderPairSymbolDropdown(orderPairs) {
 /**
  * 数値を読みやすい形式にフォーマットする
  * @param {number} num - フォーマットする数値
- * @param {number} maxDigits - 小数点以下の最大桁数（デフォルト1）
+ * @param {number} maxDigits - 小数点以下の最大桁数（デフォルト4）
  * @returns {string} - フォーマットされた数値文字列
  */
-function formatNumber(num, maxDigits = 1) {
+function formatNumber(num, maxDigits = 4) {
   if (num === null || num === undefined) return '0';
 
   // 大きな数値の場合は小数点以下を省略
@@ -2040,7 +2040,11 @@ function displayFilledPositionsTable(positions) {
     const pnlPercent = position.unrealizedPnLPercent || 0;
     const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
     
-    const elapsedHours = (Date.now() - position.timestamp) / (1000 * 60 * 60);
+    // 約定済みポジションの場合は保有時間を使用、そうでなければ経過時間を計算
+    const elapsedHours = position.holdingTimeHours || 
+                        (position.createdAt && position.closedAt ? 
+                         (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
+                         (Date.now() - position.timestamp) / (1000 * 60 * 60));
     
     return `
       <tr>
@@ -2120,4 +2124,5 @@ function formatDateTime(timestamp) {
     hour: '2-digit',
     minute: '2-digit'
   });
-}
+}/* Updated at Tue Jun 17 17:22:18 UTC 2025 */
+/* Volume test - Tue Jun 17 17:27:28 UTC 2025 */

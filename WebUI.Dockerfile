@@ -20,7 +20,7 @@ COPY package*.json ./
 RUN npm install --production
 # localtunnelはpackage.jsonの依存関係に含まれているため、グローバルインストールは不要
 
-# アプリケーションのソースコードをコピー
+# アプリケーションのソースコードをコピー（ボリュームマウントで上書きされる）
 COPY src/ ./src/
 
 # ポートを公開

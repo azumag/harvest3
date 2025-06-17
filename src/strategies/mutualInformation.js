@@ -27,6 +27,7 @@ const {
 
 const { addSignal, fetchTicker } = require('../database/manager');
 const { postErrorToDiscord } = require('../common/notifications');
+const { isBacktestMode } = require('../common/utils');
 
 // グローバルインスタンス（状態管理用）
 let globalPairSelector = null;
@@ -76,6 +77,9 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
     referenceSymbols = options.referenceSymbols;
   } else if (referenceSymbols === 'all' && options.referenceSymbols) {
     referenceSymbols = options.referenceSymbols;
+    if (!isBacktestMode()) {
+      console.log(`[相互情報量戦略] ${symbol}: 参照シンボル ${referenceSymbols.length}個 - ${referenceSymbols.slice(0, 5).join(', ')}${referenceSymbols.length > 5 ? '...' : ''}`);
+    }
   }
 
   try {
@@ -139,12 +143,18 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
           // console.log(`参照シンボル ${refSymbol} のデータを取引所 ${refExchange.id} から取得しました`);
         }
       } catch (error) {
-        console.log(`参照シンボル ${refSymbol} のデータ取得に失敗: ${error.message}`);
+        if (!isBacktestMode()) {
+          console.log(`参照シンボル ${refSymbol} のデータ取得に失敗: ${error.message}`);
+        }
       }
     }
 
     if (referenceData.length === 0) {
-      console.log(`相互情報量戦略: 参照データが不足しています ${symbol}`);
+      if (!isBacktestMode()) {
+        console.log(`相互情報量戦略: 参照データが不足しています ${symbol}`);
+        console.log(`  - 参照シンボル候補数: ${referenceSymbols.length}`);
+        console.log(`  - 参照シンボル候補: ${referenceSymbols.slice(0, 10).join(', ')}${referenceSymbols.length > 10 ? '...' : ''}`);
+      }
       return {
         strategy: 'Mutual Information',
         symbol,

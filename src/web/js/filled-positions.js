@@ -69,7 +69,13 @@ function updatePositionsTable() {
         const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
         const sideClass = position.side === 'buy' ? 'text-primary' : 'text-warning';
         
-        const elapsedHours = (Date.now() - position.timestamp) / (1000 * 60 * 60);
+        // 約定済みポジションの場合は保有時間を使用、そうでなければ経過時間を計算
+        console.log('Debug position:', position.symbol, 'holdingTimeHours:', position.holdingTimeHours, 'createdAt:', position.createdAt, 'closedAt:', position.closedAt);
+        const holdingTime = position.holdingTimeHours || 
+                           (position.createdAt && position.closedAt ? 
+                            (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
+                            (Date.now() - position.timestamp) / (1000 * 60 * 60));
+        console.log('Debug calculated holdingTime:', holdingTime);
         
         return `
             <tr>
@@ -82,8 +88,8 @@ function updatePositionsTable() {
                 <td>¥${formatNumber(position.currentPrice)}</td>
                 <td class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></td>
                 <td class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></td>
-                <td>${formatHours(elapsedHours)}</td>
-                <td>${formatDateTime(position.timestamp)}</td>
+                <td>${formatHours(holdingTime)}</td>
+                <td>${formatDateTime(position.closedAt || position.timestamp)}</td>
             </tr>
         `;
     }).join('');

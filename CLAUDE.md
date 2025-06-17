@@ -2,9 +2,8 @@
 
 ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
 
-1. 「これを標準のルールにしますか？」と質問する
-2. YESの回答を得た場合、CLAUDE.mdに追加ルールとして記載する
-3. 以降は標準ルールとして常に適用する
+1. CLAUDE.mdに追加ルールとして記載する
+2. 以降は標準ルールとして常に適用する
 
 このプロセスにより、プロジェクトのルールを継続的に改善していきます
 
@@ -32,29 +31,33 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 
 この手順を踏まずにデータ削除を行うことは厳禁とする。
 
-## 知見管理システム
-このプロジェクトでは以下のファイルで知見を体系的に管理しています：
+## WebUIアクセスの注意事項
+WebUIコンテナ（trade_viewer）へのアクセスに問題がある場合は、以下の方法を試してください：
 
-### `.claude/context.md`
-- プロジェクトの背景、目的、制約条件
-- 技術スタック選定理由
-- ビジネス要件や技術的制約
+1. **コンテナIPアドレスでの直接アクセス**
+   ```bash
+   # コンテナのIPアドレスを確認
+   docker inspect trade_viewer | grep IPAddress
+   # 表示されたIPアドレス（例: 192.168.97.6）でアクセス
+   # http://192.168.97.6:3000
+   ```
 
-### `.claude/project-knowledge.md`
-- 実装パターンや設計決定の知見
-- アーキテクチャの選択理由
-- 避けるべきパターンやアンチパターン
+2. **コンテナ内からのアクセス**
+   ```bash
+   docker exec trade_viewer curl http://localhost:3000/api/filled-positions
+   ```
 
-### `.claude/project-improvements.md`
-- 過去の試行錯誤の記録
-- 失敗した実装とその原因
-- 改善プロセスと結果
+## システム更新時の注意事項
 
-### `.claude/common-patterns.md`
-- 頻繁に使用するコマンドパターン
-- 定型的な実装テンプレート
+### Dockerコンテナ更新のガイドライン
+- docker コンテナが更新されていないからといって、コピーして実行しないで、コンテナが更新されない原因を探って修正すること
 
-**重要**: 新しい実装や重要な決定を行った際は、該当するファイルを更新してください。
+### Docker cp 操作に関する注意事項
+- `docker cp` コマンドは禁止
+- コンテナ間のファイル転送は、ボリュームマウントや共有ネットワークストレージなど、安全で追跡可能な方法を使用すること
+
+### Docker絶対パス使用に関する注意事項
+- docker 関連に絶対パスを絶対に使わない。禁止されています
 
 # 指示
 タスクごとに git branch を作成し、 git worktree に割り当て作業する。
@@ -66,6 +69,32 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 docker-compose.yml などでアプリケーションが構成されている場合、npmなどローカルサーバを起動せず、
 docker compose を利用してアプリテストを行う
 
+### ファイル変更の反映確保
+**重要**: コードファイルを変更した後は、必ず以下の手順で変更を確実にコンテナに反映する：
+
+#### Makefileコマンドの使用（推奨）
+```bash
+# バックテスト関連の変更時
+make quick-restart-backtest
+
+# 戦略実行関連の変更時  
+make quick-restart-bot
+
+# 全体を確実に反映したい場合
+make restart-all
+```
+
+#### 手動でのコンテナ再起動
+```bash
+# バックテストコンテナ
+docker compose restart backtest
+
+# 戦略実行コンテナ
+docker compose restart strategy-runner
+```
+
+**注意**: ボリュームマウントの問題でファイル変更が反映されない場合があるため、変更後は必ずコンテナを再起動すること。
+
 ### UIテストの実行
 UIの改修を行った場合は、必ず以下の手順でテストを実行する：
 1. **`docker compose restart web-ui`** でWebUIサービスを再起動（UIに変更があった場合は毎回必須）
@@ -76,22 +105,12 @@ UIの改修を行った場合は、必ず以下の手順でテストを実行す
 ### Botの再起動
 bot部分の修正（src/strategies/、src/database/、src/common/など）を行った場合は、必ず以下のコマンドで再起動する：
 ```bash
+make quick-restart-bot
+# または
 docker compose restart bot
 ```
 
-
-## Claude Code CLI設定
-
-### デフォルトフラグの設定
-
-Dev Container内では、`--dangerously-skip-permissions`フラグがデフォルトで有効になっています：
-
-```bash
-# .bashrcに設定済み
-alias claude="claude --dangerously-skip-permissions"
-```
-
-これにより、コンテナ内での権限チェックをバイパスし、スムーズな開発体験を提供します。
+## html, javascript などのUI系修正は、必ず修正内容をアクセスし確認すること。
 
 ## 開発フロー
 

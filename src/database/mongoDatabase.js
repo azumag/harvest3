@@ -37,6 +37,7 @@ async function connectDB() {
       module.exports.signalsCollection = db.collection('signals');
       module.exports.ohlcvCollection = db.collection('ohlcv'); // ohlcvCollection の参照を追加
       module.exports.tickersCollection = db.collection('tickers');
+      module.exports.positionsCollection = db.collection('positions');
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
@@ -573,6 +574,50 @@ async function fetchTickerFromMongoDB(exchange, symbol, timestamp, maxTimeDiff =
   }
 }
 
+/**
+ * 約定済みポジション履歴を取得
+ * @param {Object} filter - フィルタ条件
+ * @param {Number} limit - 取得件数制限
+ * @returns {Promise<Array>} 約定済みポジション配列
+ */
+async function listFilledPositions(filter = {}, limit = 1000) {
+  await connectDB();
+  try {
+    // フィルタ条件を構築
+    const query = {};
+    
+    if (filter.exchangeId) {
+      query.exchangeId = filter.exchangeId;
+    }
+    
+    if (filter.symbol) {
+      query.symbol = filter.symbol;
+    }
+    
+    if (filter.strategyKey) {
+      query.strategyKey = filter.strategyKey;
+    }
+    
+    // 約定済み（closed）ポジションのみを取得
+    query.status = 'closed';
+    
+    console.log('listFilledPositions query:', query);
+    
+    const positions = await module.exports.positionsCollection
+      .find(query)
+      .sort({ closedAt: -1 })
+      .limit(limit)
+      .toArray();
+    
+    console.log(`listFilledPositions found ${positions.length} positions`);
+    
+    return positions;
+  } catch (error) {
+    console.error('約定済みポジションの取得に失敗:', error);
+    throw error;
+  }
+}
+
 // モジュールエクスポートに追加
 module.exports = {
   connectDB,
@@ -597,5 +642,6 @@ module.exports = {
   ohlcvCollection: null,
   setupGracefulShutdown,
   fetchHistoricalOHLCVData,
-  connectDB
+  connectDB,
+  listFilledPositions
 };

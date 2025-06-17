@@ -82,9 +82,18 @@ function timeframeToMs(timeframe) {
 // スリープ関数
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * バックテストモードかどうかを判定する統一関数
+ * @returns {boolean} - バックテストモードの場合true
+ */
+function isBacktestMode() {
+  return process.env.BACKTEST_MODE === 'true';
+}
+
 module.exports = {
   weightedAverage,
   fetchTotal,
   sleep,
-  timeframeToMs
+  timeframeToMs,
+  isBacktestMode
 };

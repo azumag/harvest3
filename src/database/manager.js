@@ -13,6 +13,7 @@ const {
   fetchHistoricalOHLCVData,
   saveTickerMongoDB,
   fetchTickerFromMongoDB,
+  listFilledPositions,
 } = require('./mongoDatabase');
 
 const {
@@ -40,7 +41,7 @@ const { fetchOHLCVDataAPI } = require('./exchangeAPI');
 const { getOHLCVQueue } = require('./ohlcvQueue');
 const { getOHLCVCacheManager } = require('./ohlcvCache');
 
-const { sleep, timeframeToMs } = require('../common/utils');
+const { sleep, timeframeToMs, isBacktestMode } = require('../common/utils');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -215,11 +216,14 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     // バックテストモードの場合（既存ロジックを維持）
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      console.log(`[OHLCVData] バックテストモード: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+      // console.log(`[OHLCVData] バックテストモード: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 
-    console.log(`[OHLCVData] 通常モード: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+    // 通常モード時のログを制御（バックテスト時は出力しない）
+    if (!isBacktestMode()) {
+      console.log(`[OHLCVData] 通常モード: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+    }
     
     // キャッシュマネージャーとキューの初期化
     const cacheManager = getOHLCVCacheManagerInstance();
@@ -229,12 +233,16 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     const cachedData = await cacheManager.get(exchange.id, symbol, timeframe, limit, options);
     if (cachedData && !options.forceUpdate) {
       const duration = Date.now() - startTime;
-      console.log(`[OHLCVData] キャッシュヒット: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`);
+      if (!isBacktestMode()) {
+        console.log(`[OHLCVData] キャッシュヒット: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`);
+      }
       return applyLimitToData(cachedData, limit);
     }
 
     // 2. 新しいデータの取得が必要
-    console.log(`[OHLCVData] APIから新しいデータを取得: ${exchange.id} ${symbol} ${timeframe}`);
+    if (!isBacktestMode()) {
+      console.log(`[OHLCVData] APIから新しいデータを取得: ${exchange.id} ${symbol} ${timeframe}`);
+    }
     
     // forceUpdate が true の場合以外は、limit を 200 にする（既存ロジック維持）
     const _limit = options.forceUpdate ? limit : 200;
@@ -255,7 +263,9 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     );
     
     if (!ohlcvs || ohlcvs.length === 0) {
-      console.log(`[OHLCVData] ${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      if (!isBacktestMode()) {
+        console.log(`[OHLCVData] ${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      }
       return [];
     }
 
@@ -268,7 +278,9 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     }
     
     const duration = Date.now() - startTime;
-    console.log(`[OHLCVData] API取得完了: ${exchange.id} ${symbol} ${timeframe} (${ohlcvs.length}件, ${duration}ms)`);
+    if (!isBacktestMode()) {
+      console.log(`[OHLCVData] API取得完了: ${exchange.id} ${symbol} ${timeframe} (${ohlcvs.length}件, ${duration}ms)`);
+    }
     
     return applyLimitToData(ohlcvs, limit);
     
@@ -278,7 +290,9 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     
     // フォールバック: 従来の方法で取得を試行
     try {
-      console.log(`[OHLCVData] フォールバック処理: 従来の方法で取得`);
+      if (!isBacktestMode()) {
+        console.log(`[OHLCVData] フォールバック処理: 従来の方法で取得`);
+      }
       return await fetchOHLCVDataFallback(exchange, symbol, timeframe, limit, options);
     } catch (fallbackError) {
       console.error(`[OHLCVData] フォールバック処理も失敗:`, fallbackError);
@@ -467,14 +481,67 @@ async function getOrderStrategyKeyByOrderId(orderId) {
   return (order && order.strategy) ? order.strategy : 'OUTSIDE';
 }
 
+// 約定情報更新のキャッシュ (exchange:symbol -> {timestamp, promise})
+const tradeUpdateCache = new Map();
+const CACHE_DURATION = 30000; // 30秒間キャッシュ
+
+// 定期的なキャッシュクリーンアップ (5分ごと)
+setInterval(() => {
+  const now = Date.now();
+  const expiredKeys = [];
+  
+  for (const [key, cache] of tradeUpdateCache.entries()) {
+    if (now - cache.timestamp > CACHE_DURATION * 2) { // 有効期限の2倍で削除
+      expiredKeys.push(key);
+    }
+  }
+  
+  expiredKeys.forEach(key => tradeUpdateCache.delete(key));
+  
+  if (expiredKeys.length > 0) {
+    console.log(`[約定更新キャッシュ] 期限切れエントリを${expiredKeys.length}件削除`);
+  }
+}, 5 * 60 * 1000);
+
 /**
- * 前回チェック時から現在までの約定履歴を取得し記録する
+ * 前回チェック時から現在までの約定履歴を取得し記録する（キャッシュ付き）
  * @param {Object} exchange - 取引所オブジェクト
  * @param {string} symbol - 通貨ペア
  * @returns {Promise<number>} - 処理した約定数
  */
 async function updateFilledTrades(exchange, symbol) {
- 
+  const cacheKey = `${exchange.id}:${symbol}`;
+  const now = Date.now();
+  
+  // キャッシュチェック
+  const cached = tradeUpdateCache.get(cacheKey);
+  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+    const cacheAge = Math.round((now - cached.timestamp)/1000);
+    console.log(`[約定更新] キャッシュヒット: ${exchange.id} ${symbol} (${cacheAge}秒前の結果を返却)`);
+    const result = await cached.promise;
+    console.log(`[約定更新] キャッシュ結果返却完了: ${exchange.id} ${symbol} -> ${result}件`);
+    return result;
+  }
+  
+  const startTime = Date.now();
+  console.log(`[約定更新] 開始: ${exchange.id} ${symbol}`);
+  
+  // 実際の処理をPromiseとしてキャッシュに保存
+  const updatePromise = updateFilledTradesInternal(exchange, symbol, startTime);
+  tradeUpdateCache.set(cacheKey, {
+    timestamp: now,
+    promise: updatePromise
+  });
+  
+  return updatePromise;
+}
+
+/**
+ * 約定履歴更新の実装部分
+ */
+async function updateFilledTradesInternal(exchange, symbol, startTime) {
+  const isBacktest = process.env.BACKTEST_MODE === 'true';
+  
   try {
     // 前回の更新時間を取得
     const timestamp = await getTradeSummaryTimestamp(exchange.id, symbol);
@@ -485,25 +552,77 @@ async function updateFilledTrades(exchange, symbol) {
     
     // fetchMyTradesメソッドが利用可能かどうかを確認
     if (!exchange.has || !exchange.has['fetchMyTrades']) {
-      console.error(`約定履歴の更新エラー (${exchange.id} ${symbol}): fetchMyTradesメソッドがサポートされていません`);
+      if (!isBacktest) {
+        console.warn(`[約定更新] fetchMyTradesメソッドがサポートされていません: ${exchange.id} ${symbol}`);
+      }
       return 0;
     }
     
     // 取引所から約定履歴を取得
-    // 最終チェック時間からの約定履歴を取得
+    if (!isBacktest) {
+      console.log(`[約定更新] API呼び出し開始: ${exchange.id} ${symbol}`);
+    }
+    const apiStart = Date.now();
     const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
-    // console.log(`最終更新時間: ${new Date(lastCheckTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+    const apiTime = Date.now() - apiStart;
     
-    let processedCount = 0;
-    let strategyKey = 'OUTSIDE';
-    // 各約定を処理
-    for (const trade of trades) {
-
-      if (trade.order) {
-        strategyKey = await getOrderStrategyKeyByOrderId(trade.order);
+    if (!isBacktest) {
+      console.log(`[約定更新] API呼び出し完了: ${exchange.id} ${symbol} (${apiTime}ms, ${trades ? trades.length : 0}件)`);
+    }
+    
+    // 約定がない場合は早期リターン
+    if (!trades || trades.length === 0) {
+      const totalTime = Date.now() - startTime;
+      if (!isBacktest) {
+        console.log(`[約定更新] 完了（約定なし）: ${exchange.id} ${symbol} (${totalTime}ms)`);
       }
-      // console.log(`strategykey: ${strategyKey} trade: ${trade.order}`);
+      return 0;
+    }
 
+    let processedCount = 0;
+    let successCount = 0;
+    
+    // 戦略キーを一括取得してキャッシュ
+    if (!isBacktest) {
+      console.log(`[約定更新] 戦略キー取得開始: ${trades.length}件の約定を処理`);
+    }
+    const strategyStart = Date.now();
+    const orderIds = trades.map(trade => trade.order).filter(id => id);
+    const strategyKeyMap = new Map();
+    
+    if (orderIds.length > 0) {
+      try {
+        // 戦略キーを並列取得
+        const strategyKeys = await Promise.all(
+          orderIds.map(async orderId => {
+            try {
+              return await getOrderStrategyKeyByOrderId(orderId);
+            } catch (error) {
+              return 'OUTSIDE';
+            }
+          })
+        );
+        
+        orderIds.forEach((orderId, index) => {
+          strategyKeyMap.set(orderId, strategyKeys[index]);
+        });
+        
+        const strategyTime = Date.now() - strategyStart;
+        if (!isBacktest) {
+          console.log(`[約定更新] 戦略キー取得完了: ${orderIds.length}件 (${strategyTime}ms)`);
+        }
+      } catch (error) {
+        if (!isBacktest) {
+          console.warn(`戦略キー一括取得エラー: ${error.message}`);
+        }
+      }
+    }
+
+    // 約定データを準備
+    const tradeDataList = [];
+    for (const trade of trades) {
+      const strategyKey = strategyKeyMap.get(trade.order) || 'OUTSIDE';
+      
       const _trade = {
         exchange: exchange.id,
         symbol,
@@ -517,14 +636,22 @@ async function updateFilledTrades(exchange, symbol) {
         fee: trade.fee ? trade.fee.cost : 0,
         tradeId: trade.id,
         timestamp: now,
-      }
+      };
+      
+      tradeDataList.push(_trade);
+    }
 
+    // 約定データを処理
+    if (!isBacktest) {
+      console.log(`[約定更新] MongoDB書き込み開始: ${tradeDataList.length}件`);
+    }
+    const dbStart = Date.now();
+    
+    for (const _trade of tradeDataList) {
       try {
         await addTradeMongoDB(_trade);
-        console.log('_trade object:', _trade); // 追加
         await updateTradeSummary(_trade);
-        console.log('updateTradeSummary executed'); // 追加
-        await updateTradeSummaryTimestamp(exchange.id, symbol, now);
+        successCount++;
       } catch (error) {
         const { errorHandler } = require('../common/errorHandler');
         const context = `約定履歴の更新 (${exchange.id} ${symbol})`;
@@ -534,19 +661,48 @@ async function updateFilledTrades(exchange, symbol) {
           await errorHandler.handleError(error, context, false);
         } else {
           // 重複キーエラーの場合は警告ログのみ
-          console.warn(`[${context}] 重複約定をスキップ: tradeId=${_trade.tradeId}`, error.message);
+          if (!isBacktest) {
+            console.warn(`[約定更新] 重複約定をスキップ: tradeId=${_trade.tradeId}`);
+          }
         }
       }
       
       processedCount++;
     }
     
-    if (processedCount > 0) {
-      console.log(`${exchange.id} ${symbol} ${strategyKey}: ${processedCount}件の約定を記録しました`);
+    const dbTime = Date.now() - dbStart;
+    if (!isBacktest) {
+      console.log(`[約定更新] MongoDB書き込み完了: ${successCount}/${processedCount}件成功 (${dbTime}ms)`);
+    }
+    
+    // サマリータイムスタンプは最後に一度だけ更新
+    if (successCount > 0) {
+      try {
+        await updateTradeSummaryTimestamp(exchange.id, symbol, now);
+      } catch (error) {
+        if (!isBacktest) {
+          console.warn(`サマリータイムスタンプ更新エラー: ${error.message}`);
+        }
+      }
+    }
+    
+    const totalTime = Date.now() - startTime;
+    if (!isBacktest) {
+      if (processedCount > 0) {
+        console.log(`[約定更新] 完了: ${exchange.id} ${symbol} ${processedCount}件処理 (合計${totalTime}ms)`);
+      } else {
+        console.log(`[約定更新] 完了: ${exchange.id} ${symbol} 約定なし (${totalTime}ms)`);
+      }
     }
     return processedCount;
   } catch (error) {
-    console.error(`約定履歴の更新エラー (${exchange.id} ${symbol} :`, error);
+    const totalTime = Date.now() - startTime;
+    console.error(`[約定更新] エラー: ${exchange.id} ${symbol} (${totalTime}ms)`, error.message);
+    
+    // エラー時はキャッシュをクリア
+    const cacheKey = `${exchange.id}:${symbol}`;
+    tradeUpdateCache.delete(cacheKey);
+    
     return 0;
   }
 }
@@ -1272,6 +1428,7 @@ module.exports = {
   listTrades,
   listSignals,
   countSignals,
+  listFilledPositions,
   addOhlcvMongoDB, // script からの利用のみ
   getOHLCVByParams, // script からの利用のみ
   fetchTicker,

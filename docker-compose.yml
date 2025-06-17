@@ -1,28 +1,30 @@
 services:
 
-  reporter:
-    image: harvest3-bot-image
-    container_name: harvest3-reporter
-    restart: always
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run reporter
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-      - mongodb
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "1m"
-        max-file: "1"
+  # reporter:
+  #   image: harvest3-bot-image
+  #   container_name: harvest3-reporter
+  #   restart: always
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./src:/usr/src/app/src
+  #     - ./scripts:/usr/src/app/scripts
+  #     - ./test:/usr/src/app/test
+  #   command: npm run reporter
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #     - MONGODB_URL=mongodb://mongodb:27017
+  #     - MONGODB_DB_NAME=harvest3
+  #   networks:
+  #     - harvest-network
+  #   depends_on:
+  #     - redis
+  #     - mongodb
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "1m"
+  #       max-file: "1"
 
   redis:
     image: redis:8-alpine
@@ -59,15 +61,19 @@ services:
 
   bot:
     image: harvest3-bot-image
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
     container_name: strategy-runner
     restart: always
     env_file:
       - .env
     volumes:
-      - ./strategies:/usr/src/app/strategies
+      - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies  
+      - ./scripts:/usr/src/app/scripts
       - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
+      - ./data:/usr/src/app/data
     command: npm run start
     environment:
       - REDIS_URL=redis://redis:6379
@@ -88,8 +94,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./src:/usr/src/app/src
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
     command: npm run start-hft
     environment:
       - REDIS_URL=redis://redis:6379
@@ -111,11 +115,13 @@ services:
     env_file:
       - .env
     volumes:
+      - ./src:/usr/src/app/src
       - ./data:/usr/src/app/data
     command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
       - REDIS_URL=redis://redis:6379
+      - BACKTEST_MODE=true
     networks:
       - harvest-network
     depends_on:
@@ -160,6 +166,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./src:/usr/src/app/src
       - ./data:/usr/src/app/data
     depends_on:
       - redis
