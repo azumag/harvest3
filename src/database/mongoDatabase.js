@@ -196,17 +196,30 @@ async function addOrdersBulk(ordersData) {
 }
 
 /**
- * tradesコレクションにデータを追加する
+ * tradesコレクションにデータを追加する（重複チェック付き）
  * @param {Object} tradeData - 約定データ
  */
 async function addTradeMongoDB(tradeData) {
   await connectDB();
   try {
-    const result = await module.exports.tradesCollection.insertOne(tradeData);
-    console.log('Trade added:', result.insertedId);
+    // upsert操作を使用して重複エラーを回避
+    const result = await module.exports.tradesCollection.replaceOne(
+      { tradeId: tradeData.tradeId },
+      tradeData,
+      { upsert: true }
+    );
+    
+    if (result.upsertedCount > 0) {
+      console.log('New trade added:', result.upsertedId);
+    } else if (result.modifiedCount > 0) {
+      console.log('Existing trade updated for tradeId:', tradeData.tradeId);
+    } else {
+      console.log('Trade already exists (no changes):', tradeData.tradeId);
+    }
+    
     return result;
   } catch (error) {
-    console.error('Error adding trade:', error);
+    console.error('Error adding/updating trade:', error);
     throw error;
   }
 }

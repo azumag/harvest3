@@ -286,9 +286,11 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       // 重要なエラーはDiscordに通知
       const { postErrorToDiscord } = require('../common/notifications');
       const errorMessage = `OHLCV Data Complete Failure: ${exchange.id} ${symbol} ${timeframe} - メインとフォールバック両方が失敗`;
-      postErrorToDiscord(errorMessage).catch(err => 
-        console.error('Discord通知エラー:', err)
-      );
+      try {
+        await postErrorToDiscord(errorMessage);
+      } catch (err) {
+        console.error('Discord通知エラー:', err);
+      }
       
       throw error; // 元のエラーをスロー
     }
@@ -524,7 +526,16 @@ async function updateFilledTrades(exchange, symbol) {
         console.log('updateTradeSummary executed'); // 追加
         await updateTradeSummaryTimestamp(exchange.id, symbol, now);
       } catch (error) {
-        console.error(`約定履歴の更新エラー (${exchange.id} ${symbol}):`, error);
+        const { errorHandler } = require('../common/errorHandler');
+        const context = `約定履歴の更新 (${exchange.id} ${symbol})`;
+        
+        // 重複キーエラー以外の場合はDiscord通知
+        if (error.code !== 11000) {
+          await errorHandler.handleError(error, context, false);
+        } else {
+          // 重複キーエラーの場合は警告ログのみ
+          console.warn(`[${context}] 重複約定をスキップ: tradeId=${_trade.tradeId}`, error.message);
+        }
       }
       
       processedCount++;
