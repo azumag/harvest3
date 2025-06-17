@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 dotenv.config(); // .envファイルから環境変数を読み込む
 
 // strategies 
-const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy } = require('./strategies/trendFollowing');
+const { maStrategy, macdStrategy, rsiStrategy, bollingerBandsStrategy, multiIndicatorStrategy } = require('./strategies/trendFollowing');
 const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/meanReversion');
 const { mutualInformationStrategy } = require('./strategies/mutualInformation');
 // const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
@@ -293,6 +293,48 @@ const config = {
         monthlyMaxLossPercent: 0.144,      // 月次最大損失14.4%
         maxPositionsPerPair: 3,            // 同一ペアの最大ポジション
         maxTotalPositions: 9,              // 全体の最大ポジション
+      }
+    },
+
+    // マルチ指標確認戦略（Issue #146）
+    MULTI_INDICATOR: {
+      enabled: false, // 初期は無効（テスト後に有効化）
+      ohlcvInterval: '15m',
+      function: multiIndicatorStrategy,
+      exchanges: [exchangeBB],
+      enableRiskManagement: true,
+      
+      // マルチ指標設定（フラット化構造）
+      requiredConfirmations: 3,
+      
+      // 重み設定（各指標の重要度）
+      weightMACD: 1.0,
+      weightEMA: 0.8,
+      weightRSI: 0.7,
+      weightVolume: 0.5,
+      weightADX: 0.9,
+      
+      // 期間設定
+      macdFastPeriod: 12,
+      macdSlowPeriod: 26,
+      macdSignalPeriod: 9,
+      emaShortPeriod: 12,
+      emaLongPeriod: 26,
+      rsiPeriod: 14,
+      adxPeriod: 14,
+      volumeMAPeriod: 20,
+      
+      // リスク管理設定
+      riskSettings: {
+        fixedStopLossPercent: 0.015,       // 1.5%の固定ストップロス（高品質シグナルなので小さめ）
+        trailingStopTriggerPercent: 0.01,  // 1%の利益でトレーリング発動
+        trailingStopDistancePercent: 0.01, // 最高値から1%でトレーリング
+        timeBasedStopHours: 48,            // 48時間でタイムストップ（長期ホールド）
+        dailyMaxLossPercent: 0.03,         // 日次最大損失3%
+        weeklyMaxLossPercent: 0.06,        // 週次最大損失6%
+        monthlyMaxLossPercent: 0.12,       // 月次最大損失12%
+        maxPositionsPerPair: 2,            // 同一ペアの最大ポジション（品質重視）
+        maxTotalPositions: 6,              // 全体の最大ポジション
       }
     },
 

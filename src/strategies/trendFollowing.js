@@ -544,34 +544,35 @@ function formatBollingerBandsLogInfo(signalResult) {
 async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { 
     ohlcvInterval,
-    multiIndicator = {
-      requiredConfirmations: 3,
-      weights: {
-        macd: 1.0,
-        ema: 0.8,
-        rsi: 0.7,
-        volume: 0.5,
-        adx: 0.9
-      },
-      periods: {
-        macd: { fast: 12, slow: 26, signal: 9 },
-        emaShort: 12,
-        emaLong: 26,
-        rsi: 14,
-        adx: 14,
-        volumeMA: 20
-      }
-    }
+    // マルチ指標設定（フラット化構造 - バックテスト対応）
+    requiredConfirmations = 3,
+    
+    // 重み設定
+    weightMACD = 1.0,
+    weightEMA = 0.8,
+    weightRSI = 0.7,
+    weightVolume = 0.5,
+    weightADX = 0.9,
+    
+    // 期間設定
+    macdFastPeriod = 12,
+    macdSlowPeriod = 26,
+    macdSignalPeriod = 9,
+    emaShortPeriod = 12,
+    emaLongPeriod = 26,
+    rsiPeriod = 14,
+    adxPeriod = 14,
+    volumeMAPeriod = 20
   } = config;
 
   try {
     // 必要な期間の最大値を計算
     const maxPeriod = Math.max(
-      multiIndicator.periods.macd.slow + multiIndicator.periods.macd.signal,
-      multiIndicator.periods.emaLong,
-      multiIndicator.periods.rsi,
-      multiIndicator.periods.adx + 10, // ADXには追加データが必要
-      multiIndicator.periods.volumeMA
+      macdSlowPeriod + macdSignalPeriod,
+      emaLongPeriod,
+      rsiPeriod,
+      adxPeriod + 10, // ADXには追加データが必要
+      volumeMAPeriod
     );
 
     // OHLCVデータを取得して検証
@@ -597,23 +598,23 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
     // MACD
     indicators.macd = calculateMACD(
       closes, 
-      multiIndicator.periods.macd.fast,
-      multiIndicator.periods.macd.slow,
-      multiIndicator.periods.macd.signal
+      macdFastPeriod,
+      macdSlowPeriod,
+      macdSignalPeriod
     );
 
     // EMA（短期・長期）
-    indicators.emaShort = calculateEMA(closes, multiIndicator.periods.emaShort);
-    indicators.emaLong = calculateEMA(closes, multiIndicator.periods.emaLong);
+    indicators.emaShort = calculateEMA(closes, emaShortPeriod);
+    indicators.emaLong = calculateEMA(closes, emaLongPeriod);
 
     // RSI
-    indicators.rsi = calculateRSI(closes, multiIndicator.periods.rsi);
+    indicators.rsi = calculateRSI(closes, rsiPeriod);
 
     // 出来高データ（利用可能な場合）
     if (ohlcv.length > 0 && ohlcv[0].length > 5) {
       const volumes = ohlcv.map(candle => candle[5]);
       indicators.volume = volumes;
-      indicators.volumeMA = calculateSMA(volumes, multiIndicator.periods.volumeMA);
+      indicators.volumeMA = calculateSMA(volumes, volumeMAPeriod);
     }
 
     // ADX（OHLC データが必要）
@@ -622,7 +623,7 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
       low: candle[3],
       close: candle[4]
     }));
-    indicators.adx = calculateADX(ohlcData, multiIndicator.periods.adx);
+    indicators.adx = calculateADX(ohlcData, adxPeriod);
 
     // 価格変化を計算
     indicators.priceChange = closes[closes.length - 1] - closes[closes.length - 2];
@@ -639,7 +640,17 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
     });
 
     // マルチ指標確認を実行
-    const confirmation = confirmMultipleIndicators(indicators, multiIndicator);
+    const multiIndicatorConfig = {
+      requiredConfirmations,
+      weights: {
+        macd: weightMACD,
+        ema: weightEMA,
+        rsi: weightRSI,
+        volume: weightVolume,
+        adx: weightADX
+      }
+    };
+    const confirmation = confirmMultipleIndicators(indicators, multiIndicatorConfig);
 
     // シグナル決定ロジック
     let buySignal = false;
