@@ -68,7 +68,7 @@ docker compose を利用してアプリテストを行う
 
 ### UIテストの実行
 UIの改修を行った場合は、必ず以下の手順でテストを実行する：
-1. `docker compose up -d` または `docker compose restart` でサービスを起動/再起動
+1. **`docker compose restart web-ui`** でWebUIサービスを再起動（UIに変更があった場合は毎回必須）
 2. ブラウザで実際の動作を確認
 3. コンソールエラーがないことを確認
 4. 期待される動作が行われることを確認

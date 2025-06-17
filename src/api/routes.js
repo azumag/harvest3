@@ -12,6 +12,7 @@ const signalsController = require('./controllers/signals');
 const { getStrategiesList } = require('./controllers/strategies');
 const parametersController = require('./controllers/parameters'); // コントローラー全体をインポート
 const riskManagementController = require('./controllers/riskManagement');
+const errorStatsController = require('./controllers/errorStats');
 
 const { getOhlcv } = require('./controllers/ohlcv');
 
@@ -74,6 +75,10 @@ router.get('/all-parameters', parametersController.getAllParameters); // 新し�
 router.get('/risk-positions', riskManagementController.getRiskPositions);
 router.get('/risk-stats', riskManagementController.getRiskStats);
 router.get('/filled-positions', riskManagementController.getFilledPositions);
+
+// エラー統計API
+router.get('/error-stats', errorStatsController.getErrorStats);
+router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {

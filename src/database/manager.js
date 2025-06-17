@@ -37,6 +37,8 @@ const {
 } = require('./redisDatabase');
 
 const { fetchOHLCVDataAPI } = require('./exchangeAPI');
+const { getOHLCVQueue } = require('./ohlcvQueue');
+const { getOHLCVCacheManager } = require('./ohlcvCache');
 
 const { sleep, timeframeToMs } = require('../common/utils');
 
@@ -172,93 +174,198 @@ async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100
   }
 }
 
+// グローバルインスタンス（遅延初期化）
+let _ohlcvQueue = null;
+let _ohlcvCacheManager = null;
+
+function getOHLCVQueueInstance() {
+  if (!_ohlcvQueue) {
+    _ohlcvQueue = getOHLCVQueue({
+      maxConcurrentRequests: 1,
+      rateLimitMs: 1000,
+      retryAttempts: 3,
+      retryDelayMs: 2000
+    });
+  }
+  return _ohlcvQueue;
+}
+
+function getOHLCVCacheManagerInstance() {
+  if (!_ohlcvCacheManager) {
+    // redisDatabase モジュールの関数群を渡してキャッシュマネージャーを初期化
+    const redisModule = {
+      getOHLCVRedis,
+      getOHLCVRedisTimestamp,
+      updateOHLCVRedis,
+      getBacktestOHLCVRedisBeforeTimestamp,
+      updateBacktestOHLCVRedisSortedSet
+    };
+    _ohlcvCacheManager = getOHLCVCacheManager(redisModule, {
+      memoryTTL: 300, // 5分
+      maxMemoryKeys: 1000
+    });
+  }
+  return _ohlcvCacheManager;
+}
+
 async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options = {}) {
+  const startTime = Date.now();
+  
   try {
-    // バックテストモードの場合
+    // バックテストモードの場合（既存ロジックを維持）
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+      console.log(`[OHLCVData] バックテストモード: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 
-    // console.log(`fetchOHLCVData: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+    console.log(`[OHLCVData] 通常モード: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     
-    // 通常モード
-    // REDISに最新データがあるか確認
-    const timestamp = Date.now();
-    const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
-    const timeframeMs = timeframeToMs(timeframe);
-    // 前回更新時刻がない、または前回更新時刻から Timeframe 時間以上経過している場合
-    if (options.forceUpdate || !redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
-    // if (true) {
-      // TODO: 前回更新時刻をみて取得する limit を調整
-      // TODO: 取得したデータを保存する際、redisには更新でなく追記をかける必要がある
-      // forceUpdate が true の場合以外は、limit を 100 にする: REDISに保存するデータ量を固定
-      const _limit = (() => {
-        if (options.forceUpdate) {
-          return limit;
-        }
-        return 200; // 戦略パラメータで100以上必要になったときに増やす
-        // TODO: 戦略パラメータのMAXをlimit下限にする
-      })();
+    // キャッシュマネージャーとキューの初期化
+    const cacheManager = getOHLCVCacheManagerInstance();
+    const queue = getOHLCVQueueInstance();
+    
+    // 1. 階層化キャッシュから取得を試行
+    const cachedData = await cacheManager.get(exchange.id, symbol, timeframe, limit, options);
+    if (cachedData && !options.forceUpdate) {
+      const duration = Date.now() - startTime;
+      console.log(`[OHLCVData] キャッシュヒット: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`);
+      return applyLimitToData(cachedData, limit);
+    }
 
-      const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
-      if (!ohlcvs || ohlcvs.length === 0) {
-        console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
-        return [];
-      }
-      // RedisとMongoDBに保存
-      // 履歴から最新の1件だけ取得して、timestamp が更新しようとしているデータより
-      // 新しい場合のみ履歴保存する
-      const lastOhlcv = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, 1);
-      // console.log(`lastOhlcv: ${lastOhlcv}`);
-      // console.log(`ohlcvs: ${ohlcvs}`);
-      for (const ohlcv of ohlcvs) {
-        if (options.forceUpdate) {
-          // forceUpdate が true の場合は全て保存
-          // console.log(`forceUpdate: ${ohlcv}`);
-        } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0].timestamp) {
-          // console.log(`既存のデータより古いデータをスキップ: ${ohlcv[0]} <= ${lastOhlcv[0].timestamp}`);
-          continue; // 既存のデータより古い場合はスキップ
-        }
-        try {
-          const [_timestamp, open, high, low, close, volume] = ohlcv;
-          const ohlcvData = {
-              exchange: exchange.id,
-              symbol: symbol,
-              timeframe: timeframe,
-              timestamp: _timestamp,
-              open: open,
-              high: high,
-              low: low,
-              close: close,
-              volume: volume,
-          };
-          addOhlcvMongoDB(ohlcvData);
-        } catch (error) {
-          console.error(`Error adding OHLCV data to MongoDB: ${error.message}`);
-        }
-      }
+    // 2. 新しいデータの取得が必要
+    console.log(`[OHLCVData] APIから新しいデータを取得: ${exchange.id} ${symbol} ${timeframe}`);
+    
+    // forceUpdate が true の場合以外は、limit を 200 にする（既存ロジック維持）
+    const _limit = options.forceUpdate ? limit : 200;
+    
+    // 優先度の決定
+    const requestOptions = {
+      ...options,
+      urgent: !options.backtest && !options.forceUpdate // リアルタイムの通常取得は高優先度
+    };
+    
+    // 3. キューシステムを使用してAPIリクエスト
+    const ohlcvs = await queue.requestOHLCV(
+      exchange, 
+      symbol, 
+      timeframe, 
+      _limit, 
+      requestOptions
+    );
+    
+    if (!ohlcvs || ohlcvs.length === 0) {
+      console.log(`[OHLCVData] ${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      return [];
+    }
+
+    // 4. MongoDB保存処理（既存ロジック維持）
+    await saveOHLCVToMongoDB(exchange, symbol, timeframe, ohlcvs, options);
+    
+    // 5. キャッシュに保存
+    if (!options.forceUpdate) {
+      await cacheManager.set(exchange.id, symbol, timeframe, _limit, ohlcvs, options);
+    }
+    
+    const duration = Date.now() - startTime;
+    console.log(`[OHLCVData] API取得完了: ${exchange.id} ${symbol} ${timeframe} (${ohlcvs.length}件, ${duration}ms)`);
+    
+    return applyLimitToData(ohlcvs, limit);
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[OHLCVData] エラー: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`, error);
+    
+    // フォールバック: 従来の方法で取得を試行
+    try {
+      console.log(`[OHLCVData] フォールバック処理: 従来の方法で取得`);
+      return await fetchOHLCVDataFallback(exchange, symbol, timeframe, limit, options);
+    } catch (fallbackError) {
+      console.error(`[OHLCVData] フォールバック処理も失敗:`, fallbackError);
+      
+      // 重要なエラーはDiscordに通知
+      const { postErrorToDiscord } = require('../common/notifications');
+      const errorMessage = `OHLCV Data Complete Failure: ${exchange.id} ${symbol} ${timeframe} - メインとフォールバック両方が失敗`;
+      postErrorToDiscord(errorMessage).catch(err => 
+        console.error('Discord通知エラー:', err)
+      );
+      
+      throw error; // 元のエラーをスロー
+    }
+  }
+}
+
+// MongoDB保存処理を分離（既存ロジック維持）
+async function saveOHLCVToMongoDB(exchange, symbol, timeframe, ohlcvs, options) {
+  try {
+    const lastOhlcv = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, 1);
+    
+    for (const ohlcv of ohlcvs) {
       if (options.forceUpdate) {
-        // forceUpdate が true の場合は REDIS に保存しない
-      } else {
-        await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+        // forceUpdate が true の場合は全て保存
+      } else if (lastOhlcv && lastOhlcv[0] && ohlcv[0] <= lastOhlcv[0].timestamp) {
+        continue; // 既存のデータより古い場合はスキップ
       }
-      return ohlcvs;
-    } else {
-      // Redisにデータがある場合はそれを返す
-      const redisData = await getOHLCVRedis(exchange.id, symbol, timeframe);
-      // console.log(`Redis data: ${redisData}`);
-      // limitが指定されている場合、データを制限
-      if (limit && limit > 0) {
-        return redisData.slice(-limit);
-      } else {
-        return redisData;
+      
+      try {
+        const [_timestamp, open, high, low, close, volume] = ohlcv;
+        const ohlcvData = {
+          exchange: exchange.id,
+          symbol: symbol,
+          timeframe: timeframe,
+          timestamp: _timestamp,
+          open: open,
+          high: high,
+          low: low,
+          close: close,
+          volume: volume,
+        };
+        addOhlcvMongoDB(ohlcvData);
+      } catch (error) {
+        console.error(`[OHLCVData] MongoDB保存エラー:`, error);
       }
     }
   } catch (error) {
-    console.error(`Error fetching OHLCV data: ${error.message}`);
-    throw error;
+    console.error(`[OHLCVData] MongoDB保存処理エラー:`, error);
+  }
+}
+
+// データにlimitを適用
+function applyLimitToData(data, limit) {
+  if (!data || data.length === 0) return data;
+  
+  if (limit && limit > 0 && data.length > limit) {
+    return data.slice(-limit);
+  }
+  
+  return data;
+}
+
+// フォールバック処理（元の実装）
+async function fetchOHLCVDataFallback(exchange, symbol, timeframe, limit, options) {
+  const timestamp = Date.now();
+  const redisOHLCVTimestamp = await getOHLCVRedisTimestamp(exchange.id, symbol, timeframe);
+  const timeframeMs = timeframeToMs(timeframe);
+  
+  if (options.forceUpdate || !redisOHLCVTimestamp || (redisOHLCVTimestamp && timestamp - redisOHLCVTimestamp > timeframeMs)) {
+    const _limit = options.forceUpdate ? limit : 200;
+    const ohlcvs = await fetchOHLCVDataAPI(exchange, symbol, timeframe, _limit);
+    
+    if (!ohlcvs || ohlcvs.length === 0) {
+      return [];
+    }
+    
+    // MongoDB保存
+    await saveOHLCVToMongoDB(exchange, symbol, timeframe, ohlcvs, options);
+    
+    if (!options.forceUpdate) {
+      await updateOHLCVRedis(exchange.id, symbol, timeframe, ohlcvs);
+    }
+    
+    return ohlcvs;
+  } else {
+    const redisData = await getOHLCVRedis(exchange.id, symbol, timeframe);
+    return applyLimitToData(redisData, limit);
   }
 }
 

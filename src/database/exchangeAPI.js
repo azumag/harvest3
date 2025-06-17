@@ -1,4 +1,6 @@
 const https = require('https');
+const { postErrorToDiscord } = require('../common/notifications');
+const { recordError } = require('../api/controllers/errorStats');
 
 // Bitbank API関連の定数
 const BITBANK_PUBLIC_API_URL = 'https://public.bitbank.cc';
@@ -50,13 +52,22 @@ async function fetchBitbankOHLCV(pair, candleType, year, limit) {
             ]);
             resolve(candles);
           } else {
-            reject(new Error(`Bitbank API error: ${response.data.code}`));
+            const errorMessage = `Bitbank API error: ${response.data.code}`;
+            console.error(errorMessage);
+            postErrorToDiscord(errorMessage).catch(err => console.error('Discord通知エラー:', err));
+            reject(new Error(errorMessage));
           }
         } catch (error) {
+          const errorMessage = `Bitbank API JSON parse error: ${error.message}`;
+          console.error(errorMessage);
+          postErrorToDiscord(errorMessage).catch(err => console.error('Discord通知エラー:', err));
           reject(error);
         }
       });
     }).on('error', (error) => {
+      const errorMessage = `Bitbank API HTTP request error: ${error.message}`;
+      console.error(errorMessage);
+      postErrorToDiscord(errorMessage).catch(err => console.error('Discord通知エラー:', err));
       reject(error);
     });
   });
@@ -79,7 +90,10 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
     const yearData = await fetchBitbankOHLCV(pair, candleType, currentYear, limit);
     allData = [...yearData];
   } catch (error) {
-    console.error(`Bitbank APIエラー (${pair} ${candleType} ${currentYear}):`, error);
+    const errorMessage = `Bitbank APIエラー (${pair} ${candleType} ${currentYear}): ${error.message}`;
+    console.error(errorMessage, error);
+    recordError('bitbank_api', errorMessage, error.stack);
+    await postErrorToDiscord(errorMessage);
     return [];
   }
   
@@ -107,13 +121,19 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
         // API制限を考慮して少し待機
         await waitForAPILimit();
       } catch (error) {
-        console.error(`Bitbank APIエラー (${pair} ${candleType} ${prevYear}):`, error);
+        const errorMessage = `Bitbank APIエラー (${pair} ${candleType} ${prevYear}): ${error.message}`;
+        console.error(errorMessage, error);
+        recordError('bitbank_api', errorMessage, error.stack);
+        await postErrorToDiscord(errorMessage);
         break;
       }
     }
   } catch (error) {
-    console.error(`Bitbank APIエラー (${pair} ${candleType}):`, error);
+    const errorMessage = `Bitbank APIエラー (${pair} ${candleType}): ${error.message}`;
+    console.error(errorMessage, error);
     console.log(`Bitbank API: これ以上の過去データが取得できません: ${pair} ${candleType}`);
+    recordError('bitbank_api', errorMessage, error.stack);
+    await postErrorToDiscord(errorMessage);
   }
   
   // 必要なデータ数を超える場合は、新しいデータを優先して上限まで返す
@@ -186,8 +206,10 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
         await waitForAPILimit();
       }
     } catch (error) {
-      console.error(`fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}):`, error);
+      const errorMessage = `fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}): ${error.message}`;
+      console.error(errorMessage, error);
       console.log(`fetchStandardHistoricalOHLCVData: これ以上の過去データが取得できません: ${symbol} ${timeframe}`);
+      await postErrorToDiscord(errorMessage);
       await waitForAPILimit();
     }
     
@@ -195,7 +217,9 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
     return allData.slice(-limit);
     
   } catch (error) {
-    console.error(`fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}):`, error);
+    const errorMessage = `fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}): ${error.message}`;
+    console.error(errorMessage, error);
+    await postErrorToDiscord(errorMessage);
     return [];
   }
 }
