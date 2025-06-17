@@ -25,6 +25,7 @@ const {
 const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
+const { calculateADX } = require('./indicators');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
 let dynamicSizing = null;
@@ -803,6 +804,249 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   return { success: true };
 }
 
+/**
+ * マルチ指標確認システム
+ * 複数の指標が同じ方向を示しているかを確認
+ * @param {Object} indicators - 各種指標の計算結果
+ * @param {Object} config - 確認システムの設定
+ * @returns {Object} 確認結果とシグナル強度
+ */
+function confirmMultipleIndicators(indicators, config = {}) {
+  const {
+    requiredConfirmations = 3, // 必要な確認数
+    weights = {
+      macd: 1.0,
+      ema: 0.8,
+      rsi: 0.7,
+      volume: 0.5,
+      adx: 0.9
+    }
+  } = config;
+
+  const bullishSignals = [];
+  const bearishSignals = [];
+  let totalBullishWeight = 0;
+  let totalBearishWeight = 0;
+
+  // MACD確認
+  if (indicators.macd) {
+    const { histogram, signal, macd } = indicators.macd;
+    const lastHistogram = histogram[histogram.length - 1];
+    const prevHistogram = histogram[histogram.length - 2];
+    
+    if (lastHistogram > 0 && lastHistogram > prevHistogram) {
+      bullishSignals.push('MACD');
+      totalBullishWeight += weights.macd;
+    } else if (lastHistogram < 0 && lastHistogram < prevHistogram) {
+      bearishSignals.push('MACD');
+      totalBearishWeight += weights.macd;
+    }
+  }
+
+  // EMA確認（短期が長期を上回る）
+  if (indicators.emaShort && indicators.emaLong) {
+    const lastShort = indicators.emaShort[indicators.emaShort.length - 1];
+    const lastLong = indicators.emaLong[indicators.emaLong.length - 1];
+    
+    if (lastShort > lastLong) {
+      bullishSignals.push('EMA');
+      totalBullishWeight += weights.ema;
+    } else if (lastShort < lastLong) {
+      bearishSignals.push('EMA');
+      totalBearishWeight += weights.ema;
+    }
+  }
+
+  // RSI確認
+  if (indicators.rsi) {
+    const lastRSI = indicators.rsi[indicators.rsi.length - 1];
+    const prevRSI = indicators.rsi[indicators.rsi.length - 2];
+    
+    // RSIが30を上抜け（買われすぎ領域から脱出）
+    if (lastRSI > 30 && prevRSI <= 30) {
+      bullishSignals.push('RSI');
+      totalBullishWeight += weights.rsi;
+    }
+    // RSIが70を下抜け（売られすぎ領域から脱出）
+    else if (lastRSI < 70 && prevRSI >= 70) {
+      bearishSignals.push('RSI');
+      totalBearishWeight += weights.rsi;
+    }
+    // トレンド確認
+    else if (lastRSI > 50 && lastRSI > prevRSI) {
+      bullishSignals.push('RSI');
+      totalBullishWeight += weights.rsi * 0.5; // トレンド確認は弱いシグナル
+    } else if (lastRSI < 50 && lastRSI < prevRSI) {
+      bearishSignals.push('RSI');
+      totalBearishWeight += weights.rsi * 0.5;
+    }
+  }
+
+  // 出来高確認
+  if (indicators.volume && indicators.volumeMA) {
+    const lastVolume = indicators.volume[indicators.volume.length - 1];
+    const lastVolumeMA = indicators.volumeMA[indicators.volumeMA.length - 1];
+    
+    // 出来高が平均を上回る場合、現在のトレンドを確認
+    if (lastVolume > lastVolumeMA * 1.2) {
+      if (indicators.priceChange > 0) {
+        bullishSignals.push('Volume');
+        totalBullishWeight += weights.volume;
+      } else if (indicators.priceChange < 0) {
+        bearishSignals.push('Volume');
+        totalBearishWeight += weights.volume;
+      }
+    }
+  }
+
+  // ADX確認（トレンド強度）
+  if (indicators.adx) {
+    const { adx, plusDI, minusDI } = indicators.adx;
+    const lastADX = adx[adx.length - 1];
+    const lastPlusDI = plusDI[plusDI.length - 1];
+    const lastMinusDI = minusDI[minusDI.length - 1];
+    
+    // ADXが25以上でトレンドが存在
+    if (lastADX >= 25) {
+      if (lastPlusDI > lastMinusDI) {
+        bullishSignals.push('ADX');
+        totalBullishWeight += weights.adx;
+      } else if (lastMinusDI > lastPlusDI) {
+        bearishSignals.push('ADX');
+        totalBearishWeight += weights.adx;
+      }
+    }
+  }
+
+  // シグナル強度を計算（0-100のスコア）
+  const maxPossibleWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+  const bullishScore = (totalBullishWeight / maxPossibleWeight) * 100;
+  const bearishScore = (totalBearishWeight / maxPossibleWeight) * 100;
+
+  // 確認結果を判定
+  const isBullish = bullishSignals.length >= requiredConfirmations && bullishScore > bearishScore;
+  const isBearish = bearishSignals.length >= requiredConfirmations && bearishScore > bullishScore;
+
+  return {
+    confirmed: isBullish || isBearish,
+    direction: isBullish ? 'bullish' : (isBearish ? 'bearish' : 'neutral'),
+    bullishSignals,
+    bearishSignals,
+    bullishScore: bullishScore.toFixed(2),
+    bearishScore: bearishScore.toFixed(2),
+    requiredConfirmations,
+    actualConfirmations: {
+      bullish: bullishSignals.length,
+      bearish: bearishSignals.length
+    }
+  };
+}
+
+/**
+ * 市場環境を識別（トレンド vs レンジ）
+ * @param {Object} adxData - ADX計算結果
+ * @param {Object} config - 識別設定
+ * @returns {Object} 市場環境の識別結果
+ */
+function identifyMarketEnvironment(adxData, config = {}) {
+  const {
+    strongTrendThreshold = 40,
+    trendThreshold = 25,
+    weakTrendThreshold = 20
+  } = config;
+
+  if (!adxData || !adxData.adx || adxData.adx.length === 0) {
+    return {
+      environment: 'unknown',
+      strength: 0,
+      description: 'データ不足'
+    };
+  }
+
+  const lastADX = adxData.adx[adxData.adx.length - 1];
+  const prevADX = adxData.adx[adxData.adx.length - 2] || lastADX;
+  const adxTrend = lastADX - prevADX;
+
+  let environment, strength, description;
+
+  if (lastADX >= strongTrendThreshold) {
+    environment = 'strong_trend';
+    strength = lastADX;
+    description = '強いトレンド相場';
+  } else if (lastADX >= trendThreshold) {
+    environment = 'trend';
+    strength = lastADX;
+    description = 'トレンド相場';
+  } else if (lastADX >= weakTrendThreshold) {
+    environment = 'weak_trend';
+    strength = lastADX;
+    description = '弱いトレンド相場';
+  } else {
+    environment = 'range';
+    strength = lastADX;
+    description = 'レンジ相場';
+  }
+
+  // トレンドの方向性
+  let direction = 'neutral';
+  if (adxData.plusDI && adxData.minusDI) {
+    const lastPlusDI = adxData.plusDI[adxData.plusDI.length - 1];
+    const lastMinusDI = adxData.minusDI[adxData.minusDI.length - 1];
+    
+    if (lastPlusDI > lastMinusDI) {
+      direction = 'bullish';
+    } else if (lastMinusDI > lastPlusDI) {
+      direction = 'bearish';
+    }
+  }
+
+  return {
+    environment,
+    strength,
+    description,
+    direction,
+    adxTrend: adxTrend > 0 ? 'strengthening' : 'weakening',
+    recommendation: getMarketRecommendation(environment, direction)
+  };
+}
+
+/**
+ * 市場環境に基づく推奨戦略を取得
+ * @param {string} environment - 市場環境
+ * @param {string} direction - トレンド方向
+ * @returns {Object} 推奨戦略
+ */
+function getMarketRecommendation(environment, direction) {
+  const recommendations = {
+    strong_trend: {
+      strategy: 'trend_following',
+      description: 'トレンドフォロー戦略が有効',
+      caution: 'トレンド転換に注意'
+    },
+    trend: {
+      strategy: 'trend_following',
+      description: 'トレンドフォロー戦略を推奨',
+      caution: 'ポジションサイズ管理に注意'
+    },
+    weak_trend: {
+      strategy: 'mixed',
+      description: 'トレンドとレンジ戦略の併用を検討',
+      caution: 'だましシグナルに注意'
+    },
+    range: {
+      strategy: 'range_trading',
+      description: 'レンジ取引戦略が有効',
+      caution: 'ブレイクアウトに備える'
+    }
+  };
+
+  return recommendations[environment] || {
+    strategy: 'caution',
+    description: '市場環境が不明瞭',
+    caution: '小さなポジションで様子見'
+  };
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
@@ -811,5 +1055,7 @@ module.exports = {
   disableStrategy,
   clearPositionMarket,
   initializeDynamicSizing,
-  performanceTracker
+  performanceTracker,
+  confirmMultipleIndicators,
+  identifyMarketEnvironment
 };

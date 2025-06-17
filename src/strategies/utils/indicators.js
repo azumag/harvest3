@@ -421,6 +421,145 @@ function calculateVolatilityBasedPositionSize(accountBalance, riskPerTrade, atr,
   return positionSize;
 }
 
+/**
+ * ADX（Average Directional Index）を計算
+ * @param {Array} ohlcData - OHLC データの配列 [{high, low, close}, ...]
+ * @param {Number} period - 期間（デフォルト14）
+ * @returns {Object} - ADX、+DI、-DIの配列を含むオブジェクト
+ */
+function calculateADX(ohlcData, period = 14) {
+  if (!ohlcData || ohlcData.length < period + 1) {
+    return { adx: [], plusDI: [], minusDI: [] };
+  }
+
+  const result = {
+    adx: [],
+    plusDI: [],
+    minusDI: []
+  };
+
+  // DM（Directional Movement）とTR（True Range）を計算
+  const plusDMs = [];
+  const minusDMs = [];
+  const trueRanges = [];
+
+  for (let i = 1; i < ohlcData.length; i++) {
+    const current = ohlcData[i];
+    const previous = ohlcData[i - 1];
+
+    // +DM = High - High_prev (if positive and > Low_prev - Low)
+    // -DM = Low_prev - Low (if positive and > High - High_prev)
+    const highDiff = current.high - previous.high;
+    const lowDiff = previous.low - current.low;
+
+    let plusDM = 0;
+    let minusDM = 0;
+
+    if (highDiff > lowDiff && highDiff > 0) {
+      plusDM = highDiff;
+    }
+    if (lowDiff > highDiff && lowDiff > 0) {
+      minusDM = lowDiff;
+    }
+
+    plusDMs.push(plusDM);
+    minusDMs.push(minusDM);
+
+    // True Range = max(H-L, H-C_prev, C_prev-L)
+    const highLow = current.high - current.low;
+    const highClosePrev = Math.abs(current.high - previous.close);
+    const lowClosePrev = Math.abs(current.low - previous.close);
+    const trueRange = Math.max(highLow, highClosePrev, lowClosePrev);
+    trueRanges.push(trueRange);
+  }
+
+  // Smoothed +DM, -DM, TR を計算
+  const smoothedPlusDM = [];
+  const smoothedMinusDM = [];
+  const smoothedTR = [];
+
+  // 最初のperiod分はnullで埋める
+  for (let i = 0; i < period; i++) {
+    result.plusDI.push(null);
+    result.minusDI.push(null);
+    result.adx.push(null);
+  }
+
+  // 初期値を計算（最初のperiodの平均）
+  let sumPlusDM = 0;
+  let sumMinusDM = 0;
+  let sumTR = 0;
+
+  for (let i = 0; i < period; i++) {
+    sumPlusDM += plusDMs[i];
+    sumMinusDM += minusDMs[i];
+    sumTR += trueRanges[i];
+  }
+
+  smoothedPlusDM.push(sumPlusDM);
+  smoothedMinusDM.push(sumMinusDM);
+  smoothedTR.push(sumTR);
+
+  // Wilder's smoothing を適用
+  for (let i = period; i < plusDMs.length; i++) {
+    const prevSmoothedPlusDM = smoothedPlusDM[smoothedPlusDM.length - 1];
+    const prevSmoothedMinusDM = smoothedMinusDM[smoothedMinusDM.length - 1];
+    const prevSmoothedTR = smoothedTR[smoothedTR.length - 1];
+
+    smoothedPlusDM.push(prevSmoothedPlusDM - (prevSmoothedPlusDM / period) + plusDMs[i]);
+    smoothedMinusDM.push(prevSmoothedMinusDM - (prevSmoothedMinusDM / period) + minusDMs[i]);
+    smoothedTR.push(prevSmoothedTR - (prevSmoothedTR / period) + trueRanges[i]);
+  }
+
+  // +DI と -DI を計算
+  const dxValues = [];
+
+  for (let i = 0; i < smoothedPlusDM.length; i++) {
+    if (smoothedTR[i] !== 0) {
+      const plusDI = (smoothedPlusDM[i] / smoothedTR[i]) * 100;
+      const minusDI = (smoothedMinusDM[i] / smoothedTR[i]) * 100;
+      
+      result.plusDI.push(plusDI);
+      result.minusDI.push(minusDI);
+
+      // DX = |+DI - -DI| / (+DI + -DI) * 100
+      const diSum = plusDI + minusDI;
+      if (diSum !== 0) {
+        const dx = Math.abs(plusDI - minusDI) / diSum * 100;
+        dxValues.push(dx);
+      } else {
+        dxValues.push(0);
+      }
+    } else {
+      result.plusDI.push(0);
+      result.minusDI.push(0);
+      dxValues.push(0);
+    }
+  }
+
+  // ADX を計算（DXの移動平均）
+  // ADX計算用にperiod分null追加
+  for (let i = 0; i < period - 1; i++) {
+    result.adx.push(null);
+  }
+
+  // 最初のADXはDXの単純平均
+  let sumDX = 0;
+  for (let i = 0; i < period && i < dxValues.length; i++) {
+    sumDX += dxValues[i];
+  }
+  let adx = sumDX / period;
+  result.adx.push(adx);
+
+  // 以降はSmoothed Moving Average
+  for (let i = period; i < dxValues.length; i++) {
+    adx = (adx * (period - 1) + dxValues[i]) / period;
+    result.adx.push(adx);
+  }
+
+  return result;
+}
+
 module.exports = {
   calculateSMA,
   calculateEMA,
@@ -431,5 +570,6 @@ module.exports = {
   calculateMutualInformationMatrix,
   calculateReturns,
   calculateATR,
-  calculateVolatilityBasedPositionSize
+  calculateVolatilityBasedPositionSize,
+  calculateADX
 };
