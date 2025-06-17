@@ -25,7 +25,6 @@ const {
 const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
-const { calculateADX } = require('./indicators');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
 let dynamicSizing = null;
@@ -919,9 +918,18 @@ function confirmMultipleIndicators(indicators, config = {}) {
   }
 
   // シグナル強度を計算（0-100のスコア）
-  const maxPossibleWeight = Object.values(weights).reduce((a, b) => a + b, 0);
-  const bullishScore = (totalBullishWeight / maxPossibleWeight) * 100;
-  const bearishScore = (totalBearishWeight / maxPossibleWeight) * 100;
+  // 実際に評価された指標の重みのみで計算（動的重み計算）
+  const evaluatedWeights = [];
+  
+  if (indicators.macd) evaluatedWeights.push(weights.macd || 0);
+  if (indicators.emaShort && indicators.emaLong) evaluatedWeights.push(weights.ema || 0);
+  if (indicators.rsi) evaluatedWeights.push(weights.rsi || 0);
+  if (indicators.volume && indicators.volumeMA) evaluatedWeights.push(weights.volume || 0);
+  if (indicators.adx) evaluatedWeights.push(weights.adx || 0);
+  
+  const maxPossibleWeight = evaluatedWeights.reduce((a, b) => a + b, 0);
+  const bullishScore = maxPossibleWeight > 0 ? (totalBullishWeight / maxPossibleWeight) * 100 : 0;
+  const bearishScore = maxPossibleWeight > 0 ? (totalBearishWeight / maxPossibleWeight) * 100 : 0;
 
   // 確認結果を判定
   const isBullish = bullishSignals.length >= requiredConfirmations && bullishScore > bearishScore;

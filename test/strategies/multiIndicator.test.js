@@ -104,6 +104,45 @@ describe('マルチ指標確認システムテスト', () => {
     expect(parseFloat(result.bullishScore)).toBeGreaterThan(parseFloat(result.bearishScore));
   });
 
+  test('弱気シグナルが正しく確認される', () => {
+    const indicators = {
+      macd: {
+        histogram: [null, null, 0.5, 0.2, -0.1, -0.3],
+        signal: [null, null, 0.5, 0.7, 0.8, 0.9],
+        macd: [null, null, 1.0, 0.9, 0.7, 0.6]
+      },
+      emaShort: [null, null, 103, 102, 101, 100],
+      emaLong: [null, null, 102, 103, 104, 105], // 短期が長期を下回る
+      rsi: [null, null, 75, 65, 55, 45],
+      volume: [1000, 1200, 1500, 1800, 2000, 2200],
+      volumeMA: [null, null, 1100, 1200, 1300, 1400],
+      priceChange: -2,
+      adx: {
+        adx: [null, null, 15, 20, 25, 30],
+        plusDI: [null, null, 20, 22, 24, 25],
+        minusDI: [null, null, 25, 28, 32, 35]
+      }
+    };
+
+    const config = {
+      requiredConfirmations: 3,
+      weights: {
+        macd: 1.0,
+        ema: 0.8,
+        rsi: 0.7,
+        volume: 0.5,
+        adx: 0.9
+      }
+    };
+
+    const result = confirmMultipleIndicators(indicators, config);
+
+    expect(result.confirmed).toBe(true);
+    expect(result.direction).toBe('bearish');
+    expect(result.bearishSignals.length).toBeGreaterThanOrEqual(3);
+    expect(parseFloat(result.bearishScore)).toBeGreaterThan(parseFloat(result.bullishScore));
+  });
+
   test('確認数不足でシグナルが否定される', () => {
     const indicators = {
       macd: {
