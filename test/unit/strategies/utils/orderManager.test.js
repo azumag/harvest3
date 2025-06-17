@@ -13,8 +13,8 @@ const mockExchange = {
   createLimitSellOrder: jest.fn(),
   createMarketBuyOrder: jest.fn(),
   createMarketSellOrder: jest.fn(),
-  fetchOrder: jest.fn(),
-  cancelOrder: jest.fn()
+  fetchOrder: jest.fn().mockResolvedValue({ status: 'closed' }),
+  cancelOrder: jest.fn().mockResolvedValue({ status: 'canceled' })
 };
 
 describe('AdvancedOrderManager', () => {
@@ -23,6 +23,13 @@ describe('AdvancedOrderManager', () => {
   beforeEach(() => {
     orderManager = new AdvancedOrderManager(mockExchange);
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // 非同期操作のクリーンアップ
+    if (orderManager.activeOrders) {
+      orderManager.activeOrders.clear();
+    }
   });
 
   describe('最適注文タイプ選択', () => {
@@ -82,13 +89,13 @@ describe('AdvancedOrderManager', () => {
 
     test('高スプレッド・低ボリュームで低流動性を返す', async () => {
       mockExchange.fetchOrderBook.mockResolvedValue({
-        bids: [[100, 0.1], [99, 0.1]],
-        asks: [[102, 0.1], [103, 0.1]]
+        bids: [[100, 0.01], [99, 0.01]], // より少ないボリューム
+        asks: [[105, 0.01], [106, 0.01]] // より大きなスプレッド
       });
 
       const liquidity = await orderManager.assessLiquidity('BTC/JPY', 0.01);
       
-      expect(liquidity).toBeLessThan(0.5);
+      expect(liquidity).toBeLessThan(0.4); // より厳しい閾値
     });
   });
 

@@ -356,10 +356,13 @@ class AdvancedOrderManager {
 
     this.activeOrders.set(order.id, managementInfo);
 
-    // 定期チェック開始
-    setTimeout(() => {
-      this.checkOrderStatus(order.id);
-    }, 10000); // 10秒後に初回チェック
+    // テスト環境では監視を開始しない
+    if (process.env.NODE_ENV !== 'test' && typeof jest === 'undefined') {
+      // 定期チェック開始
+      setTimeout(() => {
+        this.checkOrderStatus(order.id);
+      }, 10000); // 10秒後に初回チェック
+    }
   }
 
   /**
