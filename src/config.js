@@ -71,6 +71,7 @@ const config = {
       minPositionPercent: 0.001, // 0.1%
       
       // Kelly基準設定
+      // TODO: 理解する
       kellyEnabled: false, // Phase 1では無効
       kellyFraction: 0.25,
       
@@ -82,13 +83,14 @@ const config = {
     // 高度注文管理設定（Issue #147）
     advancedOrderManagement: {
       enabled: true,
-      defaultUrgency: 'medium', // low, medium, high
+      defaultUrgency: 'medium', // low, medium, high TODO: どうやって決まる？
       maxSlippage: 0.005, // 0.5%
       orderTimeout: 60000, // 60秒
       maxRetries: 3,
       retryDelay: 1000, // 1秒
       
       // 注文タイプ別設定
+      // TODO: 対応している注文タイプのみ
       orderTypes: {
         market: {
           enabled: true,
