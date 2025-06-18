@@ -10,9 +10,13 @@ const {
   fetchTicker,
   getSymbolsByExchange,
   getStrategyConfig,
-  getMarketParametersByExchangeSymbol 
+  getMarketParametersByExchangeSymbol,
+  cleanupInvalidPendingOrders
 } = require('./database/manager');
 const { pro } = require('ccxt');
+
+// 未約定注文クリーンアップの最終実行時間を記録
+let lastCleanupTime = {}; // exchangeId -> timestamp
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -80,6 +84,25 @@ async function startBot() {
         try {
           // 約定済み取引の更新
           await updateFilledTrades(exchangeInstance, symbol);
+
+          // 未約定注文のクリーンアップ（5分間隔）
+          const now = Date.now();
+          const cleanupInterval = 5 * 60 * 1000; // 5分
+          const lastTime = lastCleanupTime[exchangeId] || 0;
+          
+          if (now - lastTime >= cleanupInterval) {
+            try {
+              console.log(`[クリーンアップ] 開始: ${exchangeId}`);
+              const cleanupResult = await cleanupInvalidPendingOrders(exchangeInstance);
+              lastCleanupTime[exchangeId] = now;
+              
+              if (cleanupResult.deleted > 0) {
+                console.log(`[クリーンアップ] 完了: ${exchangeId} - ${cleanupResult.deleted}件の無効注文を削除`);
+              }
+            } catch (cleanupError) {
+              console.warn(`[クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
+            }
+          }
 
           // Ticker情報を取得
           // 同時にキャッシュする効果もある

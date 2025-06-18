@@ -19,7 +19,8 @@ const {
 const {
   savePendingOrderRedis,
   deletePendingOrderRedis,
-  getAllPendingOrdersRedis
+  getAllPendingOrdersRedis,
+  cleanupInvalidPendingOrders
 } = require('./redisDatabase');
 
 const {
@@ -657,6 +658,26 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       try {
         await addTradeMongoDB(_trade);
         await updateTradeSummary(_trade);
+        
+        // 約定時に対応する未約定注文をRedisから削除
+        if (_trade.orderId && _trade.strategy !== 'OUTSIDE') {
+          try {
+            const deleteResult = await deletePendingOrderRedis(
+              _trade.exchange, 
+              _trade.symbol, 
+              _trade.strategy, 
+              _trade.orderId
+            );
+            if (deleteResult && !isBacktest) {
+              console.log(`[約定処理] 未約定注文を削除: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
+            }
+          } catch (deleteError) {
+            if (!isBacktest) {
+              console.warn(`[約定処理] 未約定注文削除エラー: ${_trade.orderId} - ${deleteError.message}`);
+            }
+          }
+        }
+        
         successCount++;
       } catch (error) {
         const { errorHandler } = require('../common/errorHandler');
@@ -1486,4 +1507,5 @@ module.exports = {
   savePendingOrderRedis,
   deletePendingOrderRedis,
   getAllPendingOrdersRedis,
+  cleanupInvalidPendingOrders,
 };

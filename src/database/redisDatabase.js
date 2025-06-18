@@ -1070,6 +1070,7 @@ module.exports = {
   getPendingOrderRedis,
   getAllPendingOrdersRedis,
   deletePendingOrderRedis,
+  cleanupInvalidPendingOrders,
 };
 
 /**
@@ -1200,5 +1201,128 @@ async function deletePendingOrderRedis(exchangeId, symbol, strategyKey, orderId)
   } catch (error) {
     console.error(`未約定注文の削除に失敗しました: ${error.message}`);
     return false;
+  }
+}
+
+/**
+ * 無効な未約定注文をクリーンアップ
+ * 取引所APIで注文状態を確認し、約定済み・キャンセル済み・期限切れの注文をRedisから削除
+ * @param {Object} exchangeInstance - 取引所インスタンス
+ * @returns {Promise<Object>} - クリーンアップ結果
+ */
+async function cleanupInvalidPendingOrders(exchangeInstance) {
+  const isBacktest = process.env.BACKTEST_MODE === 'true';
+  const result = {
+    checked: 0,
+    deleted: 0,
+    errors: 0,
+    details: []
+  };
+  
+  try {
+    // Redisから全ての未約定注文を取得
+    const pendingOrders = await getAllPendingOrdersRedis();
+    
+    if (pendingOrders.length === 0) {
+      if (!isBacktest) {
+        console.log('[注文クリーンアップ] クリーンアップ対象の未約定注文がありません');
+      }
+      return result;
+    }
+    
+    if (!isBacktest) {
+      console.log(`[注文クリーンアップ] ${pendingOrders.length}件の未約定注文をチェック開始`);
+    }
+    
+    // 取引所インスタンスの準備
+    if (!exchangeInstance.markets) {
+      await exchangeInstance.loadMarkets();
+    }
+    
+    // 各未約定注文の状態をチェック
+    for (const pendingOrder of pendingOrders) {
+      result.checked++;
+      
+      try {
+        // 注文状態を確認
+        const orderInfo = await exchangeInstance.fetchOrder(pendingOrder.orderId, pendingOrder.symbol);
+        
+        // 注文が約定済み・キャンセル済み・期限切れの場合は削除
+        const invalidStatuses = ['closed', 'canceled', 'cancelled', 'rejected', 'expired'];
+        if (invalidStatuses.includes(orderInfo.status) || orderInfo.filled >= orderInfo.amount) {
+          const deleted = await deletePendingOrderRedis(
+            pendingOrder.exchangeId,
+            pendingOrder.symbol,
+            pendingOrder.strategyKey,
+            pendingOrder.orderId
+          );
+          
+          if (deleted) {
+            result.deleted++;
+            result.details.push({
+              orderId: pendingOrder.orderId,
+              symbol: pendingOrder.symbol,
+              strategy: pendingOrder.strategyKey,
+              status: orderInfo.status,
+              filled: orderInfo.filled,
+              amount: orderInfo.amount
+            });
+            
+            if (!isBacktest) {
+              console.log(`[注文クリーンアップ] 削除: ${pendingOrder.orderId} (${orderInfo.status}, filled: ${orderInfo.filled}/${orderInfo.amount})`);
+            }
+          }
+        }
+      } catch (orderError) {
+        result.errors++;
+        
+        // 注文が見つからない場合（Not Found）はRedisから削除
+        if (orderError.message.includes('not found') || 
+            orderError.message.includes('NotFound') || 
+            orderError.message.includes('Invalid order') ||
+            orderError.message.includes('does not exist')) {
+          
+          const deleted = await deletePendingOrderRedis(
+            pendingOrder.exchangeId,
+            pendingOrder.symbol,
+            pendingOrder.strategyKey,
+            pendingOrder.orderId
+          );
+          
+          if (deleted) {
+            result.deleted++;
+            result.details.push({
+              orderId: pendingOrder.orderId,
+              symbol: pendingOrder.symbol,
+              strategy: pendingOrder.strategyKey,
+              status: 'not_found',
+              error: orderError.message
+            });
+            
+            if (!isBacktest) {
+              console.log(`[注文クリーンアップ] 削除（注文なし）: ${pendingOrder.orderId} - ${orderError.message}`);
+            }
+          }
+        } else {
+          // その他のエラーは警告ログのみ
+          if (!isBacktest) {
+            console.warn(`[注文クリーンアップ] チェックエラー: ${pendingOrder.orderId} - ${orderError.message}`);
+          }
+        }
+      }
+      
+      // API制限を考慮して少し待機
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    if (!isBacktest) {
+      console.log(`[注文クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`[注文クリーンアップ] 全体エラー: ${error.message}`);
+    result.errors++;
+    return result;
   }
 }
