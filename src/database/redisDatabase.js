@@ -104,10 +104,23 @@ async function getAllTradeSummaries() {
   for (const key of keys) {
     const summary = await client.hGetAll(key);
     if (Object.keys(summary).length > 0) {
+      const keyParts = key.split(':');
+      const exchangeId = keyParts[2];
+      const symbol = keyParts[3];
+      const strategyKey = keyParts[4];
+      
+      // undefinedやnullの値を持つキーをスキップ
+      if (exchangeId === 'undefined' || !exchangeId || 
+          symbol === 'undefined' || !symbol || 
+          strategyKey === 'undefined' || !strategyKey) {
+        console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+        continue;
+      }
+      
       summaries.push({
-        exchangeId: key.split(':')[2],
-        symbol: key.split(':')[3],
-        strategyKey: key.split(':')[4],
+        exchangeId,
+        symbol,
+        strategyKey,
         buyAmount: parseFloat(summary.buyAmount || 0),
         sellAmount: parseFloat(summary.sellAmount || 0),
         totalBuyCost: parseFloat(summary.totalBuyCost || 0),
