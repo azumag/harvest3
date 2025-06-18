@@ -22,10 +22,10 @@ const {
   saveStrategySignal,
   createLogInfoBase,
   fetchAndValidateOHLCVWithBacktestSetup,
-  executeStrategyTemplate
+  executeStrategyTemplate,
 } = require('./utils/common');
 
-// 削除: addSignal, fetchTicker は共通関数でラップされるため不要
+const { addSignal, fetchTicker } = require('../database/manager');
 const { postErrorToDiscord } = require('../common/notifications');
 
 /**
@@ -374,9 +374,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
     const currentMiddle = bands.middle[bands.middle.length - 1];
     const currentLower = bands.lower[bands.lower.length - 1];
     
-    // 現在の価格を取得
-    const ticker = await fetchTicker(exchange, symbol, options);
-    const currentPrice = ticker.last;
+    // 共通化された価格取得
+    const currentPrice = await getCurrentPrice(exchange, symbol, options);
     
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;

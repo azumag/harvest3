@@ -380,3 +380,11 @@ git push origin feature/user-auth
 ### タスク終了後のコミットとプッシュ
 task完了後、taskの内容に従って適宜CLAUDE.mdを更新して、かならずコミットとpushを行なってください
 ```
+
+## 取引取API仕様
+高度な注文オプションについて参照：
+### https://github.com/bitbankinc/bitbank-api-docs/blob/master/public-api.md
+### https://github.com/bitbankinc/bitbank-api-docs/blob/master/rest-api_JP.md
+
+## ccxt仕様
+### https://docs.ccxt.com/

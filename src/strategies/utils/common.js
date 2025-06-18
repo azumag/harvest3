@@ -318,16 +318,24 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   const balance = await getAvailableFund(exchange, symbol, options); // getAvailableFund を呼び出すように変更
   const baseCurrency = symbol.split('/')[1];
   const availableFunds = balance.free[baseCurrency];
+  
+  // デバッグ: 資金計算情報をログ出力
+  if (!options.backtest) {
+    console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${availableFunds}円, tradePercentage=${config.tradePercentage}, 制限後=${(availableFunds * config.tradePercentage).toFixed(2)}円`);
+  }
 
   // 損益を取得
   const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options); // options を渡すように変更
 
   let formattedAmount;
-  
+
+  let isPositionSized = false;
   // 動的ポジションサイジングが有効かチェック
   if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
     try {
       // OHLCV データを取得（ATR計算用）
+      // TODO: 動的ポジションサイジングのパラメータ設定
+      // TOOD: ポジションサイジングにおいて、実現損益が低いほど少なくなるようになっているか？
       const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
       
       if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
@@ -348,6 +356,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         
         if (positionResult.reason === 'success' && positionResult.positionSize > 0) {
           formattedAmount = parseFloat(positionResult.positionSize.toFixed(amountPrecision));
+          isPositionSized = true;
           
           // Discord通知
           if (postOrderToDiscord) {
@@ -400,6 +409,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     tradePercentage,
     realizedPnL,
     minTradeAmount,
+    isPositionSized, // 動的ポジションサイジングの結果を渡す
     options // options を渡すように変更
   );
 

@@ -1062,6 +1062,13 @@ async function getAvailableFund(exchange, symbol, options = {}) {
   // exchange オブジェクトは CCXT の インスタンスであると仮定
   try {
     const balance = await exchange.fetchBalance();
+    
+    // デバッグ: 残高情報をログ出力
+    const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
+    if (balance.free && balance.free[baseCurrency] !== undefined) {
+      console.log(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+    }
+    
     return balance;
   } catch (error) {
     console.error(`Error fetching balance for ${exchange.id}:`, error);
@@ -1280,7 +1287,7 @@ async function getSymbolsByExchange(config) {
  * @param {Number} baseMinTradeAmount - 最小取引量
  * @returns {Object} - {allowed: boolean, reason: string}
  */
-async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, options = {}) {
+async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, isPositionSized, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
     // console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
@@ -1312,7 +1319,15 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   const requiredFunds = price * formattedAmount;
 
   // トレードパーセンテージを考慮した利用可能資金を計算
-  const allowedFunds = (availableFunds * tradePercentage) + realizedPnL;
+  const allowedFunds = (() => {
+    if (isPositionSized) {
+      // ポジションサイズが有効な場合、利用可能資金は現在のポジションに基づく
+      return availableFunds;
+    } else {
+      // ポジションサイズが無効な場合、利用可能資金は全体資金の割合+実現損益に基づく
+      return (availableFunds * tradePercentage) + realizedPnL;
+    }
+  })();
 
   // Check if available funds are sufficient, considering trade percentage
   if (requiredFunds > allowedFunds || formattedAmount <= 0) {
@@ -1320,6 +1335,11 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
       allowed: false,
       reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能(制限内): ${allowedFunds.toFixed(2)}`
     };
+  }
+
+  if (isPositionSized) {
+    // ポジションサイジングが有効な場合、資金が十分あるならば現在量に関わらず許可
+    return { allowed: true };
   }
 
   // 実質的なポジションを計算 (売り注文量を差し引く)
