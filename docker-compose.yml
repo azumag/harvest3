@@ -27,7 +27,7 @@ services:
   #       max-file: "1"
 
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
     container_name: harvest3-redis
     command: redis-server --save 900 1 --save 300 10 --save 60 10000
     ports:
