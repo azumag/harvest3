@@ -299,7 +299,7 @@ const config = {
 
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
-      enabled: false, // 初期は無効（テスト後に有効化）
+      enabled: true, // 初期は無効（テスト後に有効化）
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],

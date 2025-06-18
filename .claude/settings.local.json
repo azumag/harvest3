@@ -50,7 +50,10 @@
       "Bash(sudo apt-get:*)",
       "Bash(sudo apt-get install:*)",
       "Bash(tmux:*)",
-      "Bash(claude-discord-bot:*)"
+      "Bash(claude-discord-bot:*)",
+      "Bash(ls:*)",
+      "Bash(npm install)",
+      "Bash(npm audit:*)"
     ],
     "deny": [
       "Bash(docker cp:*)"
