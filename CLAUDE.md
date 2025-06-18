@@ -99,27 +99,6 @@ make help                # Show all available commands
 - `.env` - Environment variables (API keys, database URLs)
 - `Makefile` - Docker operation shortcuts
 
-## 🔧 Development Environment
-
-### Dev Container Setup
-This project includes a fully configured development container (`.devcontainer/`) with:
-
-- **Base Image**: Node.js 18 (Bullseye)
-- **Docker-outside-of-Docker**: Enabled for managing host Docker containers from within dev container
-- **Pre-installed Tools**: Git, GitHub CLI, ESLint, Prettier, Docker extension
-- **Port Forwarding**: 3000 (Web UI), 8080 (additional services)
-- **Auto-install**: Dependencies installed automatically via `postCreateCommand`
-
-### Docker Socket Access
-The dev container has direct access to the host Docker daemon via:
-```json
-"mounts": [
-  "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-]
-```
-
-This allows you to run all Docker and Docker Compose commands directly from within the dev container, managing the bot's microservices seamlessly.
-
 ## 🔨 最重要ルール - 新しいルールの追加プロセス
 
 ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
