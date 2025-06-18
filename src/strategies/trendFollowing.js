@@ -16,10 +16,16 @@ const {
   executeBuyOrder, 
   executeSellOrder,
   confirmMultipleIndicators,
-  identifyMarketEnvironment
+  identifyMarketEnvironment,
+  handleStrategyError,
+  getCurrentPrice,
+  saveStrategySignal,
+  createLogInfoBase,
+  fetchAndValidateOHLCVWithBacktestSetup,
+  executeStrategyTemplate
 } = require('./utils/common');
 
-const { addSignal, fetchTicker } = require('../database/manager');
+// 削除: addSignal, fetchTicker は共通関数でラップされるため不要
 const { postErrorToDiscord } = require('../common/notifications');
 
 /**
@@ -27,26 +33,16 @@ const { postErrorToDiscord } = require('../common/notifications');
  * 短期移動平均線が長期移動平均線を上抜けたら買い、下抜けたら売り
  */
 async function maStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  const { shortPeriod = 5, longPeriod = 20, ohlcvInterval } = config;
+  return await executeStrategyTemplate(async () => {
+    const { shortPeriod = 5, longPeriod = 20, ohlcvInterval } = config;
 
-  try {
-    // OHLCVデータを取得して検証
-    const validatedData = await fetchAndValidateOHLCVData(
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
-      longPeriod, 
-      postErrorToDiscord,
-      'MA',
-      options
+    // 共通化されたOHLCVデータ取得
+    const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
+      exchange, symbol, ohlcvInterval, longPeriod, 'MA戦略', options
     );
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    if (options.backtest) {
-      // バックテストモードの場合、OHLCVデータを保存
-      options.backtest.ohlcvData = ohlcv;
-    }
 
     // シグナル計算
     const signalResult = await calculateMACrossSignals(
@@ -75,17 +71,13 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       options,
       options.config
     );
-  } catch (error) {
-    console.error(`移動平均線戦略でエラーが発生しました: ${symbol}`, error);
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(`[MA戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'MA Cross',
-      symbol,
-      error: error.message
-    };
-  }
+
+  }, {
+    exchange,
+    symbol,
+    strategyName: 'MA戦略',
+    strategyId: 'MA Cross'
+  });
 }
 
 /**
@@ -109,9 +101,8 @@ async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange
   const currentLongMA = longMA[longMA.length - 1];
   const previousLongMA = longMA[longMA.length - 2];
   
-  // 現在の価格を取得
-  const ticker = await fetchTicker(exchange, symbol, options);
-  const currentPrice = ticker.last;
+  // 共通化された価格取得
+  const currentPrice = await getCurrentPrice(exchange, symbol, options);
   
   // クロスを検出
   const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
@@ -126,18 +117,8 @@ async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange
     longMA: currentLongMA
   };
   
-  // シグナルがある場合のみ保存
-  if (signalType !== 'none') {
-    addSignal(
-      exchange,
-      symbol,
-      strategyKey,
-      signalType,
-      currentPrice,
-      strategyResults,
-      options // optionsを追加
-    );
-  }
+  // 共通化されたシグナル保存
+  await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
   
   return {
     currentPrice,
@@ -169,28 +150,18 @@ function formatMACrossLogInfo(signalResult) {
 
 // MACD戦略
 async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  const { tradePercentage } = config;
-  const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
-  const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+  return await executeStrategyTemplate(async () => {
+    const { tradePercentage } = config;
+    const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
+    const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
 
-  try {
-    // OHLCVデータを取得して検証
-    const validatedData = await fetchAndValidateOHLCVData(
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
-      slowPeriod + signalPeriod, 
-      postErrorToDiscord,
-      'MACD',
-      options,
+    // 共通化されたOHLCVデータ取得
+    const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
+      exchange, symbol, ohlcvInterval, slowPeriod + signalPeriod, 'MACD戦略', options
     );
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    if (options.backtest) {
-      // バックテストモードの場合、OHLCVデータを保存
-      options.backtest.ohlcvData = ohlcv;
-    }
 
     // MACDを計算
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
@@ -201,9 +172,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const currentSignal = macdData.signal[macdData.signal.length - 1];
     const previousSignal = macdData.signal[macdData.signal.length - 2];
     
-    // 現在の価格を取得
-    const ticker = await fetchTicker(exchange, symbol, options);
-    const currentPrice = ticker.last;
+    // 共通化された価格取得
+    const currentPrice = await getCurrentPrice(exchange, symbol, options);
     
     // クロスを検出
     const crossUp = previousMACD < previousSignal && currentMACD > currentSignal;
@@ -218,18 +188,8 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       signal: currentSignal
     };
     
-    // シグナルがある場合のみ保存
-    if (signalType !== 'none') {
-      addSignal(
-        exchange,
-        symbol,
-        strategyKey,
-        signalType,
-        currentPrice,
-        strategyResults,
-        options // optionsを追加
-      );
-    }
+    // 共通化されたシグナル保存
+    await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
     
     // シグナル結果をまとめる
     const signalResult = {
@@ -256,17 +216,13 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       options,
       options.config
     );
-  } catch (error) {
-    console.error(`MACD戦略でエラーが発生しました: ${symbol}`, error);
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(`[MACD戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'MACD',
-      symbol,
-      error: error.message
-    };
-  }
+
+  }, {
+    exchange,
+    symbol,
+    strategyName: 'MACD戦略',
+    strategyId: 'MACD'
+  });
 }
 
 /**
@@ -288,27 +244,18 @@ function formatMACDLogInfo(signalResult) {
 
 // RSI戦略
 async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  const { tradePercentage } = config; 
-  const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
-  const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
-  try {
-    // OHLCVデータを取得して検証
-    const validatedData = await fetchAndValidateOHLCVData(  
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
-      period, 
-      postErrorToDiscord,
-      'RSI',
-      options
+  return await executeStrategyTemplate(async () => {
+    const { tradePercentage } = config; 
+    const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
+    const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
+
+    // 共通化されたOHLCVデータ取得
+    const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
+      exchange, symbol, ohlcvInterval, period, 'RSI戦略', options
     );
     if (!validatedData) return;
     
     const { closes, ohlcv } = validatedData;
-    if (options.backtest) {
-      // バックテストモードの場合、OHLCVデータを保存
-      options.backtest.ohlcvData = ohlcv;
-    }
 
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
@@ -317,9 +264,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
     const currentRSI = rsiValues[rsiValues.length - 1];
     const previousRSI = rsiValues[rsiValues.length - 2];
     
-    // 現在の価格を取得
-    const ticker = await fetchTicker(exchange, symbol, options);
-    const currentPrice = ticker.last;
+    // 共通化された価格取得
+    const currentPrice = await getCurrentPrice(exchange, symbol, options);
     
     // 買いシグナル: RSIが閾値を下回り、前回のRSIが閾値以上
     const buySignal = currentRSI < oversoldThreshold && previousRSI >= oversoldThreshold;
@@ -337,18 +283,8 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       overboughtThreshold
     };
     
-    // シグナルがある場合のみ保存
-    if (signalType !== 'none') {
-      addSignal(
-        exchange,
-        symbol,
-        strategyKey,
-        signalType,
-        currentPrice,
-        strategyResults,
-        options // optionsを追加
-      );
-    }
+    // 共通化されたシグナル保存
+    await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
     
     // シグナル結果をまとめる
     const signalResult = {
@@ -376,18 +312,13 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       options,
       options.config
     );
-    
-  } catch (error) {
-    console.error(`RSI戦略でエラーが発生しました: ${symbol}`, error);
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(`[RSI戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'RSI',
-      symbol,
-      error: error.message
-    };
-  }
+
+  }, {
+    exchange,
+    symbol,
+    strategyName: 'RSI戦略',
+    strategyId: 'RSI'
+  });
 }
 
 /**
