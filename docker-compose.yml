@@ -6,8 +6,10 @@ services:
     restart: always
     volumes:
       - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies
       - ./scripts:/usr/src/app/scripts
       - ./test:/usr/src/app/test
+      - ./data:/usr/src/app/data
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: npm run reporter
@@ -91,6 +93,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies
+      - ./data:/usr/src/app/data
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: npm run start-hft
@@ -113,6 +117,8 @@ services:
     restart: always
     volumes:
       - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies
+      - ./data:/usr/src/app/data
       - ./package.json:/usr/src/app/package.json
       - .env:/usr/src/app/.env
     command: sh -c "while true; do npm run backtest; sleep 500; done"
@@ -162,6 +168,7 @@ services:
       - "3000:3000"
     volumes:
       - ./src:/usr/src/app/src
+      - ./strategies:/usr/src/app/strategies
       - ./data:/usr/src/app/data
       - ./package.json:/usr/src/app/package.json
       - ./package-lock.json:/usr/src/app/package-lock.json
