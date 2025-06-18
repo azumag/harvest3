@@ -1,7 +1,7 @@
 /**
  * リスク管理API コントローラー
  */
-const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis } = require('../../database/redisDatabase');
+const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis, getAllPendingOrdersRedis } = require('../../database/redisDatabase');
 const { getTradeSummary, listTrades, listFilledPositions, getOrderStrategyKeyByOrderId } = require('../../database/manager');
 const ccxt = require('ccxt');
 
@@ -20,70 +20,103 @@ async function getRiskPositions(req, res) {
     // 全ての戦略ポジションを取得
     const allPositions = await getAllPositionsRedis();
     
-    // 未約定注文を取得するため、取引所とシンボルの一覧を取得
-    const exchangeSymbolPairs = [...new Set(allPositions.map(p => `${p.exchange}:${p.symbol}`))];
+    // まずRedisから未約定注文を取得（高速）
+    let openOrderPositions = [];
+    let useExchangeAPIFallback = false;
     
-    // 未約定注文を取得
-    const openOrderPositions = [];
-    for (const pair of exchangeSymbolPairs) {
-      const [exchangeId, symbol] = pair.split(':');
+    try {
+      const pendingOrders = await getAllPendingOrdersRedis();
+      if (pendingOrders.length > 0) {
+        openOrderPositions = pendingOrders.map(order => ({
+          key: `pending-order:${order.orderId}`,
+          positionKey: `pending-order:${order.orderId}`,
+          exchange: order.exchange,
+          symbol: order.symbol,
+          strategy: order.strategy,
+          orderId: order.orderId,
+          side: order.side,
+          amount: order.amount,
+          entryPrice: order.price,
+          timestamp: order.timestamp,
+          filled: false,  // 未約定フラグ
+          orderStatus: order.status,
+          orderType: order.orderType
+        }));
+        console.log(`[INFO] Redis から ${openOrderPositions.length} 件の未約定注文を取得しました`);
+      } else {
+        console.log(`[INFO] Redis に未約定注文なし、取引所APIフォールバックを実行します`);
+        useExchangeAPIFallback = true;
+      }
+    } catch (redisError) {
+      console.warn('Redis からの未約定注文取得に失敗、取引所APIにフォールバック:', redisError.message);
+      useExchangeAPIFallback = true;
+    }
+    
+    if (useExchangeAPIFallback) {
       
-      try {
-        // 取引所インスタンスを作成
-        const exchangeClass = ccxt[exchangeId];
-        if (!exchangeClass) {
-          console.warn(`Exchange ${exchangeId} not found in ccxt`);
-          continue;
-        }
+      // フォールバック: 取引所APIから取得
+      const exchangeSymbolPairs = [...new Set(allPositions.map(p => `${p.exchange}:${p.symbol}`))];
+      
+      for (const pair of exchangeSymbolPairs) {
+        const [exchangeId, symbol] = pair.split(':');
         
-        const exchange = new exchangeClass({
-          apiKey: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_KEY`],
-          secret: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_SECRET`],
-          options: {
-            enableUnifiedAccount: false,
-            enableUnifiedMargin: false,
-            defaultType: 'spot'
+        try {
+          // 取引所インスタンスを作成
+          const exchangeClass = ccxt[exchangeId];
+          if (!exchangeClass) {
+            console.warn(`Exchange ${exchangeId} not found in ccxt`);
+            continue;
           }
-        });
-        
-        // 市場情報をロード
-        if (!exchange.markets) {
-          await exchange.loadMarkets();
-        }
-        
-        // シンボルがサポートされているか確認
-        if (!(symbol in exchange.markets)) {
-          continue;
-        }
-        
-        // 未約定注文を取得
-        const openOrders = await exchange.fetchOpenOrders(symbol);
-        
-        // 各未約定注文をポジション形式に変換
-        for (const order of openOrders) {
-          // 戦略キーを取得
-          const strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-          if (!strategyKey) continue;
           
-          // 未約定注文をポジション形式で追加
-          openOrderPositions.push({
-            key: `open-order:${order.id}`,
-            positionKey: `open-order:${order.id}`,
-            exchange: exchangeId,
-            symbol: symbol,
-            strategy: strategyKey,
-            orderId: order.id,
-            side: order.side,
-            amount: order.amount,
-            entryPrice: order.price,
-            timestamp: order.timestamp || Date.now(),
-            filled: false,  // 未約定フラグ
-            orderStatus: order.status,
-            orderType: order.type
+          const exchange = new exchangeClass({
+            apiKey: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_KEY`],
+            secret: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_SECRET`],
+            options: {
+              enableUnifiedAccount: false,
+              enableUnifiedMargin: false,
+              defaultType: 'spot'
+            }
           });
+          
+          // 市場情報をロード
+          if (!exchange.markets) {
+            await exchange.loadMarkets();
+          }
+          
+          // シンボルがサポートされているか確認
+          if (!(symbol in exchange.markets)) {
+            continue;
+          }
+          
+          // 未約定注文を取得
+          const openOrders = await exchange.fetchOpenOrders(symbol);
+          
+          // 各未約定注文をポジション形式に変換
+          for (const order of openOrders) {
+            // 戦略キーを取得
+            const strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+            if (!strategyKey) continue;
+            
+            // 未約定注文をポジション形式で追加
+            openOrderPositions.push({
+              key: `open-order:${order.id}`,
+              positionKey: `open-order:${order.id}`,
+              exchange: exchangeId,
+              symbol: symbol,
+              strategy: strategyKey,
+              orderId: order.id,
+              side: order.side,
+              amount: order.amount,
+              entryPrice: order.price,
+              timestamp: order.timestamp || Date.now(),
+              filled: false,  // 未約定フラグ
+              orderStatus: order.status,
+              orderType: order.type
+            });
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch open orders for ${exchangeId}:${symbol}:`, error.message);
         }
-      } catch (error) {
-        console.warn(`Failed to fetch open orders for ${exchangeId}:${symbol}:`, error.message);
       }
     }
     

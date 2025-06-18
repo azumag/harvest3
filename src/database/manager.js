@@ -17,6 +17,12 @@ const {
 } = require('./mongoDatabase');
 
 const {
+  savePendingOrderRedis,
+  deletePendingOrderRedis,
+  getAllPendingOrdersRedis
+} = require('./redisDatabase');
+
+const {
   getTradeSummary, updateTradeSummary, 
   getStrategyParametersRedis, saveStrategyParametersRedis,
   getCurrentOrderPairRedis, setCurrentOrderPairRedis,
@@ -728,7 +734,19 @@ async function addOrder(exchange, symbol, strategyKey, side, amount, price, orde
     timestamp
   };
 
-  return await addOrderMongoDB(order);
+  // MongoDBに注文履歴を保存
+  const mongoResult = await addOrderMongoDB(order);
+
+  // Redisに未約定注文として保存
+  await savePendingOrderRedis(exchange.id, symbol, strategyKey, orderId, {
+    side,
+    amount,
+    price,
+    orderType,
+    timestamp
+  });
+
+  return mongoResult;
 }
 
 async function addSignal(exchange, symbol, strategyKey, side, price, detail, options = {}) { // options を追加
@@ -1465,4 +1483,7 @@ module.exports = {
   loadHistoricalOHLCVToBacktestRedis,
   fetchBacktestOHLCVData,
   deleteTradeSummary,
+  savePendingOrderRedis,
+  deletePendingOrderRedis,
+  getAllPendingOrdersRedis,
 };

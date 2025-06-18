@@ -1065,4 +1065,140 @@ module.exports = {
   // テスト用
   clearAllPositionsRedis,
   clearAllPnLRedis,
+  // 未約定注文管理機能
+  savePendingOrderRedis,
+  getPendingOrderRedis,
+  getAllPendingOrdersRedis,
+  deletePendingOrderRedis,
 };
+
+/**
+ * 未約定注文をRedisに保存
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - シンボル
+ * @param {string} strategyKey - 戦略キー
+ * @param {string} orderId - 注文ID
+ * @param {Object} orderData - 注文データ
+ */
+async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, orderData) {
+  try {
+    const key = `pending_order:${exchangeId}:${symbol}:${strategyKey}:${orderId}`;
+    const data = {
+      exchangeId,
+      symbol,
+      strategyKey,
+      orderId,
+      side: orderData.side,
+      amount: orderData.amount.toString(),
+      price: orderData.price.toString(),
+      orderType: orderData.orderType || 'limit',
+      timestamp: orderData.timestamp.toString(),
+      status: 'open'
+    };
+    
+    await client.hSet(key, data);
+    console.log(`未約定注文を保存しました: ${key}`);
+    return true;
+  } catch (error) {
+    console.error(`未約定注文の保存に失敗しました: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * 特定の未約定注文を取得
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - シンボル
+ * @param {string} strategyKey - 戦略キー
+ * @param {string} orderId - 注文ID
+ */
+async function getPendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
+  try {
+    const key = `pending_order:${exchangeId}:${symbol}:${strategyKey}:${orderId}`;
+    const order = await client.hGetAll(key);
+    
+    if (Object.keys(order).length === 0) {
+      return null;
+    }
+    
+    return {
+      exchangeId: order.exchangeId,
+      symbol: order.symbol,
+      strategyKey: order.strategyKey,
+      orderId: order.orderId,
+      side: order.side,
+      amount: parseFloat(order.amount),
+      price: parseFloat(order.price),
+      orderType: order.orderType,
+      timestamp: parseInt(order.timestamp),
+      status: order.status
+    };
+  } catch (error) {
+    console.error(`未約定注文の取得に失敗しました: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * 全ての未約定注文を取得
+ * @returns {Promise<Array>} 未約定注文の配列
+ */
+async function getAllPendingOrdersRedis() {
+  try {
+    const pattern = `pending_order:*`;
+    const keys = await client.keys(pattern);
+    const orders = [];
+    
+    for (const key of keys) {
+      const order = await client.hGetAll(key);
+      if (Object.keys(order).length > 0) {
+        orders.push({
+          key: key,
+          exchangeId: order.exchangeId,
+          exchange: order.exchangeId, // API互換性のため
+          symbol: order.symbol,
+          strategyKey: order.strategyKey,
+          strategy: order.strategyKey, // API互換性のため
+          orderId: order.orderId,
+          side: order.side,
+          amount: parseFloat(order.amount),
+          price: parseFloat(order.price),
+          orderType: order.orderType,
+          timestamp: parseInt(order.timestamp),
+          status: order.status,
+          filled: false, // 未約定フラグ
+        });
+      }
+    }
+    
+    return orders;
+  } catch (error) {
+    console.error(`全未約定注文の取得に失敗しました: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 未約定注文を削除（約定時などに使用）
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - シンボル
+ * @param {string} strategyKey - 戦略キー
+ * @param {string} orderId - 注文ID
+ */
+async function deletePendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
+  try {
+    const key = `pending_order:${exchangeId}:${symbol}:${strategyKey}:${orderId}`;
+    const result = await client.del(key);
+    
+    if (result === 1) {
+      console.log(`未約定注文を削除しました: ${key}`);
+      return true;
+    } else {
+      console.log(`削除対象の未約定注文が見つかりませんでした: ${key}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`未約定注文の削除に失敗しました: ${error.message}`);
+    return false;
+  }
+}
