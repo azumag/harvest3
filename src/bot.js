@@ -173,9 +173,13 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 
     // MUTUAL_INFO戦略の場合は、referenceSymbolsを設定
     if (strategyKey === 'MUTUAL_INFO' && options.allExchangeSymbolPairs) {
-      // 同じ取引所のシンボルのみを抽出し、自分自身を除外
+      // 同じ取引所のシンボルのみを抽出し、自分自身と除外シンボルを除外
       const sameExchangeSymbols = options.allExchangeSymbolPairs
-        .filter(pair => pair.exchangeId === exchange.id && pair.symbol !== symbol)
+        .filter(pair => 
+          pair.exchangeId === exchange.id && 
+          pair.symbol !== symbol &&
+          !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+        )
         .map(pair => pair.symbol);
       
       options.referenceSymbols = sameExchangeSymbols;
@@ -205,6 +209,22 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 //     postStrategyProfitReport(exchangeBF);
 //   }
 // }, 60000); // 1分ごとにチェック
+
+// 残高チェックを1時間ごとに実行
+// 一時的にコメントアウト（ボリュームマウント問題解決後に有効化）
+// setInterval(async () => {
+//   const now = new Date();
+//   if (now.getMinutes() === 0) { // 毎時0分に実行
+//     try {
+//       console.log('=== 定期残高チェック開始 ===');
+//       await checkAllExchangeBalances();
+//       console.log('=== 定期残高チェック完了 ===');
+//     } catch (error) {
+//       console.error('定期残高チェックエラー:', error.message);
+//       await postErrorToDiscord(`定期残高チェック失敗: ${error.message}`);
+//     }
+//   }
+// }, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);
