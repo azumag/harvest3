@@ -1,7 +1,7 @@
 # Docker Compose操作のMakefile
 # ボリュームマウントを確実に反映させる
 
-.PHONY: restart-backtest restart-bot restart-all rebuild-all bot-restart bot-quick-restart restart-webui bot-logs bot-status bot-exec help
+.PHONY: restart-backtest restart-bot restart-all rebuild-all bot-restart bot-quick-restart restart-webui bot-logs bot-status bot-exec balance-check balance-check-quiet help
 
 # バックテストコンテナを確実に再起動（ボリューム再マウント）
 restart-backtest:
@@ -79,6 +79,16 @@ bot-exec:
 	@echo "Botコンテナ内でシェルを開きます..."
 	docker compose exec bot /bin/bash
 
+# 残高チェック手動実行
+balance-check:
+	@echo "残高チェックを手動実行中..."
+	./scripts/manual-balance-check.sh
+
+# 残高チェック手動実行（静粛モード）
+balance-check-quiet:
+	@echo "残高チェックを実行中（静粛モード）..."
+	./scripts/manual-balance-check.sh --quiet
+
 # ヘルプ表示
 help:
 	@echo "=== Docker Compose 操作コマンド ==="
@@ -99,6 +109,10 @@ help:
 	@echo "【クイック再起動（軽量）】"
 	@echo "  quick-restart-backtest : バックテストのクイック再起動"
 	@echo "  quick-restart-bot      : Botのクイック再起動"
+	@echo ""
+	@echo "【残高チェック】"
+	@echo "  balance-check      : 残高チェックを手動実行"
+	@echo "  balance-check-quiet: 残高チェックを静粛モードで実行"
 	@echo ""
 	@echo "【その他】"
 	@echo "  rebuild-all        : 全イメージを再ビルドして起動"
