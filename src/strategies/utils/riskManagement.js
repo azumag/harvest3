@@ -603,6 +603,18 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
     }
     
+    // 最終フォールバック：executionPriceがnullの場合はエントリー価格を使用
+    if (executionPrice === null || executionPrice === undefined || isNaN(executionPrice)) {
+      executionPrice = position.entryPrice;
+      console.warn(`[WARNING] Using entry price as final fallback for closePrice: ${executionPrice} for ${symbol}`);
+      
+      // それでもnullの場合は0を設定（データ整合性のため）
+      if (executionPrice === null || executionPrice === undefined || isNaN(executionPrice)) {
+        executionPrice = 0;
+        console.error(`[ERROR] No valid price available for closePrice, setting to 0 for ${symbol}`);
+      }
+    }
+    
     // 最終的な売却量を確定（再試行があった場合を考慮）
     const finalFormattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
     

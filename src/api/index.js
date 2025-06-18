@@ -50,7 +50,7 @@ app.get('/analysis', (req, res) => {
 });
 
 // サーバー起動
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`API & Web Server running on port ${PORT}`);
   
   // データベースの初期化

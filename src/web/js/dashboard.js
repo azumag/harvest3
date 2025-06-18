@@ -32,7 +32,7 @@ function initDashboard() {
         loadAndDisplayRiskStats();
       }
       
-      // 約定済みポジションタブが表示された場合はデータを読み込み
+      // 未売却ポジションタブが表示された場合はデータを読み込み
       if (activeTabId === 'filled-positions-tab') {
         loadAndDisplayFilledPositions();
       }
@@ -1967,7 +1967,7 @@ function refreshRiskPositions() {
 }
 
 /**
- * 約定済みポジションデータの読み込みと表示
+ * 未売却ポジションデータの読み込みと表示
  */
 async function loadAndDisplayFilledPositions() {
   try {
@@ -1978,17 +1978,17 @@ async function loadAndDisplayFilledPositions() {
       displayFilledPositionsStats(data.stats);
       displayFilledPositionsTable(data.positions);
     } else {
-      console.error('約定済みポジションの読み込みエラー:', data.error);
+      console.error('未売却ポジションの読み込みエラー:', data.error);
       showFilledPositionsError('データの読み込みに失敗しました: ' + data.error);
     }
   } catch (error) {
-    console.error('約定済みポジションの読み込みエラー:', error);
+    console.error('未売却ポジションの読み込みエラー:', error);
     showFilledPositionsError('データの読み込みに失敗しました: ' + error.message);
   }
 }
 
 /**
- * 約定済みポジション統計情報の表示
+ * 未売却ポジション統計情報の表示
  */
 function displayFilledPositionsStats(stats) {
   const totalPositionsElement = document.getElementById('filled-total-positions');
@@ -2017,7 +2017,7 @@ function displayFilledPositionsStats(stats) {
 }
 
 /**
- * 約定済みポジションテーブルの表示
+ * 未売却ポジションテーブルの表示
  */
 function displayFilledPositionsTable(positions) {
   const tbody = document.getElementById('filled-positions-tbody');
@@ -2028,7 +2028,7 @@ function displayFilledPositionsTable(positions) {
     tbody.innerHTML = `
       <tr>
         <td colspan="10" class="text-center text-muted">
-          約定済みポジションが見つかりません
+          未売却ポジションが見つかりません
         </td>
       </tr>
     `;
@@ -2064,7 +2064,7 @@ function displayFilledPositionsTable(positions) {
 }
 
 /**
- * 約定済みポジションエラー表示
+ * 未売却ポジションエラー表示
  */
 function showFilledPositionsError(message) {
   const tbody = document.getElementById('filled-positions-tbody');

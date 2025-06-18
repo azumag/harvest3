@@ -1161,7 +1161,8 @@ async function fetchParameterDetails(exchange, symbol, strategy) {
  * 時間足セレクトボックスにオプションを静的に設定
  */
 function populateTimeframes() {
-    const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '8h', '12h', '1d', '1w'];
+    // Bitbankでサポートされているタイムフレームのみを使用
+    const timeframes = ['1m', '5m', '15m', '30m', '1h'];
     if (filterTimeframeSelect) {
         filterTimeframeSelect.innerHTML = ''; // 既存オプションをクリア
         timeframes.forEach(tf => {

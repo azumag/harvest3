@@ -1,6 +1,7 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord, checkAllExchangeBalances } = require('./common/notifications');
+const { postErrorToDiscord } = require('./common/notifications');
+const { checkAllExchangeBalances } = require('./common/balanceChecker');
 const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
 const { 

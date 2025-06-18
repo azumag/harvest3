@@ -281,11 +281,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   // タイムフレームでループ
   const timeframePromises = OHLCVTimeFrames.map(async (timeframe) => {
     // const timeframeMs = timeframeToMs(timeframe);
-    // Skip specific timeframes for BCH/JPY
-    if (symbol === 'BCH/JPY' && ['4h', '8h', '12h', '1d', '1w'].includes(timeframe)) {
-      console.log(`  Skipping ${symbol} with timeframe ${timeframe} as requested`);
-      return [];
-    }
+    // 注：BCH/JPYの特別なスキップロジックは不要（OHLCVTimeFramesでサポート対象のみ定義済み）
     const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
     
     console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
@@ -377,9 +373,13 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
       // MUTUAL_INFO戦略の場合は、referenceSymbolsを設定
       if (strategyKey === 'MUTUAL_INFO' && allExchangeSymbolPairs) {
-        // 同じ取引所のシンボルのみを抽出し、自分自身を除外
+        // 同じ取引所のシンボルのみを抽出し、自分自身と除外シンボルを除外
         const sameExchangeSymbols = allExchangeSymbolPairs
-          .filter(pair => pair.exchangeId === exchange.id && pair.symbol !== symbol)
+          .filter(pair => 
+            pair.exchangeId === exchange.id && 
+            pair.symbol !== symbol &&
+            !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+          )
           .map(pair => pair.symbol);
         
         options.referenceSymbols = sameExchangeSymbols;

@@ -67,14 +67,23 @@ function getOrderManager(exchange) {
 async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, errorNotificationFn, strategyName, options) {
   // 過去のローソク足データを取得
   const ohlcv = await fetchOHLCVData(exchange, symbol, ohlcvInterval, period + 10, options);
-  if (ohlcv.length < period) {
+  
+  // データ不足の許容範囲を設定（90%以上あれば許可）
+  const minRequiredData = Math.max(period * 0.9, period - 5); // 最低でも90%または期間-5のいずれか大きい方
+  
+  if (ohlcv.length < minRequiredData) {
     if (!options.backtest) {
-      console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
+      console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period} (最低必要: ${minRequiredData})`);
       throw new Error(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     }
     if (options.backtest) {
       return null; // バックテストモードではnullを返す
     }
+  }
+  
+  // データが最低要件は満たしているが、期待値より少ない場合は警告
+  if (ohlcv.length < period && !options.backtest) {
+    console.warn(`[${strategyName}] ${symbol}: データ数が期待値より少ないですが実行継続 (${ohlcv.length}/${period})`);
   }
 
   // 終値の配列を作成
@@ -130,7 +139,10 @@ async function handleStrategySignals(
   if (!options.backtest && config.enableRiskManagement !== false) {
     // リスク管理前に約定情報を更新
     console.log(`[リスク管理] ${symbol} の約定情報を更新中...`);
-    await updateFilledTrades(exchange, symbol);
+    const tradeUpdateStart = Date.now();
+    const updatedCount = await updateFilledTrades(exchange, symbol);
+    const tradeUpdateTime = Date.now() - tradeUpdateStart;
+    console.log(`[リスク管理] ${symbol} 約定情報更新完了: ${updatedCount}件 (${tradeUpdateTime}ms)`);
     
     const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
     

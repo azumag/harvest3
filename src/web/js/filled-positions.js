@@ -1,5 +1,6 @@
 /**
- * 約定済みポジション管理 JavaScript
+ * 未売却ポジション管理 JavaScript
+ * 買い注文が約定済みだが、まだ売却していないポジションを表示
  */
 
 let filledPositionsData = [];
@@ -27,11 +28,11 @@ async function loadFilledPositions() {
             updateLastUpdated(data.timestamp);
         } else {
             console.error('Error loading filled positions:', data.error);
-            showError('約定済みポジションデータの読み込みに失敗しました: ' + data.error);
+            showError('未売却ポジションデータの読み込みに失敗しました: ' + data.error);
         }
     } catch (error) {
         console.error('Error loading filled positions:', error);
-        showError('約定済みポジションデータの読み込みに失敗しました: ' + error.message);
+        showError('未売却ポジションデータの読み込みに失敗しました: ' + error.message);
     }
 }
 
@@ -56,7 +57,7 @@ function updatePositionsTable() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="11" class="text-center text-muted">
-                    約定済みポジションが見つかりません
+                    未売却ポジションが見つかりません
                 </td>
             </tr>
         `;

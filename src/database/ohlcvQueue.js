@@ -69,7 +69,9 @@ class OHLCVRequestQueue extends EventEmitter {
     // 重複リクエストの確認
     if (this.isDuplicateRequest(requestId)) {
       this.stats.duplicateRequests++;
-      console.log(`[OHLCVQueue] 重複リクエストを検出: ${requestId}`);
+      if (process.env.BACKTEST_MODE !== 'true') {
+        console.log(`[OHLCVQueue] 重複リクエストを検出: ${requestId}`);
+      }
       return this.waitForExistingRequest(requestId);
     }
     
@@ -107,7 +109,9 @@ class OHLCVRequestQueue extends EventEmitter {
     this.addToQueue(request);
     this.stats.totalRequests++;
     
-    console.log(`[OHLCVQueue] リクエストをキューに追加: ${requestId} (優先度: ${priority})`);
+    if (process.env.BACKTEST_MODE !== 'true') {
+      console.log(`[OHLCVQueue] リクエストをキューに追加: ${requestId} (優先度: ${priority})`);
+    }
     
     return promise;
   }
@@ -245,7 +249,9 @@ class OHLCVRequestQueue extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      console.log(`[OHLCVQueue] リクエスト処理開始: ${request.id}`);
+      if (process.env.BACKTEST_MODE !== 'true') {
+        console.log(`[OHLCVQueue] リクエスト処理開始: ${request.id}`);
+      }
       
       // API呼び出し
       const result = await fetchOHLCVDataAPI(
@@ -264,7 +270,9 @@ class OHLCVRequestQueue extends EventEmitter {
       this.completeRequest(request, result);
       this.addToHistory(request, result);
       
-      console.log(`[OHLCVQueue] リクエスト完了: ${request.id} (${result.length}件, ${waitTime}ms)`);
+      if (process.env.BACKTEST_MODE !== 'true') {
+        console.log(`[OHLCVQueue] リクエスト完了: ${request.id} (${result.length}件, ${waitTime}ms)`);
+      }
       
     } catch (error) {
       console.error(`[OHLCVQueue] リクエストエラー: ${request.id}`, error);
@@ -273,9 +281,11 @@ class OHLCVRequestQueue extends EventEmitter {
       if (request.retryCount === 0) { // 初回のエラーのみ通知（スパム防止）
         const errorMessage = `OHLCV Queue Error: ${request.exchange.id} ${request.symbol} ${request.timeframe} - ${error.message}`;
         recordError('ohlcv_queue', errorMessage, error.stack);
-        postErrorToDiscord(errorMessage).catch(err => 
-          console.error('Discord通知エラー:', err)
-        );
+        try {
+          await postErrorToDiscord(errorMessage);
+        } catch (err) {
+          console.error('Discord通知エラー:', err);
+        }
       }
       
       // リトライ処理
@@ -294,9 +304,11 @@ class OHLCVRequestQueue extends EventEmitter {
       // 最終的に失敗
       const finalErrorMessage = `OHLCV Queue Final Failure: ${request.exchange.id} ${request.symbol} ${request.timeframe} - ${this.config.retryAttempts}回リトライしましたが失敗しました`;
       recordError('ohlcv_queue', finalErrorMessage, error.stack);
-      postErrorToDiscord(finalErrorMessage).catch(err => 
-        console.error('Discord通知エラー:', err)
-      );
+      try {
+        await postErrorToDiscord(finalErrorMessage);
+      } catch (err) {
+        console.error('Discord通知エラー:', err);
+      }
       
       this.updateStats(false);
       this.completeRequest(request, null, error);

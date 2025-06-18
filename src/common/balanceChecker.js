@@ -1,5 +1,6 @@
 /**
  * 残高チェッカー - 取引所残高とbot管理残高の比較・監視
+ * 完全再構築テスト用
  */
 const { config } = require('../config');
 const { postErrorToDiscord } = require('./notifications');
@@ -68,9 +69,9 @@ async function getBotManagedBalance() {
 /**
  * 残高を比較し、不整合があればDiscordに通知する
  * @param {string} exchangeId - 取引所ID
- * @param {number} thresholdPercent - 許容誤差（パーセント）
+ * @param {number} thresholdPercent - 許容誤差（パーセント）- 完全一致チェックのため0
  */
-async function compareBalances(exchangeId, thresholdPercent = 5) {
+async function compareBalances(exchangeId, thresholdPercent = 0) {
   try {
     console.log(`残高比較開始: ${exchangeId}`);
     
@@ -81,7 +82,7 @@ async function compareBalances(exchangeId, thresholdPercent = 5) {
     const botBalance = await getBotManagedBalance();
     
     // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
-    const significantThreshold = 0.001; // 0.001以上を有意とする
+    const significantThreshold = 0.00001; // 0.00001以上を有意とする（完全一致チェックのため閾値を大幅に下げる）
     const exchangeCurrencies = Object.keys(exchangeBalance.total).filter(
       currency => exchangeBalance.total[currency] >= significantThreshold
     );
@@ -99,12 +100,13 @@ async function compareBalances(exchangeId, thresholdPercent = 5) {
         continue;
       }
       
-      // 差異の計算
+      // 差異の計算（完全一致チェック）
       const difference = Math.abs(exchangeAmount - botAmount);
       const maxAmount = Math.max(exchangeAmount, botAmount);
       const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
       
-      if (discrepancyPercent > thresholdPercent) {
+      // 完全一致でない場合は全て通知（閾値0%）
+      if (difference > 0) {
         discrepancies.push({
           currency,
           exchangeAmount,

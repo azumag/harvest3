@@ -1,3 +1,125 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## 🏗️ Project Overview
+
+**harvest3** is a sophisticated cryptocurrency trading bot system built with Node.js that executes multiple trading strategies in parallel. The system uses a microservices architecture with Docker containers and dual-database approach (Redis + MongoDB) for optimal performance.
+
+### Tech Stack
+- **Runtime**: Node.js 16
+- **Exchange API**: ccxt v3.1.60  
+- **Databases**: Redis 8 (real-time), MongoDB 7.0 (historical)
+- **Web Framework**: Express.js
+- **UI**: Vanilla JavaScript + Chart.js 4.4.9
+- **Testing**: Jest 29.7.0
+- **Containers**: Docker + Docker Compose
+
+### Core Services
+```
+bot (strategy-runner)    # Main strategy execution container
+hft                     # High-frequency trading container  
+backtest               # Backtesting execution container
+web-ui (trade_viewer)  # Web UI container
+redis                  # Real-time database
+mongodb               # Historical database
+```
+
+## 🛠️ Essential Commands
+
+### Development Commands
+```bash
+# Testing
+npm test                    # Run all tests
+npm run test:unit          # Run unit tests only
+npm run test:watch         # Watch mode testing
+
+# Bot Operations  
+npm start                  # Start main bot
+npm run start-hft         # Start HFT bot
+npm run start-web         # Start Web UI server
+npm run backtest          # Run backtesting
+
+# Balance Management
+npm run check-balance     # Check balance consistency
+npm run compare-balance   # Compare exchange vs internal balance
+npm run fix-position-inconsistencies  # Fix position inconsistencies
+```
+
+### Docker Operations (Makefile)
+```bash
+# Quick restarts (recommended for development)
+make quick-restart-bot       # Restart bot container
+make quick-restart-backtest  # Restart backtest container
+make restart-webui          # Restart Web UI
+
+# Full restarts
+make restart-all           # Restart all containers
+make restart-bot          # Full bot restart
+make restart-backtest     # Full backtest restart
+
+# Bot-specific commands
+make bot-logs             # View bot logs
+make bot-status          # Check bot status  
+make bot-exec            # Shell into bot container
+make help                # Show all available commands
+```
+
+## 🏛️ Architecture & Key Directories
+
+```
+/workspace/
+├── src/
+│   ├── bot.js                    # Main bot entry point
+│   ├── config.js                 # Strategy & configuration management
+│   ├── api/                      # Web API (Express routes)
+│   ├── strategies/               # Trading strategy implementations
+│   │   ├── trendFollowing.js     # MA, MACD, RSI, Bollinger Bands
+│   │   ├── meanReversion.js      # Mean reversion, oscillator strategies
+│   │   ├── arbitrage.js          # Inter-exchange arbitrage
+│   │   └── utils/               # Strategy utilities & common functions
+│   ├── database/                 # Database management (Redis/MongoDB)
+│   ├── hft/                      # High-frequency trading modules
+│   ├── common/                   # Shared utilities & helpers
+│   │   ├── utils.js             # Core utility functions
+│   │   ├── balanceChecker.js    # Balance validation
+│   │   └── notifications.js     # Discord notifications
+│   └── web/                      # Web UI (HTML/CSS/JS)
+├── scripts/                      # Operational & maintenance scripts
+├── test/                         # Test suites (Jest)
+├── docs/                         # Documentation
+├── docker-compose.yml            # Service definitions
+├── Makefile                      # Automation commands
+└── package.json                  # Dependencies & npm scripts
+```
+
+### Key Configuration Files
+- `src/config.js` - Central strategy configuration and parameters
+- `docker-compose.yml` - Container orchestration
+- `.env` - Environment variables (API keys, database URLs)
+- `Makefile` - Docker operation shortcuts
+
+## 🔧 Development Environment
+
+### Dev Container Setup
+This project includes a fully configured development container (`.devcontainer/`) with:
+
+- **Base Image**: Node.js 18 (Bullseye)
+- **Docker-outside-of-Docker**: Enabled for managing host Docker containers from within dev container
+- **Pre-installed Tools**: Git, GitHub CLI, ESLint, Prettier, Docker extension
+- **Port Forwarding**: 3000 (Web UI), 8080 (additional services)
+- **Auto-install**: Dependencies installed automatically via `postCreateCommand`
+
+### Docker Socket Access
+The dev container has direct access to the host Docker daemon via:
+```json
+"mounts": [
+  "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+]
+```
+
+This allows you to run all Docker and Docker Compose commands directly from within the dev container, managing the bot's microservices seamlessly.
+
 ## 🔨 最重要ルール - 新しいルールの追加プロセス
 
 ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
@@ -94,6 +216,8 @@ docker compose restart strategy-runner
 ```
 
 **注意**: ボリュームマウントの問題でファイル変更が反映されない場合があるため、変更後は必ずコンテナを再起動すること。
+
+**詳細**: ボリュームマウントの問題と解決方法については、`docs/volume-mount-troubleshooting.md` を参照してください。
 
 ### UIテストの実行
 UIの改修を行った場合は、必ず以下の手順でテストを実行する：
@@ -257,4 +381,10 @@ gh pr create --title "$(git log -1 --pretty=%s)" --body "$(git log -1 --pretty=%
 git add .
 git commit -m "fix: CIエラーの修正 - lint警告の解消"
 git push origin feature/user-auth
+```
+
+## タスク完了時の重要ルール
+
+### タスク終了後のコミットとプッシュ
+task完了後、taskの内容に従って適宜CLAUDE.mdを更新して、かならずコミットとpushを行なってください
 ```

@@ -57,6 +57,7 @@ const config = {
       'ELF/',
       'MATIC/',
       'RNDR/',
+      'BCH/',  // ゼロボリューム・データ不足のため除外
       // 'ATOM/',
     ],
     
