@@ -211,7 +211,10 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       strategyResults
     };
     
+    console.log(`[MACD STRATEGY] ${symbol}: Creating signalResult:`, JSON.stringify(signalResult));
+    
     // シグナル処理を共通関数で行う
+    console.log(`[MACD STRATEGY] ${symbol}: About to call handleStrategySignals`);
     return await handleStrategySignals(
       exchange,
       symbol,
@@ -240,19 +243,31 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
  * @returns {Object} フォーマットされたログ情報
  */
 function formatMACDLogInfo(signalResult) {
-  const { currentPrice, currentMACD, currentSignal } = signalResult;
-  
-  // null値を安全に処理
-  const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
-  const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
-  
-  return {
-    buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
-    sell: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
-    none: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
-    orderInfo: { macd: currentMACD, signal: currentSignal },
-    result: { macd: currentMACD, signal: currentSignal, currentPrice }
-  };
+  try {
+    console.log(`[MACD FORMAT] Entry with signalResult:`, JSON.stringify(signalResult));
+    
+    const { currentPrice, currentMACD, currentSignal } = signalResult;
+    
+    console.log(`[MACD FORMAT] Extracted values - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
+    
+    // null値を安全に処理
+    const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
+    const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
+    
+    console.log(`[MACD FORMAT] Safe values - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
+    
+    return {
+      buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
+      sell: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
+      none: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
+      orderInfo: { macd: currentMACD, signal: currentSignal },
+      result: { macd: currentMACD, signal: currentSignal, currentPrice }
+    };
+  } catch (error) {
+    console.error(`[MACD FORMAT] ERROR in formatMACDLogInfo:`, error);
+    console.error(`[MACD FORMAT] signalResult at error:`, signalResult);
+    throw error;
+  }
 }
 
 // RSI戦略

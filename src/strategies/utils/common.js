@@ -134,7 +134,9 @@ async function handleStrategySignals(
   }
   
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
+  console.log(`[HANDLE SIGNALS] ${symbol}: About to call formatLogInfo with signalResult:`, JSON.stringify(signalResult));
   const logInfo = formatLogInfo(signalResult);
+  console.log(`[HANDLE SIGNALS] ${symbol}: formatLogInfo completed successfully`);
   
   // リスク管理: ストップロスチェック（バックテストモードではスキップ）
   if (!options.backtest && config.enableRiskManagement !== false) {
@@ -159,8 +161,8 @@ async function handleStrategySignals(
                      `取引所: ${exchange.id}\n` +
                      `戦略: ${strategyName}\n` +
                      `本日の損失: ${drawdownStatus.daily.pnl.toLocaleString()}円\n` +
-                     `損失率: ${(drawdownStatus.daily.loss * 100).toFixed(2)}%\n` +
-                     `制限値: ${(drawdownStatus.daily.limit * 100).toFixed(2)}%\n` +
+                     `損失率: ${drawdownStatus.daily.loss !== null && drawdownStatus.daily.loss !== undefined ? (drawdownStatus.daily.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                     `制限値: ${drawdownStatus.daily.limit !== null && drawdownStatus.daily.limit !== undefined ? (drawdownStatus.daily.limit * 100).toFixed(2) : 'N/A'}%\n` +
                      `⚠️ 新規取引を停止しました`;
       
       console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
@@ -184,8 +186,8 @@ async function handleStrategySignals(
                      `取引所: ${exchange.id}\n` +
                      `戦略: ${strategyName}\n` +
                      `今週の損失: ${drawdownStatus.weekly.pnl.toLocaleString()}円\n` +
-                     `損失率: ${(drawdownStatus.weekly.loss * 100).toFixed(2)}%\n` +
-                     `制限値: ${(drawdownStatus.weekly.limit * 100).toFixed(2)}%\n` +
+                     `損失率: ${drawdownStatus.weekly.loss !== null && drawdownStatus.weekly.loss !== undefined ? (drawdownStatus.weekly.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                     `制限値: ${drawdownStatus.weekly.limit !== null && drawdownStatus.weekly.limit !== undefined ? (drawdownStatus.weekly.limit * 100).toFixed(2) : 'N/A'}%\n` +
                      `⚠️ 戦略を一時停止することを検討してください`;
       
       if (postOrderToDiscord) {
@@ -198,8 +200,8 @@ async function handleStrategySignals(
                      `取引所: ${exchange.id}\n` +
                      `戦略: ${strategyName}\n` +
                      `今月の損失: ${drawdownStatus.monthly.pnl.toLocaleString()}円\n` +
-                     `損失率: ${(drawdownStatus.monthly.loss * 100).toFixed(2)}%\n` +
-                     `制限値: ${(drawdownStatus.monthly.limit * 100).toFixed(2)}%\n` +
+                     `損失率: ${drawdownStatus.monthly.loss !== null && drawdownStatus.monthly.loss !== undefined ? (drawdownStatus.monthly.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                     `制限値: ${drawdownStatus.monthly.limit !== null && drawdownStatus.monthly.limit !== undefined ? (drawdownStatus.monthly.limit * 100).toFixed(2) : 'N/A'}%\n` +
                      `🚨 戦略の見直しが必要です`;
       
       if (postOrderToDiscord) {
@@ -321,7 +323,10 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   
   // デバッグ: 資金計算情報をログ出力
   if (!options.backtest) {
-    console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${availableFunds}円, tradePercentage=${config.tradePercentage}, 制限後=${(availableFunds * config.tradePercentage).toFixed(2)}円`);
+    const safeAvailableFunds = availableFunds !== null && availableFunds !== undefined ? availableFunds : 0;
+    const safeTradePercentage = config.tradePercentage !== null && config.tradePercentage !== undefined ? config.tradePercentage : 0;
+    const safeCalculated = (safeAvailableFunds * safeTradePercentage).toFixed(2);
+    console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${safeAvailableFunds}円, tradePercentage=${safeTradePercentage}, 制限後=${safeCalculated}円`);
   }
 
   // 損益を取得
