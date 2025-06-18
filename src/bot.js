@@ -1,6 +1,6 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord } = require('./common/notifications');
+const { postErrorToDiscord, checkAllExchangeBalances } = require('./common/notifications');
 const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
 const { 
@@ -210,21 +210,20 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 //   }
 // }, 60000); // 1分ごとにチェック
 
-// 残高チェックを1時間ごとに実行
-// 一時的にコメントアウト（ボリュームマウント問題解決後に有効化）
-// setInterval(async () => {
-//   const now = new Date();
-//   if (now.getMinutes() === 0) { // 毎時0分に実行
-//     try {
-//       console.log('=== 定期残高チェック開始 ===');
-//       await checkAllExchangeBalances();
-//       console.log('=== 定期残高チェック完了 ===');
-//     } catch (error) {
-//       console.error('定期残高チェックエラー:', error.message);
-//       await postErrorToDiscord(`定期残高チェック失敗: ${error.message}`);
-//     }
-//   }
-// }, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
+// 残高チェックを1時間ごとに実行（完全一致チェック）
+setInterval(async () => {
+  const now = new Date();
+  if (now.getMinutes() === 0) { // 毎時0分に実行
+    try {
+      console.log('=== 定期残高チェック開始 ===');
+      await checkAllExchangeBalances();
+      console.log('=== 定期残高チェック完了 ===');
+    } catch (error) {
+      console.error('定期残高チェックエラー:', error.message);
+      await postErrorToDiscord(`定期残高チェック失敗: ${error.message}`);
+    }
+  }
+}, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);
