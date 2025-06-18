@@ -92,6 +92,11 @@ async function compareBalances(exchangeId, thresholdPercent = 0) {
     const discrepancies = [];
     
     for (const currency of allCurrencies) {
+      // JPYは残高チェックから除外
+      if (currency === 'JPY') {
+        continue;
+      }
+      
       const exchangeAmount = exchangeBalance.total[currency] || 0;
       const botAmount = botBalance[currency] || 0;
       
