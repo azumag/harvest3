@@ -1737,6 +1737,7 @@ function renderRiskPositions(data) {
           <div class="card-body text-center">
             <h6 class="card-title">総ポジション数</h6>
             <h4>${stats.totalPositions || 0}</h4>
+            <small>約定済: ${stats.filledPositions || 0} / 未約定: ${stats.pendingOrders || 0}</small>
           </div>
         </div>
       </div>
@@ -1788,9 +1789,14 @@ function renderRiskPositions(data) {
   `;
 
   positions.forEach(position => {
-    const statusBadge = position.status === 'active' ? 
-      '<span class="badge bg-success">アクティブ</span>' :
-      '<span class="badge bg-warning">リスク状態</span>';
+    let statusBadge;
+    if (position.status === 'pending') {
+      statusBadge = '<span class="badge bg-info">未約定</span>';
+    } else if (position.status === 'active') {
+      statusBadge = '<span class="badge bg-success">アクティブ</span>';
+    } else {
+      statusBadge = '<span class="badge bg-warning">リスク状態</span>';
+    }
 
     const pnlClass = (position.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
     const pnlPrefix = (position.unrealizedPnL || 0) >= 0 ? '+' : '';

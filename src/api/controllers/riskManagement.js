@@ -2,7 +2,8 @@
  * リスク管理API コントローラー
  */
 const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis } = require('../../database/redisDatabase');
-const { getTradeSummary, listTrades, listFilledPositions } = require('../../database/manager');
+const { getTradeSummary, listTrades, listFilledPositions, getOrderStrategyKeyByOrderId } = require('../../database/manager');
+const ccxt = require('ccxt');
 
 /**
  * リスク管理ポジション情報を取得するAPIエンドポイント
@@ -19,8 +20,78 @@ async function getRiskPositions(req, res) {
     // 全ての戦略ポジションを取得
     const allPositions = await getAllPositionsRedis();
     
+    // 未約定注文を取得するため、取引所とシンボルの一覧を取得
+    const exchangeSymbolPairs = [...new Set(allPositions.map(p => `${p.exchange}:${p.symbol}`))];
+    
+    // 未約定注文を取得
+    const openOrderPositions = [];
+    for (const pair of exchangeSymbolPairs) {
+      const [exchangeId, symbol] = pair.split(':');
+      
+      try {
+        // 取引所インスタンスを作成
+        const exchangeClass = ccxt[exchangeId];
+        if (!exchangeClass) {
+          console.warn(`Exchange ${exchangeId} not found in ccxt`);
+          continue;
+        }
+        
+        const exchange = new exchangeClass({
+          apiKey: process.env[`${exchangeId.toUpperCase()}_API_KEY`],
+          secret: process.env[`${exchangeId.toUpperCase()}_SECRET_KEY`],
+          options: {
+            enableUnifiedAccount: false,
+            enableUnifiedMargin: false,
+            defaultType: 'spot'
+          }
+        });
+        
+        // 市場情報をロード
+        if (!exchange.markets) {
+          await exchange.loadMarkets();
+        }
+        
+        // シンボルがサポートされているか確認
+        if (!(symbol in exchange.markets)) {
+          continue;
+        }
+        
+        // 未約定注文を取得
+        const openOrders = await exchange.fetchOpenOrders(symbol);
+        
+        // 各未約定注文をポジション形式に変換
+        for (const order of openOrders) {
+          // 戦略キーを取得
+          const strategyKey = await getOrderStrategyKeyByOrderId(order.id);
+          if (!strategyKey) continue;
+          
+          // 未約定注文をポジション形式で追加
+          openOrderPositions.push({
+            key: `open-order:${order.id}`,
+            positionKey: `open-order:${order.id}`,
+            exchange: exchangeId,
+            symbol: symbol,
+            strategy: strategyKey,
+            orderId: order.id,
+            side: order.side,
+            amount: order.amount,
+            entryPrice: order.price,
+            timestamp: order.timestamp || Date.now(),
+            filled: false,  // 未約定フラグ
+            orderStatus: order.status,
+            orderType: order.type
+          });
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch open orders for ${exchangeId}:${symbol}:`, error.message);
+      }
+    }
+    
+    // 約定済みポジションと未約定注文を結合
+    const allPositionsWithOrders = [...allPositions, ...openOrderPositions];
+    
     // フィルタ条件を適用
-    let filteredPositions = allPositions;
+    let filteredPositions = allPositionsWithOrders;
     
     if (exchange) {
       filteredPositions = filteredPositions.filter(pos => pos.exchange === exchange);
@@ -92,7 +163,12 @@ async function getRiskPositions(req, res) {
             createdAt: new Date(position.timestamp).toISOString(),
             
             // ポジション状態
-            status: (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active'
+            status: position.filled === false ? 'pending' : (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active',
+            
+            // 追加情報
+            filled: position.filled !== false,
+            orderStatus: position.orderStatus || null,
+            orderType: position.orderType || null
           };
         } catch (error) {
           console.error(`Error enriching position ${position.positionKey}:`, error);
@@ -107,11 +183,13 @@ async function getRiskPositions(req, res) {
     // 統計情報を計算
     const stats = {
       totalPositions: enrichedPositions.length,
+      filledPositions: enrichedPositions.filter(p => p.filled).length,
+      pendingOrders: enrichedPositions.filter(p => !p.filled).length,
       activePositions: enrichedPositions.filter(p => p.status === 'active').length,
       atRiskPositions: enrichedPositions.filter(p => p.status === 'at_risk').length,
-      totalUnrealizedPnL: enrichedPositions.reduce((sum, p) => sum + (p.unrealizedPnL || 0), 0),
-      averageHoldingTime: enrichedPositions.length > 0 ? 
-        enrichedPositions.reduce((sum, p) => sum + (p.elapsedHours || 0), 0) / enrichedPositions.length : 0
+      totalUnrealizedPnL: enrichedPositions.filter(p => p.filled).reduce((sum, p) => sum + (p.unrealizedPnL || 0), 0),
+      averageHoldingTime: enrichedPositions.filter(p => p.filled).length > 0 ? 
+        enrichedPositions.filter(p => p.filled).reduce((sum, p) => sum + (p.elapsedHours || 0), 0) / enrichedPositions.filter(p => p.filled).length : 0
     };
 
     res.json({
