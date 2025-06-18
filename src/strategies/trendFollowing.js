@@ -164,9 +164,7 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const { closes, ohlcv } = validatedData;
 
     // MACDを計算
-    console.log(`[MACD DEBUG] ${symbol}: MACD計算開始`);
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
-    console.log(`[MACD DEBUG] ${symbol}: MACD計算完了 - MACD配列長:${macdData.macd.length}, Signal配列長:${macdData.signal.length}`);
     
     // 最新と1つ前の値を取得
     const currentMACD = macdData.macd[macdData.macd.length - 1];
@@ -174,14 +172,12 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const currentSignal = macdData.signal[macdData.signal.length - 1];
     const previousSignal = macdData.signal[macdData.signal.length - 2];
     
-    console.log(`[MACD DEBUG] ${symbol}: 値取得 - currentMACD:${currentMACD}, currentSignal:${currentSignal}, previousMACD:${previousMACD}, previousSignal:${previousSignal}`);
-    
     // null値チェック - 計算に必要な値がnullの場合は戦略をスキップ
     if (currentMACD === null || currentMACD === undefined || 
         currentSignal === null || currentSignal === undefined ||
         previousMACD === null || previousMACD === undefined ||
         previousSignal === null || previousSignal === undefined) {
-      console.log(`[MACD DEBUG] ${symbol}: データ不足でスキップ - currentMACD:${currentMACD}, currentSignal:${currentSignal}, previousMACD:${previousMACD}, previousSignal:${previousSignal}`);
+      console.log(`MACD戦略データ不足: ${symbol} - データが不十分です（計算に必要な値がnull）`);
       return;
     }
     
@@ -246,13 +242,9 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
 function formatMACDLogInfo(signalResult) {
   const { currentPrice, currentMACD, currentSignal } = signalResult;
   
-  console.log(`[MACD FORMAT DEBUG] 入力値 - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
-  
   // null値を安全に処理
   const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
   const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
-  
-  console.log(`[MACD FORMAT DEBUG] 安全変換後 - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
   
   return {
     buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,

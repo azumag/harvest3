@@ -355,7 +355,9 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         });
         
         if (positionResult.reason === 'success' && positionResult.positionSize > 0) {
-          formattedAmount = parseFloat(positionResult.positionSize.toFixed(amountPrecision));
+          formattedAmount = positionResult.positionSize !== null && positionResult.positionSize !== undefined 
+                           ? parseFloat(positionResult.positionSize.toFixed(amountPrecision))
+                           : parseFloat((tradeAmount).toFixed(amountPrecision));
           isPositionSized = true;
           
           // Discord通知
@@ -638,7 +640,8 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
             timestamp: Date.now()
           });
           
-          console.log(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${estimatedPnL.toFixed(2)}`);
+          const safePnL = estimatedPnL !== null && estimatedPnL !== undefined ? estimatedPnL.toFixed(2) : 'N/A';
+          console.log(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${safePnL}`);
         }
       } catch (trackingError) {
         console.error(`[パフォーマンス追跡] エラー: ${trackingError.message}`);
@@ -721,7 +724,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
     return { success: false, reason: 'no position' };
   }
 
-  const netPosition = Math.max(_netPosition.toFixed(4), 0.0001);
+  const netPosition = Math.max(_netPosition !== null && _netPosition !== undefined ? _netPosition.toFixed(4) : 0, 0.0001);
   // 売り注文を作成
   try {
     const order = await exchange.createMarketSellOrder(symbol, netPosition);
