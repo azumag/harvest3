@@ -164,13 +164,26 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const { closes, ohlcv } = validatedData;
 
     // MACDを計算
+    console.log(`[MACD DEBUG] ${symbol}: MACD計算開始`);
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
+    console.log(`[MACD DEBUG] ${symbol}: MACD計算完了 - MACD配列長:${macdData.macd.length}, Signal配列長:${macdData.signal.length}`);
     
     // 最新と1つ前の値を取得
     const currentMACD = macdData.macd[macdData.macd.length - 1];
     const previousMACD = macdData.macd[macdData.macd.length - 2];
     const currentSignal = macdData.signal[macdData.signal.length - 1];
     const previousSignal = macdData.signal[macdData.signal.length - 2];
+    
+    console.log(`[MACD DEBUG] ${symbol}: 値取得 - currentMACD:${currentMACD}, currentSignal:${currentSignal}, previousMACD:${previousMACD}, previousSignal:${previousSignal}`);
+    
+    // null値チェック - 計算に必要な値がnullの場合は戦略をスキップ
+    if (currentMACD === null || currentMACD === undefined || 
+        currentSignal === null || currentSignal === undefined ||
+        previousMACD === null || previousMACD === undefined ||
+        previousSignal === null || previousSignal === undefined) {
+      console.log(`[MACD DEBUG] ${symbol}: データ不足でスキップ - currentMACD:${currentMACD}, currentSignal:${currentSignal}, previousMACD:${previousMACD}, previousSignal:${previousSignal}`);
+      return;
+    }
     
     // 共通化された価格取得
     const currentPrice = await getCurrentPrice(exchange, symbol, options);
@@ -233,10 +246,18 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
 function formatMACDLogInfo(signalResult) {
   const { currentPrice, currentMACD, currentSignal } = signalResult;
   
+  console.log(`[MACD FORMAT DEBUG] 入力値 - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
+  
+  // null値を安全に処理
+  const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
+  const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
+  
+  console.log(`[MACD FORMAT DEBUG] 安全変換後 - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
+  
   return {
-    buy: `MACD: ${currentMACD.toFixed(6)}, シグナル: ${currentSignal.toFixed(6)}`,
-    sell: `MACD: ${currentMACD.toFixed(6)}, シグナル: ${currentSignal.toFixed(6)}`,
-    none: `MACD: ${currentMACD.toFixed(6)}, シグナル: ${currentSignal.toFixed(6)}`,
+    buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
+    sell: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
+    none: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
     orderInfo: { macd: currentMACD, signal: currentSignal },
     result: { macd: currentMACD, signal: currentSignal, currentPrice }
   };
@@ -329,10 +350,13 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
 function formatRSILogInfo(signalResult) {
   const { currentPrice, currentRSI, oversoldThreshold, overboughtThreshold } = signalResult;
   
+  // null値を安全に処理
+  const safeRSI = currentRSI !== null && currentRSI !== undefined ? currentRSI.toFixed(2) : 'N/A';
+  
   return {
-    buy: `RSI: ${currentRSI.toFixed(2)} (閾値: ${oversoldThreshold})`,
-    sell: `RSI: ${currentRSI.toFixed(2)} (閾値: ${overboughtThreshold})`,
-    none: `RSI: ${currentRSI.toFixed(2)}`,
+    buy: `RSI: ${safeRSI} (閾値: ${oversoldThreshold})`,
+    sell: `RSI: ${safeRSI} (閾値: ${overboughtThreshold})`,
+    none: `RSI: ${safeRSI}`,
     orderInfo: { rsi: currentRSI, oversoldThreshold, overboughtThreshold },
     result: { rsi: currentRSI, currentPrice }
   };
@@ -458,10 +482,14 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
 function formatBollingerBandsLogInfo(signalResult) {
   const { currentPrice, currentUpper, currentMiddle, currentLower, bandWidth } = signalResult;
   
+  // null値を安全に処理
+  const safeUpper = currentUpper !== null && currentUpper !== undefined ? currentUpper.toFixed(2) : 'N/A';
+  const safeLower = currentLower !== null && currentLower !== undefined ? currentLower.toFixed(2) : 'N/A';
+  
   return {
-    buy: `価格: ${currentPrice}, 下限: ${currentLower.toFixed(2)}`,
-    sell: `価格: ${currentPrice}, 上限: ${currentUpper.toFixed(2)}`,
-    none: `価格: ${currentPrice}, 上限: ${currentUpper.toFixed(2)}, 下限: ${currentLower.toFixed(2)}`,
+    buy: `価格: ${currentPrice}, 下限: ${safeLower}`,
+    sell: `価格: ${currentPrice}, 上限: ${safeUpper}`,
+    none: `価格: ${currentPrice}, 上限: ${safeUpper}, 下限: ${safeLower}`,
     orderInfo: { upper: currentUpper, middle: currentMiddle, lower: currentLower, bandWidth },
     result: { price: currentPrice, upper: currentUpper, middle: currentMiddle, lower: currentLower, bandWidth }
   };
@@ -699,7 +727,7 @@ function formatMultiIndicatorLogInfo(signalResult) {
   const confirmationInfo = `確認数: ${confirmation.actualConfirmations.bullish}/${confirmation.actualConfirmations.bearish}, ` +
                           `スコア: ${confirmation.bullishScore}/${confirmation.bearishScore}`;
   
-  const marketInfo = `市場: ${marketEnvironment.description} (ADX: ${marketEnvironment.strength?.toFixed(1) || 'N/A'})`;
+  const marketInfo = `市場: ${marketEnvironment.description} (ADX: ${marketEnvironment.strength !== null && marketEnvironment.strength !== undefined ? marketEnvironment.strength.toFixed(1) : 'N/A'})`;
   
   return {
     buy: `${confirmationInfo}, ${marketInfo}, 理由: ${signalReason}`,

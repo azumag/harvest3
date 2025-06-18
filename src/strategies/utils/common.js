@@ -360,11 +360,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
           
           // Discord通知
           if (postOrderToDiscord) {
+            const safeATR = positionResult.atr !== null && positionResult.atr !== undefined ? positionResult.atr.toFixed(6) : 'N/A';
+            const safeStopLoss = positionResult.stopLossDistance !== null && positionResult.stopLossDistance !== undefined ? positionResult.stopLossDistance.toFixed(6) : 'N/A';
             const sizeInfo = `📊 [動的サイジング] ATRベース計算適用\n` +
-                           `ATR: ${positionResult.atr?.toFixed(6) || 'N/A'}\n` +
+                           `ATR: ${safeATR}\n` +
                            `リスク: ${(positionResult.adjustedRisk * 100).toFixed(2)}%\n` +
                            `計算サイズ: ${formattedAmount}\n` +
-                           `ストップロス距離: ${positionResult.stopLossDistance?.toFixed(6) || 'N/A'}`;
+                           `ストップロス距離: ${safeStopLoss}`;
             
             console.log(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
           }
@@ -963,8 +965,8 @@ function confirmMultipleIndicators(indicators, config = {}) {
     direction: isBullish ? 'bullish' : (isBearish ? 'bearish' : 'neutral'),
     bullishSignals,
     bearishSignals,
-    bullishScore: bullishScore.toFixed(2),
-    bearishScore: bearishScore.toFixed(2),
+    bullishScore: bullishScore !== null && bullishScore !== undefined ? bullishScore.toFixed(2) : '0.00',
+    bearishScore: bearishScore !== null && bearishScore !== undefined ? bearishScore.toFixed(2) : '0.00',
     requiredConfirmations,
     actualConfirmations: {
       bullish: bullishSignals.length,
