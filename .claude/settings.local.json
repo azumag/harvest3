@@ -49,8 +49,11 @@
       "Bash(/home/node/.deno/bin/deno --version)",
       "Bash(sudo apt-get:*)",
       "Bash(sudo apt-get install:*)",
-      "Bash(tmux:*)"
+      "Bash(tmux:*)",
+      "Bash(claude-discord-bot:*)"
     ],
-    "deny": []
+    "deny": [
+      "Bash(docker cp:*)"
+    ]
   }
 }
