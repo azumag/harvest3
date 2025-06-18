@@ -17,8 +17,9 @@ const {
   executeStrategyTemplate
 } = require('./utils/common');
 
-// 削除: addSignal, fetchTicker は共通関数でラップされるため不要
 const { postErrorToDiscord } = require('../common/notifications');
+
+// 削除: addSignal, fetchTicker は共通関数でラップされるため不要
 
 /**
  * 平均回帰戦略
@@ -90,36 +91,34 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
     if(!closes) return;
 
     // RSIシグナル計算
-    try {
-      const signalResult = await calculateOscillatorSignals(
-        closes,
-        period,
-        oversoldThreshold,
-        overboughtThreshold,
-        exchange,
-        symbol,
-        strategyKey,
-        options
-      );
+    const signalResult = await calculateOscillatorSignals(
+      closes,
+      period,
+      oversoldThreshold,
+      overboughtThreshold,
+      exchange,
+      symbol,
+      strategyKey,
+      options
+    );
 
-      // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
-      if (!signalResult) return;
+    // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
+    if (!signalResult) return;
 
-      // シグナル処理
-      return await handleStrategySignals(
-        exchange,
-        symbol,
-        strategyKey,
-        config,
-        marketParameters,
-        signalResult,
-        'オシレーター戦略',
-        'Oscillator',
-        formatOscillatorLogInfo,
-        options,
-        options.config
-      );
-
+    // シグナル処理
+    return await handleStrategySignals(
+      exchange,
+      symbol,
+      strategyKey,
+      config,
+      marketParameters,
+      signalResult,
+      'オシレーター戦略',
+      'Oscillator',
+      formatOscillatorLogInfo,
+      options,
+      options.config
+    );
   }, {
     exchange,
     symbol,

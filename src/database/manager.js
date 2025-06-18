@@ -1062,6 +1062,13 @@ async function getAvailableFund(exchange, symbol, options = {}) {
   // exchange オブジェクトは CCXT の インスタンスであると仮定
   try {
     const balance = await exchange.fetchBalance();
+    
+    // デバッグ: 残高情報をログ出力
+    const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
+    if (balance.free && balance.free[baseCurrency] !== undefined) {
+      console.log(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+    }
+    
     return balance;
   } catch (error) {
     console.error(`Error fetching balance for ${exchange.id}:`, error);

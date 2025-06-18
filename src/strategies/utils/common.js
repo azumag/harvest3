@@ -318,6 +318,9 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   const balance = await getAvailableFund(exchange, symbol, options); // getAvailableFund を呼び出すように変更
   const baseCurrency = symbol.split('/')[1];
   const availableFunds = balance.free[baseCurrency];
+  
+  // デバッグ: 資金計算情報をログ出力
+  console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${availableFunds}円, tradePercentage=${config.tradePercentage}, 制限後=${(availableFunds * config.tradePercentage).toFixed(2)}円`);
 
   // 損益を取得
   const realizedPnL = await getRealizedPnL(exchange, symbol, strategyKey, options); // options を渡すように変更
