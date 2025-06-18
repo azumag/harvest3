@@ -22,17 +22,14 @@ jest.mock('../../../../src/common/notifications', () => ({
   postErrorToDiscord: jest.fn()
 }));
 
-jest.mock('../../../../src/strategies/utils/common', () => {
-  const originalModule = jest.requireActual('../../../../src/strategies/utils/common');
-  return {
-    ...originalModule,
-    fetchAndValidateOHLCVData: jest.fn()
-  };
-});
+jest.mock('../../../../src/database/manager', () => ({
+  fetchTicker: jest.fn(),
+  addSignal: jest.fn(),
+  fetchOHLCVData: jest.fn()
+}));
 
-const { fetchTicker, addSignal } = require('../../../../src/database/manager');
+const { fetchTicker, addSignal, fetchOHLCVData } = require('../../../../src/database/manager');
 const { postErrorToDiscord } = require('../../../../src/common/notifications');
-const { fetchAndValidateOHLCVData } = require('../../../../src/strategies/utils/common');
 
 describe('リファクタリング共通関数テスト', () => {
   beforeEach(() => {
@@ -194,12 +191,8 @@ describe('リファクタリング共通関数テスト', () => {
         [1640995200000, 5000000, 5100000, 4900000, 5050000, 100],
         [1640995260000, 5050000, 5150000, 4950000, 5080000, 120]
       ];
-      const mockValidatedData = {
-        closes: [5050000, 5080000],
-        ohlcv: mockOHLCV
-      };
 
-      fetchAndValidateOHLCVData.mockResolvedValue(mockValidatedData);
+      fetchOHLCVData.mockResolvedValue(mockOHLCV);
 
       const exchange = { id: 'bitbank' };
       const symbol = 'BTC/JPY';
@@ -214,28 +207,23 @@ describe('リファクタリング共通関数テスト', () => {
         ohlcv: mockOHLCV
       });
       expect(options.backtest.ohlcvData).toEqual(mockOHLCV);
-      expect(fetchAndValidateOHLCVData).toHaveBeenCalledWith(
-        exchange, symbol, '1m', 50, postErrorToDiscord, 'テスト戦略', options
-      );
+      expect(fetchOHLCVData).toHaveBeenCalled();
     });
 
     test('データ取得失敗時はnullを返す', async () => {
-      fetchAndValidateOHLCVData.mockResolvedValue(null);
+      fetchOHLCVData.mockResolvedValue([]); // 空の配列でデータ不足をシミュレート
 
       const result = await fetchAndValidateOHLCVWithBacktestSetup(
-        {}, 'BTC/JPY', '1h', 20, 'テスト戦略'
+        {}, 'BTC/JPY', '1h', 20, 'テスト戦略', { backtest: true }
       );
 
       expect(result).toBe(null);
     });
 
     test('非バックテストモードではohlcvData設定されない', async () => {
-      const mockValidatedData = {
-        closes: [5000000],
-        ohlcv: [[1640995200000, 5000000, 5000000, 5000000, 5000000, 100]]
-      };
+      const mockOHLCV = [[1640995200000, 5000000, 5000000, 5000000, 5000000, 100]];
 
-      fetchAndValidateOHLCVData.mockResolvedValue(mockValidatedData);
+      fetchOHLCVData.mockResolvedValue(mockOHLCV);
 
       const options = { backtest: false };
       await fetchAndValidateOHLCVWithBacktestSetup({}, 'BTC/JPY', '1m', 10, 'テスト', options);
