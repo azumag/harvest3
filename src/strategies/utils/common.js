@@ -1095,15 +1095,18 @@ function getMarketRecommendation(environment, direction) {
  */
 async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+  console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
   
   if (postErrorToDiscord) {
-    await postErrorToDiscord(`[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+    const detailedMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}\nスタック: ${error.stack?.split('\n')[1] || 'N/A'}`;
+    await postErrorToDiscord(detailedMessage);
   }
   
   return {
     strategy: strategyId,
     symbol,
-    error: error.message
+    error: error.message,
+    stack: error.stack
   };
 }
 
