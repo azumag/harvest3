@@ -65,34 +65,6 @@ make bot-exec            # Shell into bot container
 make help                # Show all available commands
 ```
 
-## 🏛️ Architecture & Key Directories
-
-```
-/workspace/
-├── src/
-│   ├── bot.js                    # Main bot entry point
-│   ├── config.js                 # Strategy & configuration management
-│   ├── api/                      # Web API (Express routes)
-│   ├── strategies/               # Trading strategy implementations
-│   │   ├── trendFollowing.js     # MA, MACD, RSI, Bollinger Bands
-│   │   ├── meanReversion.js      # Mean reversion, oscillator strategies
-│   │   ├── arbitrage.js          # Inter-exchange arbitrage
-│   │   └── utils/               # Strategy utilities & common functions
-│   ├── database/                 # Database management (Redis/MongoDB)
-│   ├── hft/                      # High-frequency trading modules
-│   ├── common/                   # Shared utilities & helpers
-│   │   ├── utils.js             # Core utility functions
-│   │   ├── balanceChecker.js    # Balance validation
-│   │   └── notifications.js     # Discord notifications
-│   └── web/                      # Web UI (HTML/CSS/JS)
-├── scripts/                      # Operational & maintenance scripts
-├── test/                         # Test suites (Jest)
-├── docs/                         # Documentation
-├── docker-compose.yml            # Service definitions
-├── Makefile                      # Automation commands
-└── package.json                  # Dependencies & npm scripts
-```
-
 ### Key Configuration Files
 - `src/config.js` - Central strategy configuration and parameters
 - `docker-compose.yml` - Container orchestration
