@@ -69,11 +69,11 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies  
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data
+      - ./src:/usr/src/app/src:cached
+      - ./strategies:/usr/src/app/strategies:cached  
+      - ./scripts:/usr/src/app/scripts:cached
+      - ./test:/usr/src/app/test:cached
+      - ./data:/usr/src/app/data:cached
     command: npm run start
     environment:
       - REDIS_URL=redis://redis:6379
@@ -93,7 +93,7 @@ services:
     container_name: hft
     restart: unless-stopped
     volumes:
-      - ./src:/usr/src/app/src
+      - ./src:/usr/src/app/src:cached
     command: npm run start-hft
     environment:
       - REDIS_URL=redis://redis:6379
@@ -115,8 +115,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./data:/usr/src/app/data
+      - ./src:/usr/src/app/src:cached
+      - ./data:/usr/src/app/data:cached
     command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
@@ -166,8 +166,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./data:/usr/src/app/data
+      - ./src:/usr/src/app/src:cached
+      - ./data:/usr/src/app/data:cached
     depends_on:
       - redis
       - mongodb
