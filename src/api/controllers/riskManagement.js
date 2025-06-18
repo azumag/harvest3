@@ -37,8 +37,8 @@ async function getRiskPositions(req, res) {
         }
         
         const exchange = new exchangeClass({
-          apiKey: process.env[`${exchangeId.toUpperCase()}_API_KEY`],
-          secret: process.env[`${exchangeId.toUpperCase()}_SECRET_KEY`],
+          apiKey: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_KEY`],
+          secret: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_SECRET`],
           options: {
             enableUnifiedAccount: false,
             enableUnifiedMargin: false,
