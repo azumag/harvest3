@@ -196,7 +196,7 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
                          `注文ID: ${position.orderId}\n` +
                          `エントリー価格: ${position.entryPrice.toLocaleString()}円\n` +
                          `新最高値: ${currentPrice.toLocaleString()}円\n` +
-                         `現在利益: ${(profitPercent * 100).toFixed(2)}%\n` +
+                         `現在利益: ${profitPercent !== null && profitPercent !== undefined ? (profitPercent * 100).toFixed(2) : 'N/A'}%\n` +
                          `📊 トレーリングストップが追従中です`;
           
           if (postOrderToDiscord) {
@@ -540,7 +540,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
     }
     
-    const formattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
+    const formattedAmount = parseFloat(sellAmount !== null && sellAmount !== undefined ? sellAmount.toFixed(amountPrecision) : 0);
     
     console.log(`[DEBUG] Executing stop-loss sell order: ${formattedAmount} ${baseAsset}`);
     
@@ -564,7 +564,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       
       if (retryBalance > minTradeAmount) {
         const retryAmount = Math.min(retryBalance, position.amount);
-        const formattedRetryAmount = parseFloat(retryAmount.toFixed(amountPrecision));
+        const formattedRetryAmount = parseFloat(retryAmount !== null && retryAmount !== undefined ? retryAmount.toFixed(amountPrecision) : 0);
         console.log(`[INFO] Retrying stop-loss with actual balance: ${formattedRetryAmount} ${baseAsset}`);
         
         // 実際の残高で再試行
@@ -616,7 +616,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     }
     
     // 最終的な売却量を確定（再試行があった場合を考慮）
-    const finalFormattedAmount = parseFloat(sellAmount.toFixed(amountPrecision));
+    const finalFormattedAmount = parseFloat(sellAmount !== null && sellAmount !== undefined ? sellAmount.toFixed(amountPrecision) : 0);
     
     // 注文を記録
     await addOrder(exchange, symbol, strategyKey, 'sell', finalFormattedAmount, executionPrice, order.id, 'market');
@@ -626,7 +626,8 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     
     if (isPartialClose) {
       // 部分決済：残ポジション量を更新
-      position.amount = parseFloat((position.amount - finalFormattedAmount).toFixed(amountPrecision));
+      const newAmount = position.amount - finalFormattedAmount;
+      position.amount = parseFloat(newAmount !== null && newAmount !== undefined ? newAmount.toFixed(amountPrecision) : 0);
       position.updatedAt = Date.now();
       await savePosition(position.key, position);
       console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
@@ -663,7 +664,10 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     
     // 通知
     const lossPercent = executionPrice && position.entryPrice ? 
-                       ((executionPrice - position.entryPrice) / position.entryPrice * 100).toFixed(2) : 
+                       (() => {
+                         const percent = (executionPrice - position.entryPrice) / position.entryPrice * 100;
+                         return percent !== null && percent !== undefined ? percent.toFixed(2) : 'N/A';
+                       })() : 
                        'N/A';
     
     // 売り注文がキャンセルされた場合のメッセージ
@@ -1128,18 +1132,18 @@ async function generateRiskManagementReport(exchange, strategyKey, riskSettings 
       },
       drawdown: {
         daily: {
-          current: (drawdownStatus.daily.loss * 100).toFixed(2),
-          limit: (drawdownStatus.daily.limit * 100).toFixed(2),
+          current: drawdownStatus.daily.loss !== null && drawdownStatus.daily.loss !== undefined ? (drawdownStatus.daily.loss * 100).toFixed(2) : '0.00',
+          limit: drawdownStatus.daily.limit !== null && drawdownStatus.daily.limit !== undefined ? (drawdownStatus.daily.limit * 100).toFixed(2) : '0.00',
           status: drawdownStatus.daily.exceeded ? '🚨 制限超過' : '✅ 正常'
         },
         weekly: {
-          current: (drawdownStatus.weekly.loss * 100).toFixed(2),
-          limit: (drawdownStatus.weekly.limit * 100).toFixed(2),
+          current: drawdownStatus.weekly.loss !== null && drawdownStatus.weekly.loss !== undefined ? (drawdownStatus.weekly.loss * 100).toFixed(2) : '0.00',
+          limit: drawdownStatus.weekly.limit !== null && drawdownStatus.weekly.limit !== undefined ? (drawdownStatus.weekly.limit * 100).toFixed(2) : '0.00',
           status: drawdownStatus.weekly.exceeded ? '🚨 制限超過' : '✅ 正常'
         },
         monthly: {
-          current: (drawdownStatus.monthly.loss * 100).toFixed(2),
-          limit: (drawdownStatus.monthly.limit * 100).toFixed(2),
+          current: drawdownStatus.monthly.loss !== null && drawdownStatus.monthly.loss !== undefined ? (drawdownStatus.monthly.loss * 100).toFixed(2) : '0.00',
+          limit: drawdownStatus.monthly.limit !== null && drawdownStatus.monthly.limit !== undefined ? (drawdownStatus.monthly.limit * 100).toFixed(2) : '0.00',
           status: drawdownStatus.monthly.exceeded ? '🚨 制限超過' : '✅ 正常'
         }
       }

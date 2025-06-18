@@ -659,7 +659,7 @@ function formatMutualInformationLogInfo(signalResult) {
     const { threshold, analysisType, mutualInfoScores } = strategyResults;
     
     const referenceInfo = mutualInfoScores ? mutualInfoScores.map(score => 
-      `${score.symbol}:${score.mutualInfo.toFixed(3)}`
+      `${score.symbol}:${score.mutualInfo !== null && score.mutualInfo !== undefined ? score.mutualInfo.toFixed(3) : 'N/A'}`
     ).join(', ') : 'なし';
     
     const logMessage = `相互情報量: ${avgMutualInfo?.toFixed(4) || 'N/A'}, トレンド: ${currentTrend?.toFixed(6) || 'N/A'}, 分析: ${analysisType}, 参照: [${referenceInfo}] (レガシー)`;
