@@ -902,7 +902,7 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     if (availableAmount < 0) availableAmount = 0;
 
     // 精度を考慮して、最小精度以上の値を確保
-    return parseFloat(availableAmount.toFixed(amountPrecision));
+    return parseFloat(availableAmount !== null && availableAmount !== undefined ? availableAmount.toFixed(amountPrecision) : 0);
   } catch (error) {
     console.error('利用可能量の計算に失敗しました:', error);
     // エラーとなった取引所とシンボルを記録
@@ -1372,7 +1372,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   if (requiredFunds > allowedFunds || formattedAmount <= 0) {
     return {
       allowed: false,
-      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能(制限内): ${allowedFunds.toFixed(2)}`
+      reason: `資金不足のため買い注文をスキップ: ${symbol} - 必要: ${requiredFunds}, 利用可能(制限内): ${allowedFunds !== null && allowedFunds !== undefined ? allowedFunds.toFixed(2) : 'N/A'}`
     };
   }
 

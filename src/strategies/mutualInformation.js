@@ -612,7 +612,7 @@ function formatMutualInformationLogInfo(signalResult) {
     const { threshold, analysisType } = strategyResults;
     
     const correlationInfo = reliableCorrelations ? reliableCorrelations.map(score => 
-      `${score.symbol}:${score.compositeScore.toFixed(3)}`
+      `${score.symbol}:${score.compositeScore !== null && score.compositeScore !== undefined ? score.compositeScore.toFixed(3) : 'N/A'}`
     ).join(', ') : 'なし';
     
     const logMessage = `重み方向: ${weightedDirection?.toFixed(4) || 'N/A'}, 信号強度: ${signalStrength?.toFixed(4) || 'N/A'}, トレンド: ${currentTrend?.toFixed(6) || 'N/A'}, 分析: ${analysisType || 'N/A'}, 相関: [${correlationInfo}]`;
