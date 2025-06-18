@@ -7,6 +7,7 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   getTradeCurrentPosition,
   getOrderStrategyKeyByOrderId,
   updateFilledTrades,
+  fetchTicker
 } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { 
@@ -1067,6 +1068,131 @@ function getMarketRecommendation(environment, direction) {
   };
 }
 
+/**
+ * 戦略共通エラーハンドリング関数
+ * 全戦略で同じ形式のエラーハンドリングを提供
+ * @param {Error} error - 発生したエラー
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyName - 戦略名（日本語）
+ * @param {string} strategyId - 戦略ID（英語）
+ * @param {Object} exchange - 取引所オブジェクト
+ * @returns {Object} 標準化されたエラーレスポンス
+ */
+async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+  console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+  
+  if (postErrorToDiscord) {
+    await postErrorToDiscord(`[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
+  }
+  
+  return {
+    strategy: strategyId,
+    symbol,
+    error: error.message
+  };
+}
+
+/**
+ * 現在価格取得の共通関数
+ * 全戦略で統一された価格取得処理を提供
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {Object} options - オプション（バックテスト設定等）
+ * @returns {Promise<number>} 現在価格
+ */
+async function getCurrentPrice(exchange, symbol, options = {}) {
+  const ticker = await fetchTicker(exchange, symbol, options);
+  return ticker.last;
+}
+
+/**
+ * 戦略シグナル保存の共通関数
+ * 条件に応じてシグナルを保存する統一処理
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @param {string} signalType - シグナルタイプ ('buy', 'sell', 'none')
+ * @param {number} currentPrice - 現在価格
+ * @param {Object} strategyResults - 戦略計算結果
+ * @param {Object} options - オプション（バックテスト設定等）
+ */
+async function saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options = {}) {
+  if (signalType !== 'none') {
+    await addSignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
+  }
+}
+
+/**
+ * ログ情報フォーマットの基底関数
+ * 戦略固有の情報と共通フォーマットを組み合わせる
+ * @param {number} currentPrice - 現在価格
+ * @param {Object} strategySpecificInfo - 戦略固有の情報
+ * @returns {Object} 標準化されたログ情報オブジェクト
+ */
+function createLogInfoBase(currentPrice, strategySpecificInfo) {
+  return {
+    buy: strategySpecificInfo.buy || 'シグナル情報なし',
+    sell: strategySpecificInfo.sell || 'シグナル情報なし',
+    none: strategySpecificInfo.none || 'シグナルなし',
+    orderInfo: strategySpecificInfo.orderInfo || {},
+    result: { 
+      ...strategySpecificInfo.result || {}, 
+      currentPrice 
+    }
+  };
+}
+
+/**
+ * OHLCV データ取得とバックテスト設定の共通処理
+ * 戦略で頻繁に使用されるパターンを統一
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} ohlcvInterval - OHLCV間隔
+ * @param {number} period - 期間
+ * @param {string} strategyName - 戦略名
+ * @param {Object} options - オプション
+ * @returns {Object|null} 検証済みデータまたはnull
+ */
+async function fetchAndValidateOHLCVWithBacktestSetup(exchange, symbol, ohlcvInterval, period, strategyName, options = {}) {
+  const validatedData = await fetchAndValidateOHLCVData(
+    exchange,
+    symbol,
+    ohlcvInterval,
+    period,
+    postErrorToDiscord,
+    strategyName,
+    options
+  );
+  
+  if (!validatedData) return null;
+  
+  const { closes, ohlcv } = validatedData;
+  
+  // バックテストモードの場合、OHLCVデータを設定
+  if (options.backtest) {
+    options.backtest.ohlcvData = ohlcv;
+  }
+  
+  return { closes, ohlcv };
+}
+
+/**
+ * 戦略実行の標準テンプレート関数
+ * 共通のtry-catch-returnパターンを統一
+ * @param {Function} strategyLogic - 戦略の実行ロジック関数
+ * @param {Object} context - 戦略実行コンテキスト
+ * @returns {Promise<Object>} 戦略実行結果
+ */
+async function executeStrategyTemplate(strategyLogic, context) {
+  const { exchange, symbol, strategyName, strategyId } = context;
+  
+  try {
+    return await strategyLogic();
+  } catch (error) {
+    return await handleStrategyError(error, symbol, strategyName, strategyId, exchange);
+  }
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
@@ -1077,5 +1203,12 @@ module.exports = {
   initializeDynamicSizing,
   performanceTracker,
   confirmMultipleIndicators,
-  identifyMarketEnvironment
+  identifyMarketEnvironment,
+  // 新しい共通関数
+  handleStrategyError,
+  getCurrentPrice,
+  saveStrategySignal,
+  createLogInfoBase,
+  fetchAndValidateOHLCVWithBacktestSetup,
+  executeStrategyTemplate
 };
