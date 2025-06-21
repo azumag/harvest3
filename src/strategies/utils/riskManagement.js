@@ -267,11 +267,43 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       console.warn(`[WARNING] Failed to fetch actual balance: ${balanceError.message}`);
     }
     
+    // 不整合ポジションの自動削除チェック
+    const isInconsistentPosition = (netPosition === 0 && actualBalance === 0 && position.amount > 0) ||
+                                   (netPosition > 0 && actualBalance === 0 && position.amount > 0);
+    
+    if (isInconsistentPosition) {
+      console.warn(`[WARNING] Inconsistent position detected - auto cleanup: net=${netPosition}, actual=${actualBalance}, positionAmount=${position.amount}`);
+      
+      try {
+        // 不整合ポジションの自動削除
+        await closeAndCleanupPosition(position.key);
+        console.log(`[INFO] Auto-cleaned inconsistent position: ${position.key}`);
+        
+        // Discord通知
+        const cleanupMessage = `🧹 [自動修復] 不整合ポジションを削除: ${exchange.id} - ${symbol}\n` +
+                              `戦略: ${strategyKey}\n` +
+                              `理由: 実際の残高0、ネットポジション${netPosition}、記録ポジション${position.amount}\n` +
+                              `処理: ポジション記録を自動削除`;
+        
+        if (postOrderToDiscord) {
+          await postOrderToDiscord(cleanupMessage);
+        }
+        
+        return { 
+          success: true, 
+          reason: 'auto_cleanup',
+          soldAmount: 0,
+          message: `不整合ポジション ${strategyKey} を自動削除しました`
+        };
+      } catch (cleanupError) {
+        console.error(`[ERROR] Failed to auto-cleanup inconsistent position: ${cleanupError.message}`);
+      }
+    }
+    
     // 事前修復チェック（全ケースを対象）
     const shouldRepairPreemptively = netPosition < 0 || 
                                      (netPosition > 0 && actualBalance === 0) ||
                                      (netPosition === 0 && actualBalance > 0) ||
-                                     (netPosition === 0 && actualBalance === 0 && position.amount > 0) || // 孤立ポジション
                                      (Math.abs(netPosition - actualBalance) > 0.0001); // ポジションと残高の大きな差異
     
     if (shouldRepairPreemptively) {
@@ -483,17 +515,29 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           const { getTradeCurrentPosition } = require('../../database/manager');
           const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
           
-          const detailMessage = `⚠️ [リスク管理] ストップロス実行不可: ${exchange.id} - ${symbol}\n` +
-                               `理由: 売却可能量不足\n` +
-                               `戦略: ${strategyKey}\n` +
-                               `ポジション量: ${position.amount}\n` +
-                               `ネットポジション: ${netPosition}\n` +
-                               `実際の残高: ${finalActualBalance}\n` +
-                               `計算された売却可能量: ${availableToSell}\n` +
-                               `🔍 ポジション管理の同期確認が必要です`;
+          const detailMessage = `❌ [リスク管理] ストップロス失敗: ${exchange.id} - ${symbol}\n` +
+                               `エラー: The number of possessions is insufficient\n` +
+                               `詳細情報:\n` +
+                               `ポジション量: ${position.amount},\n` +
+                               `ネットポジション: ${netPosition},\n` +
+                               `実際の残高: ${finalActualBalance},\n` +
+                               `戦略: ${strategyKey}`;
           
           if (postErrorToDiscord) {
             await postErrorToDiscord(detailMessage);
+          }
+          
+          // 不整合ポジションの遅延削除を試行
+          if (netPosition === 0 && finalActualBalance === 0 && position.amount > 0) {
+            console.warn(`[WARNING] Attempting delayed cleanup of orphaned position: ${position.key}`);
+            try {
+              setTimeout(async () => {
+                await closeAndCleanupPosition(position.key);
+                console.log(`[INFO] Delayed cleanup completed for orphaned position: ${position.key}`);
+              }, 5000); // 5秒後に削除
+            } catch (delayedCleanupError) {
+              console.error(`[ERROR] Delayed cleanup failed: ${delayedCleanupError.message}`);
+            }
           }
         } catch (notificationError) {
           await errorHandler.handleError(notificationError, '詳細通知送信', false);

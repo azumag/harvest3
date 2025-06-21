@@ -1464,6 +1464,67 @@ async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
   }
 }
 
+/**
+ * MongoDBから取引履歴を取得してサマリーを再計算する
+ */
+async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKey) {
+  try {
+    const db = await connect();
+    const collection = db.collection('filled_trades');
+    
+    // 該当する全取引を取得
+    const trades = await collection.find({
+      exchangeId,
+      symbol,
+      strategyKey
+    }).toArray();
+    
+    // 集計計算
+    let netPosition = 0;
+    let buyAmount = 0;
+    let sellAmount = 0;
+    let totalBuyCost = 0;
+    let totalSellRevenue = 0;
+    
+    for (const trade of trades) {
+      if (trade.side === 'buy') {
+        buyAmount += trade.amount;
+        totalBuyCost += trade.amount * trade.price;
+        netPosition += trade.amount;
+      } else if (trade.side === 'sell') {
+        sellAmount += trade.amount;
+        totalSellRevenue += trade.amount * trade.price;
+        netPosition -= trade.amount;
+      }
+    }
+    
+    // Redisに再計算結果を保存
+    const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+    const { getClient } = require('./redisDatabase');
+    const client = getClient();
+    
+    const newSummary = {
+      netPosition: Math.max(0, netPosition), // 負の値は0に補正
+      buyAmount,
+      sellAmount,
+      totalBuyCost,
+      totalSellRevenue,
+      avgBuyPrice: buyAmount > 0 ? totalBuyCost / buyAmount : 0,
+      avgSellPrice: sellAmount > 0 ? totalSellRevenue / sellAmount : 0,
+      updatedAt: Date.now()
+    };
+    
+    await client.hSet(summaryKey, newSummary);
+    
+    console.log(`[再計算] ${exchangeId}:${symbol}:${strategyKey} - ネット=${netPosition}, 買い=${buyAmount}, 売り=${sellAmount}`);
+    
+    return newSummary;
+  } catch (error) {
+    console.error('[再計算] エラー:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   fetchOHLCVData,
   updateFilledTrades,
@@ -1508,4 +1569,5 @@ module.exports = {
   deletePendingOrderRedis,
   getAllPendingOrdersRedis,
   cleanupInvalidPendingOrders,
+  recalculateTradeSummaryFromMongoDB,
 };

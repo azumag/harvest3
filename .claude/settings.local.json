@@ -53,7 +53,8 @@
       "Bash(claude-discord-bot:*)",
       "Bash(ls:*)",
       "Bash(npm install)",
-      "Bash(npm audit:*)"
+      "Bash(npm audit:*)",
+      "Bash(make:*)"
     ],
     "deny": [
       "Bash(docker cp:*)"

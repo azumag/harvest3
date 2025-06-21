@@ -7,3 +7,4 @@ coverage/
 bin/
 tools/
 .env.bu
+.ccc.env

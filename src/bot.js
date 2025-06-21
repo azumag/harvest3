@@ -189,6 +189,25 @@ async function startBot() {
  */
 async function executeRiskManagementCheck() {
   try {
+    // 積極的なクリーンアップを実行（リスク管理前）
+    console.log('[リスク管理] 事前クリーンアップ開始...');
+    let preCleanupCount = 0;
+    
+    // 取引所別に事前クリーンアップを実行
+    for (const [exchangeId, exchangeConfig] of Object.entries(config.exchanges)) {
+      if (!exchangeConfig) continue;
+      try {
+        const cleanup = await cleanupInvalidPendingOrders(exchangeConfig.instance);
+        preCleanupCount += cleanup.deleted;
+      } catch (cleanupError) {
+        console.warn(`[リスク管理] 事前クリーンアップエラー ${exchangeId}: ${cleanupError.message}`);
+      }
+    }
+    
+    if (preCleanupCount > 0) {
+      console.log(`[リスク管理] 事前クリーンアップ完了: ${preCleanupCount}件削除`);
+    }
+    
     // 全ポジションを取得
     const allPositions = await getAllPositionsRedis();
     
@@ -199,9 +218,45 @@ async function executeRiskManagementCheck() {
     
     console.log(`[リスク管理] ${allPositions.length}個のポジションをチェック中...`);
     
+    // 不整合ポジションの事前検出と修復
+    let preRepairCount = 0;
+    const validPositions = [];
+    
+    for (const position of allPositions) {
+      try {
+        // 基本的な整合性チェック
+        if (!position.amount || position.amount <= 0 || 
+            !position.entryPrice || position.entryPrice <= 0 ||
+            !position.symbol || !position.exchangeId) {
+          console.warn(`[リスク管理] 無効なポジションデータ: ${position.key || 'unknown'}`);
+          
+          // 無効なポジションを削除
+          try {
+            const { closeAndCleanupPosition } = require('./database/redisDatabase');
+            await closeAndCleanupPosition(position.key);
+            preRepairCount++;
+          } catch (cleanupError) {
+            console.warn(`[リスク管理] 無効ポジション削除失敗: ${cleanupError.message}`);
+          }
+          continue;
+        }
+        
+        validPositions.push(position);
+      } catch (checkError) {
+        console.warn(`[リスク管理] ポジションチェックエラー: ${checkError.message}`);
+        validPositions.push(position); // エラー時は保守的に保持
+      }
+    }
+    
+    if (preRepairCount > 0) {
+      console.log(`[リスク管理] 事前修復完了: ${preRepairCount}個の無効ポジション削除`);
+    }
+    
+    console.log(`[リスク管理] 有効ポジション: ${validPositions.length}個を処理開始`);
+    
     // 取引所ごとにグループ化
     const positionsByExchange = {};
-    for (const position of allPositions) {
+    for (const position of validPositions) {
       if (!positionsByExchange[position.exchangeId]) {
         positionsByExchange[position.exchangeId] = [];
       }
@@ -275,6 +330,147 @@ async function executeRiskManagementCheck() {
               // ストップロス実行
               for (const position of allStopLossPositions) {
                 try {
+                  // 実行前の不整合チェック
+                  const baseAsset = symbol.split('/')[0];
+                  
+                  // 実際の残高を確認
+                  let actualBalance = 0;
+                  try {
+                    const balance = await exchangeInstance.fetchBalance();
+                    actualBalance = balance.total[baseAsset] || 0;
+                  } catch (balanceError) {
+                    console.warn(`[リスク管理] 残高取得失敗 ${symbol}: ${balanceError.message}`);
+                  }
+                  
+                  // より包括的な不整合チェック
+                  const { getTradeCurrentPosition } = require('./database/manager');
+                  const netPosition = await getTradeCurrentPosition(exchangeInstance, symbol, position.strategyKey);
+                  
+                  // 複数の不整合パターンをチェック
+                  const hasZeroBalance = actualBalance === 0;
+                  const hasPositiveNet = netPosition > 0;
+                  const hasPositivePosition = position.amount > 0;
+                  
+                  // パターン1: 実際残高0だが記録ポジションあり
+                  const pattern1 = hasZeroBalance && hasPositivePosition;
+                  
+                  // パターン2: 実際残高0だがネットポジションあり  
+                  const pattern2 = hasZeroBalance && hasPositiveNet;
+                  
+                  // パターン3: ネットポジション > 実際残高の大幅乖離
+                  const pattern3 = hasPositiveNet && actualBalance > 0 && (netPosition > actualBalance * 2);
+                  
+                  // パターン4: 負のネットポジション（売り>買いの異常状態）
+                  const pattern4 = netPosition < 0;
+                  
+                  if (pattern1 || pattern2 || pattern3 || pattern4) {
+                    const patternType = pattern1 ? 'position-mismatch' : 
+                                       pattern2 ? 'net-mismatch' : 
+                                       pattern3 ? 'balance-mismatch' :
+                                       'negative-net';
+                    console.warn(`[リスク管理] 不整合ポジション検出(${patternType}): ${position.strategyKey} ${symbol} - 実際残高${actualBalance}、記録ポジション${position.amount}、ネット${netPosition}`);
+                    
+                    try {
+                      // パターン別修復処理
+                      if (pattern2 || pattern4) {
+                        // ネットポジション不整合の包括的修復（正の不整合 or 負の値不整合）
+                        const isNegative = pattern4;
+                        console.log(`[リスク管理] ネットポジション包括修復開始${isNegative ? '(負の値)' : ''}: ${symbol} ${position.strategyKey}`);
+                        
+                        // 1. 該当戦略の全ポジションを取得
+                        const { getStrategyPositionsRedis, getTradeSummary, updateTradeSummary } = require('./database/redisDatabase');
+                        const allStrategyPositions = await getStrategyPositionsRedis(exchangeInstance.id, symbol, position.strategyKey);
+                        
+                        // 2. 全ポジションを削除
+                        let deletedCount = 0;
+                        for (const pos of allStrategyPositions) {
+                          try {
+                            const { closeAndCleanupPosition } = require('./database/redisDatabase');
+                            await closeAndCleanupPosition(pos.key);
+                            deletedCount++;
+                          } catch (deleteError) {
+                            console.warn(`[リスク管理] ポジション削除失敗: ${pos.key}`);
+                          }
+                        }
+                        
+                        // 3. 負のネットポジションの場合は取引履歴から再計算
+                        if (isNegative) {
+                          console.log(`[リスク管理] 負のネットポジション検出: ${netPosition} - 取引履歴から再計算開始`);
+                          
+                          try {
+                            // MongoDBから取引履歴を取得して再計算
+                            const { recalculateTradeSummaryFromMongoDB } = require('./database/manager');
+                            const newSummary = await recalculateTradeSummaryFromMongoDB(exchangeInstance.id, symbol, position.strategyKey);
+                            
+                            console.log(`[リスク管理] 再計算完了: 新ネットポジション=${newSummary.netPosition}, 買い量=${newSummary.buyAmount}, 売り量=${newSummary.sellAmount}`);
+                            
+                            // 再計算後もまだ負の場合は強制リセット
+                            if (newSummary.netPosition < 0) {
+                              console.warn(`[リスク管理] 再計算後も負のネットポジション: ${newSummary.netPosition} - 強制リセット実行`);
+                              throw new Error('再計算後も負のネットポジション');
+                            }
+                          } catch (recalcError) {
+                            console.error(`[リスク管理] 再計算失敗: ${recalcError.message} - 強制リセットに切り替え`);
+                            // 再計算失敗時は強制リセット
+                            const summaryKey = `trade_summary:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
+                            const { getClient } = require('./database/redisDatabase');
+                            const client = getClient();
+                            
+                            await client.hSet(summaryKey, {
+                              netPosition: 0,
+                              buyAmount: 0,
+                              sellAmount: 0,
+                              totalBuyCost: 0,
+                              totalSellRevenue: 0,
+                              updatedAt: Date.now()
+                            });
+                            
+                            console.log(`[リスク管理] 取引サマリー強制リセット完了: ${summaryKey}`);
+                          }
+                        } else {
+                          // 通常の強制リセット
+                          try {
+                            const summaryKey = `trade_summary:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
+                            const { getClient } = require('./database/redisDatabase');
+                            const client = getClient();
+                            
+                            await client.hSet(summaryKey, {
+                              netPosition: 0,
+                              buyAmount: 0,
+                              sellAmount: 0,
+                              totalBuyCost: 0,
+                              totalSellRevenue: 0,
+                              updatedAt: Date.now()
+                            });
+                            
+                            console.log(`[リスク管理] 取引サマリー強制リセット完了: ${summaryKey}`);
+                          } catch (resetError) {
+                            console.warn(`[リスク管理] サマリーリセット失敗: ${resetError.message}`);
+                          }
+                        }
+                        
+                        console.log(`[リスク管理] ネットポジション包括修復完了: ${deletedCount}ポジション削除、サマリーリセット`);
+                        
+                        // Discord通知
+                        await postErrorToDiscord(`🔧 [包括修復] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n削除: ${deletedCount}ポジション\nネット: ${netPosition} → 0\n実残高: ${actualBalance}`);
+                        
+                      } else {
+                        // 単一ポジション削除（従来の処理）
+                        const { closeAndCleanupPosition } = require('./database/redisDatabase');
+                        await closeAndCleanupPosition(position.key);
+                        console.log(`[リスク管理] 不整合ポジション自動削除完了: ${position.key}`);
+                        
+                        // Discord通知
+                        await postErrorToDiscord(`🧹 [自動修復] 不整合ポジション削除: ${exchangeInstance.id} - ${symbol} - ${position.strategyKey} (残高${actualBalance}、記録${position.amount})`);
+                      }
+                      
+                      totalStopLossExecuted++; // 削除も成功としてカウント
+                      continue; // 次のポジションへ
+                    } catch (cleanupError) {
+                      console.error(`[リスク管理] 不整合ポジション削除失敗: ${cleanupError.message}`);
+                    }
+                  }
+                  
                   // マーケットパラメータを取得
                   const marketParams = await getMarketParametersByExchangeSymbol(
                     { [exchangeId]: [symbol] }, 
@@ -295,9 +491,13 @@ async function executeRiskManagementCheck() {
                   
                   if (result.success) {
                     totalStopLossExecuted++;
-                    console.log(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
+                    if (result.reason === 'auto_cleanup') {
+                      console.log(`[リスク管理] 自動修復完了: ${symbol} - ${result.message}`);
+                    } else {
+                      console.log(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
+                    }
                   } else {
-                    console.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.error}`);
+                    console.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.message || result.error}`);
                   }
                 } catch (stopLossError) {
                   console.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
