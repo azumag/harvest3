@@ -98,7 +98,7 @@ async function updateTradeSummary(trade) {
 }
 
 async function getAllTradeSummaries() {
-  const keys = await client.keys(`summary:trade:*`);
+  const keys = await client.keys(`trade_summary:*`);
   const summaries = [];
 
   for (const key of keys) {
@@ -138,7 +138,7 @@ async function getAllTradeSummaries() {
 }
 
 async function getTradeSummaries(exchangeId) {
-  const keys = await client.keys(`summary:trade:${exchangeId}:*`);
+  const keys = await client.keys(`trade_summary:${exchangeId}:*`);
   const summaries = [];
 
   for (const key of keys) {
@@ -175,7 +175,7 @@ async function getTradeSummary(filters = {}) {
   
   // 全て指定されている場合は特定のサマリーを取得
   if (exchangeId && symbol && strategyKey) {
-    const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
+    const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
     const summary = await client.hGetAll(summaryKey);
     
     if (Object.keys(summary).length > 0) {
