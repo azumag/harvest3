@@ -1469,8 +1469,14 @@ async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
  */
 async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKey) {
   try {
-    const db = await connectDB();
-    const collection = db.collection('filled_trades');
+    await connectDB();
+    
+    // connectDB後にtradesCollectionが利用可能になるため、直接参照
+    const mongoDatabase = require('./mongoDatabase');
+    if (!mongoDatabase.tradesCollection) {
+      throw new Error('tradesCollection is not available after connectDB');
+    }
+    const collection = mongoDatabase.tradesCollection;
     
     // 該当する全取引を取得
     const trades = await collection.find({

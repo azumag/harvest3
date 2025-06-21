@@ -1035,8 +1035,17 @@ async function deleteStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   }
 }
 
+/**
+ * Redisクライアントを取得する関数
+ * @returns {Object} Redis クライアント
+ */
+function getClient() {
+  return client;
+}
+
 // モジュールのエクスポートに新しい関数を追加
 module.exports = {
+  getClient,
   initialize,
   setCurrentOrderPairRedis,
   getCurrentOrderPairRedis,
