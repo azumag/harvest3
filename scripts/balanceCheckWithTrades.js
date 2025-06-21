@@ -95,8 +95,10 @@ async function balanceCheckWithTrades() {
         strategies: {}
       };
       
-      // 各戦略の詳細を取得
-      for (const strategyKey of activeStrategies) {
+      // 各戦略の詳細を取得（現在の有効戦略 + UNKNOWN戦略）
+      const strategiesToCheck = [...activeStrategies, 'UNKNOWN'];
+      
+      for (const strategyKey of strategiesToCheck) {
         const summary = await getTradeSummary({
           exchangeId: exchangeId,
           symbol: symbol,
