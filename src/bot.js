@@ -13,6 +13,13 @@ const {
   getMarketParametersByExchangeSymbol,
   cleanupInvalidPendingOrders
 } = require('./database/manager');
+const { 
+  checkStopLoss, 
+  executeStopLoss, 
+  checkPositionLimits, 
+  checkDrawdown 
+} = require('./strategies/utils/riskManagement');
+const { getAllPositionsRedis } = require('./database/redisDatabase');
 const { pro } = require('ccxt');
 
 // 未約定注文クリーンアップの最終実行時間を記録
@@ -177,6 +184,127 @@ async function startBot() {
 }
 
 /**
+ * リスク管理チェックを実行する関数
+ * ストップロス、トレーリングストップ、タイムストップの処理を行う
+ */
+async function executeRiskManagementCheck() {
+  try {
+    // 全ポジションを取得
+    const allPositions = await getAllPositionsRedis();
+    
+    if (allPositions.length === 0) {
+      console.log('[リスク管理] チェック対象のポジションがありません');
+      return;
+    }
+    
+    console.log(`[リスク管理] ${allPositions.length}個のポジションをチェック中...`);
+    
+    // 取引所ごとにグループ化
+    const positionsByExchange = {};
+    for (const position of allPositions) {
+      if (!positionsByExchange[position.exchangeId]) {
+        positionsByExchange[position.exchangeId] = [];
+      }
+      positionsByExchange[position.exchangeId].push(position);
+    }
+    
+    let totalProcessed = 0;
+    let totalStopLossExecuted = 0;
+    
+    // 各取引所のポジションを処理
+    for (const [exchangeId, positions] of Object.entries(positionsByExchange)) {
+      try {
+        // 取引所インスタンスを取得
+        const exchangeConfig = config.exchanges[exchangeId];
+        if (!exchangeConfig) {
+          console.warn(`[リスク管理] 取引所設定が見つかりません: ${exchangeId}`);
+          continue;
+        }
+        
+        const exchangeInstance = exchangeConfig.instance;
+        
+        // シンボルごとにグループ化
+        const positionsBySymbol = {};
+        for (const position of positions) {
+          if (!positionsBySymbol[position.symbol]) {
+            positionsBySymbol[position.symbol] = [];
+          }
+          positionsBySymbol[position.symbol].push(position);
+        }
+        
+        // 各シンボルのポジションを処理
+        for (const [symbol, symbolPositions] of Object.entries(positionsBySymbol)) {
+          try {
+            // リスク管理設定を取得
+            const riskSettings = {
+              fixedStopLossPercent: 0.03, // 3%のストップロス（より積極的）
+              trailingStopTriggerPercent: 0.02, // 2%の利益でトレーリング発動
+              trailingStopDistancePercent: 0.02, // 最高値から2%下でトレーリング
+              timeBasedStopHours: 24, // 24時間でタイムストップ（より短縮）
+            };
+            
+            // ストップロスチェック
+            const stopLossPositions = await checkStopLoss(exchangeInstance, symbol, symbolPositions, riskSettings);
+            
+            if (stopLossPositions.length > 0) {
+              console.log(`[リスク管理] ${symbol}: ${stopLossPositions.length}個のポジションでストップロス発動`);
+              
+              // ストップロス実行
+              for (const position of stopLossPositions) {
+                try {
+                  // マーケットパラメータを取得
+                  const marketParams = await getMarketParametersByExchangeSymbol(
+                    { [exchangeId]: [symbol] }, 
+                    config,
+                    {}
+                  );
+                  const marketParameters = marketParams[exchangeId][symbol];
+                  
+                  console.log(`[リスク管理] ストップロス実行: ${position.strategyKey} ${symbol} (理由: ${position.reason})`);
+                  
+                  const result = await executeStopLoss(
+                    exchangeInstance, 
+                    symbol, 
+                    position.strategyKey, 
+                    position, 
+                    marketParameters
+                  );
+                  
+                  if (result.success) {
+                    totalStopLossExecuted++;
+                    console.log(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
+                  } else {
+                    console.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.error}`);
+                  }
+                } catch (stopLossError) {
+                  console.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
+                }
+              }
+            }
+            
+            totalProcessed += symbolPositions.length;
+          } catch (symbolError) {
+            console.error(`[リスク管理] シンボル処理エラー: ${symbol} - ${symbolError.message}`);
+          }
+        }
+      } catch (exchangeError) {
+        console.error(`[リスク管理] 取引所処理エラー: ${exchangeId} - ${exchangeError.message}`);
+      }
+    }
+    
+    console.log(`[リスク管理] 処理完了: ${totalProcessed}個処理、${totalStopLossExecuted}個のストップロス実行`);
+    
+    if (totalStopLossExecuted > 0) {
+      await postErrorToDiscord(`[リスク管理] ${totalStopLossExecuted}個のポジションでストップロスを実行しました`);
+    }
+    
+  } catch (error) {
+    console.error('[リスク管理] チェック処理エラー:', error.message);
+    throw error;
+  }
+}
+
+/**
  * 指定された戦略を実行する関数
  * @param {Object} exchange - 取引所オブジェクト
  * @param {String} symbol - 通貨ペア
@@ -249,6 +377,18 @@ setInterval(async () => {
   }
 }, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
 
+// リスク管理処理を5分ごとに実行
+setInterval(async () => {
+  try {
+    console.log('=== 定期リスク管理チェック開始 ===');
+    await executeRiskManagementCheck();
+    console.log('=== 定期リスク管理チェック完了 ===');
+  } catch (error) {
+    console.error('定期リスク管理チェックエラー:', error.message);
+    await postErrorToDiscord(`定期リスク管理チェック失敗: ${error.message}`);
+  }
+}, 5 * 60 * 1000); // 5分ごとに実行
+
 // // 初期レポートを投稿
 // postReport(exchangeBB);
 // postReport(exchangeBF);
@@ -259,6 +399,18 @@ setInterval(async () => {
 
 // ボットを起動
 startBot();
+
+// 初回リスク管理チェックを実行（起動から30秒後）
+setTimeout(async () => {
+  try {
+    console.log('=== 初回リスク管理チェック開始 ===');
+    await executeRiskManagementCheck();
+    console.log('=== 初回リスク管理チェック完了 ===');
+  } catch (error) {
+    console.error('初回リスク管理チェックエラー:', error.message);
+    await postErrorToDiscord(`初回リスク管理チェック失敗: ${error.message}`);
+  }
+}, 30000); // 30秒後に実行
 
 // アービトラージ戦略を実行
     // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
