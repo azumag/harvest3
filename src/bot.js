@@ -363,18 +363,64 @@ async function executeRiskManagementCheck() {
                   // パターン4: 負のネットポジション（売り>買いの異常状態）
                   const pattern4 = netPosition < 0;
                   
-                  if (pattern1 || pattern2 || pattern3 || pattern4) {
+                  // パターン5: 未約定注文による利用可能量ブロック
+                  const pattern5 = availableToSell <= 0 && actualBalance > position.amount && netPosition > 0;
+                  
+                  if (pattern1 || pattern2 || pattern3 || pattern4 || pattern5) {
                     const patternType = pattern1 ? 'position-mismatch' : 
                                        pattern2 ? 'net-mismatch' : 
                                        pattern3 ? 'balance-mismatch' :
-                                       'negative-net';
+                                       pattern4 ? 'negative-net' :
+                                       'pending-order-block';
                     console.warn(`[リスク管理] 不整合ポジション検出(${patternType}): ${position.strategyKey} ${symbol} - 実際残高${actualBalance}、記録ポジション${position.amount}、ネット${netPosition}`);
                     
                     try {
                       // パターン別修復処理
-                      if (pattern2 || pattern4) {
-                        // ネットポジション不整合の包括的修復（正の不整合 or 負の値不整合）
-                        const isNegative = pattern4;
+                      if (pattern5) {
+                        // 未約定注文ブロック修復
+                        console.log(`[リスク管理] 未約定注文ブロック修復開始: ${symbol} ${position.strategyKey}`);
+                        
+                        // 該当戦略の未約定注文をクリーンアップ
+                        try {
+                          const { cleanupStrategyPendingOrders } = require('./database/redisDatabase');
+                          const cleanupResult = await cleanupStrategyPendingOrders(exchangeInstance.id, symbol, position.strategyKey);
+                          
+                          console.log(`[リスク管理] 未約定注文クリーンアップ完了: ${cleanupResult.deleted}件削除`);
+                          
+                          // クリーンアップ後に再度利用可能量を計算
+                          const newAvailableAmount = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
+                          
+                          if (newAvailableAmount > 0) {
+                            availableToSell = Math.min(position.amount, newAvailableAmount);
+                            console.log(`[リスク管理] クリーンアップ後の利用可能量: ${newAvailableAmount} → 売却量: ${availableToSell}`);
+                          } else {
+                            // それでもダメな場合は実際の残高を使用
+                            availableToSell = Math.min(position.amount, actualBalance);
+                            console.log(`[リスク管理] フォールバック: 実際残高${actualBalance}を使用 → 売却量: ${availableToSell}`);
+                          }
+                          
+                          await postErrorToDiscord(`🧹 [未約定注文修復] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n削除: ${cleanupResult.deleted}件\n利用可能量: 0 → ${availableToSell}\n実残高: ${actualBalance}`);
+                          
+                        } catch (cleanupError) {
+                          console.error(`[リスク管理] 未約定注文クリーンアップ失敗: ${cleanupError.message}`);
+                          // クリーンアップ失敗時は実際の残高を強制使用
+                          availableToSell = Math.min(position.amount, actualBalance);
+                          console.log(`[リスク管理] クリーンアップ失敗、実際残高を強制使用: ${availableToSell}`);
+                        }
+                        
+                      } else if (pattern2 || pattern4) {
+                        // ⚠️ 危険: ネットポジションリセットは戦略間データ損失を引き起こす
+                        // 一時的に無効化 - 代替案として単純なポジション削除のみ実行
+                        console.warn(`[リスク管理] 危険な包括修復を無効化: ${symbol} ${position.strategyKey} (ネット=${netPosition}, 実残高=${actualBalance})`);
+                        
+                        // 単純な個別ポジション削除のみ実行（サマリーリセットなし）
+                        const { closeAndCleanupPosition } = require('./database/redisDatabase');
+                        await closeAndCleanupPosition(position.key);
+                        console.log(`[リスク管理] 単純削除完了: ${position.key}`);
+                        
+                        await postErrorToDiscord(`⚠️ [安全削除] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n個別ポジション削除のみ実行\nネット: ${netPosition} (保持)\n実残高: ${actualBalance} (保持)`);
+                        
+                        /* 危険なサマリーリセットコードを無効化 - 戦略間データ損失を防ぐため
                         console.log(`[リスク管理] ネットポジション包括修復開始${isNegative ? '(負の値)' : ''}: ${symbol} ${position.strategyKey}`);
                         
                         // 1. 該当戦略の全ポジションを取得
@@ -453,6 +499,7 @@ async function executeRiskManagementCheck() {
                         
                         // Discord通知
                         await postErrorToDiscord(`🔧 [包括修復] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n削除: ${deletedCount}ポジション\nネット: ${netPosition} → 0\n実残高: ${actualBalance}`);
+                        */ // 危険なサマリーリセットコード終了
                         
                       } else {
                         // 単一ポジション削除（従来の処理）

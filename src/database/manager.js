@@ -1509,8 +1509,14 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
     const { getClient } = require('./redisDatabase');
     const client = getClient();
     
+    // ⚠️ 危険: netPositionを0に補正すると戦略間データ損失が発生
+    // 一時的に無効化 - より安全なアプローチが必要
+    console.warn(`[再計算] 危険な操作を無効化: netPosition=${netPosition} をリセットしません`);
+    throw new Error('recalculateTradeSummaryFromMongoDB is temporarily disabled to prevent data loss');
+    
+    /* 危険なサマリーリセットを無効化
     const newSummary = {
-      netPosition: Math.max(0, netPosition), // 負の値は0に補正
+      netPosition: Math.max(0, netPosition), // 負の値は0に補正 ← これが危険
       buyAmount,
       sellAmount,
       totalBuyCost,
@@ -1525,6 +1531,7 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
     console.log(`[再計算] ${exchangeId}:${symbol}:${strategyKey} - ネット=${netPosition}, 買い=${buyAmount}, 売り=${sellAmount}`);
     
     return newSummary;
+    */
   } catch (error) {
     console.error('[再計算] エラー:', error);
     throw error;

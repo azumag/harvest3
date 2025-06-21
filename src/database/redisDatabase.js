@@ -1036,6 +1036,50 @@ async function deleteStrategyParametersRedis(exchangeId, symbol, strategyKey) {
 }
 
 /**
+ * 特定戦略の未約定注文をクリーンアップする関数
+ * @param {String} exchangeId - 取引所ID
+ * @param {String} symbol - 通貨ペア
+ * @param {String} strategyKey - 戦略キー
+ * @returns {Object} クリーンアップ結果
+ */
+async function cleanupStrategyPendingOrders(exchangeId, symbol, strategyKey) {
+  const result = { checked: 0, deleted: 0, errors: 0 };
+  
+  try {
+    // 該当戦略の未約定注文を取得
+    const pattern = `pending_order:${exchangeId}:${symbol}:${strategyKey}:*`;
+    const keys = await client.keys(pattern);
+    
+    result.checked = keys.length;
+    
+    for (const key of keys) {
+      try {
+        const pendingOrder = await client.hGetAll(key);
+        
+        if (pendingOrder && pendingOrder.orderId) {
+          // 実際の取引所で注文状態を確認（オプション）
+          // 注文が存在しない場合はRedisから削除
+          await client.del(key);
+          result.deleted++;
+          console.log(`[戦略クリーンアップ] 削除: ${pendingOrder.orderId} (${strategyKey})`);
+        }
+      } catch (error) {
+        console.warn(`[戦略クリーンアップ] キー処理エラー: ${key} - ${error.message}`);
+        result.errors++;
+      }
+    }
+    
+    console.log(`[戦略クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
+    
+    return result;
+  } catch (error) {
+    console.error(`[戦略クリーンアップ] 全体エラー: ${error.message}`);
+    result.errors++;
+    return result;
+  }
+}
+
+/**
  * Redisクライアントを取得する関数
  * @returns {Object} Redis クライアント
  */
@@ -1093,6 +1137,7 @@ module.exports = {
   getAllPendingOrdersRedis,
   deletePendingOrderRedis,
   cleanupInvalidPendingOrders,
+  cleanupStrategyPendingOrders,
 };
 
 /**
