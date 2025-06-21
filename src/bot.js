@@ -243,14 +243,37 @@ async function executeRiskManagementCheck() {
               timeBasedStopHours: 24, // 24時間でタイムストップ（より短縮）
             };
             
-            // ストップロスチェック
-            const stopLossPositions = await checkStopLoss(exchangeInstance, symbol, symbolPositions, riskSettings);
+            // 各ポジションのストップロスをチェック
+            const allStopLossPositions = [];
             
-            if (stopLossPositions.length > 0) {
-              console.log(`[リスク管理] ${symbol}: ${stopLossPositions.length}個のポジションでストップロス発動`);
+            for (const position of symbolPositions) {
+              // 現在価格を取得
+              const ticker = await fetchTicker(exchangeInstance, symbol);
+              const currentPrice = ticker.last;
+              
+              // 時間ベースのストップロスチェック
+              const positionAge = (Date.now() - position.createdAt) / (1000 * 60 * 60); // 時間単位
+              const timeBasedStop = positionAge >= riskSettings.timeBasedStopHours;
+              
+              // 価格ベースのストップロスチェック（3%損失）
+              const priceBasedStop = currentPrice <= position.entryPrice * (1 - riskSettings.fixedStopLossPercent);
+              
+              if (timeBasedStop || priceBasedStop) {
+                console.log(`[リスク管理] ストップロス対象: ${position.strategyKey} ${symbol} - 経過時間: ${positionAge.toFixed(1)}h, 理由: ${timeBasedStop ? 'time-based' : 'price-based'}`);
+                allStopLossPositions.push({
+                  ...position,
+                  reason: timeBasedStop ? 'time-based' : 'price-based',
+                  currentPrice,
+                  positionAge: positionAge.toFixed(1)
+                });
+              }
+            }
+            
+            if (allStopLossPositions.length > 0) {
+              console.log(`[リスク管理] ${symbol}: ${allStopLossPositions.length}個のポジションでストップロス発動`);
               
               // ストップロス実行
-              for (const position of stopLossPositions) {
+              for (const position of allStopLossPositions) {
                 try {
                   // マーケットパラメータを取得
                   const marketParams = await getMarketParametersByExchangeSymbol(

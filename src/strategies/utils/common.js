@@ -134,9 +134,9 @@ async function handleStrategySignals(
   }
   
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
-  console.log(`[HANDLE SIGNALS] ${symbol}: About to call formatLogInfo with signalResult:`, JSON.stringify(signalResult));
+  // console.log(っっHANDLE SIGNALS] ${symbol}: About to call formatLogInfo with signalResult:`, JSON.stringify(signalResult));
   const logInfo = formatLogInfo(signalResult);
-  console.log(`[HANDLE SIGNALS] ${symbol}: formatLogInfo completed successfully`);
+  // console.log(`[HANDLE SIGNALS] ${symbol}: formatLogInfo completed successfully`);
   
   // リスク管理: ストップロスチェック（バックテストモードではスキップ）
   if (!options.backtest && config.enableRiskManagement !== false) {
