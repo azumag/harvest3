@@ -1469,7 +1469,7 @@ async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
  */
 async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKey) {
   try {
-    const db = await connect();
+    const db = await connectDB();
     const collection = db.collection('filled_trades');
     
     // 該当する全取引を取得
