@@ -48,7 +48,7 @@ async function getTradeSummaryTimestamp(exchange, symbol) {
 
 // サマリーの更新
 async function updateTradeSummary(trade) {
-  const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+  const summaryKey = `trade_summary:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
   const now = Date.now();
 
   const exists = await client.exists(summaryKey);
