@@ -572,8 +572,8 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                                `実際の残高: ${finalActualBalance},\n` +
                                `戦略: ${strategyKey}`;
           
-          if (postErrorToDiscord) {
-            await postErrorToDiscord(detailMessage);
+          if (postOrderToDiscord) {
+            await postOrderToDiscord(detailMessage);
           }
           
           // 不整合ポジションの遅延削除を試行

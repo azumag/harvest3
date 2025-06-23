@@ -3,7 +3,7 @@
  * 完全再構築テスト用
  */
 const { config } = require('../config');
-const { postErrorToDiscord } = require('./notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { getAllPositionsRedis } = require('../database/redisDatabase');
 
 /**
@@ -125,7 +125,7 @@ async function compareBalances(exchangeId, thresholdPercent = 0) {
     // 不整合があればDiscordに通知
     if (discrepancies.length > 0) {
       const message = createDiscrepancyMessage(exchangeId, discrepancies);
-      await postErrorToDiscord(message);
+      await postOrderToDiscord(message);
       console.error(`残高不整合検出: ${exchangeId}`, discrepancies);
     } else {
       console.log(`残高チェック正常: ${exchangeId}`);
