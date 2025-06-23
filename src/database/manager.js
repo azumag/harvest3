@@ -1227,10 +1227,23 @@ async function getStrategyConfig(exchange, symbol, strategyKey, config) {
  * @returns {Object|null} - マーケットパラメータまたはnull（エラー時）
  */
 async function getMarketParameters(exchange, symbol) {
-  const market = exchange.markets[symbol];
+  // マーケットが読み込まれていない場合は読み込み
+  if (!exchange.markets) {
+    console.log(`[INFO] マーケットデータ未読み込み、読み込み中: ${exchange.id}`);
+    await exchange.loadMarkets();
+  }
+  
+  let market = exchange.markets[symbol];
   if (!market) {
-    console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
-    return null;
+    // マーケットが見つからない場合、再読み込みを試行
+    console.log(`[WARNING] ${symbol} マーケットが見つからず、再読み込み試行: ${exchange.id}`);
+    await exchange.loadMarkets();
+    market = exchange.markets[symbol];
+    
+    if (!market) {
+      console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
+      return null;
+    }
   }
   
   const minTradeAmount = (market.limits?.amount?.min || 0.0001);
