@@ -343,8 +343,26 @@ async function executeRiskManagementCheck() {
                   }
                   
                   // より包括的な不整合チェック
-                  const { getTradeCurrentPosition } = require('./database/manager');
+                  const { getTradeCurrentPosition, formattedAvailableAmount } = require('./database/manager');
                   const netPosition = await getTradeCurrentPosition(exchangeInstance, symbol, position.strategyKey);
+                  
+                  // availableToSellを安全に初期化
+                  let availableToSell = 0;
+                  try {
+                    // マーケットパラメータを取得してからavailableToSellを計算
+                    const marketParams = await getMarketParametersByExchangeSymbol(
+                      { [exchangeInstance.id]: [symbol] }, 
+                      config,
+                      {}
+                    );
+                    const marketParameters = marketParams[exchangeInstance.id][symbol];
+                    const amountPrecision = marketParameters.amountPrecision || 8;
+                    
+                    availableToSell = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
+                  } catch (availableError) {
+                    console.warn(`[DEBUG] availableToSell取得失敗 ${symbol}: ${availableError.message}`);
+                    availableToSell = 0;
+                  }
                   
                   // 複数の不整合パターンをチェック
                   const hasZeroBalance = actualBalance === 0;
