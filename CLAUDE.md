@@ -386,6 +386,14 @@ task完了後、taskの内容に従って適宜CLAUDE.mdを更新して、かな
 ### 緊急修復時の標準手順
 1. 現在のポジション状況確認: `redis-cli KEYS "position:exchange:symbol:*"`
 2. 各ポジションの詳細確認: `redis-cli HGETALL [key]`
-3. 残高整合性確認: `balanceConsistencyChecker.js`
-4. 不整合ポジションの特定と削除
-5. 修復後の再確認と Discord 通知
+3. **未約定注文確認**: `redis-cli KEYS "pending_order:exchange:symbol:*"`
+4. 残高整合性確認: `balanceConsistencyChecker.js`
+5. 不整合ポジションの特定と削除
+6. **未約定注文のキャンセルと削除** (重要)
+7. 修復後の再確認と Discord 通知
+
+### 未約定注文の適切な処理
+**重要**: ポジション削除時は対応する未約定注文も必ず処理する
+- 取引所側の注文キャンセル: `exchange.cancelOrder(orderId, symbol)`
+- Redis からの削除: `redis-cli DEL "pending_order:..."`
+- 未処理の未約定注文は availableToSell 計算に影響し、InsufficientFunds エラーの原因となる
