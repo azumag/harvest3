@@ -1,6 +1,6 @@
 // モジュールのインポート
 const { config } = require('./config');
-const { postErrorToDiscord } = require('./common/notifications');
+const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { checkAllExchangeBalances } = require('./common/balanceChecker');
 const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
@@ -436,7 +436,7 @@ async function executeRiskManagementCheck() {
                         await closeAndCleanupPosition(position.key);
                         console.log(`[リスク管理] 単純削除完了: ${position.key}`);
                         
-                        await postErrorToDiscord(`⚠️ [安全削除] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n個別ポジション削除のみ実行\nネット: ${netPosition} (保持)\n実残高: ${actualBalance} (保持)`);
+                        await postOrderToDiscord(`⚠️ [安全削除] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n個別ポジション削除のみ実行\nネット: ${netPosition} (保持)\n実残高: ${actualBalance} (保持)`);
                         
                         /* 危険なサマリーリセットコードを無効化 - 戦略間データ損失を防ぐため
                         console.log(`[リスク管理] ネットポジション包括修復開始${isNegative ? '(負の値)' : ''}: ${symbol} ${position.strategyKey}`);
@@ -526,7 +526,7 @@ async function executeRiskManagementCheck() {
                         console.log(`[リスク管理] 不整合ポジション自動削除完了: ${position.key}`);
                         
                         // Discord通知
-                        await postErrorToDiscord(`🧹 [自動修復] 不整合ポジション削除: ${exchangeInstance.id} - ${symbol} - ${position.strategyKey} (残高${actualBalance}、記録${position.amount})`);
+                        await postOrderToDiscord(`🧹 [自動修復] 不整合ポジション削除: ${exchangeInstance.id} - ${symbol} - ${position.strategyKey} (残高${actualBalance}、記録${position.amount})`);
                       }
                       
                       totalStopLossExecuted++; // 削除も成功としてカウント
