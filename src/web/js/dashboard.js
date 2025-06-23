@@ -1795,39 +1795,38 @@ function renderRiskPositions(data) {
 
   container.innerHTML = html;
   
-  // テーブルデータを準備
-  const tableData = positions.map(position => {
-    let statusBadge;
-    if (position.status === 'pending') {
-      statusBadge = '<span class="badge bg-info">未約定</span>';
-    } else if (position.status === 'active') {
-      statusBadge = '<span class="badge bg-success">アクティブ</span>';
-    } else {
-      statusBadge = '<span class="badge bg-warning">リスク状態</span>';
-    }
-
-    const pnlClass = (position.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
-    const pnlPrefix = (position.unrealizedPnL || 0) >= 0 ? '+' : '';
-
-    return [
-      position.exchange || 'N/A',
-      `<strong>${position.symbol || 'N/A'}</strong>`,
-      `<span class="badge bg-secondary">${position.strategy || 'N/A'}</span>`,
-      `${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}`,
-      `¥${(position.entryPrice || 0).toLocaleString()}`,
-      `¥${(position.currentPrice || 0).toLocaleString()}`,
-      `<span class="${pnlClass}"><strong>${pnlPrefix}${(position.unrealizedPnL || 0).toLocaleString()}円</strong><br><small>(${pnlPrefix}${(position.unrealizedPnLPercent || 0).toFixed(2)}%)</small></span>`,
-      `${(position.elapsedHours || 0).toFixed(1)}時間`,
-      statusBadge
-    ];
-  });
-
-  // テーブルにデータを挿入
+  // テーブルにデータを挿入（data-sort属性付き）
   const tbody = document.getElementById('risk-positions-tbody');
   if (tbody) {
-    tbody.innerHTML = tableData.map(row => 
-      `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
-    ).join('');
+    tbody.innerHTML = positions.map(position => {
+      let statusBadge;
+      if (position.status === 'pending') {
+        statusBadge = '<span class="badge bg-info">未約定</span>';
+      } else if (position.status === 'active') {
+        statusBadge = '<span class="badge bg-success">アクティブ</span>';
+      } else {
+        statusBadge = '<span class="badge bg-warning">リスク状態</span>';
+      }
+
+      const pnl = position.unrealizedPnL || 0;
+      const pnlPercent = position.unrealizedPnLPercent || 0;
+      const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
+      const pnlPrefix = pnl >= 0 ? '+' : '';
+
+      return `
+        <tr>
+          <td>${position.exchange || 'N/A'}</td>
+          <td><strong>${position.symbol || 'N/A'}</strong></td>
+          <td><span class="badge bg-secondary">${position.strategy || 'N/A'}</span></td>
+          <td>${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}</td>
+          <td>¥${(position.entryPrice || 0).toLocaleString()}</td>
+          <td>¥${(position.currentPrice || 0).toLocaleString()}</td>
+          <td class="${pnlClass}" data-sort="${pnl}"><strong>${pnlPrefix}${pnl.toLocaleString()}円</strong><br><small>(${pnlPrefix}${pnlPercent.toFixed(2)}%)</small></td>
+          <td>${(position.elapsedHours || 0).toFixed(1)}時間</td>
+          <td>${statusBadge}</td>
+        </tr>
+      `;
+    }).join('');
     
     // DataTableを初期化
     initializeRiskPositionsDataTable();
@@ -1849,12 +1848,6 @@ function initializeRiskPositionsDataTable() {
     order: [[6, 'desc']], // 未実現損益列で降順ソート
     pageLength: 20,
     responsive: true,
-    columnDefs: [
-      {
-        targets: [6], // 未実現損益の列
-        type: 'num-fmt'
-      }
-    ],
     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
          '<"row"<"col-sm-12"tr>>' +
          '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
@@ -2090,8 +2083,8 @@ function displayFilledPositionsTable(positions) {
     return;
   }
   
-  // テーブルデータを生成
-  const tableData = positions.map(position => {
+  // テーブルにデータを挿入（data-sort属性付き）
+  tbody.innerHTML = positions.map(position => {
     const pnl = position.unrealizedPnL || 0;
     const pnlPercent = position.unrealizedPnLPercent || 0;
     const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
@@ -2102,24 +2095,21 @@ function displayFilledPositionsTable(positions) {
                          (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
                          (Date.now() - position.timestamp) / (1000 * 60 * 60));
     
-    return [
-      `<small>${position.exchange}</small>`,
-      `<strong>${position.symbol}</strong>`,
-      `<span class="badge bg-secondary">${position.strategy}</span>`,
-      `<span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span>`,
-      `<small>${formatNumber(position.amount)}</small>`,
-      `<small>¥${formatNumber(position.entryPrice)}</small>`,
-      `<small>¥${formatNumber(position.currentPrice)}</small>`,
-      `<span class="${pnlClass}"><strong><small>¥${formatNumber(pnl)}</small></strong></span>`,
-      `<span class="${pnlClass}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></span>`,
-      `<small>${formatHours(elapsedHours)}</small>`
-    ];
-  });
-  
-  // テーブルにデータを挿入
-  tbody.innerHTML = tableData.map(row => 
-    `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
-  ).join('');
+    return `
+      <tr>
+        <td><small>${position.exchange}</small></td>
+        <td><strong>${position.symbol}</strong></td>
+        <td><span class="badge bg-secondary">${position.strategy}</span></td>
+        <td><span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span></td>
+        <td><small>${formatNumber(position.amount)}</small></td>
+        <td><small>¥${formatNumber(position.entryPrice)}</small></td>
+        <td><small>¥${formatNumber(position.currentPrice)}</small></td>
+        <td class="${pnlClass}" data-sort="${pnl}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
+        <td class="${pnlClass}" data-sort="${pnlPercent}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
+        <td><small>${formatHours(elapsedHours)}</small></td>
+      </tr>
+    `;
+  }).join('');
   
   // DataTableを初期化
   initializeFilledPositionsDataTable();
@@ -2134,12 +2124,6 @@ function initializeFilledPositionsDataTable() {
     order: [[7, 'desc']], // 未実現損益列で降順ソート
     pageLength: 15,
     responsive: true,
-    columnDefs: [
-      {
-        targets: [7, 8], // 未実現損益と損益率の列
-        type: 'num-fmt'
-      }
-    ],
     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
          '<"row"<"col-sm-12"tr>>' +
          '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
