@@ -71,34 +71,7 @@ function updatePositionsTable() {
         return;
     }
     
-    // テーブルデータを生成
-    const tableData = filteredData.map(position => {
-        const pnl = position.unrealizedPnL || 0;
-        const pnlPercent = position.unrealizedPnLPercent || 0;
-        const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
-        
-        // 約定済みポジションの場合は保有時間を使用、そうでなければ経過時間を計算
-        const holdingTime = position.holdingTimeHours || 
-                           (position.createdAt && position.closedAt ? 
-                            (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
-                            (Date.now() - position.timestamp) / (1000 * 60 * 60));
-        
-        return [
-            position.exchange,
-            `<strong>${position.symbol}</strong>`,
-            `<span class="badge bg-secondary">${position.strategy}</span>`,
-            `<span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span>`,
-            formatNumber(position.amount),
-            `¥${formatNumber(position.entryPrice)}`,
-            `¥${formatNumber(position.currentPrice)}`,
-            `<span class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></span>`,
-            `<span class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></span>`,
-            formatHours(holdingTime),
-            formatDateTime(position.closedAt || position.timestamp)
-        ];
-    });
-    
-    // テーブルにデータを挿入（data-sort属性付き）
+    // テーブルにデータを挿入
     tbody.innerHTML = filteredData.map(position => {
         const pnl = position.unrealizedPnL || 0;
         const pnlPercent = position.unrealizedPnLPercent || 0;
@@ -118,8 +91,8 @@ function updatePositionsTable() {
                 <td>${formatNumber(position.amount)}</td>
                 <td>¥${formatNumber(position.entryPrice)}</td>
                 <td>¥${formatNumber(position.currentPrice)}</td>
-                <td class="${pnlClass}" data-sort="${pnl}"><strong>¥${formatNumber(pnl)}</strong></td>
-                <td class="${pnlClass}" data-sort="${pnlPercent}"><strong>${formatPercent(pnlPercent)}%</strong></td>
+                <td class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></td>
+                <td class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></td>
                 <td>${formatHours(holdingTime)}</td>
                 <td>${formatDateTime(position.closedAt || position.timestamp)}</td>
             </tr>
@@ -139,6 +112,12 @@ function initializeDataTable() {
         order: [[7, 'desc']], // 未実現損益列（8番目の列、0ベース）で降順ソート
         pageLength: 25,
         responsive: true,
+        columnDefs: [
+            {
+                targets: [7, 8], // 未実現損益と損益率の列
+                type: 'html-num' // HTMLタグを無視して数値でソート
+            }
+        ],
         dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'

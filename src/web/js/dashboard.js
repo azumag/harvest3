@@ -1821,7 +1821,7 @@ function renderRiskPositions(data) {
           <td>${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}</td>
           <td>¥${(position.entryPrice || 0).toLocaleString()}</td>
           <td>¥${(position.currentPrice || 0).toLocaleString()}</td>
-          <td class="${pnlClass}" data-sort="${pnl}"><strong>${pnlPrefix}${pnl.toLocaleString()}円</strong><br><small>(${pnlPrefix}${pnlPercent.toFixed(2)}%)</small></td>
+          <td class="${pnlClass}" data-order="${pnl}"><strong>${pnlPrefix}${pnl.toLocaleString()}円</strong><br><small>(${pnlPrefix}${pnlPercent.toFixed(2)}%)</small></td>
           <td>${(position.elapsedHours || 0).toFixed(1)}時間</td>
           <td>${statusBadge}</td>
         </tr>
@@ -1848,6 +1848,12 @@ function initializeRiskPositionsDataTable() {
     order: [[6, 'desc']], // 未実現損益列で降順ソート
     pageLength: 20,
     responsive: true,
+    columnDefs: [
+      {
+        targets: 6, // 未実現損益の列
+        type: 'html-num' // HTMLタグを無視して数値でソート
+      }
+    ],
     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
          '<"row"<"col-sm-12"tr>>' +
          '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
@@ -2104,8 +2110,8 @@ function displayFilledPositionsTable(positions) {
         <td><small>${formatNumber(position.amount)}</small></td>
         <td><small>¥${formatNumber(position.entryPrice)}</small></td>
         <td><small>¥${formatNumber(position.currentPrice)}</small></td>
-        <td class="${pnlClass}" data-sort="${pnl}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
-        <td class="${pnlClass}" data-sort="${pnlPercent}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
+        <td class="${pnlClass}" data-order="${pnl}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
+        <td class="${pnlClass}" data-order="${pnlPercent}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
         <td><small>${formatHours(elapsedHours)}</small></td>
       </tr>
     `;
@@ -2124,6 +2130,12 @@ function initializeFilledPositionsDataTable() {
     order: [[7, 'desc']], // 未実現損益列で降順ソート
     pageLength: 15,
     responsive: true,
+    columnDefs: [
+      {
+        targets: [7, 8], // 未実現損益と損益率の列
+        type: 'html-num' // HTMLタグを無視して数値でソート
+      }
+    ],
     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
          '<"row"<"col-sm-12"tr>>' +
          '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'

@@ -211,10 +211,10 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       strategyResults
     };
     
-    console.log(`[MACD STRATEGY] ${symbol}: Creating signalResult:`, JSON.stringify(signalResult));
+    // console.log(`[MACD STRATEGY] ${symbol}: Creating signalResult:`, JSON.stringify(signalResult));
     
     // シグナル処理を共通関数で行う
-    console.log(`[MACD STRATEGY] ${symbol}: About to call handleStrategySignals`);
+    // console.log(`[MACD STRATEGY] ${symbol}: About to call handleStrategySignals`);
     return await handleStrategySignals(
       exchange,
       symbol,
@@ -244,17 +244,17 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
  */
 function formatMACDLogInfo(signalResult) {
   try {
-    console.log(`[MACD FORMAT] Entry with signalResult:`, JSON.stringify(signalResult));
+    // console.log(`[MACD FORMAT] Entry with signalResult:`, JSON.stringify(signalResult));
     
     const { currentPrice, currentMACD, currentSignal } = signalResult;
     
-    console.log(`[MACD FORMAT] Extracted values - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
+    // console.log(`[MACD FORMAT] Extracted values - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
     
     // null値を安全に処理
     const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
     const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
     
-    console.log(`[MACD FORMAT] Safe values - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
+    // console.log(`[MACD FORMAT] Safe values - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
     
     return {
       buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
