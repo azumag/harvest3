@@ -1836,11 +1836,11 @@ function renderRiskStats(data) {
   const container = document.getElementById('risk-stats-container');
   if (!container) return;
 
-  const { exchangeStats = {}, totalPositions = 0, periodPnL = 0 } = data;
+  const { exchangeStats = {}, totalPositions = 0, filledPositions = 0, pendingOrders = 0, periodPnL = 0 } = data;
 
   let html = `
     <div class="row">
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="card border-info">
           <div class="card-body">
             <h6 class="card-title">期間損益</h6>
@@ -1850,11 +1850,21 @@ function renderRiskStats(data) {
           </div>
         </div>
       </div>
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="card border-primary">
           <div class="card-body">
-            <h6 class="card-title">総ポジション数</h6>
+            <h6 class="card-title">総リスク管理ポジション数</h6>
             <h4 class="text-primary">${totalPositions}</h4>
+            <small class="text-muted">約定済: ${filledPositions} / 未約定: ${pendingOrders}</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card border-success">
+          <div class="card-body">
+            <h6 class="card-title">未売却ポジション数</h6>
+            <h4 class="text-success">${filledPositions}</h4>
+            <small class="text-muted">約定済みのみ</small>
           </div>
         </div>
       </div>

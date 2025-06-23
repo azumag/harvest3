@@ -251,8 +251,18 @@ async function getRiskStats(req, res) {
     // 期間別損益を取得
     const periodPnL = await calculatePeriodPnLRedis(period);
     
-    // 全ポジション取得
+    // 全ポジション取得（約定済み）
     const allPositions = await getAllPositionsRedis();
+    
+    // 未約定注文を取得
+    let pendingOrdersCount = 0;
+    try {
+      const pendingOrders = await getAllPendingOrdersRedis();
+      pendingOrdersCount = pendingOrders.length;
+    } catch (error) {
+      console.warn('Failed to get pending orders for risk stats:', error.message);
+      // フォールバック: 取引所APIから取得する処理は省略（パフォーマンス考慮）
+    }
     
     // 取引所別統計
     const exchangeStats = {};
@@ -286,7 +296,9 @@ async function getRiskStats(req, res) {
       period,
       periodPnL,
       exchangeStats,
-      totalPositions: allPositions.length,
+      totalPositions: allPositions.length + pendingOrdersCount, // 約定済み + 未約定注文
+      filledPositions: allPositions.length, // 約定済みのみ
+      pendingOrders: pendingOrdersCount, // 未約定注文のみ
       timestamp: Date.now()
     });
   } catch (error) {
