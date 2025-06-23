@@ -105,9 +105,9 @@ async function getAllTradeSummaries() {
     const summary = await client.hGetAll(key);
     if (Object.keys(summary).length > 0) {
       const keyParts = key.split(':');
-      const exchangeId = keyParts[2];
-      const symbol = keyParts[3];
-      const strategyKey = keyParts[4];
+      const exchangeId = keyParts[1];
+      const symbol = keyParts[2];
+      const strategyKey = keyParts[3];
       
       // undefinedやnullの値を持つキーをスキップ
       if (exchangeId === 'undefined' || !exchangeId || 
@@ -146,8 +146,8 @@ async function getTradeSummaries(exchangeId) {
     if (Object.keys(summary).length > 0) {
       summaries.push({
         exchangeId,
-        symbol: key.split(':')[3],
-        strategyKey: key.split(':')[4],
+        symbol: key.split(':')[2],
+        strategyKey: key.split(':')[3],
         buyAmount: parseFloat(summary.buyAmount || 0),
         sellAmount: parseFloat(summary.sellAmount || 0),
         totalBuyCost: parseFloat(summary.totalBuyCost || 0),
