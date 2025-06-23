@@ -548,6 +548,13 @@ async function executeRiskManagementCheck() {
                   }
                 } catch (stopLossError) {
                   console.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
+                  console.error(`[DEBUG] ストップロスエラー詳細:`, stopLossError.stack);
+                  console.error(`[DEBUG] エラー発生時のパラメータ:`, {
+                    symbol,
+                    strategyKey: position.strategyKey,
+                    positionAmount: position.amount,
+                    marketParametersExists: !!marketParameters
+                  });
                 }
               }
             }
