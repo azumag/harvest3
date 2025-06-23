@@ -317,7 +317,34 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
     }
 
-    let availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+    let availableToSell = 0;
+    
+    // formattedAvailableAmount呼び出しを保護
+    try {
+      availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+    } catch (formattedError) {
+      console.error(`[ERROR] Failed to get formatted available amount: ${formattedError.message}`);
+      
+      // Discord通知
+      const errorMessage = `🚨 [リスク管理] 売却可能量取得エラー: ${exchange.id} - ${symbol}\n` +
+                          `戦略: ${strategyKey}\n` +
+                          `エラー: ${formattedError.message}\n` +
+                          `ポジション量: ${position.amount}\n` +
+                          `実際の残高: ${actualBalance}`;
+      
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(errorMessage);
+      }
+      
+      // 実際の残高を使用してフォールバック
+      if (actualBalance > 0) {
+        availableToSell = Math.min(position.amount, actualBalance);
+        console.log(`[WARNING] Fallback to actual balance after error: ${availableToSell} ${baseAsset}`);
+      } else {
+        // 重大エラーとして例外を発生
+        throw new Error(`Failed to determine available amount for stop-loss: ${formattedError.message}`);
+      }
+    }
     
     // 実際の残高がある場合の特別処理
     if (availableToSell <= 0 && actualBalance > 0) {
@@ -741,10 +768,18 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     };
   } catch (error) {
     console.error(`ストップロス注文の実行に失敗: ${symbol} - ${error.message}`);
+    console.error(`エラースタック: ${error.stack}`); // スタックトレースを追加
     
     // 詳細なエラー情報を収集
     let errorDetails = '';
+    let availableToSellInfo = 'undefined';
+    
     try {
+      // availableToSellの値を安全に取得
+      if (typeof availableToSell !== 'undefined') {
+        availableToSellInfo = availableToSell;
+      }
+      
       const { getTradeCurrentPosition } = require('../../database/manager');
       const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
       const balance = await exchange.fetchBalance();
@@ -754,15 +789,26 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                     `- ポジション量: ${position.amount}\n` +
                     `- ネットポジション: ${netPosition}\n` +
                     `- 実際の残高: ${actualBalance}\n` +
-                    `- 戦略: ${strategyKey}`;
+                    `- 戦略: ${strategyKey}\n` +
+                    `- availableToSell: ${availableToSellInfo}\n` +
+                    `- エラー種別: ${error.name || 'Unknown'}\n` +
+                    `- スタック: ${error.stack ? error.stack.split('\n')[0] : 'N/A'}`;
     } catch (detailError) {
       errorDetails = `\n詳細情報の取得に失敗: ${detailError.message}`;
     }
     
+    // Discord通知（エラーレベルを強調）
+    const discordMessage = `🚨 **[リスク管理] ストップロス重大エラー**\n` +
+                          `取引所: ${exchange.id}\n` +
+                          `通貨: ${symbol}\n` +
+                          `エラー: ${error.message}${errorDetails}`;
+    
     if (postErrorToDiscord) {
-      await postErrorToDiscord(`[リスク管理] ストップロス失敗: ${exchange.id} - ${symbol}\nエラー: ${error.message}${errorDetails}`);
+      await postErrorToDiscord(discordMessage);
     }
-    return { success: false, error, details: errorDetails };
+    
+    // エラーを再スローして上位でも処理できるようにする
+    throw error;
   }
 }
 
