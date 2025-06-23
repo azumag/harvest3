@@ -53,7 +53,7 @@ async function rebuildFromMongoTrades() {
       try {
         const exchange = trade.exchange || 'bitbank';
         const symbol = trade.symbol;
-        const strategy = trade.strategyKey || 'UNKNOWN';
+        const strategy = trade.strategyKey || 'OUTSIDE';
         const side = trade.side;
         const amount = parseFloat(trade.amount) || 0;
         const value = parseFloat(trade.value) || 0;
