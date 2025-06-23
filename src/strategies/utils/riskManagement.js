@@ -237,15 +237,17 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
  * @returns {Object} - 実行結果
  */
 async function executeStopLoss(exchange, symbol, strategyKey, position, marketParameters) {
-  const { amountPrecision, minTradeAmount } = marketParameters;
-  
-  // シンボルからベースアセットを抽出（エラーハンドリングでも使用するため外に移動）
-  const baseAsset = symbol.split('/')[0];
-  
-  // availableToSellを関数スコープ最上位で初期化（エラーハンドリングでも参照するため）
+  // 最優先で変数を初期化（エラーハンドリングでも参照するため）
   let availableToSell = 0;
+  let baseAsset;
+  
+  console.log(`[DEBUG] executeStopLoss開始: ${symbol}, strategy: ${strategyKey}, availableToSell初期値: ${availableToSell}`);
   
   try {
+    const { amountPrecision, minTradeAmount } = marketParameters;
+    
+    // シンボルからベースアセットを抽出（エラーハンドリングでも使用するため外に移動）
+    baseAsset = symbol.split('/')[0];
     
     // formattedAvailableAmountを使用して利用可能量を取得
     const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades } = require('../../database/manager');
@@ -789,17 +791,18 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   } catch (error) {
     console.error(`ストップロス注文の実行に失敗: ${symbol} - ${error.message}`);
     console.error(`エラースタック: ${error.stack}`); // スタックトレースを追加
+    console.error(`エラー発生時のavailableToSell状態: ${typeof availableToSell} / ${availableToSell}`);
     
     // 詳細なエラー情報を収集
     let errorDetails = '';
     let availableToSellInfo = 'undefined';
     
     try {
-      // availableToSellの値を安全に取得
-      if (typeof availableToSell !== 'undefined' && availableToSell !== null) {
-        availableToSellInfo = availableToSell;
+      // availableToSellの値を安全に取得（より堅牢なチェック）
+      if (typeof availableToSell !== 'undefined' && availableToSell !== null && !isNaN(availableToSell)) {
+        availableToSellInfo = availableToSell.toString();
       } else {
-        availableToSellInfo = 'undefined';
+        availableToSellInfo = 'undefined_or_invalid';
       }
       
       const { getTradeCurrentPosition } = require('../../database/manager');
