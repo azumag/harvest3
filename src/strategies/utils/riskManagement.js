@@ -242,6 +242,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   // シンボルからベースアセットを抽出（エラーハンドリングでも使用するため外に移動）
   const baseAsset = symbol.split('/')[0];
   
+  // availableToSellを関数スコープ最上位で初期化（エラーハンドリングでも参照するため）
+  let availableToSell = 0;
+  
   try {
     
     // formattedAvailableAmountを使用して利用可能量を取得
@@ -317,7 +320,6 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       }
     }
 
-    let availableToSell = 0;
     
     // formattedAvailableAmount呼び出しを保護
     try {
@@ -396,8 +398,16 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             ordersCanceled = true; // 注文がキャンセルされたことを記録
             // 短時間待機してから再計算（注文キャンセルが反映されるまで）
             await new Promise(resolve => setTimeout(resolve, 1000));
-            availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
-            console.log(`[INFO] After canceling orders, available to sell: ${availableToSell}`);
+            
+            try {
+              availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+              console.log(`[INFO] After canceling orders, available to sell: ${availableToSell}`);
+            } catch (retryError) {
+              console.error(`[ERROR] Failed to get available amount after order cancellation: ${retryError.message}`);
+              // フォールバック: キャンセルした分だけ利用可能とする
+              availableToSell = Math.min(position.amount, canceledAmount);
+              console.log(`[INFO] Fallback after cancellation: using canceled amount ${availableToSell}`);
+            }
           }
         }
         
@@ -433,13 +443,23 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
               
               // 修復後に再計算
               const repairedNetPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-              const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+              console.log(`[INFO] After repair - Net position: ${repairedNetPosition}`);
               
-              console.log(`[INFO] After repair - Net position: ${repairedNetPosition}, Available: ${repairedAvailable}`);
-              
-              if (repairedAvailable > 0) {
-                availableToSell = Math.min(position.amount, repairedAvailable);
-                console.log(`[INFO] Using repaired available amount: ${availableToSell}`);
+              try {
+                const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
+                console.log(`[INFO] After repair - Available: ${repairedAvailable}`);
+                
+                if (repairedAvailable > 0) {
+                  availableToSell = Math.min(position.amount, repairedAvailable);
+                  console.log(`[INFO] Using repaired available amount: ${availableToSell}`);
+                }
+              } catch (repairedError) {
+                console.error(`[ERROR] Failed to get available amount after repair: ${repairedError.message}`);
+                // 修復後もfailed場合は実際の残高を使用
+                if (actualBalance > 0) {
+                  availableToSell = Math.min(position.amount, actualBalance);
+                  console.log(`[INFO] Fallback to actual balance after repair calculation failure: ${availableToSell}`);
+                }
               }
             } catch (repairError) {
               console.warn(`[WARNING] Position repair failed: ${repairError.message}`);
@@ -776,8 +796,10 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     
     try {
       // availableToSellの値を安全に取得
-      if (typeof availableToSell !== 'undefined') {
+      if (typeof availableToSell !== 'undefined' && availableToSell !== null) {
         availableToSellInfo = availableToSell;
+      } else {
+        availableToSellInfo = 'undefined';
       }
       
       const { getTradeCurrentPosition } = require('../../database/manager');
