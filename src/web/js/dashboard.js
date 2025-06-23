@@ -5,6 +5,8 @@
 // グローバル変数
 let currentOrderPairs = []; // 注文ペアデータを保持
 let currentSymbolFilter = 'all'; // 選択中の銘柄フィルタ
+let filledPositionsDataTable = null; // 未売却ポジションDataTable
+let riskPositionsDataTable = null; // リスク管理ポジションDataTable
 
 /**
  * 初期化関数
@@ -1771,7 +1773,7 @@ function renderRiskPositions(data) {
   // ポジション一覧テーブル
   html += `
     <div class="table-responsive">
-      <table class="table table-striped table-hover">
+      <table class="table table-striped table-hover" id="risk-positions-table">
         <thead class="table-dark">
           <tr>
             <th>取引所</th>
@@ -1785,10 +1787,16 @@ function renderRiskPositions(data) {
             <th>ステータス</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="risk-positions-tbody">
+        </tbody>
+      </table>
+    </div>
   `;
 
-  positions.forEach(position => {
+  container.innerHTML = html;
+  
+  // テーブルデータを準備
+  const tableData = positions.map(position => {
     let statusBadge;
     if (position.status === 'pending') {
       statusBadge = '<span class="badge bg-info">未約定</span>';
@@ -1801,31 +1809,56 @@ function renderRiskPositions(data) {
     const pnlClass = (position.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
     const pnlPrefix = (position.unrealizedPnL || 0) >= 0 ? '+' : '';
 
-    html += `
-      <tr>
-        <td>${position.exchange || 'N/A'}</td>
-        <td><strong>${position.symbol || 'N/A'}</strong></td>
-        <td><span class="badge bg-secondary">${position.strategy || 'N/A'}</span></td>
-        <td>${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}</td>
-        <td>¥${(position.entryPrice || 0).toLocaleString()}</td>
-        <td>¥${(position.currentPrice || 0).toLocaleString()}</td>
-        <td class="${pnlClass}">
-          <strong>${pnlPrefix}${(position.unrealizedPnL || 0).toLocaleString()}円</strong><br>
-          <small>(${pnlPrefix}${(position.unrealizedPnLPercent || 0).toFixed(2)}%)</small>
-        </td>
-        <td>${(position.elapsedHours || 0).toFixed(1)}時間</td>
-        <td>${statusBadge}</td>
-      </tr>
-    `;
+    return [
+      position.exchange || 'N/A',
+      `<strong>${position.symbol || 'N/A'}</strong>`,
+      `<span class="badge bg-secondary">${position.strategy || 'N/A'}</span>`,
+      `${formatAmount(position.amount || 0, 6)} ${extractBaseAsset(position.symbol || '')}`,
+      `¥${(position.entryPrice || 0).toLocaleString()}`,
+      `¥${(position.currentPrice || 0).toLocaleString()}`,
+      `<span class="${pnlClass}"><strong>${pnlPrefix}${(position.unrealizedPnL || 0).toLocaleString()}円</strong><br><small>(${pnlPrefix}${(position.unrealizedPnLPercent || 0).toFixed(2)}%)</small></span>`,
+      `${(position.elapsedHours || 0).toFixed(1)}時間`,
+      statusBadge
+    ];
   });
 
-  html += `
-        </tbody>
-      </table>
-    </div>
-  `;
+  // テーブルにデータを挿入
+  const tbody = document.getElementById('risk-positions-tbody');
+  if (tbody) {
+    tbody.innerHTML = tableData.map(row => 
+      `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
+    ).join('');
+    
+    // DataTableを初期化
+    initializeRiskPositionsDataTable();
+  }
+}
 
-  container.innerHTML = html;
+// リスク管理ポジションDataTableの初期化
+function initializeRiskPositionsDataTable() {
+  // DataTableが既に初期化されている場合は破棄
+  if (riskPositionsDataTable) {
+    riskPositionsDataTable.destroy();
+    riskPositionsDataTable = null;
+  }
+  
+  riskPositionsDataTable = $('#risk-positions-table').DataTable({
+    language: {
+      url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/ja.json'
+    },
+    order: [[6, 'desc']], // 未実現損益列で降順ソート
+    pageLength: 20,
+    responsive: true,
+    columnDefs: [
+      {
+        targets: [6], // 未実現損益の列
+        type: 'num-fmt'
+      }
+    ],
+    dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+         '<"row"<"col-sm-12"tr>>' +
+         '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
+  });
 }
 
 /**
@@ -2036,6 +2069,12 @@ function displayFilledPositionsStats(stats) {
  * 未売却ポジションテーブルの表示
  */
 function displayFilledPositionsTable(positions) {
+  // DataTableが初期化されている場合は破棄
+  if (filledPositionsDataTable) {
+    filledPositionsDataTable.destroy();
+    filledPositionsDataTable = null;
+  }
+  
   const tbody = document.getElementById('filled-positions-tbody');
   
   if (!tbody) return;
@@ -2051,7 +2090,8 @@ function displayFilledPositionsTable(positions) {
     return;
   }
   
-  tbody.innerHTML = positions.map(position => {
+  // テーブルデータを生成
+  const tableData = positions.map(position => {
     const pnl = position.unrealizedPnL || 0;
     const pnlPercent = position.unrealizedPnLPercent || 0;
     const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
@@ -2062,21 +2102,48 @@ function displayFilledPositionsTable(positions) {
                          (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
                          (Date.now() - position.timestamp) / (1000 * 60 * 60));
     
-    return `
-      <tr>
-        <td><small>${position.exchange}</small></td>
-        <td><strong>${position.symbol}</strong></td>
-        <td><span class="badge bg-secondary">${position.strategy}</span></td>
-        <td><span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span></td>
-        <td><small>${formatNumber(position.amount)}</small></td>
-        <td><small>¥${formatNumber(position.entryPrice)}</small></td>
-        <td><small>¥${formatNumber(position.currentPrice)}</small></td>
-        <td class="${pnlClass}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
-        <td class="${pnlClass}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
-        <td><small>${formatHours(elapsedHours)}</small></td>
-      </tr>
-    `;
-  }).join('');
+    return [
+      `<small>${position.exchange}</small>`,
+      `<strong>${position.symbol}</strong>`,
+      `<span class="badge bg-secondary">${position.strategy}</span>`,
+      `<span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span>`,
+      `<small>${formatNumber(position.amount)}</small>`,
+      `<small>¥${formatNumber(position.entryPrice)}</small>`,
+      `<small>¥${formatNumber(position.currentPrice)}</small>`,
+      `<span class="${pnlClass}"><strong><small>¥${formatNumber(pnl)}</small></strong></span>`,
+      `<span class="${pnlClass}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></span>`,
+      `<small>${formatHours(elapsedHours)}</small>`
+    ];
+  });
+  
+  // テーブルにデータを挿入
+  tbody.innerHTML = tableData.map(row => 
+    `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
+  ).join('');
+  
+  // DataTableを初期化
+  initializeFilledPositionsDataTable();
+}
+
+// 未売却ポジションDataTableの初期化
+function initializeFilledPositionsDataTable() {
+  filledPositionsDataTable = $('#filled-positions-table').DataTable({
+    language: {
+      url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/ja.json'
+    },
+    order: [[7, 'desc']], // 未実現損益列で降順ソート
+    pageLength: 15,
+    responsive: true,
+    columnDefs: [
+      {
+        targets: [7, 8], // 未実現損益と損益率の列
+        type: 'num-fmt'
+      }
+    ],
+    dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+         '<"row"<"col-sm-12"tr>>' +
+         '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
+  });
 }
 
 /**

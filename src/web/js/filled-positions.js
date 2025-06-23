@@ -5,6 +5,7 @@
 
 let filledPositionsData = [];
 let filteredData = [];
+let dataTable = null; // DataTableインスタンス
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
@@ -51,6 +52,12 @@ function updateStatistics(stats) {
 
 // ポジションテーブルの更新
 function updatePositionsTable() {
+    // DataTableが初期化されている場合は破棄
+    if (dataTable) {
+        dataTable.destroy();
+        dataTable = null;
+    }
+    
     const tbody = document.getElementById('positions-tbody');
     
     if (filteredData.length === 0) {
@@ -64,36 +71,61 @@ function updatePositionsTable() {
         return;
     }
     
-    tbody.innerHTML = filteredData.map(position => {
+    // テーブルデータを生成
+    const tableData = filteredData.map(position => {
         const pnl = position.unrealizedPnL || 0;
         const pnlPercent = position.unrealizedPnLPercent || 0;
         const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
-        const sideClass = position.side === 'buy' ? 'text-primary' : 'text-warning';
         
         // 約定済みポジションの場合は保有時間を使用、そうでなければ経過時間を計算
-        console.log('Debug position:', position.symbol, 'holdingTimeHours:', position.holdingTimeHours, 'createdAt:', position.createdAt, 'closedAt:', position.closedAt);
         const holdingTime = position.holdingTimeHours || 
                            (position.createdAt && position.closedAt ? 
                             (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
                             (Date.now() - position.timestamp) / (1000 * 60 * 60));
-        console.log('Debug calculated holdingTime:', holdingTime);
         
-        return `
-            <tr>
-                <td>${position.exchange}</td>
-                <td><strong>${position.symbol}</strong></td>
-                <td><span class="badge bg-secondary">${position.strategy}</span></td>
-                <td><span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span></td>
-                <td>${formatNumber(position.amount)}</td>
-                <td>¥${formatNumber(position.entryPrice)}</td>
-                <td>¥${formatNumber(position.currentPrice)}</td>
-                <td class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></td>
-                <td class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></td>
-                <td>${formatHours(holdingTime)}</td>
-                <td>${formatDateTime(position.closedAt || position.timestamp)}</td>
-            </tr>
-        `;
-    }).join('');
+        return [
+            position.exchange,
+            `<strong>${position.symbol}</strong>`,
+            `<span class="badge bg-secondary">${position.strategy}</span>`,
+            `<span class="badge bg-${position.side === 'buy' ? 'primary' : 'warning'}">${position.side.toUpperCase()}</span>`,
+            formatNumber(position.amount),
+            `¥${formatNumber(position.entryPrice)}`,
+            `¥${formatNumber(position.currentPrice)}`,
+            `<span class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></span>`,
+            `<span class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></span>`,
+            formatHours(holdingTime),
+            formatDateTime(position.closedAt || position.timestamp)
+        ];
+    });
+    
+    // テーブルにデータを挿入
+    tbody.innerHTML = tableData.map(row => 
+        `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
+    ).join('');
+    
+    // DataTableを初期化
+    initializeDataTable();
+}
+
+// DataTableの初期化
+function initializeDataTable() {
+    dataTable = $('#positions-table').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/ja.json'
+        },
+        order: [[7, 'desc']], // 未実現損益列（8番目の列、0ベース）で降順ソート
+        pageLength: 25,
+        responsive: true,
+        columnDefs: [
+            {
+                targets: [7, 8], // 未実現損益と損益率の列
+                type: 'num-fmt' // 数値として認識
+            }
+        ],
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>'
+    });
 }
 
 // フィルター用のドロップダウンを設定
