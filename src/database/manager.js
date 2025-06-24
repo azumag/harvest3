@@ -676,6 +676,21 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
               console.warn(`[約定処理] 未約定注文削除エラー: ${_trade.orderId} - ${deleteError.message}`);
             }
           }
+          
+          // 約定時に対応するポジションをクローズ
+          try {
+            const positionKey = `${_trade.exchange}:${_trade.symbol}:${_trade.strategy}:${_trade.orderId}`;
+            const { closeAndCleanupPosition } = require('./redisDatabase');
+            const closeResult = await closeAndCleanupPosition(positionKey, { saveHistory: true });
+            
+            if (closeResult.success && !isBacktest) {
+              console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
+            }
+          } catch (closeError) {
+            if (!isBacktest) {
+              console.warn(`[約定処理] ポジションクローズエラー: ${_trade.orderId} - ${closeError.message}`);
+            }
+          }
         }
         
         successCount++;
