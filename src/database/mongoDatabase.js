@@ -484,7 +484,16 @@ function setupGracefulShutdown() {
 async function saveTickerMongoDB(tickerData) {
   await connectDB();
   try {
-    const result = await module.exports.tickersCollection.insertOne(tickerData);
+    // 重複キーエラー防止のためreplaceOneとupsertを使用
+    const result = await module.exports.tickersCollection.replaceOne(
+      { 
+        exchange: tickerData.exchange,
+        symbol: tickerData.symbol,
+        timestamp: tickerData.timestamp
+      },
+      tickerData,
+      { upsert: true }
+    );
     
     // 一週間分の分速データの上限（7日 × 1440分）
     const MAX_TICKER_RECORDS = 7 * 1440;
@@ -517,7 +526,13 @@ async function saveTickerMongoDB(tickerData) {
     
     return result;
   } catch (error) {
-    // console.error('Error adding ticker:', error);
+    // 重複キーエラーの場合は警告ログのみで処理継続
+    if (error.code === 11000) {
+      console.warn(`[Ticker保存] 重複データをスキップ: ${tickerData.exchange}:${tickerData.symbol} timestamp=${tickerData.timestamp}`);
+      return { acknowledged: true, upsertedCount: 0, matchedCount: 1 };
+    }
+    // その他のエラーは再スロー
+    console.error('Error saving ticker:', error);
     throw error;
   }
 }
