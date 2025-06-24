@@ -105,7 +105,7 @@ const config = {
           urgencyLevel: 'low'
         },
         ioc: {
-          enabled: true,
+          enabled: false, // bitbankはIOCをサポートしていないため無効
           urgencyLevel: 'medium'
         },
         iceberg: {

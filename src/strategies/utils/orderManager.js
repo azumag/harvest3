@@ -12,7 +12,8 @@ const { sleep } = require('../../common/utils');
  */
 const ORDER_TYPES = {
   LIMIT_POST_ONLY: 'post_only',     // 現在の方式（メイカー限定）
-  LIMIT_IOC: 'ioc',                 // Immediate or Cancel
+  LIMIT: 'limit',                   // 通常のリミット注文
+  LIMIT_IOC: 'ioc',                 // Immediate or Cancel（bitbankでは非サポート）
   MARKET: 'market',                 // 成行注文
   STOP_LIMIT: 'stop_limit',         // ストップ限指
   ICEBERG: 'iceberg'                // 氷山注文（大口分割）
@@ -55,7 +56,8 @@ class AdvancedOrderManager {
       if (urgency === URGENCY_LEVELS.HIGH && liquidityLevel > 0.6) {
         return ORDER_TYPES.MARKET;
       } else if (urgency === URGENCY_LEVELS.MEDIUM && liquidityLevel > 0.4) {
-        return ORDER_TYPES.LIMIT_IOC;
+        // bitbankはIOCをサポートしていないため、通常のlimit注文を使用
+        return ORDER_TYPES.LIMIT;
       } else if (amount > this.getLargeOrderThreshold(symbol)) {
         return ORDER_TYPES.ICEBERG;
       }
@@ -284,8 +286,12 @@ class AdvancedOrderManager {
       case ORDER_TYPES.LIMIT_POST_ONLY:
         params.postOnly = true;
         break;
+      case ORDER_TYPES.LIMIT:
+        // 通常のリミット注文（bitbank標準）
+        break;
       case ORDER_TYPES.LIMIT_IOC:
-        params.timeInForce = 'IOC';
+        // bitbankではIOCをサポートしていないため、通常のlimit注文として処理
+        console.warn('bitbankはIOCをサポートしていません。通常のlimit注文を使用します。');
         break;
       case ORDER_TYPES.STOP_LIMIT:
         if (options.stopPrice) {
