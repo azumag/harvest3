@@ -163,6 +163,82 @@ const config = {
         defaultTradeCount: 10,          // 直近10取引
         cacheTimeout: 60000
       }
+    },
+    
+    // 統合動的urgencyシステム（Ultra-Advanced）
+    unifiedUrgencySystem: {
+      enabled: true,
+      mode: 'production', // development, testing, production
+      
+      // フォールバック戦略
+      fallbackStrategy: 'rule_based', // rule_based, static, conservative
+      maxCalculationTime: 5000, // 5秒タイムアウト
+      enableAutoOptimization: true,
+      enableRealTimeAdaptation: true,
+      optimizationInterval: 24 * 60 * 60 * 1000, // 24時間
+      adaptationThreshold: 0.05, // 5%改善閾値
+      
+      // 基本動的urgency設定（フォールバック用）
+      dynamic: {
+        enabled: true,
+        weights: {
+          volatility: 0.3,
+          portfolioRisk: 0.25,
+          timezone: 0.2,
+          performance: 0.25
+        },
+        adjustmentLimits: {
+          min: -0.5,
+          max: 0.8
+        },
+        cacheDuration: 60000
+      },
+      
+      // パフォーマンス監視設定
+      monitoring: {
+        enabled: true,
+        measurementWindow: 86400000, // 24時間
+        minSampleSize: 10,
+        cacheDuration: 60000
+      },
+      
+      // 機械学習urgency予測設定
+      ml: {
+        enabled: false, // Phase 1では無効（将来的に有効化）
+        modelType: 'adaptive_ensemble',
+        trainingWindow: 7 * 24 * 60 * 60 * 1000, // 7日
+        minTrainingData: 100,
+        retrainInterval: 24 * 60 * 60 * 1000 // 24時間
+      },
+      
+      // マルチタイムフレーム分析設定
+      multiTimeframe: {
+        enabled: true,
+        timeframes: ['1m', '5m', '15m', '1h', '4h', '1d'],
+        weights: {
+          '1m': 0.1,
+          '5m': 0.15,
+          '15m': 0.2,
+          '1h': 0.25,
+          '4h': 0.2,
+          '1d': 0.1
+        },
+        cacheTimeout: 30000 // 30秒
+      },
+      
+      // A/Bテスト設定
+      abTesting: {
+        enabled: true,
+        testDuration: 7 * 24 * 60 * 60 * 1000, // 7日間
+        minSampleSize: 50,
+        significanceLevel: 0.05, // 5%
+        trafficAllocation: {
+          control: 0.3,           // 静的urgency
+          ruleBasedDynamic: 0.25, // ルールベース動的
+          mlBased: 0.25,          // 機械学習ベース
+          multiTimeframe: 0.2     // マルチタイムフレーム
+        }
+      }
     }
   },
   

@@ -27,12 +27,13 @@ const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
 const { DynamicUrgencyCalculator } = require('./dynamicUrgencyCalculator');
+const { UnifiedUrgencySystem } = require('./unifiedUrgencySystem');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
 let dynamicSizing = null;
 
-// 動的urgency調整のインスタンス（設定注入用）
-let dynamicUrgencyCalculator = null;
+// 統合動的urgency調整システムのインスタンス（設定注入用）
+let unifiedUrgencySystem = null;
 
 // 高度注文管理のインスタンス（取引所別）
 const orderManagers = new Map();
@@ -48,13 +49,21 @@ function initializeDynamicSizing(config) {
 }
 
 /**
- * 動的urgency調整を初期化
+ * 統合動的urgency調整システムを初期化
  * @param {Object} config - グローバル設定
  */
-function initializeDynamicUrgency(config) {
-  if (config?.global?.dynamicUrgencyAdjustment) {
-    dynamicUrgencyCalculator = new DynamicUrgencyCalculator(config.global.dynamicUrgencyAdjustment);
-    console.log('[common.js] 動的urgency調整システムを初期化しました');
+function initializeUnifiedUrgencySystem(config) {
+  if (config?.global?.unifiedUrgencySystem) {
+    unifiedUrgencySystem = new UnifiedUrgencySystem(config.global.unifiedUrgencySystem);
+    console.log('[common.js] 統合動的urgency調整システムを初期化しました');
+  } else if (config?.global?.dynamicUrgencyAdjustment) {
+    // フォールバック: 基本動的システム
+    unifiedUrgencySystem = new UnifiedUrgencySystem({
+      enabled: true,
+      mode: 'basic',
+      dynamic: config.global.dynamicUrgencyAdjustment
+    });
+    console.log('[common.js] 基本動的urgency調整システムを初期化しました');
   }
 }
 
@@ -71,29 +80,33 @@ function getOrderManager(exchange) {
 }
 
 /**
- * 動的urgency調整を計算
+ * 統合動的urgency調整を計算
  * @param {string} symbol - 通貨ペア
  * @param {string} baseUrgency - ベースのurgency
  * @param {Object} exchange - 取引所オブジェクト
  * @param {string} strategyName - 戦略名
- * @returns {Promise<string>} 調整されたurgency
+ * @param {Object} additionalContext - 追加コンテキスト
+ * @returns {Promise<Object>} 調整されたurgency結果
  */
-async function calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName) {
-  // 動的urgency調整が無効または未初期化の場合はベース値を返す
-  if (!dynamicUrgencyCalculator) {
-    return baseUrgency;
+async function calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyName, additionalContext = {}) {
+  // 統合urgency調整が無効または未初期化の場合はベース値を返す
+  if (!unifiedUrgencySystem) {
+    return { urgency: baseUrgency, method: 'disabled', confidence: 0, testId: null };
   }
   
   try {
     const context = {
+      symbol,
+      baseUrgency,
       exchange,
-      strategyName
+      strategyName,
+      ...additionalContext
     };
     
-    return await dynamicUrgencyCalculator.calculateDynamicUrgency(symbol, baseUrgency, context);
+    return await unifiedUrgencySystem.calculateOptimalUrgency(context);
   } catch (error) {
-    console.error(`[動的urgency] 計算エラー: ${symbol} - ${error.message}`);
-    return baseUrgency; // エラー時はベース値を返す
+    console.error(`[統合urgency] 計算エラー: ${symbol} - ${error.message}`);
+    return { urgency: baseUrgency, method: 'error', confidence: 0, testId: null, error: error.message };
   }
 }
 
@@ -175,9 +188,9 @@ async function handleStrategySignals(
     initializeDynamicSizing(globalConfig);
   }
   
-  // 動的urgency調整の初期化（初回のみ）
-  if (globalConfig && !dynamicUrgencyCalculator) {
-    initializeDynamicUrgency(globalConfig);
+  // 統合動的urgency調整システムの初期化（初回のみ）
+  if (globalConfig && !unifiedUrgencySystem) {
+    initializeUnifiedUrgencySystem(globalConfig);
   }
   
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
@@ -496,20 +509,29 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
       }
       
-      // 動的urgency調整を適用
-      const urgency = await calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName);
+      // 統合動的urgency調整を適用
+      const urgencyResult = await calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyName, {
+        currentPrice,
+        marketParameters,
+        amount: formattedAmount,
+        side: orderType === 'market' ? 'market' : 'limit'
+      });
+      const urgency = urgencyResult.urgency;
       
       const orderOptions = {
         urgency,
         strategy: strategyName,
         backtest: false,
         maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
-        enableRetry: orderConfig.maxRetries > 0
+        enableRetry: orderConfig.maxRetries > 0,
+        testId: urgencyResult.testId, // A/Bテスト用
+        urgencyMethod: urgencyResult.method,
+        urgencyConfidence: urgencyResult.confidence
       };
       
       // 高度注文管理が有効かチェック
       if (orderConfig.enabled) {
-        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency}`);
+        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(
           symbol, 'buy', formattedAmount, currentPrice, orderOptions
@@ -648,20 +670,29 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
         baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
       }
       
-      // 動的urgency調整を適用
-      const urgency = await calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName);
+      // 統合動的urgency調整を適用
+      const urgencyResult = await calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyName, {
+        currentPrice,
+        marketParameters,
+        amount: formattedAmount,
+        side: orderType === 'market' ? 'market' : 'limit'
+      });
+      const urgency = urgencyResult.urgency;
       
       const orderOptions = {
         urgency,
         strategy: strategyName,
         backtest: false,
         maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
-        enableRetry: orderConfig.maxRetries > 0
+        enableRetry: orderConfig.maxRetries > 0,
+        testId: urgencyResult.testId, // A/Bテスト用
+        urgencyMethod: urgencyResult.method,
+        urgencyConfidence: urgencyResult.confidence
       };
       
       // 高度注文管理が有効かチェック
       if (orderConfig.enabled) {
-        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency}`);
+        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(
           symbol, 'sell', formattedAmount, currentPrice, orderOptions
@@ -1285,6 +1316,27 @@ async function executeStrategyTemplate(strategyLogic, context) {
   }
 }
 
+/**
+ * 注文実行結果をフィードバック記録
+ * @param {string} testId - テストID
+ * @param {Object} orderData - 注文データ
+ * @param {Object} urgencyData - urgency調整データ
+ * @param {Object} executionResult - 実行結果
+ */
+function recordOrderExecutionFeedback(testId, orderData, urgencyData, executionResult) {
+  try {
+    if (unifiedUrgencySystem && testId) {
+      unifiedUrgencySystem.recordExecutionFeedback(testId, {
+        orderData,
+        urgencyData,
+        ...executionResult
+      });
+    }
+  } catch (error) {
+    console.warn('[common.js] フィードバック記録エラー:', error.message);
+  }
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
@@ -1293,11 +1345,12 @@ module.exports = {
   disableStrategy,
   clearPositionMarket,
   initializeDynamicSizing,
-  initializeDynamicUrgency,
+  initializeUnifiedUrgencySystem,
   performanceTracker,
   confirmMultipleIndicators,
   identifyMarketEnvironment,
-  calculateDynamicUrgency,
+  calculateUnifiedUrgency,
+  recordOrderExecutionFeedback,
   // 新しい共通関数
   handleStrategyError,
   getCurrentPrice,
