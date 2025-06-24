@@ -435,7 +435,8 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       const orderManager = getOrderManager(exchange);
       
       // 注文オプションを設定（グローバル設定から取得）
-      const orderConfig = globalConfig?.global?.advancedOrderManagement || {};
+      const appConfig = require('../../config');
+      const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
       const defaultUrgency = orderConfig.defaultUrgency || 'medium';
       let urgency = URGENCY_LEVELS.MEDIUM;
       
@@ -456,10 +457,17 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         enableRetry: orderConfig.maxRetries > 0
       };
       
-      // 高度注文実行
-      orderResult = await orderManager.executeAdvancedOrder(
-        symbol, 'buy', formattedAmount, currentPrice, orderOptions
-      );
+      // 高度注文管理が有効かチェック
+      if (orderConfig.enabled) {
+        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency}`);
+        // 高度注文実行
+        orderResult = await orderManager.executeAdvancedOrder(
+          symbol, 'buy', formattedAmount, currentPrice, orderOptions
+        );
+      } else {
+        console.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
+        orderResult.success = false; // フォールバック処理を実行
+      }
       
       if (orderResult.success) {
         order = orderResult.order;
@@ -576,7 +584,8 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       const orderManager = getOrderManager(exchange);
       
       // 注文オプションを設定（グローバル設定から取得）
-      const orderConfig = globalConfig?.global?.advancedOrderManagement || {};
+      const appConfig = require('../../config');
+      const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
       const defaultUrgency = orderConfig.defaultUrgency || 'medium';
       let urgency = URGENCY_LEVELS.MEDIUM;
       
@@ -597,10 +606,17 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
         enableRetry: orderConfig.maxRetries > 0
       };
       
-      // 高度注文実行
-      orderResult = await orderManager.executeAdvancedOrder(
-        symbol, 'sell', formattedAmount, currentPrice, orderOptions
-      );
+      // 高度注文管理が有効かチェック
+      if (orderConfig.enabled) {
+        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency}`);
+        // 高度注文実行
+        orderResult = await orderManager.executeAdvancedOrder(
+          symbol, 'sell', formattedAmount, currentPrice, orderOptions
+        );
+      } else {
+        console.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
+        orderResult.success = false; // フォールバック処理を実行
+      }
       
       if (orderResult.success) {
         order = orderResult.order;
