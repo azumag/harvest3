@@ -26,9 +26,13 @@ const {
 const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
+const { DynamicUrgencyCalculator } = require('./dynamicUrgencyCalculator');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
 let dynamicSizing = null;
+
+// 動的urgency調整のインスタンス（設定注入用）
+let dynamicUrgencyCalculator = null;
 
 // 高度注文管理のインスタンス（取引所別）
 const orderManagers = new Map();
@@ -44,6 +48,17 @@ function initializeDynamicSizing(config) {
 }
 
 /**
+ * 動的urgency調整を初期化
+ * @param {Object} config - グローバル設定
+ */
+function initializeDynamicUrgency(config) {
+  if (config?.global?.dynamicUrgencyAdjustment) {
+    dynamicUrgencyCalculator = new DynamicUrgencyCalculator(config.global.dynamicUrgencyAdjustment);
+    console.log('[common.js] 動的urgency調整システムを初期化しました');
+  }
+}
+
+/**
  * 高度注文管理インスタンスを取得
  * @param {Object} exchange - 取引所オブジェクト
  * @returns {AdvancedOrderManager} 注文管理インスタンス
@@ -53,6 +68,33 @@ function getOrderManager(exchange) {
     orderManagers.set(exchange.id, new AdvancedOrderManager(exchange));
   }
   return orderManagers.get(exchange.id);
+}
+
+/**
+ * 動的urgency調整を計算
+ * @param {string} symbol - 通貨ペア
+ * @param {string} baseUrgency - ベースのurgency
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} strategyName - 戦略名
+ * @returns {Promise<string>} 調整されたurgency
+ */
+async function calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName) {
+  // 動的urgency調整が無効または未初期化の場合はベース値を返す
+  if (!dynamicUrgencyCalculator) {
+    return baseUrgency;
+  }
+  
+  try {
+    const context = {
+      exchange,
+      strategyName
+    };
+    
+    return await dynamicUrgencyCalculator.calculateDynamicUrgency(symbol, baseUrgency, context);
+  } catch (error) {
+    console.error(`[動的urgency] 計算エラー: ${symbol} - ${error.message}`);
+    return baseUrgency; // エラー時はベース値を返す
+  }
 }
 
 /**
@@ -131,6 +173,11 @@ async function handleStrategySignals(
   // 動的ポジションサイジングの初期化（初回のみ）
   if (globalConfig && !dynamicSizing) {
     initializeDynamicSizing(globalConfig);
+  }
+  
+  // 動的urgency調整の初期化（初回のみ）
+  if (globalConfig && !dynamicUrgencyCalculator) {
+    initializeDynamicUrgency(globalConfig);
   }
   
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
@@ -438,16 +485,19 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       const appConfig = require('../../config');
       const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
       const defaultUrgency = orderConfig.defaultUrgency || 'medium';
-      let urgency = URGENCY_LEVELS.MEDIUM;
+      let baseUrgency = URGENCY_LEVELS.MEDIUM;
       
-      // 注文タイプに基づいて緊急度を決定
+      // 注文タイプに基づいてベース緊急度を決定
       if (orderType === 'market') {
-        urgency = URGENCY_LEVELS.HIGH;
+        baseUrgency = URGENCY_LEVELS.HIGH;
       } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
-        urgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
+        baseUrgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
       } else {
-        urgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
+        baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
       }
+      
+      // 動的urgency調整を適用
+      const urgency = await calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName);
       
       const orderOptions = {
         urgency,
@@ -587,16 +637,19 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       const appConfig = require('../../config');
       const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
       const defaultUrgency = orderConfig.defaultUrgency || 'medium';
-      let urgency = URGENCY_LEVELS.MEDIUM;
+      let baseUrgency = URGENCY_LEVELS.MEDIUM;
       
-      // 注文タイプに基づいて緊急度を決定
+      // 注文タイプに基づいてベース緊急度を決定
       if (orderType === 'market') {
-        urgency = URGENCY_LEVELS.HIGH;
+        baseUrgency = URGENCY_LEVELS.HIGH;
       } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
-        urgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
+        baseUrgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
       } else {
-        urgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
+        baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
       }
+      
+      // 動的urgency調整を適用
+      const urgency = await calculateDynamicUrgency(symbol, baseUrgency, exchange, strategyName);
       
       const orderOptions = {
         urgency,
@@ -1240,9 +1293,11 @@ module.exports = {
   disableStrategy,
   clearPositionMarket,
   initializeDynamicSizing,
+  initializeDynamicUrgency,
   performanceTracker,
   confirmMultipleIndicators,
   identifyMarketEnvironment,
+  calculateDynamicUrgency,
   // 新しい共通関数
   handleStrategyError,
   getCurrentPrice,

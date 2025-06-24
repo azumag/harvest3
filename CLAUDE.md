@@ -404,3 +404,59 @@ task完了後、taskの内容に従って適宜CLAUDE.mdを更新して、かな
 - **処理**: 37ポジション削除 + 16未約定注文キャンセル
 - **結果**: 不整合通貨数 11→4件 (63%改善)
 - **効果**: システム安定性大幅向上、ストップロスエラー激減
+
+## 動的Urgency調整システム
+
+### 概要
+**2025年6月24日実装**: 市場状況に応じて注文の緊急度を動的に調整するシステム
+
+### 構成要素
+1. **市場ボラティリティ分析** (`volatilityAnalyzer.js`)
+   - ATR（Average True Range）計算
+   - 価格変動率の標準偏差算出
+   - 過去データとの相対評価
+
+2. **ポートフォリオリスク評価** (`portfolioRiskAnalyzer.js`)
+   - ドローダウン率監視
+   - ポジション集中度分析
+   - リスク限界接近度計算
+
+3. **時間帯分析** (`timezoneAnalyzer.js`)
+   - 市場活発時間帯の判定
+   - 流動性期待値の算出
+   - 複数市場重複時間のボーナス評価
+
+4. **戦略パフォーマンス追跡** (`performanceAnalyzer.js`)
+   - 勝率・プロフィットファクター計算
+   - 総合スコア評価
+   - 最近の成功率監視
+
+### 設定
+```javascript
+// src/config.js
+dynamicUrgencyAdjustment: {
+  enabled: true,
+  weights: {
+    volatility: 0.3,        // 市場ボラティリティ 30%
+    portfolioRisk: 0.25,    // ポートフォリオリスク 25%
+    timezone: 0.2,          // 時間帯 20%
+    performance: 0.25       // 戦略パフォーマンス 25%
+  },
+  adjustmentLimits: {
+    min: -0.5,              // 最大50%ダウン調整
+    max: 0.8                // 最大80%アップ調整
+  }
+}
+```
+
+### 使用方法
+システムは `src/strategies/utils/common.js` の `executeBuyOrder` および `executeSellOrder` 関数で自動的に動作します。
+- ベースurgencyを計算後、動的調整を適用
+- 設定で無効化可能（`enabled: false`）
+- エラー時は常にベース値を返すフォールバック機能付き
+
+### 効果
+- **高ボラティリティ時**: urgency上昇（積極的実行）
+- **リスク限界接近時**: urgency低下（慎重実行）
+- **市場活発時間帯**: urgency調整（最適タイミング）
+- **戦略好調時**: urgency上昇（機会活用）

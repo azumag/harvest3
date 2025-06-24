@@ -117,6 +117,52 @@ const config = {
           }
         }
       }
+    },
+    
+    // 動的urgency調整設定
+    dynamicUrgencyAdjustment: {
+      enabled: true,
+      
+      // 要素の重み設定（合計1.0になるよう調整）
+      weights: {
+        volatility: 0.3,        // 市場ボラティリティの重み
+        portfolioRisk: 0.25,    // ポートフォリオリスクの重み
+        timezone: 0.2,          // 時間帯の重み
+        performance: 0.25       // 戦略パフォーマンスの重み
+      },
+      
+      // 調整範囲制限
+      adjustmentLimits: {
+        min: -0.5,              // 最大50%ダウン調整
+        max: 0.8                // 最大80%アップ調整
+      },
+      
+      // キャッシュ設定
+      cacheDuration: 60000,     // 1分間キャッシュ
+      
+      // 各分析モジュールの設定
+      volatility: {
+        atrPeriod: 14,
+        volatilityPeriod: 20,
+        cacheTimeout: 60000
+      },
+      
+      portfolioRisk: {
+        maxDrawdownThreshold: 0.15,     // 15%
+        concentrationThreshold: 0.3,    // 30%
+        cacheTimeout: 30000
+      },
+      
+      timezone: {
+        timezone: 'Asia/Tokyo',
+        cacheTimeout: 300000            // 5分間キャッシュ
+      },
+      
+      performance: {
+        lookbackPeriod: 30,             // 30日間
+        defaultTradeCount: 10,          // 直近10取引
+        cacheTimeout: 60000
+      }
     }
   },
   
