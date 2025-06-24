@@ -57,7 +57,9 @@
       "Bash(make:*)"
     ],
     "deny": [
-      "Bash(docker cp:*)"
+      "Bash(docker cp:*)",
+      "Bash(docker compose exec * sh -c:*)",
+      "Bash(rm -rf:*)"
     ]
   }
 }
