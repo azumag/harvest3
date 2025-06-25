@@ -544,15 +544,20 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       if (orderResult.success) {
         order = orderResult.order;
       } else {
-        // 高度注文が失敗した場合、従来方式にフォールバック
-        console.warn(`[${strategyName}] 高度注文失敗、従来方式を使用`);
-        const params = { 'post_only': true };
+        // 高度注文が失敗した場合は注文を実行しない（バリデーション強制）
+        console.warn(`[${strategyName}] 高度注文失敗、注文をスキップ: ${symbol}`);
+        console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
         
-        if (orderType && orderType === 'market') {
-          order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
-        } else {
-          order = await exchange.createLimitBuyOrder(symbol, formattedAmount, currentPrice, params);
+        // Discord通知で詳細情報を送信
+        if (postOrderToDiscord && !options.backtest) {
+          await postOrderToDiscord(`⚠️ **注文スキップ** ${symbol}\n` +
+                                  `戦略: ${strategyName}\n` +
+                                  `理由: 高度注文管理でバリデーション失敗\n` +
+                                  `詳細: ${orderResult.error?.message || 'バリデーション失敗'}\n` +
+                                  `⏰ ${new Date().toLocaleString('ja-JP')}`);
         }
+        
+        return { success: false, reason: 'バリデーション失敗のため注文スキップ' };
       }
     }
 
@@ -705,15 +710,20 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       if (orderResult.success) {
         order = orderResult.order;
       } else {
-        // 高度注文が失敗した場合、従来方式にフォールバック
-        console.warn(`[${strategyName}] 高度注文失敗、従来方式を使用`);
-        const params = { 'post_only': true };
+        // 高度注文が失敗した場合は注文を実行しない（バリデーション強制）
+        console.warn(`[${strategyName}] 高度注文失敗、注文をスキップ: ${symbol}`);
+        console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
         
-        if (orderType && orderType === 'market') {
-          order = await exchange.createMarketSellOrder(symbol, formattedAmount);
-        } else {
-          order = await exchange.createLimitSellOrder(symbol, formattedAmount, currentPrice, params);
+        // Discord通知で詳細情報を送信
+        if (postOrderToDiscord && !options.backtest) {
+          await postOrderToDiscord(`⚠️ **売り注文スキップ** ${symbol}\n` +
+                                  `戦略: ${strategyName}\n` +
+                                  `理由: 高度注文管理でバリデーション失敗\n` +
+                                  `詳細: ${orderResult.error?.message || 'バリデーション失敗'}\n` +
+                                  `⏰ ${new Date().toLocaleString('ja-JP')}`);
         }
+        
+        return { success: false, reason: 'バリデーション失敗のため注文スキップ' };
       }
     }
 
