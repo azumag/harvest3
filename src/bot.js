@@ -13,6 +13,8 @@ const {
   getMarketParametersByExchangeSymbol,
   cleanupInvalidPendingOrders
 } = require('./database/manager');
+const PendingOrderLimitManager = require('./common/pendingOrderLimitManager');
+const OrderValidation = require('./common/orderValidation');
 const { 
   checkStopLoss, 
   executeStopLoss, 
@@ -24,6 +26,14 @@ const { pro } = require('ccxt');
 
 // 未約定注文クリーンアップの最終実行時間を記録
 let lastCleanupTime = {}; // exchangeId -> timestamp
+
+// 包括的未約定注文管理システム
+let globalOrderManagers = {}; // exchangeId -> PendingOrderLimitManager
+let globalOrderValidators = {}; // exchangeId -> OrderValidation
+
+// 包括的クリーンアップの実行間隔 (10分)
+const COMPREHENSIVE_CLEANUP_INTERVAL = 10 * 60 * 1000;
+let lastComprehensiveCleanupTime = 0;
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -92,6 +102,20 @@ async function startBot() {
           // 約定済み取引の更新
           await updateFilledTrades(exchangeInstance, symbol);
 
+          // 包括的未約定注文管理システムの初期化
+          if (!globalOrderManagers[exchangeId]) {
+            const redis = require('redis');
+            const redisClient = redis.createClient({
+              url: process.env.REDIS_URL || 'redis://localhost:6379'
+            });
+            await redisClient.connect();
+            
+            globalOrderManagers[exchangeId] = new PendingOrderLimitManager(exchangeInstance, redisClient);
+            globalOrderValidators[exchangeId] = new OrderValidation(exchangeInstance);
+            
+            console.log(`[注文管理] 初期化完了: ${exchangeId}`);
+          }
+
           // 未約定注文のクリーンアップ（5分間隔）
           const now = Date.now();
           const cleanupInterval = 5 * 60 * 1000; // 5分
@@ -108,6 +132,48 @@ async function startBot() {
               }
             } catch (cleanupError) {
               console.warn(`[クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
+            }
+          }
+
+          // 包括的未約定注文管理（10分間隔）
+          if (now - lastComprehensiveCleanupTime >= COMPREHENSIVE_CLEANUP_INTERVAL) {
+            try {
+              console.log(`[包括管理] 開始: ${exchangeId}`);
+              const orderManager = globalOrderManagers[exchangeId];
+              
+              if (orderManager) {
+                // ヘルスチェック実行
+                const health = await orderManager.healthCheck();
+                console.log(`[包括管理] ヘルス: ${health.status} (利用率: ${health.utilization}, 買い比率: ${health.buyRatio})`);
+                
+                // 制限違反の確認
+                const violations = await orderManager.detectLimitViolations();
+                
+                if (violations.length > 0) {
+                  const highPriorityViolations = violations.filter(v => v.severity === 'high');
+                  
+                  if (highPriorityViolations.length > 0) {
+                    console.log(`[包括管理] 緊急対応必要: ${highPriorityViolations.length}件の高優先度違反`);
+                    
+                    // 自動修復実行
+                    const remediationResult = await orderManager.performAutoCleanup();
+                    console.log(`[包括管理] 自動修復完了: ${remediationResult.cleaned}件削除`);
+                    
+                    // Discord通知
+                    if (remediationResult.cleaned > 0) {
+                      await postOrderToDiscord(`🔧 未約定注文自動整理: ${remediationResult.cleaned}件削除 (${exchangeId})`);
+                    }
+                  } else {
+                    console.log(`[包括管理] 中優先度違反: ${violations.length}件 - 監視継続`);
+                  }
+                } else {
+                  console.log(`[包括管理] 正常: 制限違反なし`);
+                }
+                
+                lastComprehensiveCleanupTime = now;
+              }
+            } catch (comprehensiveError) {
+              console.warn(`[包括管理] エラー: ${exchangeId} - ${comprehensiveError.message}`);
             }
           }
 

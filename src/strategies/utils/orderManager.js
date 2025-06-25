@@ -1,11 +1,14 @@
 /**
  * 高度な注文管理システム
  * Issue #147: 複数注文タイプと実行最適化の実装
+ * 未約定注文管理機能統合版
  */
 
 const { getTickerRedis } = require('../../database/redisDatabase');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { sleep } = require('../../common/utils');
+const OrderValidation = require('../../common/orderValidation');
+const redis = require('redis');
 
 /**
  * 注文タイプの定義
@@ -38,6 +41,29 @@ class AdvancedOrderManager {
     this.orderTimeout = 60000; // 60秒でキャンセル
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1秒
+    
+    // 未約定注文管理機能
+    this.orderValidator = new OrderValidation(exchange);
+    this.redisClient = null;
+    this.validationEnabled = true;
+    
+    this.initRedisConnection();
+  }
+
+  /**
+   * Redis接続の初期化
+   */
+  async initRedisConnection() {
+    try {
+      this.redisClient = redis.createClient({
+        url: process.env.REDIS_URL || 'redis://localhost:6379'
+      });
+      await this.redisClient.connect();
+      console.log('[注文管理] Redis接続完了');
+    } catch (error) {
+      console.warn('[注文管理] Redis接続失敗:', error.message);
+      this.validationEnabled = false;
+    }
   }
 
   /**
@@ -191,7 +217,70 @@ class AdvancedOrderManager {
   }
 
   /**
-   * 注文実行と管理
+   * 注文前バリデーション
+   * @param {string} symbol - 通貨ペア
+   * @param {string} side - 売買方向
+   * @param {number} price - 注文価格
+   * @param {number} amount - 注文数量
+   * @returns {Object} バリデーション結果
+   */
+  async validateOrderBeforeExecution(symbol, side, price, amount) {
+    if (!this.validationEnabled || !this.redisClient) {
+      return { valid: true, reason: 'バリデーション無効' };
+    }
+
+    try {
+      // 包括的バリデーション実行
+      const validation = await this.orderValidator.validateOrder(
+        this.redisClient, 
+        symbol, 
+        side, 
+        price, 
+        amount
+      );
+
+      if (!validation.valid) {
+        console.log(`[注文管理] バリデーション失敗: ${validation.summary}`);
+        
+        // エラー詳細をログ出力
+        validation.errors.forEach(error => {
+          console.log(`  - ${error.type}: ${error.reason}`);
+          if (error.details) {
+            console.log(`    詳細:`, error.details);
+          }
+        });
+
+        // 推奨価格を取得して提案
+        try {
+          const recommendedPrice = await this.orderValidator.getRecommendedPrice(symbol, side);
+          console.log(`  推奨価格: ¥${recommendedPrice.toLocaleString()}`);
+          
+          return {
+            valid: false,
+            reason: validation.summary,
+            errors: validation.errors,
+            recommendedPrice
+          };
+        } catch (priceError) {
+          return {
+            valid: false,
+            reason: validation.summary,
+            errors: validation.errors
+          };
+        }
+      }
+
+      console.log(`[注文管理] バリデーション通過: ${symbol} ${side} ¥${price.toLocaleString()}`);
+      return { valid: true };
+
+    } catch (error) {
+      console.warn(`[注文管理] バリデーションエラー: ${error.message}`);
+      return { valid: true, reason: 'バリデーションエラー' }; // エラー時は通す
+    }
+  }
+
+  /**
+   * 注文実行と管理（バリデーション統合版）
    * @param {string} symbol - 通貨ペア
    * @param {string} side - buy/sell
    * @param {number} amount - 数量
@@ -200,7 +289,29 @@ class AdvancedOrderManager {
    * @param {Object} options - オプション
    * @returns {Object} 実行結果
    */
-  async executeOrderWithManagement(symbol, side, amount, price, orderType, options) {
+  async executeOrderWithManagement(symbol, side, amount, price, orderType, options = {}) {
+    // 注文前バリデーション
+    const validation = await this.validateOrderBeforeExecution(symbol, side, price, amount);
+    
+    if (!validation.valid) {
+      console.log(`[注文管理] 注文拒否: ${validation.reason}`);
+      
+      // Discord通知（バリデーション失敗）
+      if (postErrorToDiscord && !options.backtest) {
+        const message = `🚫 [注文拒否] ${symbol} ${side.toUpperCase()}\n` +
+                       `理由: ${validation.reason}\n` +
+                       `価格: ¥${price.toLocaleString()}\n` +
+                       `数量: ${amount}`;
+        await postErrorToDiscord(message);
+      }
+      
+      return {
+        success: false,
+        error: new Error(validation.reason),
+        validation: validation,
+        blocked: true
+      };
+    }
     let attempt = 0;
     let lastError = null;
 
