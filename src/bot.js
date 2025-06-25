@@ -726,7 +726,7 @@ async function executeRiskManagementCheck() {
     console.log(`[リスク管理] 処理完了: ${totalProcessed}個処理、${totalStopLossExecuted}個のストップロス実行`);
     
     if (totalStopLossExecuted > 0) {
-      await postErrorToDiscord(`[リスク管理] ${totalStopLossExecuted}個のポジションでストップロスを実行しました`);
+      await postOrderToDiscord(`[リスク管理] ${totalStopLossExecuted}個のポジションでストップロスを実行しました`);
     }
     
   } catch (error) {
