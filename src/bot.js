@@ -159,15 +159,85 @@ async function startBot() {
                     const remediationResult = await orderManager.performAutoCleanup();
                     console.log(`[包括管理] 自動修復完了: ${remediationResult.cleaned}件削除`);
                     
-                    // Discord通知
+                    // Discord通知（詳細版）
                     if (remediationResult.cleaned > 0) {
-                      await postOrderToDiscord(`🔧 未約定注文自動整理: ${remediationResult.cleaned}件削除 (${exchangeId})`);
+                      let message = `🔧 **未約定注文自動整理完了** (${exchangeId})\n` +
+                                   `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                   `📈 **修復結果**\n` +
+                                   `　削除件数: ${remediationResult.cleaned}件\n` +
+                                   `　緊急度: 🚨 高優先度 (${highPriorityViolations.length}件違反)\n`;
+                      
+                      // 修復アクション詳細
+                      if (remediationResult.actions && remediationResult.actions.length > 0) {
+                        message += `\n🛠️ **修復アクション**\n`;
+                        remediationResult.actions.forEach(action => {
+                          message += `　• ${action}\n`;
+                        });
+                      }
+                      
+                      // 健全性情報
+                      message += `\n📊 **修復前の状況**\n` +
+                                `　利用率: ${health.utilization}\n` +
+                                `　買い注文比率: ${health.buyRatio}\n` +
+                                `　制限違反: ${violations.length}件\n`;
+                      
+                      message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
+                      
+                      await postOrderToDiscord(message);
                     }
                   } else {
                     console.log(`[包括管理] 中優先度違反: ${violations.length}件 - 監視継続`);
+                    
+                    // 中優先度違反の通知（12時間に1回程度）
+                    const lastMediumNotify = globalOrderManagers[exchangeId].lastMediumNotifyTime || 0;
+                    const mediumNotifyInterval = 12 * 60 * 60 * 1000; // 12時間
+                    
+                    if (now - lastMediumNotify >= mediumNotifyInterval) {
+                      const mediumViolations = violations.filter(v => v.severity === 'medium');
+                      let message = `⚠️ **未約定注文監視レポート** (${exchangeId})\n` +
+                                   `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                   `📊 **現在の状況**\n` +
+                                   `　利用率: ${health.utilization}\n` +
+                                   `　買い注文比率: ${health.buyRatio}\n` +
+                                   `　中優先度違反: ${mediumViolations.length}件\n\n` +
+                                   `⚡ **主な違反内容**\n`;
+                      
+                      mediumViolations.slice(0, 5).forEach(violation => {
+                        message += `　• ${violation.message}\n`;
+                      });
+                      
+                      if (mediumViolations.length > 5) {
+                        message += `　... 他 ${mediumViolations.length - 5} 件\n`;
+                      }
+                      
+                      message += `\n📈 **対応状況**: 監視継続中（自動修復待機）\n`;
+                      message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
+                      
+                      await postOrderToDiscord(message);
+                      globalOrderManagers[exchangeId].lastMediumNotifyTime = now;
+                    }
                   }
                 } else {
                   console.log(`[包括管理] 正常: 制限違反なし`);
+                  
+                  // 正常状態の通知（24時間に1回）
+                  const lastHealthyNotify = globalOrderManagers[exchangeId].lastHealthyNotifyTime || 0;
+                  const healthyNotifyInterval = 24 * 60 * 60 * 1000; // 24時間
+                  
+                  if (now - lastHealthyNotify >= healthyNotifyInterval) {
+                    let message = `✅ **未約定注文システム正常** (${exchangeId})\n` +
+                                 `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                                 `📊 **健全性状況**\n` +
+                                 `　利用率: ${health.utilization}\n` +
+                                 `　買い注文比率: ${health.buyRatio}\n` +
+                                 `　制限違反: なし\n` +
+                                 `　状態: ${health.status === 'healthy' ? '✅ 健全' : '⚠️ 要注意'}\n\n` +
+                                 `🔧 **最終クリーンアップ**: ${health.lastCleanup}\n` +
+                                 `⏰ ${new Date().toLocaleString('ja-JP')}`;
+                    
+                    await postOrderToDiscord(message);
+                    globalOrderManagers[exchangeId].lastHealthyNotifyTime = now;
+                  }
                 }
                 
                 lastComprehensiveCleanupTime = now;

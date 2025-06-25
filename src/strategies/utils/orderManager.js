@@ -298,10 +298,52 @@ class AdvancedOrderManager {
       
       // Discord通知（バリデーション失敗）
       if (postErrorToDiscord && !options.backtest) {
-        const message = `🚫 [注文拒否] ${symbol} ${side.toUpperCase()}\n` +
-                       `理由: ${validation.reason}\n` +
-                       `価格: ¥${price.toLocaleString()}\n` +
-                       `数量: ${amount}`;
+        let message = `🚫 **注文拒否** ${symbol} ${side.toUpperCase()}\n` +
+                     `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                     `💰 **注文内容**\n` +
+                     `　価格: ¥${price.toLocaleString()}\n` +
+                     `　数量: ${amount}\n` +
+                     `　総額: ¥${(price * amount).toLocaleString()}\n\n` +
+                     `❌ **拒否理由**\n` +
+                     `　${validation.reason}\n`;
+
+        // 詳細エラー情報を追加
+        if (validation.errors && validation.errors.length > 0) {
+          message += `\n📋 **詳細情報**\n`;
+          validation.errors.forEach(error => {
+            message += `　• ${error.type}: ${error.reason}\n`;
+            if (error.details) {
+              if (error.details.current !== undefined && error.details.limit !== undefined) {
+                message += `　　現在値: ${error.details.current} / 上限: ${error.details.limit}\n`;
+              }
+              if (error.details.currentBuyRatio) {
+                message += `　　買い注文比率: ${error.details.currentBuyRatio}\n`;
+              }
+              if (error.details.deviation) {
+                message += `　　価格乖離: ${error.details.deviation} (閾値: ${error.details.threshold})\n`;
+              }
+              if (error.details.orderValue !== undefined) {
+                if (error.details.minimum) {
+                  message += `　　注文金額: ¥${error.details.orderValue.toLocaleString()} (最小: ¥${error.details.minimum.toLocaleString()})\n`;
+                }
+                if (error.details.maximum) {
+                  message += `　　注文金額: ¥${error.details.orderValue.toLocaleString()} (最大: ¥${error.details.maximum.toLocaleString()})\n`;
+                }
+              }
+            }
+          });
+        }
+
+        // 推奨価格情報を追加
+        if (validation.recommendedPrice) {
+          const priceDeviation = ((validation.recommendedPrice - price) / price * 100);
+          message += `\n💡 **推奨価格**\n` +
+                    `　¥${validation.recommendedPrice.toLocaleString()}\n` +
+                    `　(${priceDeviation > 0 ? '+' : ''}${priceDeviation.toFixed(2)}% 調整)\n`;
+        }
+
+        message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
+        
         await postErrorToDiscord(message);
       }
       
