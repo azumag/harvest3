@@ -657,38 +657,111 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     for (const _trade of tradeDataList) {
       try {
         await addTradeMongoDB(_trade);
-        await updateTradeSummary(_trade);
         
-        // 約定時に対応する未約定注文をRedisから削除
-        if (_trade.orderId && _trade.strategy !== 'OUTSIDE') {
+        // trade_summary更新（最大3回再試行）
+        let summaryUpdateSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            const deleteResult = await deletePendingOrderRedis(
-              _trade.exchange, 
-              _trade.symbol, 
-              _trade.strategy, 
-              _trade.orderId
-            );
-            if (deleteResult && !isBacktest) {
-              console.log(`[約定処理] 未約定注文を削除: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
-            }
-          } catch (deleteError) {
+            await updateTradeSummary(_trade);
+            summaryUpdateSuccess = true;
+            break;
+          } catch (summaryError) {
             if (!isBacktest) {
-              console.warn(`[約定処理] 未約定注文削除エラー: ${_trade.orderId} - ${deleteError.message}`);
+              console.warn(`[約定処理] trade_summary更新失敗 (試行${attempt}/3): ${_trade.tradeId} - ${summaryError.message}`);
+            }
+            if (attempt === 3) {
+              // 3回失敗した場合は重要エラーとして通知
+              const { postErrorToDiscord } = require('../common/notifications');
+              if (postErrorToDiscord && !isBacktest) {
+                await postErrorToDiscord(`🚨 **重要: trade_summary更新失敗**\n` +
+                                        `約定ID: ${_trade.tradeId}\n` +
+                                        `通貨: ${_trade.symbol}\n` +
+                                        `戦略: ${_trade.strategy}\n` +
+                                        `エラー: ${summaryError.message}\n` +
+                                        `※ 残高不整合の原因となる可能性があります`);
+              }
+              throw summaryError;
+            }
+            // 再試行前に100ms待機
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        // 約定時に対応する未約定注文をRedisから削除（最大3回再試行）
+        if (_trade.orderId && _trade.strategy !== 'OUTSIDE') {
+          let orderDeleteSuccess = false;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const deleteResult = await deletePendingOrderRedis(
+                _trade.exchange, 
+                _trade.symbol, 
+                _trade.strategy, 
+                _trade.orderId
+              );
+              if (deleteResult && !isBacktest) {
+                console.log(`[約定処理] 未約定注文を削除: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
+              }
+              orderDeleteSuccess = true;
+              break;
+            } catch (deleteError) {
+              if (!isBacktest) {
+                console.warn(`[約定処理] 未約定注文削除失敗 (試行${attempt}/3): ${_trade.orderId} - ${deleteError.message}`);
+              }
+              if (attempt === 3) {
+                // 3回失敗した場合は警告通知（重要ではないがログに残す）
+                const { postOrderToDiscord } = require('../common/notifications');
+                if (postOrderToDiscord && !isBacktest) {
+                  await postOrderToDiscord(`⚠️ **未約定注文削除失敗**\n` +
+                                          `約定ID: ${_trade.tradeId}\n` +
+                                          `注文ID: ${_trade.orderId}\n` +
+                                          `通貨: ${_trade.symbol}\n` +
+                                          `戦略: ${_trade.strategy}\n` +
+                                          `※ 手動確認が必要な場合があります`);
+                }
+              } else {
+                // 再試行前に50ms待機
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
             }
           }
           
-          // 約定時に対応するポジションをクローズ
-          try {
-            const positionKey = `${_trade.exchange}:${_trade.symbol}:${_trade.strategy}:${_trade.orderId}`;
-            const { closeAndCleanupPosition } = require('./redisDatabase');
-            const closeResult = await closeAndCleanupPosition(positionKey, { saveHistory: true });
-            
-            if (closeResult.success && !isBacktest) {
-              console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
-            }
-          } catch (closeError) {
-            if (!isBacktest) {
-              console.warn(`[約定処理] ポジションクローズエラー: ${_trade.orderId} - ${closeError.message}`);
+          // 約定時に対応するポジションをクローズ（最大3回再試行）
+          let positionCloseSuccess = false;
+          const positionKey = `${_trade.exchange}:${_trade.symbol}:${_trade.strategy}:${_trade.orderId}`;
+          
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const { closeAndCleanupPosition } = require('./redisDatabase');
+              const closeResult = await closeAndCleanupPosition(positionKey, { saveHistory: true });
+              
+              if (closeResult.success) {
+                if (!isBacktest) {
+                  console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
+                }
+                positionCloseSuccess = true;
+                break;
+              } else {
+                throw new Error(closeResult.message || 'ポジションクローズ失敗');
+              }
+            } catch (closeError) {
+              if (!isBacktest) {
+                console.warn(`[約定処理] ポジションクローズ失敗 (試行${attempt}/3): ${_trade.orderId} - ${closeError.message}`);
+              }
+              if (attempt === 3) {
+                // 3回失敗した場合は重要エラーとして通知
+                const { postErrorToDiscord } = require('../common/notifications');
+                if (postErrorToDiscord && !isBacktest) {
+                  await postErrorToDiscord(`🚨 **重要: ポジションクローズ失敗**\n` +
+                                          `約定ID: ${_trade.tradeId}\n` +
+                                          `注文ID: ${_trade.orderId}\n` +
+                                          `ポジションキー: ${positionKey}\n` +
+                                          `エラー: ${closeError.message}\n` +
+                                          `※ 手動でポジション確認が必要です`);
+                }
+              } else {
+                // 再試行前に100ms待機
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
             }
           }
         }

@@ -724,6 +724,27 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       position.updatedAt = Date.now();
       await savePosition(position.key, position);
       console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
+      
+      // trade_summaryの同期：部分決済分を反映
+      try {
+        const { updateTradeSummary } = require('../database/manager');
+        const partialTrade = {
+          exchange: exchange.id,
+          symbol: symbol,
+          strategy: strategyKey,
+          side: 'sell',
+          amount: finalFormattedAmount,
+          price: executionPrice,
+          timestamp: Date.now(),
+          tradeId: `partial_${order.id}_${Date.now()}`,
+          orderId: order.id
+        };
+        await updateTradeSummary(partialTrade);
+        console.log(`[DEBUG] Trade summary updated for partial close: ${finalFormattedAmount}`);
+      } catch (summaryError) {
+        console.warn(`[リスク管理] 部分決済時のtrade_summary更新失敗: ${summaryError.message}`);
+        // 部分決済は成功しているので、サマリー更新失敗でも処理は継続
+      }
     } else {
       // 完全決済：ポジションを閉じて履歴保存後にRedisから削除
       position.status = 'closed';
