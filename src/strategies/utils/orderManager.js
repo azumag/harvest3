@@ -297,7 +297,7 @@ class AdvancedOrderManager {
       console.log(`[注文管理] 注文拒否: ${validation.reason}`);
       
       // Discord通知（バリデーション失敗）
-      if (postErrorToDiscord && !options.backtest) {
+      if (postOrderToDiscord && !options.backtest) {
         let message = `🚫 **注文拒否** ${symbol} ${side.toUpperCase()}\n` +
                      `━━━━━━━━━━━━━━━━━━━━━━━\n` +
                      `💰 **注文内容**\n` +
@@ -344,7 +344,7 @@ class AdvancedOrderManager {
 
         message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
         
-        await postErrorToDiscord(message);
+        await postOrderToDiscord(message);
       }
       
       return {
@@ -415,8 +415,12 @@ class AdvancedOrderManager {
     }
 
     // 全ての試行が失敗
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(`注文実行失敗: ${symbol} ${side} ${amount} - ${lastError?.message}`);
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(`❌ **注文実行失敗** ${symbol} ${side.toUpperCase()}\n` +
+                              `数量: ${amount}\n` +
+                              `エラー: ${lastError?.message}\n` +
+                              `試行回数: ${this.maxRetries}回\n` +
+                              `⏰ ${new Date().toLocaleString('ja-JP')}`);
     }
 
     return {
