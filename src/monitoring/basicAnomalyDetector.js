@@ -122,7 +122,15 @@ class BasicAnomalyDetector {
           const position = await this.client.hGetAll(posKey);
           if (!position.symbol || !position.strategyKey) continue;
           
-          const expectedSummaryKey = `trade_summary:${position.symbol}:${position.strategyKey}`;
+          // Extract exchange ID from position key: position:exchange:symbol:strategy:*
+          const posKeyParts = posKey.split(':');
+          if (posKeyParts.length < 4) {
+            console.warn(`不正なポジションキー形式: ${posKey}`);
+            continue;
+          }
+          const exchangeId = posKeyParts[1];
+          
+          const expectedSummaryKey = `trade_summary:${exchangeId}:${position.symbol}:${position.strategyKey}`;
           const summaryExists = await this.client.exists(expectedSummaryKey);
           
           if (!summaryExists) {
@@ -495,7 +503,17 @@ class BasicAnomalyDetector {
         }
         
         if (buyAmount > 0 || sellAmount > 0 || netPosition !== 0) {
-          const summaryKey = `trade_summary:${combo.symbol}:${combo.strategy}`;
+          // Need to determine exchange ID - get from first position found
+          let exchangeId = 'bitbank'; // Default fallback
+          if (positions.length > 0) {
+            const firstPosKey = Object.keys(positions)[0];
+            const posKeyParts = firstPosKey.split(':');
+            if (posKeyParts.length >= 2) {
+              exchangeId = posKeyParts[1];
+            }
+          }
+          
+          const summaryKey = `trade_summary:${exchangeId}:${combo.symbol}:${combo.strategy}`;
           await this.client.hSet(summaryKey, {
             buyAmount: buyAmount.toFixed(8),
             sellAmount: sellAmount.toFixed(8),

@@ -484,6 +484,23 @@ async function getTradeCurrentPosition(exchange, symbol, strategyKey) {
 
 async function getOrderStrategyKeyByOrderId(orderId) {
   const order = await getOrderByOrderId(orderId);
+  
+  // CRITICAL FIX: OUTSIDEデフォルトが売り注文の誤配置を引き起こす問題を修正
+  // 売り注文が元の買い戦略に正しく関連付けされるよう、戦略探索を強化
+  if (!order || !order.strategy) {
+    console.warn(`[戦略探索] OrderID ${orderId} の戦略が見つかりません。関連取引から推測を試みます...`);
+    
+    // MongoDB から同じOrderIDの取引を探す
+    const relatedTrades = await listTrades({ orderId }, {}, 10);
+    if (relatedTrades.length > 0 && relatedTrades[0].strategy) {
+      console.log(`[戦略探索] 関連取引から戦略を復元: ${relatedTrades[0].strategy}`);
+      return relatedTrades[0].strategy;
+    }
+    
+    // それでも見つからない場合は、エラーログを記録してOUTSIDEを返す
+    console.error(`[戦略探索] OrderID ${orderId} の戦略が完全に不明です。OUTSIDE戦略を使用します。`);
+    await postErrorToDiscord(`⚠️ 戦略不明注文検出: OrderID ${orderId} - 売り注文の誤配置リスク`);
+  }
 
   return (order && order.strategy) ? order.strategy : 'OUTSIDE';
 }

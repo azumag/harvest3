@@ -8,6 +8,7 @@ const { getTickerRedis } = require('../../database/redisDatabase');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { sleep } = require('../../common/utils');
 const OrderValidation = require('../../common/orderValidation');
+const TransactionalOrderManager = require('../../common/transactionalOrderManager');
 const redis = require('redis');
 
 /**
@@ -46,6 +47,10 @@ class AdvancedOrderManager {
     this.orderValidator = new OrderValidation(exchange);
     this.redisClient = null;
     this.validationEnabled = true;
+    
+    // トランザクショナル注文管理
+    this.transactionalManager = new TransactionalOrderManager(exchange);
+    this.useTransactionalOrders = true; // デフォルトで有効
     
     this.initRedisConnection();
   }
@@ -290,6 +295,24 @@ class AdvancedOrderManager {
    * @returns {Object} 実行結果
    */
   async executeOrderWithManagement(symbol, side, amount, price, orderType, options = {}) {
+    // トランザクショナル注文を使用するかチェック
+    if (this.useTransactionalOrders && !options.backtest) {
+      console.log(`[注文管理] トランザクショナル注文使用: ${symbol} ${side}`);
+      
+      const transactionalOptions = {
+        ...options,
+        type: orderType,
+        strategy: options.strategy || 'UNKNOWN'
+      };
+      
+      return await this.transactionalManager.executeTransactionalOrder(
+        symbol, side, amount, price, transactionalOptions
+      );
+    }
+    
+    // 従来の注文方式（バックテスト等）
+    console.log(`[注文管理] 従来注文方式使用: ${symbol} ${side}`);
+    
     // 注文前バリデーション
     const validation = await this.validateOrderBeforeExecution(symbol, side, price, amount);
     
@@ -364,6 +387,32 @@ class AdvancedOrderManager {
         // 注文パラメータを構築
         const params = this.buildOrderParams(orderType, options);
         
+        // CRITICAL: 注文実行前にMongoDBに保存（戦略リンク保持のため）
+        // 一時的な注文オブジェクトを作成
+        const preOrder = {
+          id: `pre_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          symbol,
+          side,
+          amount,
+          price,
+          type: orderType,
+          status: 'pending',
+          strategy: options.strategy || 'UNKNOWN',
+          exchange: this.exchange.id,
+          timestamp: Date.now(),
+          params
+        };
+        
+        try {
+          // MongoDBに事前保存
+          const { addOrderMongoDB } = require('../../database/manager');
+          await addOrderMongoDB(preOrder);
+          console.log(`[注文管理] 注文事前保存完了: ${preOrder.id} 戦略: ${preOrder.strategy}`);
+        } catch (saveError) {
+          console.error(`[注文管理] 注文事前保存エラー: ${saveError.message}`);
+          // エラーでも注文は続行（ログのみ）
+        }
+        
         // 注文実行
         let order;
         if (orderType === ORDER_TYPES.MARKET) {
@@ -378,6 +427,22 @@ class AdvancedOrderManager {
           order = side === 'buy'
             ? await this.exchange.createLimitBuyOrder(symbol, amount, price, params)
             : await this.exchange.createLimitSellOrder(symbol, amount, price, params);
+        }
+        
+        // 実際の注文IDで更新
+        if (order && order.id) {
+          try {
+            // 事前保存した注文を実際の注文情報で更新
+            const updatedOrder = {
+              ...order,
+              strategy: options.strategy || 'UNKNOWN',
+              preOrderId: preOrder.id
+            };
+            await addOrderMongoDB(updatedOrder);
+            console.log(`[注文管理] 注文情報更新: ${order.id} (事前ID: ${preOrder.id})`);
+          } catch (updateError) {
+            console.error(`[注文管理] 注文更新エラー: ${updateError.message}`);
+          }
         }
 
         // 注文管理開始

@@ -35,6 +35,14 @@ let globalOrderValidators = {}; // exchangeId -> OrderValidation
 const COMPREHENSIVE_CLEANUP_INTERVAL = 10 * 60 * 1000;
 let lastComprehensiveCleanupTime = 0;
 
+// 自己修復システムの実行間隔 (30分)
+const SELF_HEALING_INTERVAL = 30 * 60 * 1000;
+let lastSelfHealingTime = 0;
+
+// 残高整合性チェックの実行間隔 (5分)
+const BALANCE_CHECK_INTERVAL = 5 * 60 * 1000;
+let lastBalanceCheckTime = 0;
+
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
 let targetSymbol = null;
@@ -244,6 +252,95 @@ async function startBot() {
               }
             } catch (comprehensiveError) {
               console.warn(`[包括管理] エラー: ${exchangeId} - ${comprehensiveError.message}`);
+            }
+          }
+
+          // 残高整合性チェック（5分間隔）
+          if (now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
+            try {
+              console.log(`[残高チェック] 開始: ${exchangeId}`);
+              const { BalanceConsistencyChecker } = require('./common/balanceConsistencyChecker');
+              const checker = new BalanceConsistencyChecker();
+              
+              // 単一取引所の残高整合性チェック
+              const result = await checker.checkSingleExchange(exchangeId);
+              
+              if (result.discrepancyCount > 0) {
+                console.log(`[残高チェック] 不整合検出: ${result.discrepancyCount}件`);
+                
+                // 不整合が検出された場合の詳細ログ
+                for (const discrepancy of result.discrepancies) {
+                  console.log(`  ${discrepancy.currency}: Bot ${discrepancy.botBalance} vs 取引所 ${discrepancy.exchangeBalance} (${discrepancy.percentage}%差)`);
+                }
+                
+                // 高い不整合（10%以上）が検出された場合、Discord通知
+                const highDiscrepancies = result.discrepancies.filter(d => Math.abs(d.percentage) >= 10);
+                if (highDiscrepancies.length > 0) {
+                  let message = `⚠️ **残高不整合検出** (${exchangeId})\n` +
+                               `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                               `📊 **不整合通貨**: ${highDiscrepancies.length}件\n\n`;
+                  
+                  highDiscrepancies.forEach(d => {
+                    message += `💱 **${d.currency}**\n` +
+                              `　Bot計算: ${d.botBalance.toFixed(6)}\n` +
+                              `　取引所: ${d.exchangeBalance.toFixed(6)}\n` +
+                              `　差異: ${d.percentage.toFixed(2)}%\n\n`;
+                  });
+                  
+                  message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
+                  await postOrderToDiscord(message);
+                }
+              } else {
+                console.log(`[残高チェック] 正常: 不整合なし`);
+              }
+              
+              lastBalanceCheckTime = now;
+            } catch (balanceError) {
+              console.warn(`[残高チェック] エラー: ${exchangeId} - ${balanceError.message}`);
+            }
+          }
+
+          // 自己修復システム（30分間隔）
+          if (now - lastSelfHealingTime >= SELF_HEALING_INTERVAL) {
+            try {
+              console.log(`[自己修復] 開始: ${exchangeId}`);
+              const SelfHealingSystem = require('../scripts/phase2SelfHealingSystem');
+              const healer = new SelfHealingSystem();
+              
+              // 自己修復実行
+              const healingResult = await healer.performSelfHealing(exchangeId);
+              
+              if (healingResult.totalFixed > 0) {
+                console.log(`[自己修復] 修復完了: ${healingResult.totalFixed}件`);
+                
+                let message = `🔧 **自己修復システム実行** (${exchangeId})\n` +
+                             `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                             `✅ **修復結果**\n` +
+                             `　偽約定ポジション: ${healingResult.phantomFixed}件削除\n` +
+                             `　部分約定: ${healingResult.partialFixed}件修正\n` +
+                             `　軽微な不整合: ${healingResult.minorFixed}件調整\n` +
+                             `　合計: ${healingResult.totalFixed}件\n\n`;
+                
+                if (healingResult.details && healingResult.details.length > 0) {
+                  message += `📝 **修復詳細**\n`;
+                  healingResult.details.slice(0, 5).forEach(detail => {
+                    message += `　• ${detail}\n`;
+                  });
+                  
+                  if (healingResult.details.length > 5) {
+                    message += `　... 他 ${healingResult.details.length - 5} 件\n`;
+                  }
+                }
+                
+                message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
+                await postOrderToDiscord(message);
+              } else {
+                console.log(`[自己修復] 正常: 修復対象なし`);
+              }
+              
+              lastSelfHealingTime = now;
+            } catch (healingError) {
+              console.warn(`[自己修復] エラー: ${exchangeId} - ${healingError.message}`);
             }
           }
 
