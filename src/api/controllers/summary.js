@@ -13,22 +13,22 @@ async function getTradeSummary(req, res) {
     // サマリー情報を取得
     const summaryData = await getAllTradeSummaries();
 
-    // 購入可能額計算を一時的に無効化（パフォーマンス問題の解決まで）
-    const availableAmounts = {};
+    // 緊急対応：calculateAvailableAmountsを一時的に無効化
+    // const availableAmounts = await calculateAvailableAmounts(summaryData);
     
     // サマリーデータがオブジェクトか配列かを判定
     let enhancedSummaryData;
     if (Array.isArray(summaryData)) {
       // 配列の場合はオブジェクトでラップ
       enhancedSummaryData = {
-        positions: summaryData,
-        availableAmounts
+        positions: summaryData
+        // availableAmounts  // 一時的にコメントアウト
       };
     } else {
-      // オブジェクトの場合はプロパティを追加
+      // オブジェクトの場合はそのまま返す
       enhancedSummaryData = {
-        ...summaryData,
-        availableAmounts
+        ...summaryData
+        // availableAmounts  // 一時的にコメントアウト
       };
     }
     
@@ -42,8 +42,9 @@ async function getTradeSummary(req, res) {
 
 /**
  * 各通貨ペアの購入可能額を計算
+ * @param {Array|Object} summaryData - 事前に取得されたサマリーデータ
  */
-async function calculateAvailableAmounts() {
+async function calculateAvailableAmounts(summaryData) {
   try {
     const availableAmounts = {};
     // configからbitbankインスタンスを使用
@@ -52,8 +53,7 @@ async function calculateAvailableAmounts() {
     // 残高情報を一度だけ取得
     const balance = await getAvailableFund(exchange, '', {});
     
-    // 戦略別の実現損益を取得（サマリーデータから）
-    const summaryData = await getAllTradeSummaries();
+    // 戦略別の実現損益を取得（引数として受け取ったサマリーデータから）
     const strategyPnLMap = {};
     
     // summaryDataが配列の場合とオブジェクトの場合の両方に対応
@@ -87,22 +87,24 @@ async function calculateAvailableAmounts() {
       });
     }
     
-    // 戦略別に購入可能額を計算
+    // 戦略別に購入可能額を計算（レート制限を考慮した最適化）
     for (const [strategyName, symbols] of Object.entries(strategySymbolMap)) {
       availableAmounts[strategyName] = {};
       
+      // 戦略内のシンボルを順次処理（レート制限対策）
       for (const [symbol, symbolConfig] of Object.entries(symbols)) {
         try {
           const baseCurrency = symbol.split('/')[1];
           const quoteCurrency = symbol.split('/')[0];
           const availableFunds = balance.free[baseCurrency] || 0;
           
-          // 現在の価格を取得
-          const ticker = await exchange.fetchTicker(symbol);
-          const currentPrice = ticker.last;
+          // ticker取得とmarketParams取得を並列実行（同一シンボルなのでレート制限に問題なし）
+          const [ticker, marketParams] = await Promise.all([
+            exchange.fetchTicker(symbol),
+            getMarketParameters(exchange, symbol)
+          ]);
           
-          // マーケットパラメータを取得
-          const marketParams = await getMarketParameters(exchange, symbol);
+          const currentPrice = ticker.last;
           const { amountPrecision, minTradeAmount } = marketParams;
           
           // 戦略の実現損益を取得

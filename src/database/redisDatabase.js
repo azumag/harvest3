@@ -46,10 +46,16 @@ async function getTradeSummaryTimestamp(exchange, symbol) {
   return null;
 }
 
-// サマリーの更新
+// サマリーの更新 - 数値精度安全化版
 async function updateTradeSummary(trade) {
-  const summaryKey = `trade_summary:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+  const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
   const now = Date.now();
+
+  // 入力データのバリデーション
+  if (!trade || !trade.amount || !trade.value || !trade.side) {
+    console.error('無効な取引データでサマリー更新をスキップ:', trade);
+    return;
+  }
 
   const exists = await client.exists(summaryKey);
 
@@ -82,32 +88,40 @@ async function updateTradeSummary(trade) {
     await client.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
     
-    // 実現損益を計算（売りの場合のみ更新）
-    // 単純化のため、売った分の平均購入コストを計算
+    // 実現損益を計算（売りの場合のみ更新）- 数値精度安全化
     const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
     const currentBuyCost = parseFloat(await client.hGet(summaryKey, 'totalBuyCost') || 0);
     
-    if (currentBuyAmount > 0) {
-      const avgBuyCost = currentBuyCost / currentBuyAmount;
-      const soldCost = trade.amount * avgBuyCost;
-      const profit = trade.value - soldCost;
-      await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
+    // 異常値ガード: 数値精度とゼロ除算チェック
+    if (currentBuyAmount > 0.0000001 && currentBuyCost > 0.01 && trade.amount > 0.0000001 && trade.value > 0.01) {
+      const avgBuyPrice = Number((currentBuyCost / currentBuyAmount).toFixed(8));
+      const soldCost = Number((trade.amount * avgBuyPrice).toFixed(8));
+      const profit = Number((trade.value - soldCost).toFixed(8));
+      
+      // 異常な実現損益をブロック（絶対値で1000万円超えはNG）
+      if (Math.abs(profit) <= 10000000) {
+        await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
+      } else {
+        console.error(`異常な実現損益を検出しブロック: ${trade.exchange}:${trade.symbol}:${trade.strategy} profit=${profit}円`);
+      }
+    } else {
+      console.warn(`数値精度不足で実現損益計算をスキップ: ${trade.exchange}:${trade.symbol}:${trade.strategy}`);
     }
   }
   
 }
 
 async function getAllTradeSummaries() {
-  const keys = await client.keys(`trade_summary:*`);
+  const keys = await client.keys(`summary:trade:*`);
   const summaries = [];
 
   for (const key of keys) {
     const summary = await client.hGetAll(key);
     if (Object.keys(summary).length > 0) {
       const keyParts = key.split(':');
-      const exchangeId = keyParts[1];
-      const symbol = keyParts[2];
-      const strategyKey = keyParts[3];
+      const exchangeId = keyParts[2];
+      const symbol = keyParts[3];
+      const strategyKey = keyParts[4];
       
       // undefinedやnullの値を持つキーをスキップ
       if (exchangeId === 'undefined' || !exchangeId || 
@@ -138,7 +152,7 @@ async function getAllTradeSummaries() {
 }
 
 async function getTradeSummaries(exchangeId) {
-  const keys = await client.keys(`trade_summary:${exchangeId}:*`);
+  const keys = await client.keys(`summary:trade:${exchangeId}:*`);
   const summaries = [];
 
   for (const key of keys) {
@@ -175,7 +189,7 @@ async function getTradeSummary(filters = {}) {
   
   // 全て指定されている場合は特定のサマリーを取得
   if (exchangeId && symbol && strategyKey) {
-    const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+    const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const summary = await client.hGetAll(summaryKey);
     
     if (Object.keys(summary).length > 0) {
