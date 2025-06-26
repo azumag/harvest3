@@ -59,7 +59,7 @@ class DebugValidator {
 
     try {
       // 全trade_summaryキーを取得
-      const summaryKeys = await redisClient.keys('trade_summary:*');
+      const summaryKeys = await redisClient.keys('summary:trade:*');
       console.log(`総サマリーキー数: ${summaryKeys.length}件`);
 
       let validKeys = 0;
@@ -68,7 +68,7 @@ class DebugValidator {
       for (const key of summaryKeys) {
         const keyParts = key.split(':');
         
-        if (keyParts.length === 4 && keyParts[0] === 'trade_summary') {
+        if (keyParts.length === 5 && keyParts[0] === 'summary' && keyParts[1] === 'trade') {
           const [, exchange, symbol, strategy] = keyParts;
           
           if (exchange && symbol && strategy && 
@@ -89,7 +89,7 @@ class DebugValidator {
             key,
             issue: 'invalid_format',
             parts: keyParts,
-            expectedFormat: 'trade_summary:exchange:symbol:strategy'
+            expectedFormat: 'summary:trade:exchange:symbol:strategy'
           });
           console.log(`  ❌ 不正なキー形式: ${key}`);
         }

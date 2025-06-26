@@ -35,7 +35,7 @@ async function ultraThinkPhase2StrategyAnalysis() {
     console.log('\n📊 Phase 2.1: システム現況確認');
     
     const positionKeys = await client.keys('position:*');
-    const summaryKeys = await client.keys('trade_summary:*');
+    const summaryKeys = await client.keys('summary:trade:*');
     const filledTradeKeys = await client.keys('filled_trade:*');
     const pendingOrderKeys = await client.keys('pending_order:*');
     

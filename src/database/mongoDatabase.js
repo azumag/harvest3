@@ -172,6 +172,18 @@ async function addOrderMongoDB(orderData) {
     // console.log('Order added:', result.insertedId);
     return result;
   } catch (error) {
+    // 🚨 CRITICAL FIX: Handle duplicate key errors gracefully to prevent crashes
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.orderId) {
+      console.warn(`[MongoDB] Order ${orderData.orderId} already exists, skipping duplicate insertion`);
+      // Return success-like result for duplicate orders to maintain compatibility
+      return { 
+        acknowledged: true, 
+        insertedId: null, 
+        duplicate: true, 
+        orderId: orderData.orderId 
+      };
+    }
+    
     console.error('Error adding order:', error);
     throw error;
   }

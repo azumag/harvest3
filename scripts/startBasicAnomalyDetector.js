@@ -51,7 +51,7 @@ async function startBasicAnomalyDetector() {
     // Redis接続確認
     const client = detector.client;
     const positionCount = await client.keys('position:*').then(keys => keys.length);
-    const summaryCount = await client.keys('trade_summary:*').then(keys => keys.length);
+    const summaryCount = await client.keys('summary:trade:*').then(keys => keys.length);
     const filledTradeCount = await client.keys('filled_trade:*').then(keys => keys.length);
     const pendingOrderCount = await client.keys('pending_order:*').then(keys => keys.length);
     
@@ -69,7 +69,7 @@ async function startBasicAnomalyDetector() {
       criticalIssues.push('🔴 CRITICAL: filled_trade完全欠落');
     }
     if (summaryCount < 10) {
-      criticalIssues.push('🟡 WARNING: trade_summary不足');
+      criticalIssues.push('🟡 WARNING: summary:trade不足');
     }
     if (positionCount > 200) {
       criticalIssues.push('🟡 WARNING: ポジション数過多');

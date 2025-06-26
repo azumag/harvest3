@@ -34,7 +34,7 @@ class EmergencyRiskLimits {
       // データ整合性制限
       maxDataInconsistencyRatio: 0.10, // 10%以上の不整合で制限
       minRequiredDataCount: {
-        trade_summary: 5,
+        summary:trade: 5,
         filled_trade: 1
       }
     };
@@ -240,7 +240,7 @@ Ultra-Deep Analysis発見問題への対策:
   async checkDataIntegrity() {
     try {
       const positionKeys = await this.client.keys('position:*');
-      const summaryKeys = await this.client.keys('trade_summary:*');
+      const summaryKeys = await this.client.keys('summary:trade:*');
       const filledTradeKeys = await this.client.keys('filled_trade:*');
       
       // 最小データ要件チェック
@@ -253,11 +253,11 @@ Ultra-Deep Analysis発見問題への対策:
         return;
       }
       
-      if (summaryKeys.length < this.limits.minRequiredDataCount.trade_summary) {
+      if (summaryKeys.length < this.limits.minRequiredDataCount.summary.trade) {
         await this.enforceEmergencyRestrictions('DATA_INSUFFICIENT', {
-          type: 'trade_summary',
+          type: 'summary:trade',
           actual: summaryKeys.length,
-          required: this.limits.minRequiredDataCount.trade_summary
+          required: this.limits.minRequiredDataCount.summary.trade
         });
         return;
       }
@@ -268,7 +268,7 @@ Ultra-Deep Analysis発見問題への対策:
         try {
           const pos = await this.client.hGetAll(posKey);
           if (pos.symbol && pos.strategyKey) {
-            const summaryKey = `trade_summary:${pos.symbol}:${pos.strategyKey}`;
+            const summaryKey = `summary:trade:${pos.symbol}:${pos.strategyKey}`;
             const exists = await this.client.exists(summaryKey);
             if (!exists) missingCount++;
           }

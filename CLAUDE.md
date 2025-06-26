@@ -2,22 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## tmuxを使い、gemini　cliと協調作業してください. 
-geminiはgemini-harvest というセッションペーンにいます。
-相談事をこのペーンにおくり、レスポンスをうけとってください。
-相談事の中には、geminiへの指示も含めてください。
+# Gemini および manager-claude からの指示を受けた場合
+- 指示者をプロジェクトマネージャーとし、協調作業すること
+- tmux の send-keys でやりとりし、マネージャとして指示を仰ぐこと
+- 結果レポート、作業内容を 指示者に必ず伝えること
+- Gemini は tmux の gemini-harvest で起動している
+- manager-claude は tmux の manager-claude で起動している
+- 自分を worker-claude と名乗る
 
-### Geminiへの指示
-- geminiですと名乗ること
-- claude への返答を tmux send-keys -t "gemini-harvest" を用いて送ること
-- sendkey で返答を送った後に、10秒おいて enter を送ること
-- 最終結果レポートも同じ様におくること
+## tmux 操作
+- メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
+- メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
+- Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
+- tmux send-keys -t "gemini-harvest" "内容" Enter
+- tmux send-keys -t "gemini-harvest" "" Enter
+- Enterは10秒間をおいて2回送る必要がある
 
-### 操作
-tmux send-keys -t "gemini-harvest" "<相談事>" Enter
-tmux send-keys -t "gemini-harvest" "" Enter (Enterは時間をおいて２回送る必要があります）
-tmux capture-pane -t "gemini-harvest" -p
-Geminiの作業を一旦キャンセルしたいときは esc をsendkeyすべし
+# worker-claude から指示が来た場合
+- 細かい操作、調査、実際の作業は worker-claude に任せて、自分をmanager-claudeとし、プロジェクトマネジメントだけに徹してください。
+- ただし、worker-claudeが行ったコードのレビューは行なってください。
+- レポートと結果成果物についての Quality Assuarance を行なってください.
+- テストがある場合は実行し、問題があるなら直させてください
+- テストコード自体もレビューしてください。
+- web ui の機能改修の場合は mcp ブラウザを用いて確認
+- 指示は tmux の send-keys を通じて行います。
+- worker-claude は claude-harvest という pane にいます。
+- tmux send-keys -t "claude-harvest" "指示" Enter
+- Enterは10秒間をおいて２回送る必要があります
+- tmux send-keys -t "claude-harvest" "" Enter
+- 指示の最初に /orchestrator をつけ、自分を manager-claude であると名乗ること
+- send-keys を用いて結果レポートを manager に返す様に伝えるのを忘れないでください。
+- 最後に think をつけること。
+- バッククォートがシェルによってコマンドとして解釈されてしまうので、バッククォート自体をエスケープして、worker-Claudeに指示を送る
+- 送信後はプロンプト入力画面にもどり、worker-claudeからsend-keysされてくるのを待つこと.
+- 自分で作業をしない
+例：
+tmux send-keys -t "claude-harvest" "/orchestrator 指示 レポートを tmux send-keys を用いて manager-claude に返すこと。 ultrathink" Enter
 
 # 調査
 何か調査する必要がある時は、gemini に websearchをたのむこと
@@ -48,84 +68,11 @@ mongodb               # Historical database
 
 ## 🛠️ Essential Commands
 
-### Development Commands
-```bash
-# Testing
-npm test                    # Run all tests
-npm run test:unit          # Run unit tests only
-npm run test:watch         # Watch mode testing
-
-# Bot Operations  
-npm start                  # Start main bot
-npm run start-hft         # Start HFT bot
-npm run start-web         # Start Web UI server
-npm run backtest          # Run backtesting
-
-# Balance Management
-npm run check-balance     # Check balance consistency
-npm run compare-balance   # Compare exchange vs internal balance
-npm run fix-position-inconsistencies  # Fix position inconsistencies
-```
-
-### Docker Operations (Makefile)
-```bash
-# Quick restarts (recommended for development)
-make quick-restart-bot       # Restart bot container
-make quick-restart-backtest  # Restart backtest container
-make restart-webui          # Restart Web UI
-
-# Full restarts
-make restart-all           # Restart all containers
-make restart-bot          # Full bot restart
-make restart-backtest     # Full backtest restart
-
-# Bot-specific commands
-make bot-logs             # View bot logs
-make bot-status          # Check bot status  
-make bot-exec            # Shell into bot container
-make help                # Show all available commands
-```
-
-### Key Configuration Files
-- `src/config.js` - Central strategy configuration and parameters
-- `docker-compose.yml` - Container orchestration
-- `.env` - Environment variables (API keys, database URLs)
-- `Makefile` - Docker operation shortcuts
-
-## 🔨 最重要ルール - 新しいルールの追加プロセス
-
-ユーザーから今回限りではなく常に対応が必要だと思われる指示を受けた場合：
-
-1. CLAUDE.mdに追加ルールとして記載する
-2. 以降は標準ルールとして常に適用する
-
-このプロセスにより、プロジェクトのルールを継続的に改善していきます
 
 ## 重要: 実行結果や応答を以下のコマンドでDiscordに送信                                                                                                                                                 
 ```bash
 claude-discord-bot send-to-discord "あなたの応答内容" --session claude-harvest
 ```                                                                                                                                                   
-
-## 📢 Discord通知チャンネル仕様
-
-### チャンネル別通知分類
-| チャンネル | 通知内容 | 変更履歴 |
-|------------|----------|----------|
-| **#order** | 取引実行・注文関連・リスク管理の正常処理 | |
-| | • 注文拒否（バリデーション失敗） | 2025-06-25 |
-| | • 注文実行失敗（リトライ後） | 2025-06-25 |
-| | • ストップロス実行 | 2025-06-25 |
-| | • 正常な取引実行 | |
-| **#error** | システムエラー・異常状態 | |
-| | • リスク管理チェック失敗 | |
-| | • データベース接続エラー | |
-| | • 戦略実行エラー | |
-
-### 通知変更の原則
-- **正常な取引活動** → #order チャンネル
-- **システム障害・エラー** → #error チャンネル
-- 注文拒否は**正常なバリデーション機能**なので #order へ
-- ストップロス実行は**正常なリスク管理**なので #order へ
 
 ## ⚠️ データベース操作における重要な制約
 
@@ -155,9 +102,6 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 - 暗号通貨の残高管理に焦点を当てるため
 - JPY残高は取引所側で別途管理されるため
 
-実装：
-- `src/common/balanceChecker.js` で JPY を自動的にスキップ
-- 手動実行時も自動実行時も常に適用される
 
 ## Geminiへの指示における重要な注意点
 - geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
@@ -175,3 +119,7 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 - 明白な実装が分かる場合は直接実装してもOK
 - テストリストを常に更新する
 - 不安なところからテストを書く
+
+### commit
+作業単位は適宜 git commit する。
+その時のプロンプト内容を git notes に記載する

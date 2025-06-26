@@ -158,7 +158,7 @@ class RecalibrationRecovery {
         const symbol = `${currency}/JPY`; // Most common trading pair
         const strategyKey = 'RECALIBRATION_RECOVERY'; // Special strategy for restored positions
         
-        const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+        const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
         
         const restorationData = {
           symbol,

@@ -13,6 +13,7 @@ const {
   getMarketParametersByExchangeSymbol,
   cleanupInvalidPendingOrders
 } = require('./database/manager');
+const { getAllPendingOrdersRedis } = require('./database/redisDatabase');
 const PendingOrderLimitManager = require('./common/pendingOrderLimitManager');
 const OrderValidation = require('./common/orderValidation');
 const { 
@@ -42,6 +43,133 @@ let lastSelfHealingTime = 0;
 // 残高整合性チェックの実行間隔 (5分)
 const BALANCE_CHECK_INTERVAL = 5 * 60 * 1000;
 let lastBalanceCheckTime = 0;
+
+/**
+ * 強化版未約定注文クリーンアップ機能
+ * 事前統計とエラーハンドリングを含む包括的なクリーンアップ
+ */
+async function enhancedPendingOrderCleanup(exchangeInstance, exchangeId, verbose = false) {
+  const startTime = Date.now();
+  const result = {
+    success: false,
+    preStats: null,
+    cleanupResult: null,
+    processingTime: 0,
+    error: null
+  };
+
+  try {
+    // 事前統計の取得
+    const allOrders = await getAllPendingOrdersRedis();
+    const exchangeOrders = allOrders.filter(order => order.exchangeId === exchangeId);
+    
+    const preStats = {
+      total: exchangeOrders.length,
+      bySymbol: {},
+      byStrategy: {},
+      byStatus: {},
+      oldestOrder: null,
+      newestOrder: null
+    };
+
+    let oldestTimestamp = Infinity;
+    let newestTimestamp = 0;
+
+    for (const order of exchangeOrders) {
+      // シンボル別統計
+      preStats.bySymbol[order.symbol] = (preStats.bySymbol[order.symbol] || 0) + 1;
+      
+      // 戦略別統計
+      preStats.byStrategy[order.strategyKey] = (preStats.byStrategy[order.strategyKey] || 0) + 1;
+      
+      // ステータス別統計
+      preStats.byStatus[order.status] = (preStats.byStatus[order.status] || 0) + 1;
+
+      // 最古・最新の注文を追跡
+      if (order.timestamp < oldestTimestamp) {
+        oldestTimestamp = order.timestamp;
+        preStats.oldestOrder = order;
+      }
+      if (order.timestamp > newestTimestamp) {
+        newestTimestamp = order.timestamp;
+        preStats.newestOrder = order;
+      }
+    }
+
+    result.preStats = preStats;
+
+    // 詳細ログ出力（冗長モード時）
+    if (verbose && preStats.total > 0) {
+      console.log(`[強化クリーンアップ] ${exchangeId} 事前統計:`);
+      console.log(`  総未約定注文: ${preStats.total}件`);
+      
+      // シンボル別統計（上位5件）
+      const topSymbols = Object.entries(preStats.bySymbol)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      if (topSymbols.length > 0) {
+        console.log(`  主要シンボル: ${topSymbols.map(([symbol, count]) => `${symbol}(${count})`).join(', ')}`);
+      }
+
+      // 最古の注文情報
+      if (preStats.oldestOrder) {
+        const oldestAge = Math.floor((Date.now() - preStats.oldestOrder.timestamp) / (1000 * 60 * 60));
+        console.log(`  最古注文: ${preStats.oldestOrder.orderId} (${oldestAge}時間前)`);
+      }
+    }
+
+    // 既存のクリーンアップ機能を実行
+    const cleanupResult = await cleanupInvalidPendingOrders(exchangeInstance);
+    result.cleanupResult = cleanupResult;
+
+    // 処理時間の計算
+    result.processingTime = Date.now() - startTime;
+
+    // 成功時の詳細ログ
+    if (cleanupResult.deleted > 0) {
+      console.log(`[強化クリーンアップ] ${exchangeId} 完了: ${cleanupResult.deleted}件削除 (処理時間: ${result.processingTime}ms)`);
+      
+      // 重要なクリーンアップ結果をDiscordに通知
+      if (cleanupResult.deleted >= 5) {
+        let message = `🧹 **未約定注文クリーンアップ** (${exchangeId})\n` +
+                     `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                     `📊 **処理結果**\n` +
+                     `　チェック: ${cleanupResult.checked}件\n` +
+                     `　削除: ${cleanupResult.deleted}件\n` +
+                     `　エラー: ${cleanupResult.errors}件\n`;
+
+        if (preStats.total > 0) {
+          message += `\n📈 **事前統計**\n` +
+                    `　総未約定注文: ${preStats.total}件\n`;
+          
+          // 上位シンボルを表示
+          const topSymbols = Object.entries(preStats.bySymbol)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+          if (topSymbols.length > 0) {
+            message += `　主要シンボル: ${topSymbols.map(([symbol, count]) => `${symbol}(${count})`).join(', ')}\n`;
+          }
+        }
+
+        message += `\n⏱️ 処理時間: ${result.processingTime}ms\n`;
+        message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
+
+        await postOrderToDiscord(message);
+      }
+    } else if (verbose) {
+      console.log(`[強化クリーンアップ] ${exchangeId} 完了: クリーンアップ対象なし (処理時間: ${result.processingTime}ms)`);
+    }
+
+    result.success = true;
+    return result;
+
+  } catch (error) {
+    result.error = error.message;
+    result.processingTime = Date.now() - startTime;
+    console.warn(`[強化クリーンアップ] ${exchangeId} エラー: ${error.message} (処理時間: ${result.processingTime}ms)`);
+    return result;
+  }
+}
 
 const args = process.argv.slice(2);
 // 通貨ペア（シンボル）の取得
@@ -124,22 +252,24 @@ async function startBot() {
             console.log(`[注文管理] 初期化完了: ${exchangeId}`);
           }
 
-          // 未約定注文のクリーンアップ（5分間隔）
+          // 強化版未約定注文クリーンアップ（5分間隔）
           const now = Date.now();
           const cleanupInterval = 5 * 60 * 1000; // 5分
           const lastTime = lastCleanupTime[exchangeId] || 0;
           
           if (now - lastTime >= cleanupInterval) {
             try {
-              console.log(`[クリーンアップ] 開始: ${exchangeId}`);
-              const cleanupResult = await cleanupInvalidPendingOrders(exchangeInstance);
+              console.log(`[強化クリーンアップ] 開始: ${exchangeId}`);
+              const enhancedResult = await enhancedPendingOrderCleanup(exchangeInstance, exchangeId, false);
               lastCleanupTime[exchangeId] = now;
               
-              if (cleanupResult.deleted > 0) {
-                console.log(`[クリーンアップ] 完了: ${exchangeId} - ${cleanupResult.deleted}件の無効注文を削除`);
+              if (enhancedResult.success && enhancedResult.cleanupResult.deleted > 0) {
+                console.log(`[強化クリーンアップ] 成功: ${exchangeId} - ${enhancedResult.cleanupResult.deleted}件削除`);
+              } else if (!enhancedResult.success) {
+                console.warn(`[強化クリーンアップ] 失敗: ${exchangeId} - ${enhancedResult.error}`);
               }
             } catch (cleanupError) {
-              console.warn(`[クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
+              console.warn(`[強化クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
             }
           }
 
@@ -259,11 +389,8 @@ async function startBot() {
           if (now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
             try {
               console.log(`[残高チェック] 開始: ${exchangeId}`);
-              const { BalanceConsistencyChecker } = require('./common/balanceConsistencyChecker');
-              const checker = new BalanceConsistencyChecker();
-              
-              // 単一取引所の残高整合性チェック
-              const result = await checker.checkSingleExchange(exchangeId);
+              const { checkSingleExchange } = require('./common/balanceChecker');
+              const result = await checkSingleExchange(exchangeId);
               
               if (result.discrepancyCount > 0) {
                 console.log(`[残高チェック] 不整合検出: ${result.discrepancyCount}件`);
@@ -304,38 +431,49 @@ async function startBot() {
           if (now - lastSelfHealingTime >= SELF_HEALING_INTERVAL) {
             try {
               console.log(`[自己修復] 開始: ${exchangeId}`);
-              const SelfHealingSystem = require('../scripts/phase2SelfHealingSystem');
-              const healer = new SelfHealingSystem();
+              const { Phase2SelfHealingSystem } = require('../scripts/phase2SelfHealingSystem');
+              const healer = new Phase2SelfHealingSystem();
               
-              // 自己修復実行
-              const healingResult = await healer.performSelfHealing(exchangeId);
+              // 自己修復実行 (✅ FIX: Corrected method name from performSelfHealing to executeSelfHealing)
+              const healingResult = await healer.executeSelfHealing();
               
-              if (healingResult.totalFixed > 0) {
-                console.log(`[自己修復] 修復完了: ${healingResult.totalFixed}件`);
+              // 安全なプロパティアクセスのためのnullチェック
+              if (healingResult && typeof healingResult === 'object') {
+                const totalFixed = healingResult.totalFixed || 0;
+                const phantomFixed = healingResult.phantomFixed || 0;
+                const partialFixed = healingResult.partialFixed || 0;
+                const minorFixed = healingResult.minorFixed || 0;
+                const details = healingResult.details || [];
                 
-                let message = `🔧 **自己修復システム実行** (${exchangeId})\n` +
-                             `━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                             `✅ **修復結果**\n` +
-                             `　偽約定ポジション: ${healingResult.phantomFixed}件削除\n` +
-                             `　部分約定: ${healingResult.partialFixed}件修正\n` +
-                             `　軽微な不整合: ${healingResult.minorFixed}件調整\n` +
-                             `　合計: ${healingResult.totalFixed}件\n\n`;
-                
-                if (healingResult.details && healingResult.details.length > 0) {
-                  message += `📝 **修復詳細**\n`;
-                  healingResult.details.slice(0, 5).forEach(detail => {
-                    message += `　• ${detail}\n`;
-                  });
+                if (totalFixed > 0) {
+                  console.log(`[自己修復] 修復完了: ${totalFixed}件`);
                   
-                  if (healingResult.details.length > 5) {
-                    message += `　... 他 ${healingResult.details.length - 5} 件\n`;
+                  let message = `🔧 **自己修復システム実行** (${exchangeId})\n` +
+                               `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                               `✅ **修復結果**\n` +
+                               `　偽約定ポジション: ${phantomFixed}件削除\n` +
+                               `　部分約定: ${partialFixed}件修正\n` +
+                               `　軽微な不整合: ${minorFixed}件調整\n` +
+                               `　合計: ${totalFixed}件\n\n`;
+                  
+                  if (details && details.length > 0) {
+                    message += `📝 **修復詳細**\n`;
+                    details.slice(0, 5).forEach(detail => {
+                      message += `　• ${detail}\n`;
+                    });
+                    
+                    if (details.length > 5) {
+                      message += `　... 他 ${details.length - 5} 件\n`;
+                    }
                   }
+                  
+                  message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
+                  await postOrderToDiscord(message);
+                } else {
+                  console.log(`[自己修復] 正常: 修復対象なし`);
                 }
-                
-                message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
-                await postOrderToDiscord(message);
               } else {
-                console.log(`[自己修復] 正常: 修復対象なし`);
+                console.log(`[自己修復] 警告: 修復結果が無効です`);
               }
               
               lastSelfHealingTime = now;
@@ -426,14 +564,16 @@ async function executeRiskManagementCheck() {
     console.log('[リスク管理] 事前クリーンアップ開始...');
     let preCleanupCount = 0;
     
-    // 取引所別に事前クリーンアップを実行
+    // 取引所別に事前クリーンアップを実行（強化版）
     for (const [exchangeId, exchangeConfig] of Object.entries(config.exchanges)) {
       if (!exchangeConfig) continue;
       try {
-        const cleanup = await cleanupInvalidPendingOrders(exchangeConfig.instance);
-        preCleanupCount += cleanup.deleted;
+        const enhancedResult = await enhancedPendingOrderCleanup(exchangeConfig.instance, exchangeId, true);
+        if (enhancedResult.success && enhancedResult.cleanupResult) {
+          preCleanupCount += enhancedResult.cleanupResult.deleted;
+        }
       } catch (cleanupError) {
-        console.warn(`[リスク管理] 事前クリーンアップエラー ${exchangeId}: ${cleanupError.message}`);
+        console.warn(`[リスク管理] 事前強化クリーンアップエラー ${exchangeId}: ${cleanupError.message}`);
       }
     }
     
@@ -709,7 +849,7 @@ async function executeRiskManagementCheck() {
                           } catch (recalcError) {
                             console.error(`[リスク管理] 再計算失敗: ${recalcError.message} - 強制リセットに切り替え`);
                             // 再計算失敗時は強制リセット
-                            const summaryKey = `trade_summary:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
+                            const summaryKey = `summary:trade:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
                             const { getClient } = require('./database/redisDatabase');
                             const client = getClient();
                             
@@ -727,7 +867,7 @@ async function executeRiskManagementCheck() {
                         } else {
                           // 通常の強制リセット
                           try {
-                            const summaryKey = `trade_summary:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
+                            const summaryKey = `summary:trade:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
                             const { getClient } = require('./database/redisDatabase');
                             const client = getClient();
                             

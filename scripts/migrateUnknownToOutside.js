@@ -20,7 +20,7 @@ async function migrateUnknownToOutside() {
     console.log('');
     
     // UNKNOWN戦略のキーを検索
-    const unknownKeys = await client.keys('trade_summary:*:UNKNOWN');
+    const unknownKeys = await client.keys('summary:trade:*:UNKNOWN');
     console.log(`📊 UNKNOWN戦略キー: ${unknownKeys.length}件`);
     
     if (unknownKeys.length === 0) {

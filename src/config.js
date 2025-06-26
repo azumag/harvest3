@@ -20,9 +20,13 @@ const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
     secret: BBApiSecret,
     enableRateLimit: true,
-    rateLimit: 1000, // 1リクエストあたり1000ミリ秒（1秒）の制限
+    rateLimit: 1500, // 1.5秒間隔に拡大（API負荷軽減）
+    timeout: 30000, // 30秒タイムアウト（10秒から拡大）
     options: {
-        'maxThrottleQueueSize': 2000 // スロットルキューの最大サイズを増やす
+        'maxThrottleQueueSize': 1000, // キューサイズを削減（メモリ効率向上）
+        'defaultType': 'spot',
+        'recvWindow': 60000,
+        'adjustForTimeDifference': true
     }
 });
 
@@ -247,14 +251,14 @@ const config = {
 
     // 高頻度取引戦略 (bitbank WebSocket)
     HFT: {
-      enabled: process.env.STRATEGY_HFT_BB_WS_ENABLED === 'true',
+      enabled: false, // *** EMERGENCY SHUTDOWN: CATASTROPHIC SYSTEM FAILURE ***
       function: require('./hft').startHFTStrategy,
       atomicExec: true,
       exchanges: [exchangeBB],
     },
 
     MUTUAL_INFO: {
-      enabled: true,
+      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
       threshold: 0.5,
       ohlcvInterval: '5m',
       deviationThreshold: 3,
@@ -280,7 +284,7 @@ const config = {
 
     // 逆張り戦略
     MEAN_REVERSION: {
-      enabled: true,
+      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
       period: 20,
       ohlcvInterval: '15m',
       deviationThreshold: 3,
@@ -303,7 +307,7 @@ const config = {
     },
 
     MACD: {
-      enabled: true,
+      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
@@ -327,7 +331,7 @@ const config = {
     },
 
     BOLLINGER_BANDS: {
-      enabled: true,
+      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
@@ -351,7 +355,7 @@ const config = {
 
     // トレンドフォロー戦略
     MA: {
-      enabled: true,
+      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
@@ -374,7 +378,7 @@ const config = {
     },
 
     OSCILLATOR: {
-      enabled: true,
+      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -398,7 +402,7 @@ const config = {
     },
 
     RSI: {
-      enabled: true,
+      enabled: false, // *** EMERGENCY HALT: API TIMEOUT ISSUES DETECTED ***
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
@@ -423,7 +427,7 @@ const config = {
 
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
-      enabled: true, // 初期は無効（テスト後に有効化）
+      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],

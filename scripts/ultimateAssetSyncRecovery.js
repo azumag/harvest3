@@ -310,7 +310,7 @@ class UltimateAssetSyncRecovery {
           continue;
         }
         
-        const summaryKey = `trade_summary:${exchange}:${symbol}:${strategy}`;
+        const summaryKey = `summary:trade:${exchange}:${symbol}:${strategy}`;
         
         // 該当戦略の全取引を取得
         const strategyTrades = await listTrades(

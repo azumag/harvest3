@@ -216,7 +216,7 @@ async function resetTradeSummaries() {
     const client = getClient();
     
     // 取引サマリーキーを取得
-    const summaryKeys = await client.keys('trade_summary:*');
+    const summaryKeys = await client.keys('summary:trade:*');
     console.log(`  初期化対象サマリー: ${summaryKeys.length}件`);
     
     let resetCount = 0;

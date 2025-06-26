@@ -68,6 +68,52 @@ async function closeAllPositions(exchange) {
         console.log(`${symbol} を成行で売却します。数量: ${formattedAmount}`);
         postOrderToDiscord(`[INFO] ${exchange.id}: ${symbol} を成行で売却します。数量: ${formattedAmount}`);
         
+        // 🔍 COMPREHENSIVE VALIDATION: Check position existence with detailed logging
+        console.log(`📊 CLOSEALL VALIDATION START: ${symbol}`);
+        console.log(`├─ 通貨: ${currency}`);
+        console.log(`├─ 元の残高: ${amount}`);
+        console.log(`├─ 精度調整後: ${formattedAmount}`);
+        console.log(`└─ 最小取引量: ${minAmount}`);
+        
+        const exchangeBalance = await exchange.fetchBalance();
+        const currentExchangeAmount = exchangeBalance.free[currency] || 0;
+        const currentLockedAmount = exchangeBalance.used[currency] || 0;
+        const currentTotalAmount = exchangeBalance.total[currency] || 0;
+        
+        // Detailed balance logging for closeAll
+        console.log(`💰 CLOSEALL BALANCE DETAILS: ${symbol}`);
+        console.log(`├─ Free: ${currentExchangeAmount}`);
+        console.log(`├─ Used: ${currentLockedAmount}`);
+        console.log(`├─ Total: ${currentTotalAmount}`);
+        console.log(`└─ Required: ${formattedAmount}`);
+        
+        if (currentExchangeAmount < formattedAmount) {
+          const shortage = formattedAmount - currentExchangeAmount;
+          const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
+          
+          console.error(`❌ CLOSEALL VALIDATION FAILED: ${symbol}`);
+          console.error(`├─ 不足量: ${shortage} (${shortagePercent}%)`);
+          console.error(`├─ Exchange Free: ${currentExchangeAmount}`);
+          console.error(`├─ Exchange Used: ${currentLockedAmount}`);
+          console.error(`├─ 必要量: ${formattedAmount}`);
+          console.error(`└─ ポジション決済スキップ`);
+          
+          postOrderToDiscord(`🚨 **全決済ポジション検証失敗** ${symbol}\n` +
+                            `Exchange Free残高: ${currentExchangeAmount}\n` +
+                            `Exchange Used残高: ${currentLockedAmount}\n` +
+                            `Exchange Total残高: ${currentTotalAmount}\n` +
+                            `売却予定: ${formattedAmount}\n` +
+                            `不足量: ${shortage} (${shortagePercent}%)\n` +
+                            `⚠️ このポジションをスキップします\n` +
+                            `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          continue; // Skip this position and move to next
+        }
+        
+        console.log(`✅ CLOSEALL VALIDATION PASSED: ${symbol}`);
+        console.log(`├─ Exchange Free: ${currentExchangeAmount} >= Required: ${formattedAmount}`);
+        console.log(`├─ 余剰量: ${(currentExchangeAmount - formattedAmount).toFixed(6)}`);
+        console.log(`└─ 決済実行可能`);
+        
         // 成行売り注文を作成
         const order = await exchange.createMarketSellOrder(symbol, formattedAmount);
         

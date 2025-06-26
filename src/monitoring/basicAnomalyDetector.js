@@ -18,7 +18,7 @@ class BasicAnomalyDetector {
       orderFailureRate: 0.20,              // 20%以上の注文失敗
       dataCompletenessMinimum: {
         filled_trade: 0,
-        trade_summary: 10,
+        'summary:trade': 10,
         position: 5
       }
     };
@@ -112,7 +112,7 @@ class BasicAnomalyDetector {
       console.log('🔍 Position-Summary整合性チェック実行中...');
       
       const positionKeys = await this.client.keys('position:*');
-      const summaryKeys = await this.client.keys('trade_summary:*');
+      const summaryKeys = await this.client.keys('summary:trade:*');
       
       let missingCount = 0;
       const missingCombinations = [];
@@ -130,7 +130,7 @@ class BasicAnomalyDetector {
           }
           const exchangeId = posKeyParts[1];
           
-          const expectedSummaryKey = `trade_summary:${exchangeId}:${position.symbol}:${position.strategyKey}`;
+          const expectedSummaryKey = `summary:trade:${exchangeId}:${position.symbol}:${position.strategyKey}`;
           const summaryExists = await this.client.exists(expectedSummaryKey);
           
           if (!summaryExists) {
@@ -338,7 +338,7 @@ class BasicAnomalyDetector {
       
       const dataChecks = [
         { name: 'filled_trade', pattern: 'filled_trade:*' },
-        { name: 'trade_summary', pattern: 'trade_summary:*' },
+        { name: 'summary:trade', pattern: 'summary:trade:*' },
         { name: 'position', pattern: 'position:*' },
         { name: 'pending_order', pattern: 'pending_order:*' }
       ];
@@ -477,7 +477,7 @@ class BasicAnomalyDetector {
 
   // 自動修復: Trade Summary
   async autoRepairTradeSummary(missingCombinations) {
-    console.log(`🔧 Trade Summary自動修復開始: ${missingCombinations.length}件`);
+    console.log(`🔧 summary:trade自動修復開始: ${missingCombinations.length}件`);
     
     let repairedCount = 0;
     
@@ -513,7 +513,7 @@ class BasicAnomalyDetector {
             }
           }
           
-          const summaryKey = `trade_summary:${exchangeId}:${combo.symbol}:${combo.strategy}`;
+          const summaryKey = `summary:trade:${exchangeId}:${combo.symbol}:${combo.strategy}`;
           await this.client.hSet(summaryKey, {
             buyAmount: buyAmount.toFixed(8),
             sellAmount: sellAmount.toFixed(8),
@@ -531,7 +531,7 @@ class BasicAnomalyDetector {
       }
     }
     
-    console.log(`🎉 Trade Summary自動修復完了: ${repairedCount}/${missingCombinations.length}件成功`);
+    console.log(`🎉 summary:trade自動修復完了: ${repairedCount}/${missingCombinations.length}件成功`);
     return repairedCount;
   }
 

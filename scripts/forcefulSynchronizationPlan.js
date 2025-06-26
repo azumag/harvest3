@@ -108,7 +108,7 @@ class ForcefulSynchronizer {
         
         if (isPhantom) {
           // DELETE PHANTOM POSITION
-          const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+          const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
           
           try {
             await redisClient.del(summaryKey);

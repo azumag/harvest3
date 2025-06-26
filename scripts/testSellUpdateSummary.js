@@ -24,7 +24,7 @@ async function testSellUpdateSummary() {
     console.log('⏰ Test 1: AXS BOLLINGER_BANDS売却前の状態確認');
     console.log('-------------------------------------------');
     
-    const axsSummaryKey = 'trade_summary:bitbank:AXS/JPY:BOLLINGER_BANDS';
+    const axsSummaryKey = 'summary:trade:bitbank:AXS/JPY:BOLLINGER_BANDS';
     const beforeSummary = await client.hGetAll(axsSummaryKey);
     
     console.log('  売却前のsummary:');

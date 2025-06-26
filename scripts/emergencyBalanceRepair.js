@@ -96,7 +96,7 @@ async function removeUndefinedStrategies() {
   console.log('\n=== Phase 2: Undefined戦略データの削除 ===');
   
   try {
-    const summaryKeys = await redisClient.keys('trade_summary:*');
+    const summaryKeys = await redisClient.keys('summary:trade:*');
     let removedCount = 0;
     const removedSummaries = [];
 

@@ -31,7 +31,7 @@ async function rootCauseAnalysis() {
     
     // positionとtrade_summaryの作成タイムスタンプ分析
     const positionKeys = await client.keys('position:*');
-    const tradeSummaryKeys = await client.keys('trade_summary:*');
+    const tradeSummaryKeys = await client.keys('summary:trade:*');
     
     console.log(`現在のポジション数: ${positionKeys.length}`);
     console.log(`現在のtrade_summary数: ${tradeSummaryKeys.length}`);
@@ -94,7 +94,7 @@ async function rootCauseAnalysis() {
     const missing = [];
     for (const [combo, data] of combinations) {
       const [symbol, strategy] = combo.split(':');
-      const summaryKey = `trade_summary:bitbank:${symbol}:${strategy}`;
+      const summaryKey = `summary:trade:bitbank:${symbol}:${strategy}`;
       const exists = await client.exists(summaryKey);
       
       if (!exists) {

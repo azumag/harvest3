@@ -27,7 +27,7 @@ async function tradeRecordingDiagnosis() {
     const tradeKeys = allKeys.filter(key => key.includes('trade') || key.includes('filled'));
     console.log(`取引関連キー: ${tradeKeys.length}件`);
     
-    const summaryKeys = allKeys.filter(key => key.startsWith('trade_summary:'));
+    const summaryKeys = allKeys.filter(key => key.startsWith('summary:trade:'));
     console.log(`取引サマリーキー: ${summaryKeys.length}件`);
     
     if (summaryKeys.length > 0) {
@@ -65,7 +65,7 @@ async function tradeRecordingDiagnosis() {
         }
         
         // Redis内のサマリーと比較
-        const summaryKey = `trade_summary:${exchange.id}:${symbol}`;
+        const summaryKey = `summary:trade:${exchange.id}:${symbol}`;
         const exists = await client.exists(summaryKey);
         
         if (exists) {
@@ -114,7 +114,7 @@ async function tradeRecordingDiagnosis() {
     }
     
     if (summaryKeys.length === 0) {
-      issues.push('🚨 trade_summary キーが全く存在しない');
+      issues.push('🚨 summary:trade キーが全く存在しない');
     }
     
     // 実際のポジション数と比較

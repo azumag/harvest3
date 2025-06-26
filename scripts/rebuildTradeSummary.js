@@ -17,7 +17,7 @@ async function rebuildTradeSummary() {
     const client = getClient();
     
     // 既存のtrade_summaryキーを削除
-    const existingSummaries = await client.keys('trade_summary:*');
+    const existingSummaries = await client.keys('summary:trade:*');
     if (existingSummaries.length > 0) {
       await client.del(existingSummaries);
       console.log(`✅ 既存のtrade_summary削除: ${existingSummaries.length}件`);
@@ -80,7 +80,7 @@ async function rebuildTradeSummary() {
     // trade_summaryキーを作成
     let createdCount = 0;
     for (const [summaryKey, data] of summaryByStrategy) {
-      const redisKey = `trade_summary:${data.exchange}:${data.symbol}:${data.strategy}`;
+      const redisKey = `summary:trade:${data.exchange}:${data.symbol}:${data.strategy}`;
       
       await client.hSet(redisKey, {
         buyAmount: data.buyAmount.toFixed(8),

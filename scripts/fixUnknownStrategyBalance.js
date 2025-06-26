@@ -39,7 +39,7 @@ async function fixUnknownStrategyBalance() {
     
     for (const currencyInfo of problemCurrencies) {
       const { symbol, exchangeBalance, activeBalance } = currencyInfo;
-      const unknownKey = `trade_summary:bitbank:${symbol}:UNKNOWN`;
+      const unknownKey = `summary:trade:bitbank:${symbol}:UNKNOWN`;
       
       console.log(`🔍 ${symbol} の修正処理`);
       console.log('─'.repeat(50));

@@ -142,7 +142,7 @@ async function restoreHistoricalStrategies() {
     
     // 7. OUTSIDE戦略キーのクリーンアップ
     console.log('\n🧹 OUTSIDE戦略データクリーンアップ...');
-    const outsideKeys = await client.keys('trade_summary:*:OUTSIDE');
+    const outsideKeys = await client.keys('summary:trade:*:OUTSIDE');
     if (outsideKeys.length > 0) {
       console.log(`🗑️  削除対象OUTSIDE戦略キー: ${outsideKeys.length}件`);
       await client.del(outsideKeys);

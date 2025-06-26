@@ -544,20 +544,42 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
       if (orderResult.success) {
         order = orderResult.order;
       } else {
-        // 高度注文が失敗した場合は注文を実行しない（バリデーション強制）
-        console.warn(`[${strategyName}] 高度注文失敗、注文をスキップ: ${symbol}`);
+        // 🚨 EMERGENCY FIX: 高度注文が失敗した場合、従来方式にフォールバック
+        console.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
         console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
         
-        // Discord通知で詳細情報を送信
-        if (postOrderToDiscord && !options.backtest) {
-          await postOrderToDiscord(`⚠️ **注文スキップ** ${symbol}\n` +
-                                  `戦略: ${strategyName}\n` +
-                                  `理由: 高度注文管理でバリデーション失敗\n` +
-                                  `詳細: ${orderResult.error?.message || 'バリデーション失敗'}\n` +
-                                  `⏰ ${new Date().toLocaleString('ja-JP')}`);
+        try {
+          // 従来のマーケット注文方式でフォールバック実行
+          console.log(`[${strategyName}] フォールバック: createMarketBuyOrder実行 ${symbol} 数量:${formattedAmount}`);
+          order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
+          
+          // フォールバック成功の通知
+          if (postOrderToDiscord && !options.backtest) {
+            await postOrderToDiscord(`✅ **フォールバック成功** ${symbol}\n` +
+                                    `戦略: ${strategyName}\n` +
+                                    `高度注文失敗 → 従来方式で購入完了\n` +
+                                    `数量: ${formattedAmount}\n` +
+                                    `価格: ¥${(order.price || currentPrice).toLocaleString()}\n` +
+                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          }
+          
+          console.log(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
+          
+        } catch (fallbackError) {
+          // フォールバック失敗時のエラーハンドリング
+          console.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
+          
+          if (postErrorToDiscord && !options.backtest) {
+            await postErrorToDiscord(`🚨 **フォールバック失敗** ${symbol}\n` +
+                                    `戦略: ${strategyName}\n` +
+                                    `高度注文失敗 + 従来方式も失敗\n` +
+                                    `エラー: ${fallbackError.message}\n` +
+                                    `⚠️ 手動介入が必要です\n` +
+                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          }
+          
+          return { success: false, reason: 'フォールバック失敗のため注文実行不可', error: fallbackError };
         }
-        
-        return { success: false, reason: 'バリデーション失敗のため注文スキップ' };
       }
     }
 
@@ -569,13 +591,15 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
     // 取引記録を更新
     // 高度注文の場合、調整された価格を使用
-    const executedPrice = orderResult.adjustedPrice || 
-                        ((orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice);
-    if (orderType && orderType === 'market') {
+    // フォールバック注文の場合、marketタイプとして扱う
+    const executedPrice = orderResult?.adjustedPrice || order.price || currentPrice;
+    const finalOrderType = orderResult?.success ? orderType : 'market'; // フォールバック時はmarket扱い
+    
+    if (finalOrderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
-      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'market', options);
     } else {
-      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'limit', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'buy', formattedAmount, executedPrice, order.id, 'limit', options);
     }
 
     // リスク管理: ポジション情報を記録（バックテストモードではスキップ）
@@ -697,6 +721,66 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       
       // 高度注文管理が有効かチェック
       if (orderConfig.enabled) {
+        // 🔍 COMPREHENSIVE VALIDATION: Check position existence with detailed logging
+        console.log(`[${strategyName}] 📊 VALIDATION START (高度注文前): ${symbol}`);
+        console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
+        console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
+        console.log(`[${strategyName}] ├─ 戦略キー: ${strategyKey}`);
+        console.log(`[${strategyName}] └─ urgency: ${urgency} (${urgencyResult.method})`);
+        
+        const exchangeBalance = await exchange.fetchBalance();
+        const baseCurrency = symbol.split('/')[0];
+        const exchangeAmount = exchangeBalance.free[baseCurrency] || 0;
+        const exchangeLockedAmount = exchangeBalance.used[baseCurrency] || 0;
+        const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
+        
+        // Detailed balance logging
+        console.log(`[${strategyName}] 💰 BALANCE DETAILS: ${symbol}`);
+        console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
+        console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
+        console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
+        console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
+        
+        if (exchangeAmount < formattedAmount) {
+          const shortage = formattedAmount - exchangeAmount;
+          const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
+          
+          console.error(`[${strategyName}] ❌ VALIDATION FAILED (高度注文前): ${symbol}`);
+          console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
+          console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
+          console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
+          console.error(`[${strategyName}] └─ 必要量: ${formattedAmount}`);
+          
+          if (postErrorToDiscord && !options.backtest) {
+            await postErrorToDiscord(`🚨 **高度注文前ポジション検証失敗** ${symbol}\n` +
+                                    `戦略: ${strategyName}\n` +
+                                    `Exchange Free残高: ${exchangeAmount}\n` +
+                                    `Exchange Used残高: ${exchangeLockedAmount}\n` +
+                                    `Exchange Total残高: ${exchangeTotalAmount}\n` +
+                                    `売却予定: ${formattedAmount}\n` +
+                                    `不足量: ${shortage} (${shortagePercent}%)\n` +
+                                    `現在価格: ¥${currentPrice?.toLocaleString()}\n` +
+                                    `⚠️ 高度注文実行前にポジション不足を検出\n` +
+                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          }
+          
+          return { 
+            success: false, 
+            reason: 'Position validation failed before advanced order - insufficient balance on exchange',
+            validationDetails: {
+              exchangeAmount,
+              exchangeLockedAmount,
+              exchangeTotalAmount,
+              attemptedAmount: formattedAmount,
+              shortage,
+              shortagePercent: parseFloat(shortagePercent)
+            }
+          };
+        }
+        
+        console.log(`[${strategyName}] ✅ VALIDATION PASSED (高度注文前): ${symbol}`);
+        console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
+        console.log(`[${strategyName}] └─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
         console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(
@@ -710,34 +794,122 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       if (orderResult.success) {
         order = orderResult.order;
       } else {
-        // 高度注文が失敗した場合は注文を実行しない（バリデーション強制）
-        console.warn(`[${strategyName}] 高度注文失敗、注文をスキップ: ${symbol}`);
+        // 🚨 EMERGENCY FIX: 高度注文が失敗した場合、従来方式にフォールバック
+        console.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
         console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
         
-        // Discord通知で詳細情報を送信
-        if (postOrderToDiscord && !options.backtest) {
-          await postOrderToDiscord(`⚠️ **売り注文スキップ** ${symbol}\n` +
-                                  `戦略: ${strategyName}\n` +
-                                  `理由: 高度注文管理でバリデーション失敗\n` +
-                                  `詳細: ${orderResult.error?.message || 'バリデーション失敗'}\n` +
-                                  `⏰ ${new Date().toLocaleString('ja-JP')}`);
+        try {
+          // 🔍 COMPREHENSIVE VALIDATION: Check position existence with detailed logging (fallback)
+          console.log(`[${strategyName}] 📊 FALLBACK VALIDATION START: ${symbol}`);
+          console.log(`[${strategyName}] ├─ 高度注文失敗のためフォールバック実行`);
+          console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
+          console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
+          console.log(`[${strategyName}] └─ 戦略キー: ${strategyKey}`);
+          
+          const exchangeBalance = await exchange.fetchBalance();
+          const baseCurrency = symbol.split('/')[0];
+          const exchangeAmount = exchangeBalance.free[baseCurrency] || 0;
+          const exchangeLockedAmount = exchangeBalance.used[baseCurrency] || 0;
+          const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
+          
+          // Detailed balance logging for fallback
+          console.log(`[${strategyName}] 💰 FALLBACK BALANCE DETAILS: ${symbol}`);
+          console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
+          console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
+          console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
+          console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
+          
+          if (exchangeAmount < formattedAmount) {
+            const shortage = formattedAmount - exchangeAmount;
+            const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
+            
+            console.error(`[${strategyName}] ❌ FALLBACK VALIDATION FAILED: ${symbol}`);
+            console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
+            console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
+            console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
+            console.error(`[${strategyName}] ├─ 必要量: ${formattedAmount}`);
+            console.error(`[${strategyName}] └─ フォールバック実行不可`);
+            
+            if (postErrorToDiscord && !options.backtest) {
+              await postErrorToDiscord(`🚨 **フォールバックポジション検証失敗** ${symbol}\n` +
+                                      `戦略: ${strategyName}\n` +
+                                      `Exchange Free残高: ${exchangeAmount}\n` +
+                                      `Exchange Used残高: ${exchangeLockedAmount}\n` +
+                                      `Exchange Total残高: ${exchangeTotalAmount}\n` +
+                                      `売却予定: ${formattedAmount}\n` +
+                                      `不足量: ${shortage} (${shortagePercent}%)\n` +
+                                      `現在価格: ¥${currentPrice?.toLocaleString()}\n` +
+                                      `⚠️ 高度注文失敗後のフォールバックも実行不可\n` +
+                                      `🔥 緊急対応が必要です\n` +
+                                      `⏰ ${new Date().toLocaleString('ja-JP')}`);
+            }
+            
+            return { 
+              success: false, 
+              reason: 'Fallback position validation failed - insufficient balance on exchange',
+              fallbackValidationDetails: {
+                exchangeAmount,
+                exchangeLockedAmount,
+                exchangeTotalAmount,
+                attemptedAmount: formattedAmount,
+                shortage,
+                shortagePercent: parseFloat(shortagePercent),
+                isFallback: true
+              }
+            };
+          }
+          
+          console.log(`[${strategyName}] ✅ FALLBACK VALIDATION PASSED: ${symbol}`);
+          console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
+          console.log(`[${strategyName}] ├─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
+          console.log(`[${strategyName}] └─ フォールバック実行可能`);
+          
+          // 従来のマーケット注文方式でフォールバック実行
+          console.log(`[${strategyName}] フォールバック: createMarketSellOrder実行 ${symbol} 数量:${formattedAmount}`);
+          order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+          
+          // フォールバック成功の通知
+          if (postOrderToDiscord && !options.backtest) {
+            await postOrderToDiscord(`✅ **フォールバック成功** ${symbol}\n` +
+                                    `戦略: ${strategyName}\n` +
+                                    `高度注文失敗 → 従来方式で売却完了\n` +
+                                    `数量: ${formattedAmount}\n` +
+                                    `価格: ¥${(order.price || currentPrice).toLocaleString()}\n` +
+                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          }
+          
+          console.log(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
+          
+        } catch (fallbackError) {
+          // フォールバック失敗時のエラーハンドリング
+          console.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
+          
+          if (postErrorToDiscord && !options.backtest) {
+            await postErrorToDiscord(`🚨 **フォールバック失敗** ${symbol}\n` +
+                                    `戦略: ${strategyName}\n` +
+                                    `高度注文失敗 + 従来方式も失敗\n` +
+                                    `エラー: ${fallbackError.message}\n` +
+                                    `⚠️ 手動介入が必要です\n` +
+                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
+          }
+          
+          return { success: false, reason: 'フォールバック失敗のため注文実行不可', error: fallbackError };
         }
-        
-        return { success: false, reason: 'バリデーション失敗のため注文スキップ' };
       }
     }
 
     // 取引記録を更新
     // 高度注文の場合、調整された価格を使用
-    const executedPrice = orderResult.adjustedPrice || 
-                        ((orderType && orderType === 'market') ? (order.price || currentPrice) : currentPrice);
+    // フォールバック注文の場合、marketタイプとして扱う
+    const executedPrice = orderResult?.adjustedPrice || order.price || currentPrice;
+    const finalOrderType = orderResult?.success ? orderType : 'market'; // フォールバック時はmarket扱い
     
-    if (orderType && orderType === 'market') {
+    if (finalOrderType === 'market') {
       // マーケットオーダーの場合、実際の約定価格を取得
-      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'market', options);
     }
     else {
-      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'limit', options); // options を渡すように変更
+      addOrder(exchange, symbol, strategyKey, 'sell', formattedAmount, executedPrice, order.id, 'limit', options);
     }
 
     // パフォーマンス追跡（バックテスト以外）

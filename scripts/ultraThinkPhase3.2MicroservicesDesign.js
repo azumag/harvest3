@@ -120,7 +120,7 @@ class MicroservicesDesignSystem {
         database: {
           primary: 'Redis (アクティブポジション)',
           secondary: 'MongoDB (取引履歴)',
-          collections: ['positions', 'filled_trades', 'trade_summary', 'pending_orders']
+          collections: ['positions', 'filled_trades', 'summary:trade', 'pending_orders']
         },
         apis: {
           external: ['Bitbank API'],
@@ -547,7 +547,7 @@ class MicroservicesDesignSystem {
           replication: 'Master-Slave'
         },
         'trading-redis': {
-          data: ['position:*', 'pending_order:*', 'trade_summary:*'],
+          data: ['position:*', 'pending_order:*', 'summary:trade:*'],
           memory: '4GB',
           replication: 'Master-Slave'
         },

@@ -725,7 +725,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       await savePosition(position.key, position);
       console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
       
-      // trade_summaryの同期：部分決済分を反映
+      // summary:tradeの同期：部分決済分を反映
       try {
         const { updateTradeSummary } = require('../database/manager');
         const partialTrade = {
@@ -742,7 +742,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         await updateTradeSummary(partialTrade);
         console.log(`[DEBUG] Trade summary updated for partial close: ${finalFormattedAmount}`);
       } catch (summaryError) {
-        console.warn(`[リスク管理] 部分決済時のtrade_summary更新失敗: ${summaryError.message}`);
+        console.warn(`[リスク管理] 部分決済時のsummary:trade更新失敗: ${summaryError.message}`);
         // 部分決済は成功しているので、サマリー更新失敗でも処理は継続
       }
     } else {

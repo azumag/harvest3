@@ -675,7 +675,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       try {
         await addTradeMongoDB(_trade);
         
-        // trade_summary更新（最大3回再試行）
+        // summary:trade更新（最大3回再試行）
         let summaryUpdateSuccess = false;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
@@ -684,13 +684,13 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
             break;
           } catch (summaryError) {
             if (!isBacktest) {
-              console.warn(`[約定処理] trade_summary更新失敗 (試行${attempt}/3): ${_trade.tradeId} - ${summaryError.message}`);
+              console.warn(`[約定処理] summary:trade更新失敗 (試行${attempt}/3): ${_trade.tradeId} - ${summaryError.message}`);
             }
             if (attempt === 3) {
               // 3回失敗した場合は重要エラーとして通知
               const { postErrorToDiscord } = require('../common/notifications');
               if (postErrorToDiscord && !isBacktest) {
-                await postErrorToDiscord(`🚨 **重要: trade_summary更新失敗**\n` +
+                await postErrorToDiscord(`🚨 **重要: summary:trade更新失敗**\n` +
                                         `約定ID: ${_trade.tradeId}\n` +
                                         `通貨: ${_trade.symbol}\n` +
                                         `戦略: ${_trade.strategy}\n` +
@@ -1623,7 +1623,7 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
     }
     
     // Redisに再計算結果を保存
-    const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+    const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const { getClient } = require('./redisDatabase');
     const client = getClient();
     

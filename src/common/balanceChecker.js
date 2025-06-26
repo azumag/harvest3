@@ -205,9 +205,30 @@ async function checkAllExchangeBalances() {
   }
 }
 
+/**
+ * 単一取引所の残高チェック（bot.jsとの互換性のため）
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} 残高チェック結果
+ */
+async function checkSingleExchange(exchangeId) {
+  try {
+    const result = await compareBalances(exchangeId);
+    return {
+      exchangeId: result.exchangeId,
+      discrepancies: result.discrepancies,
+      discrepancyCount: result.discrepancies.length,
+      isHealthy: result.isHealthy
+    };
+  } catch (error) {
+    console.error(`checkSingleExchange error for ${exchangeId}:`, error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   getExchangeBalance,
   getBotManagedBalance,
   compareBalances,
-  checkAllExchangeBalances
+  checkAllExchangeBalances,
+  checkSingleExchange  // ✅ FIX: Added missing function for bot.js compatibility
 };

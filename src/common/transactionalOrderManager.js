@@ -81,6 +81,7 @@ class TransactionalOrderManager {
     
     const preOrder = {
       id: preOrderId,
+      orderId: preOrderId,
       transactionId,
       symbol,
       side,
@@ -159,6 +160,7 @@ class TransactionalOrderManager {
     try {
       const updatedOrder = {
         ...exchangeOrder,
+        orderId: exchangeOrder.id || exchangeOrder.orderId, // Ensure orderId is set
         strategy: preOrder.strategy,
         transactionId,
         preOrderId: preOrder.id,

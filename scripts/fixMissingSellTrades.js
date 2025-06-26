@@ -61,7 +61,7 @@ async function fixMissingSellTrades() {
         // 各戦略のRedis trade_summaryを確認
         for (const trade of sellTrades) {
           const strategy = trade.strategy || 'UNKNOWN';
-          const summaryKey = `trade_summary:bitbank:${symbol}:${strategy}`;
+          const summaryKey = `summary:trade:bitbank:${symbol}:${strategy}`;
           
           console.log(`  📊 ${strategy} 戦略の売却: ${trade.amount} (OrderID: ${trade.orderId})`);
           

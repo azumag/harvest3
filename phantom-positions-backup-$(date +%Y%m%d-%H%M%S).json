@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-06-26T08:30:00Z",
+  "purpose": "Emergency phantom position cleanup backup",
+  "systemState": "Trading halted, balance inconsistencies detected",
+  "variances": {
+    "ADA/JPY": "2253.98%",
+    "APE/JPY": "1314.98%", 
+    "DOT/JPY": "974.03%",
+    "GALA/JPY": "400%+"
+  },
+  "redisAnalysis": {
+    "totalSummaryKeys": 284,
+    "activePositionKeys": 162,
+    "keyPattern": "summary:trade:bitbank:CURRENCY/JPY:STRATEGY"
+  },
+  "criticalFindings": {
+    "phantomPattern": "Redis positions exist but exchange balances near zero",
+    "systemIntegrityRisk": "Potential for trades on non-existent positions",
+    "rootCause": "Position closure not properly reflected in Redis summaries"
+  },
+  "highPriorityPhantoms": {
+    "ADA/JPY": {
+      "totalRedisPosition": 3.0,
+      "strategiesCount": 6,
+      "strategies": ["BOLLINGER_BANDS", "OUTSIDE", "MA", "MACD", "MULTI_INDICATOR", "RSI"],
+      "detailedPositions": {
+        "BOLLINGER_BANDS": { "netPosition": 3.3283, "avgBuyPrice": 85.25 },
+        "MA": { "netPosition": 0.3176, "avgBuyPrice": 86.01 },
+        "MULTI_INDICATOR": { "netPosition": 0.1433, "avgBuyPrice": 84.67 },
+        "RSI": { "netPosition": 0.4974, "avgBuyPrice": 81.00 }
+      }
+    }
+  },
+  "backupMetadata": {
+    "createdBy": "worker-claude",
+    "phase": "Emergency Protocol - Phantom Position Cleanup",
+    "approvedBy": "manager-claude",
+    "systemStatus": "CRITICAL - Pre-cleanup backup"
+  }
+}

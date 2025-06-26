@@ -40,11 +40,46 @@ class Phase2SelfHealingSystem {
       console.log('\nStep 4: 自己修復結果レポート生成...');
       await this.generateSelfHealingReport();
       
+      // 結果オブジェクトを返す
+      const phantomFixed = this.healedIssues.filter(issue => issue.type === 'phantom_position').length;
+      const partialFixed = this.pendingIssues.filter(issue => issue.type === 'partial_fill_mismatch').length;
+      const minorFixed = this.healedIssues.length - phantomFixed;
+      const totalFixed = this.healedIssues.length;
+      
+      const details = this.healedIssues.map(issue => 
+        `${issue.position.symbol} ${issue.position.strategyKey}: ${issue.action}`
+      );
+      
+      return {
+        totalFixed,
+        phantomFixed,
+        partialFixed,
+        minorFixed,
+        details,
+        detectedIssues: this.detectedIssues.length,
+        healedIssues: this.healedIssues.length,
+        pendingIssues: this.pendingIssues.length,
+        errors: this.errors.length
+      };
+      
     } catch (error) {
       const errorMsg = `Phase 2 自己修復エラー: ${error.message}`;
       console.error(errorMsg);
       this.errors.push(errorMsg);
       await postErrorToDiscord(`🚨 **Phase 2 自己修復エラー**\n${errorMsg}`);
+      
+      // エラー時も結果オブジェクトを返す
+      return {
+        totalFixed: 0,
+        phantomFixed: 0,
+        partialFixed: 0,
+        minorFixed: 0,
+        details: [],
+        detectedIssues: this.detectedIssues.length,
+        healedIssues: this.healedIssues.length,
+        pendingIssues: this.pendingIssues.length,
+        errors: this.errors.length
+      };
     }
   }
 

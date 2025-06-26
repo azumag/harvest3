@@ -10,7 +10,7 @@ async function deepSignalAnalysis() {
     console.log('=== 売りシグナル生成詳細分析 ===');
     
     // Redisクライアント接続
-    const client = redis.createClient({ url: 'redis://redis:6379' });
+    const client = redis.createClient({ url: 'redis://localhost:6379' });
     await client.connect();
     
     // 1. 戦略シグナル履歴の確認

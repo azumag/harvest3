@@ -46,7 +46,7 @@ const preventiveQualitySystem = {
           const inconsistencyRate = missingCount / positions.length;
           
           if (inconsistencyRate > 0.05) {
-            await triggerAutoRepair('trade_summary', missingCount);
+            await triggerAutoRepair('summary:trade', missingCount);
             await sendAlert('CRITICAL', 'Trade summary inconsistency detected', inconsistencyRate);
           }
         }
@@ -101,7 +101,7 @@ const preventiveQualitySystem = {
         async function checkDataCompleteness() {
           const criticalDataChecks = [
             { name: 'filled_trade', threshold: 0 },
-            { name: 'trade_summary', threshold: 10 },
+            { name: 'summary:trade', threshold: 10 },
             { name: 'pending_order', threshold: 0 },
             { name: 'position', threshold: 5 }
           ];
@@ -165,7 +165,7 @@ const preventiveQualitySystem = {
             const summary = await calculateSummaryFromPositions(positions);
             await saveTradeSummary(combo, summary);
             
-            console.log(\`Auto-repaired trade_summary for \${combo.symbol}:\${combo.strategy}\`);
+            console.log(\`Auto-repaired summary:trade for \${combo.symbol}:\${combo.strategy}\`);
           }
         }
         `

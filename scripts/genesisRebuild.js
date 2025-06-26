@@ -30,7 +30,7 @@ class GenesisRebuild {
     
     try {
       // Get all existing trade summaries
-      const keys = await client.keys('trade_summary:*');
+      const keys = await client.keys('summary:trade:*');
       console.log(`Found ${keys.length} existing position tracking entries`);
       
       if (keys.length === 0) {
@@ -136,7 +136,7 @@ class GenesisRebuild {
           const symbol = `${currency}/JPY`;
           const strategyKey = 'REBUILT_GENESIS';
           
-          const summaryKey = `trade_summary:${exchangeId}:${symbol}:${strategyKey}`;
+          const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
           
           // Create fresh position tracking entry based on exchange reality
           const genesisData = {
@@ -220,7 +220,7 @@ class GenesisRebuild {
     
     try {
       // Get rebuilt bot positions
-      const keys = await client.keys('trade_summary:*:*:REBUILT_GENESIS');
+      const keys = await client.keys('summary:trade:*:*:REBUILT_GENESIS');
       const rebuiltPositions = {};
       let totalBotValue = 0;
       

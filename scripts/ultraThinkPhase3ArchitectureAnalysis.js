@@ -354,7 +354,7 @@ class SystemArchitectureAnalyzer {
       
       const patterns = {
         'position:*': keys.filter(k => k.startsWith('position:')).length,
-        'trade_summary:*': keys.filter(k => k.startsWith('trade_summary:')).length,
+        'summary:trade:*': keys.filter(k => k.startsWith('summary:trade:')).length,
         'filled_trade:*': keys.filter(k => k.startsWith('filled_trade:')).length,
         'pending_order:*': keys.filter(k => k.startsWith('pending_order:')).length
       };
