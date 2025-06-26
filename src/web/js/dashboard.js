@@ -721,36 +721,41 @@ function renderBreakdownGraphAndTable(breakdownData, title, parentId) {
 }
 
 /**
- * 取引所別サマリーを表示する
- * @param {Object} exchangeData - 取引所別にグループ化されたデータ（内訳含む）
+ * 汎用データサマリーレンダリング関数
+ * Dashboard rendering pattern template function
+ * @param {Object} inputData - レンダリングするデータ
+ * @param {string} containerId - コンテナ要素のID
+ * @param {string} keyName - データのキー名 (exchangeId, symbol, strategyKey)
+ * @param {string} breakdownPrefix - 内訳コンテナのプレフィックス
+ * @param {Function} breakdownCallback - 内訳表示のコールバック関数
  */
-function renderExchangeSummary(exchangeData) {
-  const container = document.getElementById('exchange-summary-container');
+function renderDataSummary(inputData, containerId, keyName, breakdownPrefix, breakdownCallback) {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   // データがない場合
-  if (!exchangeData || Object.keys(exchangeData).length === 0) {
+  if (!inputData || Object.keys(inputData).length === 0) {
     container.innerHTML = '<div class="col-12"><div class="alert alert-info">表示するデータがありません</div></div>';
     return;
   }
 
   // データを実現損益順にソート
-  const sortedExchanges = Object.entries(exchangeData)
-    .map(([exchangeId, data]) => ({ exchangeId, ...data }))
-    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
+  const sortedData = Object.entries(inputData)
+    .map(([key, data]) => ({ [keyName]: key, ...data }))
+    .sort((a, b) => b.netPnL - a.netPnL);
 
   let html = '';
 
-  // 各取引所のカードを生成
-  sortedExchanges.forEach(data => {
+  // 各データのカードを生成
+  sortedData.forEach(data => {
     const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
-    const exchangeId = data.exchangeId;
+    const displayKey = data[keyName];
 
     html += `
     <div class="col-md-6 col-lg-4 mb-3">
-      <div class="card h-100 summary-card-clickable"> <!-- クリック可能クラスを追加 -->
+      <div class="card h-100 summary-card-clickable">
         <div class="card-header">
-          <h6 class="mb-0">${exchangeId}</h6>
+          <h6 class="mb-0">${displayKey}</h6>
         </div>
         <div class="card-body">
           <table class="table table-sm mb-0">
@@ -762,7 +767,20 @@ function renderExchangeSummary(exchangeData) {
               <tr>
                 <td>売った額</td>
                 <td class="text-end">${formatNumber(data.totalSellValue)} 円</td>
-              </tr>
+              </tr>`;
+              
+    // 銘柄の場合のみ保有量を表示
+    if (keyName === 'symbol') {
+      html += `
+              <tr>
+                <td>現在保有量</td>
+                <td class="text-end ${data.totalNetPosition > 0 ? 'text-success' : data.totalNetPosition < 0 ? 'text-danger' : ''}">
+                  ${formatAmount(data.totalNetPosition, 8)} ${extractBaseAsset(displayKey)}
+                </td>
+              </tr>`;
+    }
+    
+    html += `
               <tr>
                 <td>手数料</td>
                 <td class="text-end">${formatNumber(data.totalFee)} 円</td>
@@ -783,7 +801,7 @@ function renderExchangeSummary(exchangeData) {
           </table>
 
           <!-- 内訳コンテナ (最初は非表示) -->
-          <div class="breakdown-container" id="exchange-${exchangeId}-breakdown" style="display: none;">
+          <div class="breakdown-container" id="${breakdownPrefix}-${displayKey}-breakdown" style="display: none;">
               <!-- 内訳グラフがここに描画されます -->
           </div>
 
@@ -799,16 +817,17 @@ function renderExchangeSummary(exchangeData) {
   container.querySelectorAll('.summary-card-clickable').forEach(card => {
       card.addEventListener('click', function() {
           const breakdownContainer = this.querySelector('.breakdown-container');
-          const exchangeId = this.querySelector('.card-header h6').innerText; // 取引所IDを取得
-          const data = exchangeData[exchangeId]; // 対応するデータを取得
+          const displayKey = this.querySelector('.card-header h6').innerText;
+          const data = inputData[displayKey];
 
           if (breakdownContainer) {
               // 表示/非表示をトグル
               if (breakdownContainer.style.display === 'none') {
                   breakdownContainer.style.display = 'block';
-                  // グラフと表を描画
-                  renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', breakdownContainer.id);
-                  renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', breakdownContainer.id);
+                  // コールバック関数でカスタムな内訳表示を実行
+                  if (breakdownCallback) {
+                    breakdownCallback(data, breakdownContainer.id);
+                  }
               } else {
                   breakdownContainer.style.display = 'none';
                   // コンテンツをクリア
@@ -817,6 +836,21 @@ function renderExchangeSummary(exchangeData) {
           }
       });
   });
+}
+
+/**
+ * 取引所別サマリーを表示する
+ * @param {Object} exchangeData - 取引所別にグループ化されたデータ（内訳含む）
+ */
+function renderExchangeSummary(exchangeData) {
+  // 取引所別内訳表示のコールバック関数
+  const exchangeBreakdownCallback = (data, containerId) => {
+    renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', containerId);
+    renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', containerId);
+  };
+  
+  // 汎用テンプレート関数を使用
+  renderDataSummary(exchangeData, 'exchange-summary-container', 'exchangeId', 'exchange', exchangeBreakdownCallback);
 }
 
 /**
@@ -824,104 +858,14 @@ function renderExchangeSummary(exchangeData) {
  * @param {Object} symbolData - 銘柄別にグループ化されたデータ（内訳含む）
  */
 function renderSymbolSummary(symbolData) {
-  const container = document.getElementById('symbol-summary-container');
-  if (!container) return;
-
-  // データがない場合
-  if (!symbolData || Object.keys(symbolData).length === 0) {
-    container.innerHTML = '<div class="col-12"><div class="alert alert-info">表示するデータがありません</div></div>';
-    return;
-  }
-
-  // データを実現損益順にソート
-  const sortedSymbols = Object.entries(symbolData)
-    .map(([symbol, data]) => ({ symbol, ...data }))
-    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
-
-  let html = '';
-
-  // 各銘柄のカードを生成
-  sortedSymbols.forEach(data => {
-    const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
-    const symbol = data.symbol;
-
-    html += `
-    <div class="col-md-6 col-lg-4 mb-3">
-      <div class="card h-100 summary-card-clickable"> <!-- クリック可能クラスを追加 -->
-        <div class="card-header">
-          <h6 class="mb-0">${symbol}</h6>
-        </div>
-        <div class="card-body">
-          <table class="table table-sm mb-0">
-            <tbody>
-              <tr>
-                <td>買った額</td>
-                <td class="text-end">${formatNumber(data.totalBuyCost)} 円</td>
-              </tr>
-              <tr>
-                <td>売った額</td>
-                <td class="text-end">${formatNumber(data.totalSellValue)} 円</td>
-              </tr>
-              <tr>
-                <td>現在保有量</td>
-                <td class="text-end ${data.totalNetPosition > 0 ? 'text-success' : data.totalNetPosition < 0 ? 'text-danger' : ''}">
-                  ${formatAmount(data.totalNetPosition, 8)} ${extractBaseAsset(symbol)}
-                </td>
-              </tr>
-              <tr>
-                <td>手数料</td>
-                <td class="text-end">${formatNumber(data.totalFee)} 円</td>
-              </tr>
-              <tr>
-                <td>実現損益</td>
-                <td class="text-end ${data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : ''}">
-                  ${formatNumber(data.realizedPnL)} 円
-                </td>
-              </tr>
-              <tr>
-                <td>純損益</td>
-                <td class="text-end ${netPnlClass} fw-bold">
-                  ${formatNumber(data.netPnL)} 円
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <!-- 内訳コンテナ (最初は非表示) -->
-          <div class="breakdown-container" id="symbol-${symbol}-breakdown" style="display: none;">
-              <!-- 内訳グラフがここに描画されます -->
-          </div>
-
-        </div>
-      </div>
-    </div>
-    `;
-  });
-
-  container.innerHTML = html;
-
-  // クリックイベントリスナーを設定し、グラフを描画
-  container.querySelectorAll('.summary-card-clickable').forEach(card => {
-      card.addEventListener('click', function() {
-          const breakdownContainer = this.querySelector('.breakdown-container');
-          const symbol = this.querySelector('.card-header h6').innerText; // 銘柄を取得
-          const data = symbolData[symbol]; // 対応するデータを取得
-
-          if (breakdownContainer) {
-              // 表示/非表示をトグル
-              if (breakdownContainer.style.display === 'none') {
-                  breakdownContainer.style.display = 'block';
-                  // グラフと表を描画
-                  renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', breakdownContainer.id);
-                  renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', breakdownContainer.id);
-              } else {
-                  breakdownContainer.style.display = 'none';
-                  // コンテンツをクリア
-                  breakdownContainer.innerHTML = '';
-              }
-          }
-      });
-  });
+  // 銘柄別内訳表示のコールバック関数
+  const symbolBreakdownCallback = (data, containerId) => {
+    renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', containerId);
+    renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', containerId);
+  };
+  
+  // 汎用テンプレート関数を使用
+  renderDataSummary(symbolData, 'symbol-summary-container', 'symbol', 'symbol', symbolBreakdownCallback);
 }
 
 /**
@@ -929,98 +873,14 @@ function renderSymbolSummary(symbolData) {
  * @param {Object} strategyData - 戦略別にグループ化されたデータ（内訳含む）
  */
 function renderStrategySummary(strategyData) {
-  const container = document.getElementById('strategy-summary-container');
-  if (!container) return;
-
-  // データがない場合
-  if (!strategyData || Object.keys(strategyData).length === 0) {
-    container.innerHTML = '<div class="col-12"><div class="alert alert-info">表示するデータがありません</div></div>';
-    return;
-  }
-
-  // データを実現損益順にソート
-  const sortedStrategies = Object.entries(strategyData)
-    .map(([strategyKey, data]) => ({ strategyKey, ...data }))
-    .sort((a, b) => b.netPnL - a.netPnL); // 純損益の降順でソート
-
-  let html = '';
-
-  // 各戦略のカードを生成
-  sortedStrategies.forEach(data => {
-    const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
-    const strategyKey = data.strategyKey;
-
-    html += `
-    <div class="col-md-6 col-lg-4 mb-3">
-      <div class="card h-100 summary-card-clickable"> <!-- クリック可能クラスを追加 -->
-        <div class="card-header">
-          <h6 class="mb-0">${strategyKey}</h6>
-        </div>
-        <div class="card-body">
-          <table class="table table-sm mb-0">
-            <tbody>
-              <tr>
-                <td>買った額</td>
-                <td class="text-end">${formatNumber(data.totalBuyCost)} 円</td>
-              </tr>
-              <tr>
-                <td>売った額</td>
-                <td class="text-end">${formatNumber(data.totalSellValue)} 円</td>
-              </tr>
-              <tr>
-                <td>手数料</td>
-                <td class="text-end">${formatNumber(data.totalFee)} 円</td>
-              </tr>
-              <tr>
-                <td>実現損益</td>
-                <td class="text-end ${data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : ''}">
-                  ${formatNumber(data.realizedPnL)} 円
-                </td>
-              </tr>
-              <tr>
-                <td>純損益</td>
-                <td class="text-end ${netPnlClass} fw-bold">
-                  ${formatNumber(data.netPnL)} 円
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <!-- 内訳コンテナ (最初は非表示) -->
-          <div class="breakdown-container" id="strategy-${strategyKey}-breakdown" style="display: none;">
-              <!-- 内訳グラフがここに描画されます -->
-          </div>
-
-        </div>
-      </div>
-    </div>
-    `;
-  });
-
-  container.innerHTML = html;
-
-  // クリックイベントリスナーを設定し、グラフを描画
-  container.querySelectorAll('.summary-card-clickable').forEach(card => {
-      card.addEventListener('click', function() {
-          const breakdownContainer = this.querySelector('.breakdown-container');
-          const strategyKey = this.querySelector('.card-header h6').innerText; // 戦略キーを取得
-          const data = strategyData[strategyKey]; // 対応するデータを取得
-
-          if (breakdownContainer) {
-              // 表示/非表示をトグル
-              if (breakdownContainer.style.display === 'none') {
-                  breakdownContainer.style.display = 'block';
-                  // グラフと表を描画
-                  renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', breakdownContainer.id);
-                  renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', breakdownContainer.id);
-              } else {
-                  breakdownContainer.style.display = 'none';
-                  // コンテンツをクリア
-                  breakdownContainer.innerHTML = '';
-              }
-          }
-      });
-  });
+  // 戦略別内訳表示のコールバック関数
+  const strategyBreakdownCallback = (data, containerId) => {
+    renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', containerId);
+    renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', containerId);
+  };
+  
+  // 汎用テンプレート関数を使用
+  renderDataSummary(strategyData, 'strategy-summary-container', 'strategyKey', 'strategy', strategyBreakdownCallback);
 }
 
 /**

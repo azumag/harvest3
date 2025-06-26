@@ -4,6 +4,12 @@
  * Issue #149: 実用的な実装への再設計
  */
 const {
+  extractConfigParameters,
+  determineSignalType,
+  createStrategyResults
+} = require('../common/tradingUtils');
+
+const {
   calculateMutualInformation,
   calculateMutualInformationMatrix,
   calculateReturns,
@@ -39,16 +45,26 @@ let globalPairTrading = null;
  */
 async function mutualInformationStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { 
-    period = 30, 
-    threshold = 0.7, 
-    ohlcvInterval = '5m',
-    useReturns = true,
-    maxReferencePairs = 5,
-    enablePairTrading = true,
-    correlationWindow = 20,
-    zScoreThreshold = 2.0,
-    strategy_mode = 'enhanced' // 'legacy' | 'enhanced' | 'pair_trading'
-  } = config;
+    period, 
+    threshold, 
+    ohlcvInterval,
+    useReturns,
+    maxReferencePairs,
+    enablePairTrading,
+    correlationWindow,
+    zScoreThreshold,
+    strategy_mode
+  } = extractConfigParameters(config, {
+    period: 30,
+    threshold: 0.7,
+    ohlcvInterval: '5m',
+    useReturns: true,
+    maxReferencePairs: 5,
+    enablePairTrading: true,
+    correlationWindow: 20,
+    zScoreThreshold: 2.0,
+    strategy_mode: 'enhanced'
+  });
   
   // グローバルインスタンスの初期化
   if (!globalPairSelector) {

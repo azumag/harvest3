@@ -2,6 +2,15 @@
  * トレンドフォロー戦略
  */
 const {
+  extractConfigParameters,
+  extractMarketParameters,
+  determineSignalType,
+  createStrategyResults,
+  createStandardLogFormat,
+  safeNumberFormat
+} = require('../common/tradingUtils');
+
+const {
   calculateSMA,
   calculateEMA,
   calculateMACD,
@@ -34,7 +43,11 @@ const { postErrorToDiscord } = require('../common/notifications');
  */
 async function maStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   return await executeStrategyTemplate(async () => {
-    const { shortPeriod = 5, longPeriod = 20, ohlcvInterval } = config;
+    const { shortPeriod, longPeriod, ohlcvInterval } = extractConfigParameters(config, {
+      shortPeriod: 5,
+      longPeriod: 20,
+      ohlcvInterval: undefined
+    });
 
     // 共通化されたOHLCVデータ取得
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
@@ -109,13 +122,13 @@ async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange
   const crossDown = previousShortMA > previousLongMA && currentShortMA < currentLongMA;
 
   // シグナルタイプを決定
-  const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
+  const signalType = determineSignalType(crossUp, crossDown);
   
   // 戦略固有の計算結果
-  const strategyResults = {
+  const strategyResults = createStrategyResults({
     shortMA: currentShortMA,
     longMA: currentLongMA
-  };
+  });
   
   // 共通化されたシグナル保存
   await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
@@ -152,8 +165,14 @@ function formatMACrossLogInfo(signalResult) {
 async function macdStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   return await executeStrategyTemplate(async () => {
     const { tradePercentage } = config;
-    const { fastPeriod = 12, slowPeriod = 26, signalPeriod = 9, amount, ohlcvInterval } = config;
-    const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+    const { fastPeriod, slowPeriod, signalPeriod, amount, ohlcvInterval } = extractConfigParameters(config, {
+      fastPeriod: 12,
+      slowPeriod: 26,
+      signalPeriod: 9,
+      amount: undefined,
+      ohlcvInterval: undefined
+    });
+    const { pricePrecision, amountPrecision, minTradeAmount } = extractMarketParameters(marketParameters || {}, ['pricePrecision', 'amountPrecision', 'minTradeAmount']);
 
     // 共通化されたOHLCVデータ取得
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
@@ -189,13 +208,13 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const crossDown = previousMACD > previousSignal && currentMACD < currentSignal;
     
     // シグナルタイプを決定
-    const signalType = crossUp ? 'buy' : (crossDown ? 'sell' : 'none');
+    const signalType = determineSignalType(crossUp, crossDown);
     
     // 戦略固有の計算結果
-    const strategyResults = {
+    const strategyResults = createStrategyResults({
       macd: currentMACD,
       signal: currentSignal
-    };
+    });
     
     // 共通化されたシグナル保存
     await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
@@ -274,8 +293,14 @@ function formatMACDLogInfo(signalResult) {
 async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   return await executeStrategyTemplate(async () => {
     const { tradePercentage } = config; 
-    const { period = 14, oversoldThreshold = 30, overboughtThreshold = 70, amount, ohlcvInterval } = config;
-    const { pricePrecision, amountPrecision, minTradeAmount } = marketParameters;
+    const { period, oversoldThreshold, overboughtThreshold, amount, ohlcvInterval } = extractConfigParameters(config, {
+      period: 14,
+      oversoldThreshold: 30,
+      overboughtThreshold: 70,
+      amount: undefined,
+      ohlcvInterval: undefined
+    });
+    const { pricePrecision, amountPrecision, minTradeAmount } = extractMarketParameters(marketParameters || {}, ['pricePrecision', 'amountPrecision', 'minTradeAmount']);
 
     // 共通化されたOHLCVデータ取得
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
@@ -375,8 +400,13 @@ function formatRSILogInfo(signalResult) {
  */
 async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   const { tradePercentage } = config;
-  const { period = 20, stdDev = 2, amount, ohlcvInterval } = config;
-  const { pricePrecision, amountPrecision, minTradeAmount, } = marketParameters;
+  const { period, stdDev, amount, ohlcvInterval } = extractConfigParameters(config, {
+    period: 20,
+    stdDev: 2,
+    amount: undefined,
+    ohlcvInterval: undefined
+  });
+  const { pricePrecision, amountPrecision, minTradeAmount } = extractMarketParameters(marketParameters || {}, ['pricePrecision', 'amountPrecision', 'minTradeAmount']);
 
   try {
     // OHLCVデータを取得して検証
