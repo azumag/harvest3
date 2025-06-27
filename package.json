@@ -15,6 +15,8 @@
     "test:e2e": "node test/e2e-test-runner.js",
     "test:e2e-integrity": "node test/e2e-data-integrity.js",
     "test:e2e-position-sizing": "node test/e2e-dynamic-position-sizing.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "check-balance": "node scripts/balanceConsistencyChecker.js",
     "check-balance-symbol": "node scripts/balanceConsistencyChecker.js",
     "compare-balance": "node scripts/compareExchangeVsSummary.js",
@@ -44,6 +46,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "eslint": "^9.29.0",
     "jest": "^29.7.0",
     "string-similarity-js": "^2.1.4"
   }
