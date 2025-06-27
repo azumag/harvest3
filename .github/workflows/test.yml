@@ -32,7 +32,7 @@ jobs:
       
     - name: Start services for E2E tests
       run: |
-        docker-compose up -d mongodb redis
+        docker compose up -d mongodb redis
         sleep 10
         
     - name: Start API server
@@ -44,7 +44,7 @@ jobs:
       run: npm run test:e2e
       
     - name: Stop services
-      run: docker-compose down
+      run: docker compose down
       
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
