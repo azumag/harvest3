@@ -110,27 +110,131 @@ $(document).ready(function() {
             })
             .then(data => {
                 console.log('APIから取得した生データ:', data); // デバッグ用ログ
+                console.log('データ型:', typeof data, 'Array?', Array.isArray(data)); // データ型確認
+                console.log('データ件数:', data ? data.length : 'null/undefined');
+                
+                // 最初の数件のデータ構造を詳細分析
+                if (data && data.length > 0) {
+                    console.log('=== データ構造分析 ===');
+                    for (let i = 0; i < Math.min(3, data.length); i++) {
+                        const row = data[i];
+                        console.log(`データ${i+1}:`, row);
+                        console.log(`  - keys: [${Object.keys(row).join(', ')}]`);
+                        console.log(`  - exchange: "${row.exchange}" (type: ${typeof row.exchange})`);
+                        console.log(`  - orderId: "${row.orderId}" (type: ${typeof row.orderId})`);
+                        console.log(`  - id: "${row.id}" (type: ${typeof row.id})`);
+                        console.log(`  - _id: "${row._id}" (type: ${typeof row._id})`);
+                        console.log(`  - strategy: "${row.strategy}" (type: ${typeof row.strategy})`);
+                        console.log(`  - timestamp: "${row.timestamp}" (type: ${typeof row.timestamp})`);
+                    }
+                }
+                
+                // Filter out incomplete data and add default values for missing fields
+                const cleanedData = (data || []).filter(row => {
+                    // Ensure required fields exist - より緩い条件で試す
+                    const hasOrderId = row && (row.orderId || row.id || row._id);
+                    const hasExchange = row && row.exchange;
+                    
+                    if (!hasOrderId) {
+                        console.warn('Missing orderId field in row:', row);
+                    }
+                    if (!hasExchange) {
+                        console.warn('Missing exchange field in row:', row);
+                    }
+                    
+                    return hasOrderId && hasExchange;
+                }).map(row => {
+                    // Normalize and provide defaults for missing fields
+                    return {
+                        exchange: row.exchange || 'Unknown',
+                        symbol: row.symbol || 'Unknown',
+                        side: row.side || 'Unknown',
+                        price: row.price || 0,
+                        amount: row.amount || 0,
+                        orderId: row.orderId || row.id || row._id || 'Unknown',
+                        orderType: row.orderType || row.type || 'Unknown',
+                        strategy: row.strategy || 'Unknown',
+                        timestamp: row.timestamp || row.datetime || row.date || Date.now()
+                    };
+                });
+                
+                console.log('フィルタ後データ件数:', cleanedData.length);
+                console.log('クリーニング後のデータ:', cleanedData); // デバッグ用ログ
+                
                 if (ordersTable) {
                     ordersTable.destroy();
                 }
-                console.log('DataTablesに渡すデータ:', data); // デバッグ用ログ
+                console.log('DataTablesに渡すデータ:', cleanedData); // デバッグ用ログ
                 console.log('DataTables初期化直前'); // デバッグ用ログ
                 ordersTable = $('#orders-table').DataTable({
-                    data: data,
+                    data: cleanedData,
                     columns: [
-                        { data: 'exchange' },
-                        { data: 'symbol' },
-                        { data: 'side' },
-                        { data: 'price' },
-                        { data: 'amount' },
-                        { data: 'orderId' },
-                        { data: 'orderType' },
-                        { data: 'strategy' }, 
+                        { 
+                            data: 'exchange',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        },
+                        { 
+                            data: 'symbol',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        },
+                        { 
+                            data: 'side',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        },
+                        { 
+                            data: 'price',
+                            defaultContent: '0',
+                            render: function(data) {
+                                return data || '0';
+                            }
+                        },
+                        { 
+                            data: 'amount',
+                            defaultContent: '0',
+                            render: function(data) {
+                                return data || '0';
+                            }
+                        },
+                        { 
+                            data: 'orderId',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        },
+                        { 
+                            data: 'orderType',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        },
+                        { 
+                            data: 'strategy',
+                            defaultContent: 'Unknown',
+                            render: function(data) {
+                                return data || 'Unknown';
+                            }
+                        }, 
                         {
                             data: 'timestamp',
+                            defaultContent: 'Unknown',
                             render: function(data) {
-                                const date = new Date(data);
-                                return date.toLocaleString();
+                                try {
+                                    const date = new Date(data || Date.now());
+                                    return date.toLocaleString();
+                                } catch (error) {
+                                    return 'Invalid Date';
+                                }
                             }
                         }
                     ],
@@ -140,7 +244,28 @@ $(document).ready(function() {
             .catch(error => {
                 console.error('Error loading orders:', error);
                 console.error('API応答処理中にエラーが発生しました:', error); // デバッグ用ログ
-                // エラーメッセージを表示するなどの処理
+                console.error('エラータイプ:', error.constructor.name);
+                console.error('エラーメッセージ:', error.message);
+                console.error('エラースタック:', error.stack);
+                
+                // エラー時に空のテーブルを表示
+                if (ordersTable) {
+                    ordersTable.destroy();
+                }
+                ordersTable = $('#orders-table').DataTable({
+                    data: [],
+                    columns: [
+                        { data: 'exchange', defaultContent: 'No Data' },
+                        { data: 'symbol', defaultContent: 'No Data' },
+                        { data: 'side', defaultContent: 'No Data' },
+                        { data: 'price', defaultContent: 'No Data' },
+                        { data: 'amount', defaultContent: 'No Data' },
+                        { data: 'orderId', defaultContent: 'No Data' },
+                        { data: 'orderType', defaultContent: 'No Data' },
+                        { data: 'strategy', defaultContent: 'No Data' },
+                        { data: 'timestamp', defaultContent: 'No Data' }
+                    ]
+                });
             });
     }
 

@@ -4,7 +4,7 @@
  * 孤立取引を防ぐための根本的解決策
  */
 
-const { addOrderMongoDB, listOrders } = require('../database/mongoDatabase');
+const { addOrderMongoDB, updateOrderByOrderId, listOrders } = require('../database/mongoDatabase');
 const { postOrderToDiscord, postErrorToDiscord } = require('./notifications');
 
 class TransactionalOrderManager {
@@ -87,7 +87,7 @@ class TransactionalOrderManager {
       side,
       amount,
       price,
-      type: options.type || 'limit',
+      orderType: options.type || 'limit', // Use orderType instead of type
       status: 'pre_saved',
       strategy: options.strategy || 'UNKNOWN',
       exchange: this.exchange.id,
@@ -158,21 +158,39 @@ class TransactionalOrderManager {
    */
   async updateOrderAfterExecution(preOrder, exchangeOrder, transactionId) {
     try {
-      const updatedOrder = {
-        ...exchangeOrder,
-        orderId: exchangeOrder.id || exchangeOrder.orderId, // Ensure orderId is set
+      const updateData = {
+        orderId: exchangeOrder.id || exchangeOrder.orderId, // Update to actual order ID
+        orderType: exchangeOrder.type || exchangeOrder.orderType || preOrder.orderType,
+        exchange: exchangeOrder.exchange || this.exchange.id,
+        symbol: exchangeOrder.symbol || preOrder.symbol,
+        side: exchangeOrder.side || preOrder.side,
+        amount: exchangeOrder.amount || preOrder.amount,
+        price: exchangeOrder.price || preOrder.price,
+        status: 'executed',
         strategy: preOrder.strategy,
         transactionId,
         preOrderId: preOrder.id,
-        status: 'executed',
+        executionTimestamp: Date.now(),
         metadata: {
           phase: 'post_execution',
           originalPreOrder: preOrder.id,
-          executionTimestamp: Date.now()
+          executionTimestamp: Date.now(),
+          exchangeResponse: exchangeOrder
         }
       };
 
-      await addOrderMongoDB(updatedOrder);
+      // Update the existing pre-saved order instead of creating a new one
+      const result = await updateOrderByOrderId(preOrder.orderId, updateData);
+      
+      if (result.matchedCount === 0) {
+        console.warn(`[Phase 3] 事前保存注文が見つかりません: ${preOrder.orderId}`);
+        // If pre-order not found, create new order as fallback
+        await addOrderMongoDB({
+          ...updateData,
+          timestamp: preOrder.timestamp
+        });
+      }
+      
       console.log(`[Phase 3] 注文更新完了: ${exchangeOrder.id} (事前ID: ${preOrder.id})`);
 
     } catch (error) {
@@ -220,13 +238,12 @@ class TransactionalOrderManager {
       // MongoDB事前保存記録をロールバック状態に更新
       if (preOrder) {
         try {
-          const rollbackOrder = {
-            ...preOrder,
+          const rollbackData = {
             status: 'rolled_back',
             rollbackReason: originalError.message,
             rolledBackAt: Date.now()
           };
-          await addOrderMongoDB(rollbackOrder);
+          await updateOrderByOrderId(preOrder.orderId, rollbackData);
           console.log(`[ロールバック] MongoDB記録更新: ${preOrder.id}`);
         } catch (updateError) {
           console.error(`[ロールバック] MongoDB更新エラー: ${updateError.message}`);
@@ -332,14 +349,13 @@ class TransactionalOrderManager {
           
           if (correctStrategy && correctStrategy !== 'OUTSIDE') {
             // 正しい戦略で更新
-            const repairedOrder = {
-              ...order,
+            const repairData = {
               strategy: correctStrategy,
               repairedAt: Date.now(),
               repairReason: 'orphaned_order_repair'
             };
 
-            await addOrderMongoDB(repairedOrder);
+            await updateOrderByOrderId(order.orderId, repairData);
             repairedCount++;
             
             console.log(`[孤立注文修復] 修復: ${order.id} ${order.strategy} → ${correctStrategy}`);

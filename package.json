@@ -12,6 +12,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:unit": "jest test/unit",
+    "test:e2e": "node test/e2e-test-runner.js",
+    "test:e2e-integrity": "node test/e2e-data-integrity.js",
     "check-balance": "node scripts/balanceConsistencyChecker.js",
     "check-balance-symbol": "node scripts/balanceConsistencyChecker.js",
     "compare-balance": "node scripts/compareExchangeVsSummary.js",

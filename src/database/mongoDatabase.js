@@ -96,8 +96,10 @@ async function createIndexes() {
     // 各コレクションのインデックス作成処理
     await createCollectionIndexesIfNotExist('orders', [
       { key: { orderId: 1 }, options: { unique: true } },
-      { key: { orderedAt: 1 }, options: {} },
-      { key: { orderedAt: -1 }, options: {} }
+      { key: { timestamp: 1 }, options: {} },
+      { key: { timestamp: -1 }, options: {} },
+      { key: { exchange: 1 }, options: {} },
+      { key: { symbol: 1 }, options: {} }
     ]);
     
     await createCollectionIndexesIfNotExist('trades', [
@@ -262,8 +264,40 @@ async function addSignalMongoDB(signalData) {
 async function listOrders(filter = {}, options = {}) {
   await connectDB();
   try {
-    const orders = await module.exports.ordersCollection.find(filter, options).toArray();
-    return orders;
+    // Add filter to exclude pre-saved orders (internal IDs starting with "pre_")
+    const enhancedFilter = {
+      ...filter,
+      orderId: {
+        ...filter.orderId,
+        $not: /^pre_/
+      }
+    };
+    
+    const orders = await module.exports.ordersCollection.find(enhancedFilter, options).toArray();
+    
+    // Convert MongoDB _id to string and ensure all required fields exist
+    const processedOrders = orders.map(order => {
+      return {
+        ...order,
+        id: order._id ? order._id.toString() : undefined,
+        orderId: order.orderId || order._id?.toString(),
+        exchange: order.exchange || 'Unknown',
+        symbol: order.symbol || 'Unknown',
+        side: order.side || 'Unknown',
+        amount: order.amount || 0,
+        price: order.price || 0,
+        orderType: order.orderType || order.type || 'Unknown', // Also check 'type' field
+        strategy: order.strategy || 'Unknown',
+        timestamp: order.timestamp || order.orderedAt || Date.now()
+      };
+    });
+    
+    console.log(`listOrders: ${processedOrders.length} orders processed from DB (excluded pre-saved orders)`);
+    if (processedOrders.length > 0) {
+      console.log('Sample order structure:', processedOrders[0]);
+    }
+    
+    return processedOrders;
   } catch (error) {
     console.error('Error listing orders:', error);
     throw error;
@@ -358,6 +392,40 @@ async function getTradeByTradeId(tradeId) {
     return trade;
   } catch (error) {
     console.error('Error getting trade by tradeId:', error);
+    throw error;
+  }
+}
+
+/**
+ * 既存の注文データを更新する（orderIdで検索）
+ * @param {string} orderId - 注文ID
+ * @param {Object} updateData - 更新データ
+ */
+async function updateOrderByOrderId(orderId, updateData) {
+  await connectDB();
+  try {
+    const result = await module.exports.ordersCollection.updateOne(
+      { orderId: orderId },
+      { $set: updateData }
+    );
+    return result;
+  } catch (error) {
+    console.error('Error updating order:', error);
+    throw error;
+  }
+}
+
+/**
+ * 注文データを削除する（orderIdで検索）
+ * @param {string} orderId - 注文ID
+ */
+async function deleteOrderByOrderId(orderId) {
+  await connectDB();
+  try {
+    const result = await module.exports.ordersCollection.deleteOne({ orderId: orderId });
+    return result;
+  } catch (error) {
+    console.error('Error deleting order:', error);
     throw error;
   }
 }
@@ -661,6 +729,8 @@ module.exports = {
   listSignals, 
   countSignals,
   getOrderByOrderId,
+  updateOrderByOrderId,
+  deleteOrderByOrderId,
   getTradeByTradeId,
   getSignalById,
   ordersCollection: null,

@@ -27,11 +27,34 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Run tests
+    - name: Run unit tests
       run: npm test
+      
+    - name: Start services for E2E tests
+      run: |
+        docker-compose up -d mongodb redis
+        sleep 10
+        
+    - name: Start API server
+      run: |
+        npm run start-web &
+        sleep 5
+        
+    - name: Run E2E tests
+      run: npm run test:e2e
+      
+    - name: Stop services
+      run: docker-compose down
       
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: coverage/
+        
+    - name: Upload E2E test reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-reports
+        path: /tmp/e2e-test-report-*.json
+      if: always()

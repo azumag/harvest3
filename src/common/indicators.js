@@ -13,6 +13,11 @@
  * @returns {Array} - SMAの配列
  */
 function calculateSMA(prices, period) {
+  // Handle null/undefined inputs
+  if (!prices || !Array.isArray(prices)) {
+    return [];
+  }
+  
   const result = [];
   
   for (let i = 0; i < prices.length; i++) {
@@ -39,6 +44,11 @@ function calculateSMA(prices, period) {
  * @returns {Array} - EMAの配列
  */
 function calculateEMA(prices, period) {
+  // Handle null/undefined inputs
+  if (!prices || !Array.isArray(prices)) {
+    return [];
+  }
+  
   const result = [];
   const multiplier = 2 / (period + 1);
   
@@ -73,6 +83,11 @@ function calculateEMA(prices, period) {
  * @returns {Object} - MACD、シグナル、ヒストグラムの配列
  */
 function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+  // Handle null/undefined inputs
+  if (!prices || !Array.isArray(prices)) {
+    return { macd: [], signal: [], histogram: [] };
+  }
+  
   const fastEMA = calculateEMA(prices, fastPeriod);
   const slowEMA = calculateEMA(prices, slowPeriod);
   const macdLine = [];
@@ -121,6 +136,11 @@ function calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 
  * @returns {Object} - 上限、中央、下限の配列
  */
 function calculateBollingerBands(prices, period = 20, multiplier = 2) {
+  // Handle null/undefined inputs
+  if (!prices || !Array.isArray(prices)) {
+    return { upper: [], middle: [], lower: [] };
+  }
+  
   const middle = calculateSMA(prices, period);
   const upper = [];
   const lower = [];
