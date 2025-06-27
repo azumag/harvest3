@@ -87,14 +87,31 @@ jest.mock('./src/database/redisDatabase', () => {
 process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = 'redis://localhost:6379';
 
-// Suppress console.error in CI environment to prevent false test failures
-// Error handling tests legitimately use console.error which CI treats as failures
+// Suppress console outputs in CI environment to prevent false test failures
+// Tests legitimately use console.log/warn/error outputs which CI treats as failures
 if (process.env.CI) {
   const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  const originalConsoleLog = console.log;
+  
   console.error = jest.fn().mockImplementation((...args) => {
     // Still log to stderr for debugging if needed
     if (process.env.DEBUG_CI_ERRORS) {
       originalConsoleError.apply(console, args);
+    }
+  });
+  
+  console.warn = jest.fn().mockImplementation((...args) => {
+    // Still log to stderr for debugging if needed
+    if (process.env.DEBUG_CI_ERRORS) {
+      originalConsoleWarn.apply(console, args);
+    }
+  });
+  
+  console.log = jest.fn().mockImplementation((...args) => {
+    // Still log to stdout for debugging if needed
+    if (process.env.DEBUG_CI_ERRORS) {
+      originalConsoleLog.apply(console, args);
     }
   });
 }
