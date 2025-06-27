@@ -9,6 +9,8 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   updateFilledTrades,
   fetchTicker
 } = require('../../database/manager');
+const { calculateDynamicParams } = require('../utils/positionSizing');
+} = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { 
   checkStopLoss, 
@@ -399,7 +401,8 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
     try {
       // OHLCV データを取得（ATR計算用）
-      const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
+      const { timeframe, limit } = calculateDynamicParams(ohlcv);
+      const ohlcv = await fetchOHLCVData(exchange, symbol, timeframe, limit, options);
       
       if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
         // 動的ポジションサイジングのパラメータ設定
