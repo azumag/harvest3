@@ -14,6 +14,7 @@
     "test:unit": "jest test/unit",
     "test:e2e": "node test/e2e-test-runner.js",
     "test:e2e-integrity": "node test/e2e-data-integrity.js",
+    "test:e2e-position-sizing": "node test/e2e-dynamic-position-sizing.js",
     "check-balance": "node scripts/balanceConsistencyChecker.js",
     "check-balance-symbol": "node scripts/balanceConsistencyChecker.js",
     "compare-balance": "node scripts/compareExchangeVsSummary.js",
