@@ -9,6 +9,5 @@
 ## tmux 操作
 - メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
 - Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
-- tmux send-keys -t "gemini-harvest" "内容" Enter
-- tmux send-keys -t "gemini-harvest" "" Enter
+- tmux send-keys -t "gemini-harvest" "内容" Enter && sleep 5 && tmux send-keys -t "gemini-harvest" "" Enter
 - Enterは10秒間をおいて2回送る必要がある

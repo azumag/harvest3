@@ -33,8 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## tmux 操作
 - メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
 - Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
-- tmux send-keys -t "gemini-harvest" "内容" Enter
-- tmux send-keys -t "gemini-harvest" "" Enter
+- tmux send-keys -t "gemini-harvest" "内容" Enter && sleep 5 && tmux send-keys -t "gemini-harvest" "" Enter
 - Enterは10秒間をおいて2回送る必要がある
 
 # worker-claude から指示が来た場合
@@ -46,17 +45,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - web ui の機能改修の場合は mcp ブラウザを用いて確認
 - 指示は tmux の send-keys を通じて行います。
 - worker-claude は claude-harvest という pane にいます。
-- tmux send-keys -t "claude-harvest" "指示" Enter
 - Enterは10秒間をおいて２回送る必要があります
-- tmux send-keys -t "claude-harvest" "" Enter
-- 指示の最初に /orchestrator をつけ、自分を manager-claude であると名乗ること
+- tmux send-keys -t "claude-harvest" "指示" Enter && sleep 5 &&  tmux send-keys -t "claude-harvest" "" Enter
+- 自分を manager-claude であると名乗ること
 - send-keys を用いて結果レポートを manager に返す様に伝えるのを忘れないでください。
-- 最後に think をつけること。
 - バッククォートがシェルによってコマンドとして解釈されてしまうので、バッククォート自体をエスケープして、worker-Claudeに指示を送る
 - 送信後はプロンプト入力画面にもどり、worker-claudeからsend-keysされてくるのを待つこと.
 - 自分で作業をしない
 例：
-tmux send-keys -t "claude-harvest" "/orchestrator 指示 レポートを tmux send-keys を用いて manager-claude に返すこと。 ultrathink" Enter
+tmux send-keys -t "claude-harvest" "指示 レポートを tmux send-keys を用いて manager-claude に返すこと。" Enter
 
 # 調査
 何か調査する必要がある時は、gemini に websearchをたのむこと

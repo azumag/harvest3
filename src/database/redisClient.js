@@ -9,7 +9,11 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 // Redisクライアントの作成
 const client = redis.createClient({
-  url: REDIS_URL
+  url: REDIS_URL,
+  socket: {
+    connectTimeout: 5000,
+    commandTimeout: 5000
+  }
 });
 
 // イベントリスナーを追加

@@ -6,14 +6,11 @@
 - テストコード自体もレビューしてください。
 - 指示は tmux の send-keys を通じて行います。
 - claude は claude-harvest という pane にいます。
-- tmux send-keys -t "claude-harvest" "指示" Enter
-- Enterは10秒間をおいて２回送る必要があります
-- tmux send-keys -t "claude-harvest" "" Enter
+- tmux send-keys -t "claude-harvest" "指示" Enter && sleep 5 && tmux send-keys -t "claude-harvest" "" Enter
 - 指示の最初に /orchestrator をつけ、自分をgeminiであると名乗ること
 - send-keys を用いて結果レポートをgeminiに返す様に伝えるのを忘れないでください。
-- 最後に think をつけること。
 - バッククォートがシェルによってコマンドとして解釈されてしまうので、バッククォート自体をエスケープして、Claudeに指示を送る
 - 送信後はプロンプト入力画面にもどり、claudeからsend-keysされてくるのを待つこと.
 - 自分で作業をしない
 例：
-tmux send-keys -t "claude-harvest" "/orchestrator 指示 レポートを tmux send-keys を用いて gemini に返すこと。 ultrathink" Enter
+tmux send-keys -t "claude-harvest" "/orchestrator 指示 レポートを tmux send-keys を用いて gemini に返すこと。" Enter
