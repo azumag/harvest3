@@ -187,23 +187,28 @@ describe('リファクタリング共通関数テスト', () => {
 
   describe('fetchAndValidateOHLCVWithBacktestSetup', () => {
     test('正常なOHLCVデータ取得とバックテスト設定', async () => {
-      const mockOHLCV = [
-        [1640995200000, 5000000, 5100000, 4900000, 5050000, 100],
-        [1640995260000, 5050000, 5150000, 4950000, 5080000, 120]
-      ];
+      // 50期間の十分なデータを作成（最低必要数45以上）
+      const mockOHLCV = Array.from({ length: 50 }, (_, i) => [
+        1640995200000 + i * 60000, // timestamp
+        5000000 + i * 1000,        // open
+        5100000 + i * 1000,        // high  
+        4900000 + i * 1000,        // low
+        5050000 + i * 1000,        // close
+        100 + i                    // volume
+      ]);
 
       fetchOHLCVData.mockResolvedValue(mockOHLCV);
 
       const exchange = { id: 'bitbank' };
       const symbol = 'BTC/JPY';
-      const options = { backtest: true };
+      const options = { backtest: {} }; // backtest should be an object
 
       const result = await fetchAndValidateOHLCVWithBacktestSetup(
         exchange, symbol, '1m', 50, 'テスト戦略', options
       );
 
       expect(result).toEqual({
-        closes: [5050000, 5080000],
+        closes: mockOHLCV.map(candle => candle[4]),
         ohlcv: mockOHLCV
       });
       expect(options.backtest.ohlcvData).toEqual(mockOHLCV);
@@ -221,14 +226,24 @@ describe('リファクタリング共通関数テスト', () => {
     });
 
     test('非バックテストモードではohlcvData設定されない', async () => {
-      const mockOHLCV = [[1640995200000, 5000000, 5000000, 5000000, 5000000, 100]];
+      // 十分なデータを提供して、テストが実際の機能をテストできるようにする
+      const mockOHLCV = Array.from({ length: 15 }, (_, i) => [
+        1640995200000 + i * 60000, // timestamp
+        5000000, 5000000, 5000000, 5000000, 100 // ohlcv
+      ]);
 
       fetchOHLCVData.mockResolvedValue(mockOHLCV);
 
       const options = { backtest: false };
-      await fetchAndValidateOHLCVWithBacktestSetup({}, 'BTC/JPY', '1m', 10, 'テスト', options);
+      const result = await fetchAndValidateOHLCVWithBacktestSetup({}, 'BTC/JPY', '1m', 10, 'テスト', options);
 
+      // 非バックテストモードでは backtest プロパティは変更されない
       expect(options.backtest).toBeFalsy();
+      // 結果は正常に返される（バックテストモードでないのでohlcvDataは設定されない）
+      expect(result).toEqual({
+        closes: mockOHLCV.map(candle => candle[4]),
+        ohlcv: mockOHLCV
+      });
     });
   });
 

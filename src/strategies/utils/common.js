@@ -1426,15 +1426,14 @@ async function handleStrategyError(error, symbol, strategyName, strategyId, exch
   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
   
   if (postErrorToDiscord) {
-    const detailedMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}\nスタック: ${error.stack?.split('\n')[1] || 'N/A'}`;
-    await postErrorToDiscord(detailedMessage);
+    const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
+    await postErrorToDiscord(simpleMessage);
   }
   
   return {
     strategy: strategyId,
     symbol,
-    error: error.message,
-    stack: error.stack
+    error: error.message
   };
 }
 
