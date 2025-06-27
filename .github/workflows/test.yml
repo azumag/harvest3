@@ -10,6 +10,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
+    env:
+      NODE_ENV: test
+      CI: true
+      REDIS_URL: redis://localhost:6379
+      MONGO_URL: mongodb://localhost:27017
+      MONGO_DB_NAME: harvest3_test
+    
     strategy:
       matrix:
         node-version: [16.x]
@@ -34,17 +41,31 @@ jobs:
       run: |
         docker compose up -d mongodb redis
         sleep 10
+        # Check if services are running
+        docker compose ps
         
     - name: Start API server
       run: |
         npm run start-web &
+        API_PID=$!
+        echo "API_PID=$API_PID" >> $GITHUB_ENV
         sleep 5
+        # Check if API server is responding
+        curl -f http://localhost:3000/api/exchanges || echo "API health check failed"
         
     - name: Run E2E tests
       run: npm run test:e2e
       
+    - name: Stop API server
+      run: |
+        if [ ! -z "$API_PID" ]; then
+          kill $API_PID || true
+        fi
+      if: always()
+      
     - name: Stop services
       run: docker compose down
+      if: always()
       
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
