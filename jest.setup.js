@@ -83,9 +83,15 @@ jest.mock('./src/database/redisDatabase', () => {
   };
 });
 
+// Mock MongoDB modules to prevent connection attempts during tests
+jest.mock('./src/database/mongoDatabase');
+jest.mock('./src/database/manager');
+
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = 'redis://localhost:6379';
+process.env.MONGO_URL = 'mongodb://localhost:27017';
+process.env.MONGO_DB_NAME = 'test';
 
 // Suppress console outputs in CI environment to prevent false test failures
 // Tests legitimately use console.log/warn/error outputs which CI treats as failures

@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# perform
+- one commit should be created per task
+- git notes should be created to save ai prompt
+
+## test
+- TDD must perfomed
+- all test should be added to CI
+- all function need to be tested
+
+## Basic test promise (t-wada style)
+- 🔴 Red: failed case
+- 🟢 Green: テストを通す最小限の実装
+- 🔵 Refactor: リファクタリング
+- 小さなステップで進める
+- 仮実装（ベタ書き）から始める
+- 三角測量で一般化する
+- 明白な実装が分かる場合は直接実装してもOK
+- テストリストを常に更新する
+- 不安なところからテストを書く
+
 # Gemini および manager-claude からの指示を受けた場合
 - 指示者をプロジェクトマネージャーとし、協調作業すること
 - tmux の send-keys でやりとりし、マネージャとして指示を仰ぐこと
@@ -11,7 +31,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 自分を worker-claude と名乗る
 
 ## tmux 操作
-- メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
 - メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
 - Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
 - tmux send-keys -t "gemini-harvest" "内容" Enter
@@ -102,27 +121,6 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 - 暗号通貨の残高管理に焦点を当てるため
 - JPY残高は取引所側で別途管理されるため
 
-
 ## Geminiへの指示における重要な注意点
 - geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
 
-## TDD TODOリスト（t-wada流）
-
-### 基本方針
-
-- 🔴 Red: 失敗するテストを書く
-- 🟢 Green: テストを通す最小限の実装
-- 🔵 Refactor: リファクタリング
-- 小さなステップで進める
-- 仮実装（ベタ書き）から始める
-- 三角測量で一般化する
-- 明白な実装が分かる場合は直接実装してもOK
-- テストリストを常に更新する
-- 不安なところからテストを書く
-
-### commit
-作業単位は適宜 git commit する。
-その時のプロンプト内容を git notes に記載する
-
-## 新規テスト
-- 作成したテストは削除せず、CIに組み込む
