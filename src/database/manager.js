@@ -3,7 +3,9 @@ const {
   addTradeMongoDB, 
   addSignalMongoDB, 
   addOrderMongoDB, 
-  getOrderByOrderId, 
+  getOrderByOrderId,
+  updateOrderByOrderId,
+  deleteOrderByOrderId,
   connectDB,
   listOrders,
   listTrades,
@@ -1680,6 +1682,8 @@ module.exports = {
   listSignals,
   countSignals,
   listFilledPositions,
+  updateOrderByOrderId,
+  deleteOrderByOrderId,
   addOhlcvMongoDB, // script からの利用のみ
   getOHLCVByParams, // script からの利用のみ
   fetchTicker,

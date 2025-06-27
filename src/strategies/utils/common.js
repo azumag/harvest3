@@ -399,11 +399,40 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
     try {
       // OHLCV データを取得（ATR計算用）
-      // TODO: 動的ポジションサイジングのパラメータ設定
-      // TOOD: ポジションサイジングにおいて、実現損益が低いほど少なくなるようになっているか？
       const ohlcv = await fetchOHLCVData(exchange, symbol, '1h', 50, options);
       
       if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
+        // 動的ポジションサイジングのパラメータ設定
+        // 市場条件に基づく動的パラメータ調整
+        const volatility = calculateCurrentVolatility(ohlcv.slice(-20)); // 直近20本での変動率
+        const marketConditions = analyzeMarketConditions(ohlcv, currentPrice);
+        
+        // 動的パラメータ設定
+        const dynamicConfig = {
+          ...globalConfig.global.dynamicPositionSizing,
+          // 高ボラティリティ時はリスクを削減
+          baseRiskPerTrade: volatility > 0.05 ? 
+            globalConfig.global.dynamicPositionSizing.baseRiskPerTrade * 0.7 :
+            globalConfig.global.dynamicPositionSizing.baseRiskPerTrade,
+          // トレンド市場ではポジションサイズを増加
+          atrMultiplier: marketConditions.trend === 'strong' ? 
+            globalConfig.global.dynamicPositionSizing.atrMultiplier * 1.2 :
+            globalConfig.global.dynamicPositionSizing.atrMultiplier
+        };
+        
+        // 実現損益に基づく調整（損失が多い戦略はポジションサイズを削減）
+        let performanceAdjustment = 1.0;
+        if (realizedPnL < 0) {
+          const lossRatio = Math.abs(realizedPnL) / availableFunds;
+          performanceAdjustment = Math.max(0.3, 1.0 - (lossRatio * 2)); // 最大70%削減
+        } else if (realizedPnL > 0) {
+          const profitRatio = realizedPnL / availableFunds;
+          performanceAdjustment = Math.min(1.5, 1.0 + (profitRatio * 0.5)); // 最大50%増加
+        }
+        
+        // 動的サイジング設定を更新
+        dynamicSizing.updateConfig(dynamicConfig);
+        
         // 動的ポジションサイジングを計算
         const accountBalance = availableFunds + realizedPnL;
         const ohlcData = ohlcv.map(candle => ({
@@ -416,12 +445,20 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
           accountBalance,
           ohlcData,
           currentPrice,
-          strategyKey
+          strategyKey,
+          marketData: {
+            volatility,
+            marketConditions,
+            performanceAdjustment,
+            marketParameters
+          }
         });
         
         if (positionResult.reason === 'success' && positionResult.positionSize > 0) {
-          formattedAmount = positionResult.positionSize !== null && positionResult.positionSize !== undefined 
-                           ? parseFloat(positionResult.positionSize.toFixed(amountPrecision))
+          // パフォーマンス調整を適用
+          const adjustedPositionSize = positionResult.positionSize * performanceAdjustment;
+          formattedAmount = adjustedPositionSize !== null && adjustedPositionSize !== undefined 
+                           ? parseFloat(adjustedPositionSize.toFixed(amountPrecision))
                            : parseFloat((tradeAmount).toFixed(amountPrecision));
           isPositionSized = true;
           
@@ -432,7 +469,11 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
             const sizeInfo = `📊 [動的サイジング] ATRベース計算適用\n` +
                            `ATR: ${safeATR}\n` +
                            `リスク: ${(positionResult.adjustedRisk * 100).toFixed(2)}%\n` +
-                           `計算サイズ: ${formattedAmount}\n` +
+                           `元サイズ: ${positionResult.positionSize.toFixed(amountPrecision)}\n` +
+                           `調整後サイズ: ${formattedAmount}\n` +
+                           `調整率: ${(performanceAdjustment * 100).toFixed(1)}%\n` +
+                           `ボラティリティ: ${(volatility * 100).toFixed(2)}%\n` +
+                           `市場状況: ${marketConditions.trend}\n` +
                            `ストップロス距離: ${safeStopLoss}`;
             
             console.log(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
@@ -1539,5 +1580,106 @@ module.exports = {
   saveStrategySignal,
   createLogInfoBase,
   fetchAndValidateOHLCVWithBacktestSetup,
-  executeStrategyTemplate
+  executeStrategyTemplate,
+  // 動的ポジションサイジング関連
+  calculateCurrentVolatility,
+  analyzeMarketConditions
 };
+
+/**
+ * 現在のボラティリティを計算
+ * @param {Array} ohlcvData - OHLCV データ
+ * @returns {number} - ボラティリティ（標準偏差ベース）
+ */
+function calculateCurrentVolatility(ohlcvData) {
+  if (!ohlcvData || ohlcvData.length < 2) {
+    return 0.02; // デフォルトボラティリティ
+  }
+  
+  try {
+    // 価格変動率を計算
+    const returns = [];
+    for (let i = 1; i < ohlcvData.length; i++) {
+      const currentPrice = ohlcvData[i][4]; // 終値
+      const previousPrice = ohlcvData[i-1][4];
+      if (previousPrice > 0) {
+        returns.push((currentPrice - previousPrice) / previousPrice);
+      }
+    }
+    
+    if (returns.length === 0) return 0.02;
+    
+    // 平均リターンを計算
+    const meanReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
+    
+    // 分散を計算
+    const variance = returns.reduce((sum, ret) => {
+      return sum + Math.pow(ret - meanReturn, 2);
+    }, 0) / returns.length;
+    
+    // 標準偏差（ボラティリティ）を計算
+    const volatility = Math.sqrt(variance);
+    
+    // 異常値を防ぐため上限と下限を設定
+    return Math.max(0.001, Math.min(0.5, volatility));
+    
+  } catch (error) {
+    console.error('ボラティリティ計算エラー:', error);
+    return 0.02; // デフォルト値
+  }
+}
+
+/**
+ * 市場状況を分析
+ * @param {Array} ohlcvData - OHLCV データ
+ * @param {number} currentPrice - 現在価格
+ * @returns {Object} - 市場分析結果
+ */
+function analyzeMarketConditions(ohlcvData, currentPrice) {
+  if (!ohlcvData || ohlcvData.length < 10) {
+    return { trend: 'unknown', strength: 0, direction: 'sideways' };
+  }
+  
+  try {
+    const prices = ohlcvData.map(candle => candle[4]); // 終値
+    const period = Math.min(10, prices.length);
+    const recentPrices = prices.slice(-period);
+    
+    // 簡単なトレンド分析
+    const firstPrice = recentPrices[0];
+    const lastPrice = recentPrices[recentPrices.length - 1];
+    const priceChange = (lastPrice - firstPrice) / firstPrice;
+    
+    // 移動平均との比較
+    const sma = recentPrices.reduce((sum, price) => sum + price, 0) / recentPrices.length;
+    const priceVsSma = (currentPrice - sma) / sma;
+    
+    // トレンドの強さを計算
+    const trendStrength = Math.abs(priceChange);
+    
+    let trend = 'weak';
+    let direction = 'sideways';
+    
+    if (trendStrength > 0.03) { // 3%以上の変動
+      trend = 'strong';
+      direction = priceChange > 0 ? 'up' : 'down';
+    } else if (trendStrength > 0.01) { // 1%以上の変動
+      trend = 'moderate';
+      direction = priceChange > 0 ? 'up' : 'down';
+    }
+    
+    return {
+      trend,
+      strength: trendStrength,
+      direction,
+      priceChange,
+      priceVsSma,
+      currentPrice,
+      sma
+    };
+    
+  } catch (error) {
+    console.error('市場分析エラー:', error);
+    return { trend: 'unknown', strength: 0, direction: 'sideways' };
+  }
+}
