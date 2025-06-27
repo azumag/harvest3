@@ -1916,7 +1916,7 @@ function displayFilledPositionsStats(stats) {
   
   if (avgTimeElement) {
     const avgTime = stats.averageHoldingTime || 0;
-    avgTimeElement.textContent = formatHours(avgTime);
+    avgTimeElement.textContent = CommonUI.formatHours(avgTime);
   }
   
   if (lastUpdatedElement) {
@@ -1972,7 +1972,7 @@ function displayFilledPositionsTable(positions) {
         <td><small>¥${formatNumber(position.currentPrice)}</small></td>
         <td class="${pnlClass}" data-order="${pnl}"><strong><small>¥${formatNumber(pnl)}</small></strong></td>
         <td class="${pnlClass}" data-order="${pnlPercent}"><strong><small>${formatPercent(pnlPercent)}%</small></strong></td>
-        <td><small>${formatHours(elapsedHours)}</small></td>
+        <td><small>${CommonUI.formatHours(elapsedHours)}</small></td>
       </tr>
     `;
   }).join('');
@@ -2036,19 +2036,7 @@ function formatPercent(value) {
 /**
  * 時間フォーマット
  */
-function formatHours(hours) {
-  if (typeof hours !== 'number') return '-';
-  
-  if (hours < 1) {
-    return `${Math.round(hours * 60)}分`;
-  } else if (hours < 24) {
-    return `${hours.toFixed(1)}時間`;
-  } else {
-    const days = Math.floor(hours / 24);
-    const remainingHours = Math.round(hours % 24);
-    return `${days}日${remainingHours}時間`;
-  }
-}
+// formatHours function moved to common-ui.js to eliminate duplication
 
 /**
  * 日時フォーマット

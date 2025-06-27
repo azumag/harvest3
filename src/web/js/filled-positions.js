@@ -47,7 +47,7 @@ function updateStatistics(stats) {
     pnlElement.className = totalPnL >= 0 ? 'text-success' : 'text-danger';
     
     const avgTime = stats.averageHoldingTime || 0;
-    document.getElementById('average-holding-time').textContent = formatHours(avgTime);
+    document.getElementById('average-holding-time').textContent = CommonUI.formatHours(avgTime);
 }
 
 // ポジションテーブルの更新
@@ -93,7 +93,7 @@ function updatePositionsTable() {
                 <td>¥${formatNumber(position.currentPrice)}</td>
                 <td class="${pnlClass}"><strong>¥${formatNumber(pnl)}</strong></td>
                 <td class="${pnlClass}"><strong>${formatPercent(pnlPercent)}%</strong></td>
-                <td>${formatHours(holdingTime)}</td>
+                <td>${CommonUI.formatHours(holdingTime)}</td>
                 <td>${formatDateTime(position.closedAt || position.timestamp)}</td>
             </tr>
         `;
@@ -223,19 +223,7 @@ function formatPercent(value) {
     return value.toFixed(2);
 }
 
-function formatHours(hours) {
-    if (typeof hours !== 'number') return '-';
-    
-    if (hours < 1) {
-        return `${Math.round(hours * 60)}分`;
-    } else if (hours < 24) {
-        return `${hours.toFixed(1)}時間`;
-    } else {
-        const days = Math.floor(hours / 24);
-        const remainingHours = Math.round(hours % 24);
-        return `${days}日${remainingHours}時間`;
-    }
-}
+// formatHours function moved to common-ui.js to eliminate duplication
 
 function formatDateTime(timestamp) {
     if (!timestamp) return '-';
