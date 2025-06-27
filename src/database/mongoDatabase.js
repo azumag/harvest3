@@ -1,5 +1,9 @@
 const { MongoClient, ObjectId } = require('mongodb');
 const dotenv = require('dotenv');
+const { 
+  safeValidateTradeData, 
+  safeValidateOrderData 
+} = require('./schemas');
 dotenv.config();
 
 const mongoUrl = process.env.MONGO_URL;
@@ -10,6 +14,8 @@ const mongoOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 5000,
+  socketTimeoutMS: 5000,
   maxPoolSize: 10
 };
 
@@ -170,7 +176,13 @@ async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
 async function addOrderMongoDB(orderData) {
   await connectDB();
   try {
-    const result = await module.exports.ordersCollection.insertOne(orderData);
+    // Zod validation for order data
+    const validatedOrderData = safeValidateOrderData(orderData, 'addOrderMongoDB');
+    if (!validatedOrderData) {
+      throw new Error('Order data validation failed - see console for details');
+    }
+    
+    const result = await module.exports.ordersCollection.insertOne(validatedOrderData);
     // console.log('Order added:', result.insertedId);
     return result;
   } catch (error) {
@@ -200,9 +212,19 @@ async function addOrdersBulk(ordersData) {
     return { insertedCount: 0 };
   }
   
+  // Validate all orders in the bulk data
+  const validatedOrdersData = [];
+  for (let i = 0; i < ordersData.length; i++) {
+    const validatedOrder = safeValidateOrderData(ordersData[i], `addOrdersBulk[${i}]`);
+    if (!validatedOrder) {
+      throw new Error(`Order validation failed at index ${i} - see console for details`);
+    }
+    validatedOrdersData.push(validatedOrder);
+  }
+  
   await connectDB();
   try {
-    const result = await module.exports.ordersCollection.insertMany(ordersData);
+    const result = await module.exports.ordersCollection.insertMany(validatedOrdersData);
     return result;
   } catch (error) {
     console.error('Error adding orders in bulk:', error);
@@ -217,19 +239,25 @@ async function addOrdersBulk(ordersData) {
 async function addTradeMongoDB(tradeData) {
   await connectDB();
   try {
+    // Zod validation for trade data
+    const validatedTradeData = safeValidateTradeData(tradeData, 'addTradeMongoDB');
+    if (!validatedTradeData) {
+      throw new Error('Trade data validation failed - see console for details');
+    }
+    
     // upsert操作を使用して重複エラーを回避
     const result = await module.exports.tradesCollection.replaceOne(
-      { tradeId: tradeData.tradeId },
-      tradeData,
+      { tradeId: validatedTradeData.tradeId },
+      validatedTradeData,
       { upsert: true }
     );
     
     if (result.upsertedCount > 0) {
       console.log('New trade added:', result.upsertedId);
     } else if (result.modifiedCount > 0) {
-      console.log('Existing trade updated for tradeId:', tradeData.tradeId);
+      console.log('Existing trade updated for tradeId:', validatedTradeData.tradeId);
     } else {
-      console.log('Trade already exists (no changes):', tradeData.tradeId);
+      console.log('Trade already exists (no changes):', validatedTradeData.tradeId);
     }
     
     return result;

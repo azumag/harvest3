@@ -4,6 +4,12 @@
  */
 const { client, initRedisClient } = require('./redisClient');
 const { errorHandler } = require('../common/errorHandler');
+const { 
+  safeValidateTradeSummaryData,
+  safeValidatePositionData,
+  safeValidatePendingOrderData,
+  safeValidateStrategyParametersData
+} = require('./schemas');
 
 // 初期化関数
 async function initialize() {
@@ -48,14 +54,15 @@ async function getTradeSummaryTimestamp(exchange, symbol) {
 
 // サマリーの更新 - 数値精度安全化版
 async function updateTradeSummary(trade) {
-  const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-  const now = Date.now();
-
-  // 入力データのバリデーション
-  if (!trade || !trade.amount || !trade.value || !trade.side) {
-    console.error('無効な取引データでサマリー更新をスキップ:', trade);
+  // Zod validation for trade summary data
+  const validatedTrade = safeValidateTradeSummaryData(trade, 'updateTradeSummary');
+  if (!validatedTrade) {
+    console.error('Trade summary validation failed, skipping update');
     return;
   }
+
+  const summaryKey = `summary:trade:${validatedTrade.exchange}:${validatedTrade.symbol}:${validatedTrade.strategy}`;
+  const now = Date.now();
 
   const exists = await client.exists(summaryKey);
 
@@ -221,11 +228,26 @@ async function getTradeSummary(filters = {}) {
  */
 async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
+  
+  // Create strategy parameters data structure for validation
+  const strategyParamsData = {
+    exchangeId,
+    symbol,
+    strategyKey,
+    params
+  };
+
+  // Zod validation for strategy parameters data
+  const validatedStrategyParams = safeValidateStrategyParametersData(strategyParamsData, 'saveStrategyParametersRedis');
+  if (!validatedStrategyParams) {
+    console.error('Strategy parameters validation failed, skipping save');
+    return false;
+  }
+
   try {
-    
     // パラメータオブジェクトの各値を文字列に変換
     const stringifiedParams = {};
-    for (const [paramKey, value] of Object.entries(params)) {
+    for (const [paramKey, value] of Object.entries(validatedStrategyParams.params)) {
       stringifiedParams[paramKey] = String(value); // 値を文字列に変換
     }
     
@@ -532,10 +554,17 @@ async function deleteKey(key) {
  * @returns {Promise<Boolean>} 保存に成功したかどうか
  */
 async function savePositionRedis(positionKey, positionData) {
+  // Zod validation for position data
+  const validatedPositionData = safeValidatePositionData(positionData, 'savePositionRedis');
+  if (!validatedPositionData) {
+    console.error('Position data validation failed, skipping save');
+    return false;
+  }
+
   const key = `position:${positionKey}`;
   try {
     const dataWithTimestamp = {
-      ...positionData,
+      ...validatedPositionData,
       updatedAt: Date.now()
     };
     await client.hSet(key, dataWithTimestamp);
@@ -1193,14 +1222,29 @@ async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, o
       strategyKey,
       orderId,
       side: orderData.side,
-      amount: orderData.amount.toString(),
-      price: orderData.price.toString(),
+      amount: orderData.amount,
+      price: orderData.price,
       orderType: orderData.orderType || 'limit',
-      timestamp: orderData.timestamp.toString(),
+      timestamp: orderData.timestamp,
       status: 'open'
     };
+
+    // Zod validation for pending order data
+    const validatedPendingOrderData = safeValidatePendingOrderData(data, 'savePendingOrderRedis');
+    if (!validatedPendingOrderData) {
+      console.error('Pending order data validation failed, skipping save');
+      return false;
+    }
+
+    // Convert numbers to strings for Redis storage
+    const redisData = {
+      ...validatedPendingOrderData,
+      amount: validatedPendingOrderData.amount.toString(),
+      price: validatedPendingOrderData.price.toString(),
+      timestamp: validatedPendingOrderData.timestamp.toString()
+    };
     
-    await client.hSet(key, data);
+    await client.hSet(key, redisData);
     console.log(`未約定注文を保存しました: ${key}`);
     return true;
   } catch (error) {
