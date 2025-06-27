@@ -31,6 +31,37 @@ class ForcefulSynchronizer {
     console.log('🚨 PHASE 1: EMERGENCY PHANTOM POSITION DELETION');
     console.log('===============================================');
     
+    // SAFETY CHECK: Prevent accidental execution in non-emergency contexts
+    const emergencyFlag = process.env.EMERGENCY_PHANTOM_DELETION_ENABLED;
+    const confirmationToken = process.env.PHANTOM_DELETION_CONFIRMATION_TOKEN;
+    
+    if (!emergencyFlag || emergencyFlag !== 'true') {
+      throw new Error(
+        '🛡️ SAFETY BLOCK: Emergency phantom deletion requires EMERGENCY_PHANTOM_DELETION_ENABLED=true environment variable. ' +
+        'This prevents accidental execution of data deletion operations.'
+      );
+    }
+    
+    if (!confirmationToken || confirmationToken !== 'CONFIRM_PHANTOM_DELETION_EMERGENCY') {
+      throw new Error(
+        '🛡️ SAFETY BLOCK: Emergency phantom deletion requires PHANTOM_DELETION_CONFIRMATION_TOKEN=CONFIRM_PHANTOM_DELETION_EMERGENCY. ' +
+        'This is a secondary safety mechanism to prevent unintended data loss.'
+      );
+    }
+    
+    // Additional runtime safety check
+    if (process.env.NODE_ENV === 'production' && !process.env.FORCE_PRODUCTION_PHANTOM_DELETION) {
+      throw new Error(
+        '🛡️ PRODUCTION SAFETY BLOCK: Phantom deletion in production requires FORCE_PRODUCTION_PHANTOM_DELETION=true. ' +
+        'This is to prevent accidental data loss in live trading environments.'
+      );
+    }
+    
+    console.log('✅ Safety checks passed - proceeding with emergency phantom deletion');
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Emergency flag: ${emergencyFlag}`);
+    console.log(`Confirmation token: ${confirmationToken ? 'PROVIDED' : 'MISSING'}`);
+    
     try {
       await initRedisClient();
       const redisClient = getClient();

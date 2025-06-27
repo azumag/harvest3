@@ -123,3 +123,6 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 ### commit
 作業単位は適宜 git commit する。
 その時のプロンプト内容を git notes に記載する
+
+## 新規テスト
+- 作成したテストは削除せず、CIに組み込む
