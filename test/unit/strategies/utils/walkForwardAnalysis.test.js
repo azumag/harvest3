@@ -359,7 +359,7 @@ describe('Walk-Forward Analysis 包括テストスイート', () => {
 
   describe('🔵 Blue Phase: リファクタリング - 統計的堅牢性', () => {
     
-    test('高度な統計的堅牢性検証', () => {
+    test('高度な統計的堅牢性検証', async () => {
       const robustnessValidator = new RobustnessValidator({
         enableMonteCarloValidation: true,
         enableBootstrapValidation: true,
@@ -372,7 +372,7 @@ describe('Walk-Forward Analysis 包括テストスイート', () => {
         simulateStrategyPerformance(split)
       );
       
-      const comprehensiveResult = robustnessValidator.comprehensiveValidation(performanceResults);
+      const comprehensiveResult = await robustnessValidator.comprehensiveValidation(performanceResults);
       
       expect(comprehensiveResult.monteCarlo.pValue).toBeGreaterThan(0.05);
       expect(comprehensiveResult.bootstrap.confidenceInterval).toBeDefined();

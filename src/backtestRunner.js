@@ -16,6 +16,9 @@ const { OHLCVTimeFrames } = require('./common/const');
 const { sleep, timeframeToMs } = require('./common/utils');
 const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
+const { WalkForwardAnalysis, TimeSeriesCrossValidator, FinancialTimeSeriesValidator } = require('./strategies/utils/walkForwardAnalysis');
+const { TimeSeriesCrossValidator: TSCV, FinancialTimeSeriesValidator: FTSV } = require('./strategies/utils/timeSeriesCrossValidation');
+const { MonteCarloBootstrapping } = require('./strategies/utils/monteCarloBootstrapping');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -23,6 +26,9 @@ const targetSymbol = args.find(arg => !arg.startsWith('--')); // ハイフンで
 const autoUpdate = args.includes('--auto-update'); // auto-update フラグを検出
 const gridSearch = args.includes('--grid-search'); // grid-search フラグを検出
 const enableMonteCarlo = args.includes('--monte-carlo'); // monte-carlo フラグを検出
+const enableWalkForward = args.includes('--walk-forward'); // walk-forward フラグを検出
+const enableTimeSeriesCV = args.includes('--timeseries-cv'); // timeseries-cv フラグを検出
+const enableOverfittingDetection = args.includes('--overfitting-detection'); // オーバーフィッティング検出フラグ
 const strategySpecify = args.find(arg => arg.startsWith('--strategy'))?.split('=')[1]; // --strategy=<戦略名> フラグを検出
 
 // 引数の説明を表示
@@ -37,6 +43,9 @@ if (args.includes('--help') || args.includes('-h')) {
   --auto-update  - 最適なパラメータで設定ファイルを自動更新する
   --grid-search  - グリッドサーチを実行する
   --monte-carlo  - Monte Carlo Bootstrapping統計分析を有効化する
+  --walk-forward - Walk-Forward Analysis時系列分析を有効化する
+  --timeseries-cv - Time Series Cross-Validation分析を有効化する
+  --overfitting-detection - オーバーフィッティング検出アルゴリズムを有効化する
   --strategy <戦略名> - 特定の戦略を指定してバックテストを実行する
   --help, -h     - このヘルプを表示
   `);

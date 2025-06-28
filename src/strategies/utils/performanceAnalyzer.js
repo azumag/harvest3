@@ -4,6 +4,7 @@
  */
 
 const { getTradeSummary } = require('../../database/redisDatabase');
+const { AdvancedPerformanceMetrics } = require('./advancedPerformanceMetrics');
 
 class PerformanceAnalyzer {
   constructor(options = {}) {
@@ -11,6 +12,7 @@ class PerformanceAnalyzer {
     this.defaultTradeCount = options.defaultTradeCount || 10; // 直近10取引
     this.cacheTimeout = options.cacheTimeout || 60000; // 1分間キャッシュ
     this.cache = new Map();
+    this.advancedMetrics = new AdvancedPerformanceMetrics();
     
     // パフォーマンス閾値
     this.thresholds = {
@@ -165,7 +167,18 @@ class PerformanceAnalyzer {
    */
   calculateOverallScore(performance) {
     try {
-      const weights = {
+      // 高度パフォーマンス指標が利用可能な場合の重み配分
+      const hasAdvancedMetrics = performance.calmarRatio !== undefined && 
+                                performance.sortinoRatio !== undefined;
+      
+      const weights = hasAdvancedMetrics ? {
+        winRate: 0.25,       // 勝率 25%
+        profitFactor: 0.20,  // プロフィットファクター 20%
+        totalPnL: 0.15,      // 総損益 15%
+        tradeCount: 0.10,    // 取引数 10%
+        calmarRatio: 0.15,   // Calmar Ratio 15%
+        sortinoRatio: 0.15   // Sortino Ratio 15%
+      } : {
         winRate: 0.4,        // 勝率 40%
         profitFactor: 0.3,   // プロフィットファクター 30%
         totalPnL: 0.2,       // 総損益 20%
@@ -200,6 +213,23 @@ class PerformanceAnalyzer {
         const tradeScore = Math.min(1, performance.totalTrades / 50); // 50取引を満点とする
         totalScore += tradeScore * weights.tradeCount;
         totalWeight += weights.tradeCount;
+      }
+
+      // 高度パフォーマンス指標のスコア計算
+      if (hasAdvancedMetrics) {
+        // Calmar Ratioスコア（2.0を満点とする）
+        if (performance.calmarRatio !== undefined && !isNaN(performance.calmarRatio) && performance.calmarRatio !== Infinity) {
+          const calmarScore = Math.min(1, Math.max(0, performance.calmarRatio / 2.0));
+          totalScore += calmarScore * weights.calmarRatio;
+          totalWeight += weights.calmarRatio;
+        }
+
+        // Sortino Ratioスコア（1.5を満点とする）
+        if (performance.sortinoRatio !== undefined && !isNaN(performance.sortinoRatio) && performance.sortinoRatio !== Infinity) {
+          const sortinoScore = Math.min(1, Math.max(0, performance.sortinoRatio / 1.5));
+          totalScore += sortinoScore * weights.sortinoRatio;
+          totalWeight += weights.sortinoRatio;
+        }
       }
 
       return totalWeight > 0 ? totalScore / totalWeight : 0.5;

@@ -62,14 +62,46 @@ const config = {
       maxPositionPercent: 0.1, // 10% - 単一ポジションの最大サイズ制限
       minPositionPercent: 0.001, // 0.1% - 単一ポジションの最小サイズ制限
       
+      // OHLCV データ取得設定（ハードコード除去）
+      ohlcv: {
+        timeframe: '1h', // デフォルトタイムフレーム
+        limit: 50        // デフォルト取得期間
+      },
+      
+      // ボラティリティ調整設定
+      volatility: {
+        window: 20,               // ボラティリティ計算ウィンドウ（直近N本）
+        threshold: 0.05,          // 高ボラティリティ閾値（5%）
+        riskReductionFactor: 0.7  // 高ボラティリティ時のリスク削減率（30%削減）
+      },
+      
+      // 市場状況別調整設定
+      marketConditions: {
+        trend: {
+          strong: {
+            atrMultiplierAdjustment: 1.2  // 強いトレンド時のATR倍数調整（20%増加）
+          }
+        }
+      },
+      
       // Kelly基準設定
       // TODO: 理解する
       kellyEnabled: false, // Phase 1では無効
       kellyFraction: 0.25,
       
-      // パフォーマンス調整
-      performanceAdjustment: true,
-      lookbackDays: 30
+      // パフォーマンス調整設定
+      performanceAdjustment: {
+        enabled: true,
+        lookbackDays: 30,
+        loss: {
+          factor: 2,              // 損失率に対する調整係数
+          maxReductionRatio: 0.7  // 最大削減率（70%）
+        },
+        profit: {
+          factor: 0.5,            // 利益率に対する調整係数
+          maxIncreaseRatio: 0.5   // 最大増加率（50%）
+        }
+      }
     },
     
     // 高度注文管理設定（Issue #147）

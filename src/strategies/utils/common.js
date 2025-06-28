@@ -9,8 +9,6 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   updateFilledTrades,
   fetchTicker
 } = require('../../database/manager');
-const { calculateDynamicParams } = require('../utils/positionSizing');
-} = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { 
   checkStopLoss, 
@@ -400,37 +398,40 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
   // 動的ポジションサイジングが有効かチェック
   if (globalConfig?.global?.dynamicPositionSizing?.enabled && !options.backtest && dynamicSizing) {
     try {
-      // OHLCV データを取得（ATR計算用）
-      const { timeframe, limit } = calculateDynamicParams(ohlcv);
+      // 動的サイジングの設定を取得
+      const sizingConfig = globalConfig.global.dynamicPositionSizing;
+      const { timeframe, limit } = sizingConfig.ohlcv;
       const ohlcv = await fetchOHLCVData(exchange, symbol, timeframe, limit, options);
       
-      if (ohlcv && ohlcv.length >= dynamicSizing.config.atrPeriod) {
-        // 動的ポジションサイジングのパラメータ設定
+      if (ohlcv && ohlcv.length >= sizingConfig.atrPeriod) {
         // 市場条件に基づく動的パラメータ調整
-        const volatility = calculateCurrentVolatility(ohlcv.slice(-20)); // 直近20本での変動率
+        const volatility = calculateCurrentVolatility(ohlcv.slice(-sizingConfig.volatility.window));
         const marketConditions = analyzeMarketConditions(ohlcv, currentPrice);
         
         // 動的パラメータ設定
-        const dynamicConfig = {
-          ...globalConfig.global.dynamicPositionSizing,
-          // 高ボラティリティ時はリスクを削減
-          baseRiskPerTrade: volatility > 0.05 ? 
-            globalConfig.global.dynamicPositionSizing.baseRiskPerTrade * 0.7 :
-            globalConfig.global.dynamicPositionSizing.baseRiskPerTrade,
-          // トレンド市場ではポジションサイズを増加
-          atrMultiplier: marketConditions.trend === 'strong' ? 
-            globalConfig.global.dynamicPositionSizing.atrMultiplier * 1.2 :
-            globalConfig.global.dynamicPositionSizing.atrMultiplier
-        };
+        const dynamicConfig = { ...sizingConfig };
+
+        // 高ボラティリティ時はリスクを削減
+        if (volatility > sizingConfig.volatility.threshold) {
+          dynamicConfig.baseRiskPerTrade *= sizingConfig.volatility.riskReductionFactor;
+        }
+
+        // トレンド市場ではポジションサイズを増加
+        if (marketConditions.trend === 'strong' && sizingConfig.marketConditions?.trend?.strong?.atrMultiplierAdjustment) {
+          dynamicConfig.atrMultiplier *= sizingConfig.marketConditions.trend.strong.atrMultiplierAdjustment;
+        }
         
-        // 実現損益に基づく調整（損失が多い戦略はポジションサイズを削減）
+        // 実現損益に基づく調整
         let performanceAdjustment = 1.0;
-        if (realizedPnL < 0) {
+        const perfConfig = sizingConfig.performanceAdjustment;
+        if (realizedPnL < 0 && perfConfig?.loss) {
           const lossRatio = Math.abs(realizedPnL) / availableFunds;
-          performanceAdjustment = Math.max(0.3, 1.0 - (lossRatio * 2)); // 最大70%削減
-        } else if (realizedPnL > 0) {
+          const minAdjustment = 1.0 - perfConfig.loss.maxReductionRatio;
+          performanceAdjustment = Math.max(minAdjustment, 1.0 - (lossRatio * perfConfig.loss.factor));
+        } else if (realizedPnL > 0 && perfConfig?.profit) {
           const profitRatio = realizedPnL / availableFunds;
-          performanceAdjustment = Math.min(1.5, 1.0 + (profitRatio * 0.5)); // 最大50%増加
+          const maxAdjustment = 1.0 + perfConfig.profit.maxIncreaseRatio;
+          performanceAdjustment = Math.min(maxAdjustment, 1.0 + (profitRatio * perfConfig.profit.factor));
         }
         
         // 動的サイジング設定を更新

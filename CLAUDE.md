@@ -2,9 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# perform
+### 実践ガイド
+- **すべての判断・実装時に`gemini -p <質問内容>`で壁打ち**を必ず実施
+- Geminiの意見を鵜呑みにせず、1意見として判断。聞き方を変えて多角的な意見を抽出
+- Claude Code内蔵のWebSearchツールは使用しない
+- Geminiがエラーの場合は、聞き方を工夫してリトライ：
+  - ファイル名や実行コマンドを渡す（Geminiがコマンドを実行可能）
+  - 複数回に分割して聞く
+
+### 主要な活用場面
+1. **前提確認**: ユーザー、Claude自身に思い込みや勘違い、過信がないかどうか逐一確認（例: `gemini -p "この前提は正しいか？"`）
+2. **技術調査**: 最新情報・エラー解決・ドキュメント検索（例: `gemini -p "Rails 7.2 新機能"`）
+3. **設計検証**: アーキテクチャ・実装方針の妥当性確認（例: `gemini -p "この設計パターンは適切か？"`）
+4. **コードレビュー**: 品質・保守性・パフォーマンスの評価（例: `gemini -p "このコードの改善点は？"`）
+5. **計画立案**: タスクの実行計画レビュー・改善提案（例: `gemini -p "この実装計画の問題点は？"`）
+6. **技術選定**: ライブラリ・手法の比較検討 （例: `gemini -p "このライブラリは他と比べてどうか？"`）
+
+# 重要
 - one commit should be created per task
 - git notes should be created to save ai prompt
+- 得られた知見は docs ディレクトリの下に md ファイルで日付とともにまとめること
 
 ## test
 - TDD must perfomed
@@ -55,9 +72,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 例：
 tmux send-keys -t "claude-harvest" "指示 レポートを tmux send-keys を用いて manager-claude に返すこと。" Enter
 
-# 調査
-何か調査する必要がある時は、gemini に websearchをたのむこと
-gemini -p "WebSearch: ..."
 
 ## 🏗️ Project Overview
 
