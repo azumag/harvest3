@@ -15,12 +15,14 @@ const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require(
 const { OHLCVTimeFrames } = require('./common/const');
 const { sleep, timeframeToMs } = require('./common/utils');
 const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
+const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
 const targetSymbol = args.find(arg => !arg.startsWith('--')); // ハイフンで始まらない引数はシンボルと見なす
 const autoUpdate = args.includes('--auto-update'); // auto-update フラグを検出
 const gridSearch = args.includes('--grid-search'); // grid-search フラグを検出
+const enableMonteCarlo = args.includes('--monte-carlo'); // monte-carlo フラグを検出
 const strategySpecify = args.find(arg => arg.startsWith('--strategy'))?.split('=')[1]; // --strategy=<戦略名> フラグを検出
 
 // 引数の説明を表示
@@ -34,6 +36,7 @@ if (args.includes('--help') || args.includes('-h')) {
 オプション:
   --auto-update  - 最適なパラメータで設定ファイルを自動更新する
   --grid-search  - グリッドサーチを実行する
+  --monte-carlo  - Monte Carlo Bootstrapping統計分析を有効化する
   --strategy <戦略名> - 特定の戦略を指定してバックテストを実行する
   --help, -h     - このヘルプを表示
   `);
@@ -479,6 +482,28 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   
   allResultsArr.push('```');
   await postResultToDiscord(allResultsArr.join('\n'), discordBacktestURL);
+  
+  // Monte Carlo Bootstrapping分析（有効化されている場合）
+  if (enableMonteCarlo && rankedAllTimeframeResults.length > 0) {
+    console.log('🔬 Monte Carlo Bootstrapping分析を実行中...');
+    try {
+      const backtestEnhancer = new BacktestEnhancer({
+        iterations: 2000, // バックテスト用に軽量化
+        confidenceLevel: 0.95,
+        minTradesRequired: 5
+      });
+      
+      const enhancedResults = await backtestEnhancer.enhanceBacktestResults(rankedAllTimeframeResults);
+      const mcReport = backtestEnhancer.generateDiscordReport(enhancedResults);
+      
+      console.log('✅ Monte Carlo分析完了');
+      await postResultToDiscord(`\n${mcReport}`, discordBacktestURL);
+      
+    } catch (mcError) {
+      console.error('❌ Monte Carlo分析エラー:', mcError.message);
+      await postResultToDiscord(`❌ **Monte Carlo分析エラー**\n\`\`\`\n${mcError.message}\n\`\`\``, discordBacktestURL);
+    }
+  }
   
   // 自動更新が有効で、全タイムフレーム中から最適な結果を選択して更新
   if (autoUpdate && rankedAllTimeframeResults.length > 0) {

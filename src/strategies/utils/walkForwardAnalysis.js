@@ -704,6 +704,17 @@ class RobustnessValidator {
       iterations: config.iterations || 1000,
       ...config
     };
+    
+    // Monte Carlo Bootstrappingとの統合
+    if (this.config.enableMonteCarloValidation) {
+      const { MonteCarloBootstrapping } = require('./monteCarloBootstrapping');
+      this.mcBootstrap = new MonteCarloBootstrapping({
+        iterations: this.config.iterations,
+        confidenceLevel: 0.95,
+        biasCorrection: true,
+        acceleratedCorrection: false // 軽量化のため無効化
+      });
+    }
   }
   
   validateStability(performanceResults) {
@@ -724,12 +735,38 @@ class RobustnessValidator {
     return { isStable, stabilityScore };
   }
   
-  comprehensiveValidation(performanceResults) {
+  async comprehensiveValidation(performanceResults) {
     const results = {
       monteCarlo: this._monteCarloValidation(performanceResults),
       bootstrap: this._bootstrapValidation(performanceResults),
       crossValidation: this._crossValidation(performanceResults)
     };
+    
+    // 高度Monte Carlo分析を追加
+    if (this.config.enableMonteCarloValidation && this.mcBootstrap) {
+      try {
+        const returns = performanceResults.map(result => result.totalReturn);
+        if (returns.length >= 10) {
+          console.log('🔬 高度Monte Carlo Bootstrapping分析を実行中...');
+          results.advancedMonteCarlo = await this.mcBootstrap.comprehensiveAnalysis(returns, {
+            riskFreeRate: 0,
+            includeHigherMoments: false, // 軽量化
+            includeTailRisk: true
+          });
+          console.log('✅ 高度Monte Carlo分析完了');
+        } else {
+          results.advancedMonteCarlo = {
+            skipped: true,
+            reason: 'insufficient_data',
+            dataCount: returns.length,
+            minRequired: 10
+          };
+        }
+      } catch (error) {
+        console.error('❌ 高度Monte Carlo分析エラー:', error.message);
+        results.advancedMonteCarlo = { error: error.message };
+      }
+    }
     
     return results;
   }
