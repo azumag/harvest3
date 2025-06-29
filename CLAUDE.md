@@ -148,3 +148,6 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 理由：
 - 暗号通貨の残高管理に焦点を当てるため
 - JPY残高は取引所側で別途管理されるため
+
+## Geminiへの指示における重要な注意点
+- geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
