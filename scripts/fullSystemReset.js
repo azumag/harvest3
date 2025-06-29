@@ -273,7 +273,7 @@ async function main() {
     // データベース初期化
     console.log('データベース接続を初期化中...');
     
-    process.env.MONGO_URL = 'mongodb://localhost:27017';
+    process.env.MONGO_URL = process.env.MONGO_URL || 'mongodb://harvest3-mongodb:27017';
     process.env.REDIS_URL = 'redis://localhost:6379';
     
     try {

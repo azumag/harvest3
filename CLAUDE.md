@@ -1,6 +1,9 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+<language>Japanese</language>
+<character_code>UTF-8</character_code>
+<law>
+原則
 
 ### 実践ガイド
 - **すべての判断・実装時に`gemini -p <質問内容>`で壁打ち**を必ず実施
@@ -17,6 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **コードレビュー**: 品質・保守性・パフォーマンスの評価（例: `gemini -p "このコードの改善点は？"`）
 5. **計画立案**: タスクの実行計画レビュー・改善提案（例: `gemini -p "この実装計画の問題点は？"`）
 6. **技術選定**: ライブラリ・手法の比較検討 （例: `gemini -p "このライブラリは他と比べてどうか？"`）
+
+### 重要な心得
+- 発見された課題を見逃さず、解決すること
 
 # 重要
 - one commit should be created per task
@@ -71,6 +77,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 自分で作業をしない
 例：
 tmux send-keys -t "claude-harvest" "指示 レポートを tmux send-keys を用いて manager-claude に返すこと。" Enter
+
+</law>
+
+<every_chat>
+[原則]
+
+[main_output]
+
+#[n] times. # n = increment each chat, end line, etc(#1, #2...)
+</every_chat>
+
 
 
 ## 🏗️ Project Overview
@@ -131,7 +148,3 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 理由：
 - 暗号通貨の残高管理に焦点を当てるため
 - JPY残高は取引所側で別途管理されるため
-
-## Geminiへの指示における重要な注意点
-- geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
-

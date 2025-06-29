@@ -1,0 +1,515 @@
+Analyzing code similarity...
+
+=== Function Similarity ===
+Checking 298 files for duplicates...
+
+Found 127 duplicate pairs:
+------------------------------------------------------------
+
+Similarity: 86.67%, Score: 285.6 points (lines 320~339, avg: 329.5)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+
+Similarity: 83.85%, Score: 276.7 points (lines 321~339, avg: 330.0)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/utils/common.js:691-1011 executeSellOrder
+
+Similarity: 83.17%, Score: 266.5 points (lines 320~321, avg: 320.5)
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+  ./src/strategies/utils/common.js:691-1011 executeSellOrder
+
+Similarity: 83.86%, Score: 237.3 points (lines 227~339, avg: 283.0)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/web/js/analysis.js:349-575 fetchDataAndRenderChart
+
+Similarity: 83.41%, Score: 228.1 points (lines 227~320, avg: 273.5)
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+  ./src/web/js/analysis.js:349-575 fetchDataAndRenderChart
+
+Similarity: 86.19%, Score: 227.5 points (lines 207~321, avg: 264.0)
+  ./src/strategies/utils/common.js:691-1011 executeSellOrder
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 82.62%, Score: 225.6 points (lines 207~339, avg: 273.0)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 80.00%, Score: 219.2 points (lines 227~321, avg: 274.0)
+  ./src/strategies/utils/common.js:691-1011 executeSellOrder
+  ./src/web/js/analysis.js:349-575 fetchDataAndRenderChart
+
+Similarity: 88.38%, Score: 217.9 points (lines 172~321, avg: 246.5)
+  ./src/strategies/utils/common.js:173-344 handleStrategySignals
+  ./src/strategies/utils/common.js:691-1011 executeSellOrder
+
+Similarity: 80.64%, Score: 206.0 points (lines 172~339, avg: 255.5)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/utils/common.js:173-344 handleStrategySignals
+
+Similarity: 80.98%, Score: 199.2 points (lines 172~320, avg: 246.0)
+  ./src/strategies/utils/common.js:173-344 handleStrategySignals
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+
+Similarity: 84.75%, Score: 196.2 points (lines 143~320, avg: 231.5)
+  ./scripts/analyzeSimilarity.js:137-279 analyzeSimilarity
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+
+Similarity: 80.15%, Score: 192.8 points (lines 142~339, avg: 240.5)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/mutualInformation.js:266-407 calculateEnhancedMutualInformationSignals
+
+Similarity: 80.11%, Score: 191.5 points (lines 139~339, avg: 239.0)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/utils/common.js:1192-1330 confirmMultipleIndicators
+
+Similarity: 83.03%, Score: 186.4 points (lines 110~339, avg: 224.5)
+  ./src/backtestRunner.js:291-629 runBacktestForSymbol
+  ./src/strategies/mutualInformation.js:506-615 calculateMutualInformationSignals
+
+Similarity: 83.14%, Score: 178.7 points (lines 110~320, avg: 215.0)
+  ./src/strategies/mutualInformation.js:506-615 calculateMutualInformationSignals
+  ./src/strategies/utils/common.js:358-677 executeBuyOrder
+
+Similarity: 80.22%, Score: 160.8 points (lines 164~237, avg: 200.5)
+  ./scripts/testStrategyExecution.js:119-282 testStrategyExecution
+  ./test/e2e-dynamic-position-sizing.js:38-274 runDynamicPositionSizingTests
+
+Similarity: 81.62%, Score: 151.0 points (lines 143~227, avg: 185.0)
+  ./scripts/analyzeSimilarity.js:137-279 analyzeSimilarity
+  ./src/web/js/analysis.js:349-575 fetchDataAndRenderChart
+
+Similarity: 89.27%, Score: 128.5 points (lines 81~207, avg: 144.0)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 82.58%, Score: 128.0 points (lines 73~237, avg: 155.0)
+  ./emergency_balance_audit.js:117-189 generateAuditReport
+  ./test/e2e-dynamic-position-sizing.js:38-274 runDynamicPositionSizingTests
+
+Similarity: 80.22%, Score: 127.1 points (lines 145~172, avg: 158.5)
+  ./src/strategies/utils/common.js:173-344 handleStrategySignals
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+
+Similarity: 82.07%, Score: 126.4 points (lines 101~207, avg: 154.0)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 81.98%, Score: 120.5 points (lines 135~159, avg: 147.0)
+  ./scripts/testStrategyDependencies.js:106-240 testStrategyDependencies
+  ./scripts/testStrategyLoading.js:84-242 testStrategyLoading
+
+Similarity: 87.50%, Score: 118.6 points (lines 64~207, avg: 135.5)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 80.29%, Score: 117.6 points (lines 124~169, avg: 146.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./scripts/testAnomalyDetectorSystem_refactored.js:10-178 testAnomalyDetectorSystem
+
+Similarity: 80.00%, Score: 112.8 points (lines 139~143, avg: 141.0)
+  ./scripts/analyzeSimilarity.js:137-279 analyzeSimilarity
+  ./src/strategies/utils/common.js:1192-1330 confirmMultipleIndicators
+
+Similarity: 80.51%, Score: 108.3 points (lines 124~145, avg: 134.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+
+Similarity: 80.10%, Score: 108.1 points (lines 64~206, avg: 135.0)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/strategies/mutualInformation.js:46-251 mutualInformationStrategy
+
+Similarity: 86.24%, Score: 107.8 points (lines 81~169, avg: 125.0)
+  ./scripts/testAnomalyDetectorSystem_refactored.js:10-178 testAnomalyDetectorSystem
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 82.82%, Score: 104.8 points (lines 108~145, avg: 126.5)
+  ./src/web/js/dashboard.js:732-839 renderDataSummary
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+
+Similarity: 81.84%, Score: 103.9 points (lines 48~206, avg: 127.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/strategies/mutualInformation.js:46-251 mutualInformationStrategy
+
+Similarity: 82.01%, Score: 103.3 points (lines 110~142, avg: 126.0)
+  ./src/strategies/mutualInformation.js:266-407 calculateEnhancedMutualInformationSignals
+  ./src/strategies/mutualInformation.js:506-615 calculateMutualInformationSignals
+
+Similarity: 83.05%, Score: 102.6 points (lines 40~207, avg: 123.5)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/web/js/dashboard.js:413-619 processSummaryData
+
+Similarity: 85.38%, Score: 100.8 points (lines 64~172, avg: 118.0)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/strategies/utils/common.js:173-344 handleStrategySignals
+
+Similarity: 86.06%, Score: 100.3 points (lines 64~169, avg: 116.5)
+  ./scripts/testAnomalyDetectorSystem_refactored.js:10-178 testAnomalyDetectorSystem
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 83.89%, Score: 94.4 points (lines 101~124, avg: 112.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+
+Similarity: 83.50%, Score: 94.4 points (lines 81~145, avg: 113.0)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+
+Similarity: 83.33%, Score: 90.4 points (lines 48~169, avg: 108.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./scripts/testAnomalyDetectorSystem_refactored.js:10-178 testAnomalyDetectorSystem
+
+Similarity: 85.77%, Score: 90.1 points (lines 82~128, avg: 105.0)
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+  ./src/web/js/dashboard.js:1727-1808 renderRiskStats
+
+Similarity: 80.00%, Score: 88.0 points (lines 85~135, avg: 110.0)
+  ./scripts/testStrategyDependencies.js:106-240 testStrategyDependencies
+  ./test/testAdvancedOrderManagement.js:89-173 testAdvancedOrderManagement
+
+Similarity: 83.76%, Score: 85.9 points (lines 81~124, avg: 102.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 80.35%, Score: 84.0 points (lines 81~128, avg: 104.5)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 80.12%, Score: 83.7 points (lines 40~169, avg: 104.5)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./scripts/testAnomalyDetectorSystem_refactored.js:10-178 testAnomalyDetectorSystem
+
+Similarity: 80.00%, Score: 83.6 points (lines 64~145, avg: 104.5)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+
+Similarity: 87.07%, Score: 83.6 points (lines 64~128, avg: 96.0)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 80.29%, Score: 82.7 points (lines 82~124, avg: 103.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/web/js/dashboard.js:1727-1808 renderRiskStats
+
+Similarity: 87.17%, Score: 81.9 points (lines 64~124, avg: 94.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 81.10%, Score: 78.3 points (lines 65~128, avg: 96.5)
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 86.19%, Score: 77.1 points (lines 78~101, avg: 89.5)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 83.01%, Score: 75.5 points (lines 81~101, avg: 91.0)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 82.18%, Score: 72.3 points (lines 48~128, avg: 88.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 86.51%, Score: 70.9 points (lines 40~124, avg: 82.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+
+Similarity: 81.03%, Score: 69.7 points (lines 48~124, avg: 86.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+
+Similarity: 82.77%, Score: 69.5 points (lines 40~128, avg: 84.0)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 83.36%, Score: 69.2 points (lines 65~101, avg: 83.0)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+
+Similarity: 82.12%, Score: 67.8 points (lines 64~101, avg: 82.5)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 80.94%, Score: 67.2 points (lines 21~145, avg: 83.0)
+  ./src/web/js/dashboard.js:890-1034 renderOrderPairsSummary
+  ./test/integration/overfittingPreventionSystemIntegration.test.js:548-568 calculateProfitFactor
+
+Similarity: 80.43%, Score: 65.1 points (lines 38~124, avg: 81.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/database/manager.js:409-446 getCurrentOrderPosition
+
+Similarity: 80.43%, Score: 65.1 points (lines 38~124, avg: 81.0)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/database/manager.js:1703-1740 getCurrentSellOrderPosition
+
+Similarity: 86.55%, Score: 64.5 points (lines 48~101, avg: 74.5)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+
+Similarity: 86.58%, Score: 63.6 points (lines 65~82, avg: 73.5)
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+  ./src/web/js/dashboard.js:1727-1808 renderRiskStats
+
+Similarity: 82.14%, Score: 62.0 points (lines 27~124, avg: 75.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./walkforward_verification_test.js:29-55 mockStrategy
+
+Similarity: 80.38%, Score: 61.9 points (lines 73~81, avg: 77.0)
+  ./emergency_balance_audit.js:117-189 generateAuditReport
+  ./scripts/checkPositionConsistency.js:193-273 printResults
+
+Similarity: 86.28%, Score: 60.8 points (lines 40~101, avg: 70.5)
+  ./scripts/checkPositionConsistency.js:87-187 analyzeConsistency
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+
+Similarity: 83.33%, Score: 60.4 points (lines 64~81, avg: 72.5)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 81.29%, Score: 59.7 points (lines 23~124, avg: 73.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/web/js/analysis.js:930-952 prepareSignalDatasets
+
+Similarity: 80.58%, Score: 58.4 points (lines 17~128, avg: 72.5)
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+  ./src/web/js/filled-positions.js:138-154 populateSelect
+
+Similarity: 88.96%, Score: 57.8 points (lines 53~77, avg: 65.0)
+  ./src/web/js/analysis.js:732-808 addBollingerToChart
+  ./src/web/js/analysis.js:810-862 addMAToChart
+
+Similarity: 81.86%, Score: 57.7 points (lines 17~124, avg: 70.5)
+  ./extended_walkforward_backtest.js:12-135 runExtendedWalkForward
+  ./src/utils/positionSizing.js:1-17 calculateVolatility
+
+Similarity: 81.88%, Score: 56.5 points (lines 57~81, avg: 69.0)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/positions.js:79-135 loadPositions
+
+Similarity: 80.00%, Score: 56.0 points (lines 12~128, avg: 70.0)
+  ./src/common/cliUtils.js:245-256 update
+  ./src/web/js/dashboard.js:1370-1497 renderAvailableAmounts
+
+Similarity: 86.32%, Score: 54.4 points (lines 48~78, avg: 63.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 80.23%, Score: 51.7 points (lines 48~81, avg: 64.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 82.00%, Score: 49.6 points (lines 40~81, avg: 60.5)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 89.67%, Score: 48.0 points (lines 29~78, avg: 53.5)
+  ./scripts/checkPositionConsistency.js:51-79 aggregateNetPositionsBySymbol
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 83.06%, Score: 47.3 points (lines 33~81, avg: 57.0)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/analysis.js:1345-1377 handleParameterInputChange
+
+Similarity: 82.87%, Score: 46.8 points (lines 48~65, avg: 56.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+
+Similarity: 80.71%, Score: 46.8 points (lines 35~81, avg: 58.0)
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 84.67%, Score: 46.6 points (lines 32~78, avg: 55.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 81.29%, Score: 45.9 points (lines 32~81, avg: 56.5)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 81.62%, Score: 45.7 points (lines 48~64, avg: 56.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 89.67%, Score: 44.8 points (lines 22~78, avg: 50.0)
+  ./src/database/manager.js:487-508 getOrderStrategyKeyByOrderId
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 82.53%, Score: 42.9 points (lines 40~64, avg: 52.0)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 80.71%, Score: 42.8 points (lines 25~81, avg: 53.0)
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+  ./src/web/js/dashboard.js:1901-1925 displayFilledPositionsStats
+
+Similarity: 83.00%, Score: 42.7 points (lines 25~78, avg: 51.5)
+  ./src/database/manager.js:448-472 getRealizedPnL
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 80.36%, Score: 42.2 points (lines 40~65, avg: 52.5)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+
+Similarity: 83.03%, Score: 41.1 points (lines 35~64, avg: 49.5)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+
+Similarity: 80.68%, Score: 40.3 points (lines 35~65, avg: 50.0)
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+
+Similarity: 85.67%, Score: 40.3 points (lines 16~78, avg: 47.0)
+  ./scripts/testCloseMarketStrategies.js:53-68 main
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+
+Similarity: 82.33%, Score: 39.9 points (lines 32~65, avg: 48.5)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/web/js/dashboard.js:342-406 renderPositionDetails
+
+Similarity: 83.80%, Score: 39.4 points (lines 26~68, avg: 47.0)
+  ./src/database/exchangeAPI.js:270-337 fetchStandardHistoricalOHLCVData
+  ./src/database/manager.js:370-395 fetchOHLCVDataFallback
+
+Similarity: 80.35%, Score: 39.4 points (lines 17~81, avg: 49.0)
+  ./src/utils/positionSizing.js:1-17 calculateVolatility
+  ./src/web/js/analysis.js:449-529 saveAnalysisParameters
+
+Similarity: 81.83%, Score: 38.9 points (lines 17~78, avg: 47.5)
+  ./src/strategies/mutualInformation.js:622-699 formatMutualInformationLogInfo
+  ./src/web/js/filled-positions.js:138-154 populateSelect
+
+Similarity: 80.61%, Score: 38.7 points (lines 32~64, avg: 48.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+
+Similarity: 98.38%, Score: 37.4 points (lines 38~38, avg: 38.0)
+  ./src/database/manager.js:409-446 getCurrentOrderPosition
+  ./src/database/manager.js:1703-1740 getCurrentSellOrderPosition
+
+Similarity: 86.44%, Score: 37.2 points (lines 39~47, avg: 43.0)
+  ./src/strategies/meanReversion.js:158-204 calculateOscillatorSignals
+  ./src/strategies/meanReversion.js:262-300 calculateMeanReversionSignals
+
+Similarity: 82.18%, Score: 36.2 points (lines 40~48, avg: 44.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+
+Similarity: 86.21%, Score: 35.8 points (lines 35~48, avg: 41.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+
+Similarity: 88.28%, Score: 35.3 points (lines 32~48, avg: 40.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+
+Similarity: 80.78%, Score: 34.3 points (lines 9~76, avg: 42.5)
+  ./src/database/manager.js:947-1022 formattedAvailableAmount
+  ./src/strategies/utils/correlation.js:82-90 calculateSpread
+
+Similarity: 83.23%, Score: 33.7 points (lines 17~64, avg: 40.5)
+  ./src/database/redisDatabase.js:56-119 updateTradeSummary
+  ./src/utils/positionSizing.js:1-17 calculateVolatility
+
+Similarity: 82.16%, Score: 31.2 points (lines 31~45, avg: 38.0)
+  ./src/backtestRunner.js:648-678 generateParameterCombinations
+  ./src/strategies/utils/indicators.js:81-125 calculateMACD
+
+Similarity: 82.50%, Score: 30.5 points (lines 35~39, avg: 37.0)
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+  ./src/web/js/analysis.js:867-905 addSignalsToChart
+
+Similarity: 81.38%, Score: 30.1 points (lines 26~48, avg: 37.0)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/database/manager.js:370-395 fetchOHLCVDataFallback
+
+Similarity: 82.89%, Score: 29.8 points (lines 32~40, avg: 36.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+
+Similarity: 82.78%, Score: 29.8 points (lines 27~45, avg: 36.0)
+  ./src/web/js/analysis.js:1056-1082 showFeedback
+  ./src/web/js/parameter-settings.js:272-316 showFeedback
+
+Similarity: 85.29%, Score: 29.4 points (lines 21~48, avg: 34.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./src/strategies/utils/correlation.js:36-56 calculateSpearmanCorrelation
+
+Similarity: 85.00%, Score: 28.1 points (lines 31~35, avg: 33.0)
+  ./src/strategies/utils/riskManagement.js:1195-1225 recordBuyPosition
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+
+Similarity: 81.57%, Score: 26.9 points (lines 26~40, avg: 33.0)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./src/strategies/utils/advancedPerformanceMetrics.js:12-37 calculateCalmarRatio
+
+Similarity: 81.75%, Score: 25.3 points (lines 28~34, avg: 31.0)
+  ./test_tradingUtils.js:42-69 testExtractConfigParameters
+  ./test_tradingUtils.js:213-246 testValidateStrategyConfig
+
+Similarity: 81.40%, Score: 25.2 points (lines 17~45, avg: 31.0)
+  ./src/strategies/utils/correlation.js:12-28 calculatePearsonCorrelation
+  ./src/strategies/utils/indicators.js:81-125 calculateMACD
+
+Similarity: 82.00%, Score: 25.0 points (lines 29~32, avg: 30.5)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./scripts/checkPositionConsistency.js:51-79 aggregateNetPositionsBySymbol
+
+Similarity: 80.00%, Score: 24.8 points (lines 27~35, avg: 31.0)
+  ./src/strategies/utils/riskManagement.js:1310-1344 sendRiskManagementReport
+  ./walkforward_verification_test.js:29-55 mockStrategy
+
+Similarity: 87.13%, Score: 24.0 points (lines 7~48, avg: 27.5)
+  ./scripts/fixPositionInconsistencies.js:36-83 analyzeInconsistency
+  ./walkforward_verification_test.js:57-63 calculateSharpe
+
+Similarity: 83.27%, Score: 23.7 points (lines 25~32, avg: 28.5)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/database/manager.js:448-472 getRealizedPnL
+
+Similarity: 80.60%, Score: 23.0 points (lines 26~31, avg: 28.5)
+  ./src/database/manager.js:370-395 fetchOHLCVDataFallback
+  ./src/strategies/utils/riskManagement.js:1195-1225 recordBuyPosition
+
+Similarity: 81.93%, Score: 22.5 points (lines 27~28, avg: 27.5)
+  ./test_tradingUtils.js:42-69 testExtractConfigParameters
+  ./test_tradingUtils.js:120-146 testCreateStrategyResults
+
+Similarity: 82.73%, Score: 22.3 points (lines 22~32, avg: 27.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/web/js/analysis.js:907-928 prepareOhlcDataset
+
+Similarity: 82.00%, Score: 22.1 points (lines 22~32, avg: 27.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/database/manager.js:487-508 getOrderStrategyKeyByOrderId
+
+Similarity: 85.38%, Score: 21.8 points (lines 21~30, avg: 25.5)
+  ./src/strategies/utils/correlation.js:36-56 calculateSpearmanCorrelation
+  ./src/strategies/utils/indicators.js:42-71 calculateEMA
+
+Similarity: 82.26%, Score: 21.0 points (lines 24~27, avg: 25.5)
+  ./test_tradingUtils.js:72-95 testExtractMarketParameters
+  ./test_tradingUtils.js:120-146 testCreateStrategyResults
+
+Similarity: 85.09%, Score: 20.8 points (lines 17~32, avg: 24.5)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./src/web/js/filled-positions.js:138-154 populateSelect
+
+Similarity: 82.00%, Score: 19.7 points (lines 16~32, avg: 24.0)
+  ./extended_walkforward_backtest.js:138-169 analyzeResults
+  ./scripts/testCloseMarketStrategies.js:53-68 main
+
+Similarity: 81.81%, Score: 19.2 points (lines 7~40, avg: 23.5)
+  ./scripts/fixPositionInconsistencies.js:90-129 generateFixProposals
+  ./walkforward_verification_test.js:57-63 calculateSharpe
+
+Similarity: 82.31%, Score: 15.2 points (lines 16~21, avg: 18.5)
+  ./src/strategies/utils/correlation.js:36-56 calculateSpearmanCorrelation
+  ./src/strategies/utils/indicators.js:427-442 calculateVolatilityBasedPositionSize
+
+Similarity: 80.00%, Score: 11.6 points (lines 12~17, avg: 14.5)
+  ./src/common/cliUtils.js:245-256 update
+  ./src/web/js/filled-positions.js:138-154 populateSelect
+
+Similarity: 80.19%, Score: 11.2 points (lines 7~21, avg: 14.0)
+  ./src/strategies/utils/correlation.js:36-56 calculateSpearmanCorrelation
+  ./walkforward_verification_test.js:57-63 calculateSharpe

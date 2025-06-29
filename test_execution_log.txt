@@ -1,0 +1,2710 @@
+
+> scalping-bot@1.0.0 test
+> jest
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    📊 シャープレシオ改善: 20.00%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:76:15)
+
+  console.log
+       ベースライン: 1.042
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:77:15)
+
+  console.log
+       改善後: 1.250
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:78:15)
+
+  console.log
+    📉 ドローダウン削減: 25.00%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:99:15)
+
+  console.log
+       ベースライン: 14266.95%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:100:15)
+
+  console.log
+       改善後: 10700.21%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:101:15)
+
+  console.log
+    🔬 高度Monte Carlo Bootstrapping分析を実行中...
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:784:19)
+
+  console.error
+    堅牢性検証エラー: パフォーマンスが不安定です
+
+      176 |       
+      177 |     } catch (error) {
+    > 178 |       console.error('堅牢性検証エラー:', error.message);
+          |               ^
+      179 |       return { 
+      180 |         enabled: true, 
+      181 |         error: error.message,
+
+      at BacktestEnhancer.error [as _performRobustnessValidation] (src/strategies/utils/backtestEnhancer.js:178:15)
+      at BacktestEnhancer._performRobustnessValidation [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:81:44)
+      at Object.<anonymous> (test/integration/backtestEnhancementIntegration.test.js:184:31)
+
+  console.log
+    🎯 総合改善スコア: -25.67%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:125:15)
+
+  console.log
+       ベースライン総合スコア: -42.007
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:126:15)
+
+  console.log
+       改善後総合スコア: -31.222
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:127:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    ✅ Monte Carlo Bootstrapping分析が完了しました
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:102:15)
+
+  console.log
+    ✅ 高度Monte Carlo分析完了
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:790:19)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.log
+    🔬 高度Monte Carlo Bootstrapping分析を実行中...
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:784:19)
+
+  console.error
+    堅牢性検証エラー: パフォーマンスが不安定です
+
+      176 |       
+      177 |     } catch (error) {
+    > 178 |       console.error('堅牢性検証エラー:', error.message);
+          |               ^
+      179 |       return { 
+      180 |         enabled: true, 
+      181 |         error: error.message,
+
+      at BacktestEnhancer.error [as _performRobustnessValidation] (src/strategies/utils/backtestEnhancer.js:178:15)
+      at BacktestEnhancer._performRobustnessValidation [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:81:44)
+      at Object.<anonymous> (test/integration/backtestEnhancementIntegration.test.js:204:31)
+
+  console.log
+    ✅ Monte Carlo Bootstrapping分析が完了しました
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:102:15)
+
+  console.log
+    ✅ 高度Monte Carlo分析完了
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:790:19)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.warn
+    ⚠️ トレード数が不足しています (4 < 100)
+
+      67 |       
+      68 |       if (returns.length < this.config.minTradesRequired) {
+    > 69 |         console.warn(`⚠️ トレード数が不足しています (${returns.length} < ${this.config.minTradesRequired})`);
+         |                 ^
+      70 |         return this._generateLimitedAnalysis(backtestResults, returns);
+      71 |       }
+      72 |       
+
+      at BacktestEnhancer.warn [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:69:17)
+      at Object.enhanceBacktestResults (test/integration/backtestEnhancementIntegration.test.js:219:46)
+
+  console.log
+    🔄 リアルタイム検証システムを開始します...
+
+      at RealtimeValidationSystem.log [as startMonitoring] (src/strategies/utils/realtimeValidationSystem.js:86:13)
+
+  console.log
+    ⏹️ リアルタイム検証システムを停止します...
+
+      at RealtimeValidationSystem.log [as stopMonitoring] (src/strategies/utils/realtimeValidationSystem.js:107:13)
+
+  console.log
+    📊 パフォーマンスベースラインを設定しました
+
+      at RealtimeValidationSystem.log [as setPerformanceBaseline] (src/strategies/utils/realtimeValidationSystem.js:176:13)
+
+  console.log
+    📊 パフォーマンスベースラインを設定しました
+
+      at RealtimeValidationSystem.log [as setPerformanceBaseline] (src/strategies/utils/realtimeValidationSystem.js:176:13)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.error
+    ❌ バックテスト拡張分析エラー: バックテスト結果が空です
+
+      104 |       
+      105 |     } catch (error) {
+    > 106 |       console.error('❌ バックテスト拡張分析エラー:', error.message);
+          |               ^
+      107 |       return {
+      108 |         error: error.message,
+      109 |         timestamp: new Date().toISOString(),
+
+      at BacktestEnhancer.error [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:106:15)
+      at Object.enhanceBacktestResults (test/integration/backtestEnhancementIntegration.test.js:441:37)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] トランザクショナル注文使用: BTC/JPY buy
+
+      at AdvancedOrderManager.log [as executeOrderWithManagement] (src/strategies/utils/orderManager.js:300:15)
+
+  console.log
+    [トランザクショナル注文] 開始: tx_1751179017209_xalhe2ik1 BTC/JPY buy
+
+      at TransactionalOrderManager.log [as executeTransactionalOrder] (src/common/transactionalOrderManager.js:31:15)
+
+  console.log
+    [Phase 1] 事前保存完了: pre_tx_1751179017209_xalhe2ik1 戦略: TEST
+
+      at TransactionalOrderManager.log [as saveOrderBeforeExecution] (src/common/transactionalOrderManager.js:105:15)
+
+  console.log
+    [Phase 2] 取引所注文実行 (試行 1/3)
+
+      at TransactionalOrderManager.log [as executeExchangeOrder] (src/common/transactionalOrderManager.js:123:17)
+
+  console.log
+    [Phase 2] 取引所注文成功: 12345
+
+      at TransactionalOrderManager.log [as executeExchangeOrder] (src/common/transactionalOrderManager.js:137:19)
+
+  console.log
+    [Phase 3] 注文更新完了: 12345 (事前ID: pre_tx_1751179017209_xalhe2ik1)
+
+      at TransactionalOrderManager.log [as updateOrderAfterExecution] (src/common/transactionalOrderManager.js:194:15)
+
+  console.log
+    [Phase 4] トランザクション完了: tx_1751179017209_xalhe2ik1
+
+      at TransactionalOrderManager.log [as completeTransaction] (src/common/transactionalOrderManager.js:216:13)
+
+  console.log
+    [トランザクショナル注文] 成功: tx_1751179017209_xalhe2ik1 -> 12345
+
+      at TransactionalOrderManager.log [as executeTransactionalOrder] (src/common/transactionalOrderManager.js:51:15)
+
+  console.error
+    パフォーマンス取得エラー: test_exchange:BTC/USDT:QUANTUM_TEST Cannot read properties of undefined (reading 'hGetAll')
+
+      270 |       return null;
+      271 |     } catch (error) {
+    > 272 |       console.error(`パフォーマンス取得エラー: ${key}`, error.message);
+          |               ^
+      273 |       return null;
+      274 |     }
+      275 |   }
+
+      at PerformanceTracker.error [as getPerformance] (src/strategies/utils/performanceTracker.js:272:15)
+      at PerformanceTracker.recordTrade (src/strategies/utils/performanceTracker.js:38:25)
+      at Object.<anonymous> (test/integration/overfittingPreventionSystemIntegration.test.js:173:7)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.error
+    パフォーマンス保存エラー: test_exchange:BTC/USDT:QUANTUM_TEST Cannot read properties of undefined (reading 'hGetAll')
+
+      307 |       
+      308 |     } catch (error) {
+    > 309 |       console.error(`パフォーマンス保存エラー: ${exchangeId}:${symbol}:${strategyKey}`, error.message);
+          |               ^
+      310 |     }
+      311 |   }
+      312 |   
+
+      at PerformanceTracker.error [as savePerformance] (src/strategies/utils/performanceTracker.js:309:15)
+      at PerformanceTracker.recordTrade (src/strategies/utils/performanceTracker.js:86:7)
+      at Object.<anonymous> (test/integration/overfittingPreventionSystemIntegration.test.js:173:7)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [注文管理] トランザクショナル注文使用: BTC/JPY buy
+
+      at AdvancedOrderManager.log [as executeOrderWithManagement] (src/strategies/utils/orderManager.js:300:15)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [トランザクショナル注文] 開始: tx_1751179017217_d0az0y2vd BTC/JPY buy
+
+      at TransactionalOrderManager.log [as executeTransactionalOrder] (src/common/transactionalOrderManager.js:31:15)
+
+  console.log
+    [Phase 1] 事前保存完了: pre_tx_1751179017217_d0az0y2vd 戦略: TEST
+
+      at TransactionalOrderManager.log [as saveOrderBeforeExecution] (src/common/transactionalOrderManager.js:105:15)
+
+  console.log
+    [Phase 2] 取引所注文実行 (試行 1/3)
+
+      at TransactionalOrderManager.log [as executeExchangeOrder] (src/common/transactionalOrderManager.js:123:17)
+
+  console.warn
+    [Phase 2] 試行 1 失敗: Network error
+
+      143 |       } catch (error) {
+      144 |         lastError = error;
+    > 145 |         console.warn(`[Phase 2] 試行 ${attempt} 失敗: ${error.message}`);
+          |                 ^
+      146 |         
+      147 |         if (attempt < this.maxRetries) {
+      148 |           await this.sleep(this.retryDelay * attempt);
+
+      at TransactionalOrderManager.warn [as executeExchangeOrder] (src/common/transactionalOrderManager.js:145:17)
+      at TransactionalOrderManager.executeTransactionalOrder (src/common/transactionalOrderManager.js:39:23)
+      at AdvancedOrderManager.executeOrderWithManagement (src/strategies/utils/orderManager.js:308:14)
+      at AdvancedOrderManager.executeAdvancedOrder (src/strategies/utils/orderManager.js:219:12)
+      at Object.<anonymous> (test/unit/strategies/utils/orderManager.test.js:194:22)
+
+  console.log
+    📊 パフォーマンスベースラインを設定しました
+
+      at RealtimeValidationSystem.log [as setPerformanceBaseline] (src/strategies/utils/realtimeValidationSystem.js:176:13)
+
+  console.warn
+    minTrainPeriods (126) > trainWindow (100). 自動調整中...
+
+      40 |     // 自動調整: minTrainPeriodsがtrainWindowより大きい場合
+      41 |     if (minTrainPeriods > trainWindow) {
+    > 42 |       console.warn(`minTrainPeriods (${minTrainPeriods}) > trainWindow (${trainWindow}). 自動調整中...`);
+         |               ^
+      43 |       this.config.minTrainPeriods = Math.max(10, Math.floor(trainWindow * 0.5));
+      44 |       console.log(`minTrainPeriods を ${this.config.minTrainPeriods} に調整しました`);
+      45 |     }
+
+      at WalkForwardAnalysis.warn [as validateConfig] (src/strategies/utils/walkForwardAnalysis.js:42:15)
+      at new validateConfig (src/strategies/utils/walkForwardAnalysis.js:30:10)
+      at Object.<anonymous> (test/integration/overfittingPreventionSystemIntegration.test.js:231:27)
+
+  console.log
+    minTrainPeriods を 50 に調整しました
+
+      at WalkForwardAnalysis.log [as validateConfig] (src/strategies/utils/walkForwardAnalysis.js:44:15)
+
+  console.log
+    🔬 Monte Carlo Bootstrapping分析を開始...
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:59:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.error
+    テスト戦略戦略でエラーが発生しました: BTC/JPY Error: テスト戦略エラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:41:21)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1446 |  */
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+    > 1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+           |           ^
+      1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+
+      at error (src/strategies/utils/common.js:1448:11)
+      at Object.handleStrategyError (test/unit/strategies/utils/common-refactored.test.js:47:28)
+
+  console.error
+    [DETAILED ERROR] Stack trace: Error: テスト戦略エラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:41:21)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+      1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+    > 1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+           |           ^
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+      1452 |     const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
+
+      at error (src/strategies/utils/common.js:1449:11)
+      at Object.handleStrategyError (test/unit/strategies/utils/common-refactored.test.js:47:28)
+
+  console.error
+    テスト戦略でエラーが発生しました: BTC/JPY Error: 通知なしエラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:64:21)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1446 |  */
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+    > 1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+           |           ^
+      1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+
+      at error (src/strategies/utils/common.js:1448:11)
+      at Object.handleStrategyError (test/unit/strategies/utils/common-refactored.test.js:65:28)
+
+  console.error
+    [DETAILED ERROR] Stack trace: Error: 通知なしエラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:64:21)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+      1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+    > 1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+           |           ^
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+      1452 |     const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
+
+      at error (src/strategies/utils/common.js:1449:11)
+      at Object.handleStrategyError (test/unit/strategies/utils/common-refactored.test.js:65:28)
+
+  console.log
+    🔬 高度Monte Carlo Bootstrapping分析を実行中...
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:784:19)
+
+  console.error
+    テスト戦略戦略でエラーが発生しました: BTC/JPY Error: 戦略計算エラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:274:29)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1446 |  */
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+    > 1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+           |           ^
+      1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+
+      at error (src/strategies/utils/common.js:1448:11)
+      at handleStrategyError (src/strategies/utils/common.js:1560:18)
+      at Object.<anonymous> (test/unit/strategies/utils/common-refactored.test.js:283:22)
+
+  console.error
+    [DETAILED ERROR] Stack trace: Error: 戦略計算エラー
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:274:29)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+      1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+    > 1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+           |           ^
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+      1452 |     const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
+
+      at error (src/strategies/utils/common.js:1449:11)
+      at handleStrategyError (src/strategies/utils/common.js:1560:18)
+      at Object.<anonymous> (test/unit/strategies/utils/common-refactored.test.js:283:22)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.error
+    堅牢性検証エラー: パフォーマンスが不安定です
+
+      176 |       
+      177 |     } catch (error) {
+    > 178 |       console.error('堅牢性検証エラー:', error.message);
+          |               ^
+      179 |       return { 
+      180 |         enabled: true, 
+      181 |         error: error.message,
+
+      at BacktestEnhancer.error [as _performRobustnessValidation] (src/strategies/utils/backtestEnhancer.js:178:15)
+      at BacktestEnhancer._performRobustnessValidation [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:81:44)
+      at Object.<anonymous> (test/integration/overfittingPreventionSystemIntegration.test.js:266:33)
+
+  console.error
+    テスト戦略でエラーが発生しました: TEST/USD Error: 非同期処理エラー
+        at strategyLogic (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:297:15)
+        at strategyLogic (/Users/azumag/work/harvest3/src/strategies/utils/common.js:1558:18)
+        at Object.executeStrategyTemplate (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:307:28)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1446 |  */
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+    > 1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+           |           ^
+      1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+
+      at error (src/strategies/utils/common.js:1448:11)
+      at handleStrategyError (src/strategies/utils/common.js:1560:18)
+      at Object.<anonymous> (test/unit/strategies/utils/common-refactored.test.js:307:22)
+
+  console.error
+    [DETAILED ERROR] Stack trace: Error: 非同期処理エラー
+        at strategyLogic (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:297:15)
+        at strategyLogic (/Users/azumag/work/harvest3/src/strategies/utils/common.js:1558:18)
+        at Object.executeStrategyTemplate (/Users/azumag/work/harvest3/test/unit/strategies/utils/common-refactored.test.js:307:28)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      1447 | async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
+      1448 |   console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+    > 1449 |   console.error(`[DETAILED ERROR] Stack trace:`, error.stack);
+           |           ^
+      1450 |   
+      1451 |   if (postErrorToDiscord) {
+      1452 |     const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
+
+      at error (src/strategies/utils/common.js:1449:11)
+      at handleStrategyError (src/strategies/utils/common.js:1560:18)
+      at Object.<anonymous> (test/unit/strategies/utils/common-refactored.test.js:307:22)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    ✅ Monte Carlo Bootstrapping分析が完了しました
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:102:15)
+
+  console.log
+    🎯 エンドツーエンド最終結果:
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:290:15)
+
+  console.log
+       シャープレシオ改善: 406.44%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:291:15)
+
+  console.log
+       ドローダウン削減: -1046.88%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:292:15)
+
+  console.log
+       総取引数: 200
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:293:15)
+
+  console.log
+       勝率: 52.00%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:294:15)
+
+  console.log
+    ✅ 高度Monte Carlo分析完了
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:790:19)
+
+  console.log
+    📊 trending: Sharpe=29.944, DD=0.00%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:328:17)
+
+  console.log
+    📊 sideways: Sharpe=0.000, DD=0.00%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:328:17)
+
+  console.log
+    📊 volatile: Sharpe=1.820, DD=173.90%
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:328:17)
+
+PASS test/unit/strategies/utils/common-refactored.test.js
+  リファクタリング共通関数テスト
+    handleStrategyError
+      ✓ エラーオブジェクトの標準化された処理 (22 ms)
+      ✓ Discord通知が無効の場合でも正常動作 (2 ms)
+    getCurrentPrice
+      ✓ ティッカーから現在価格を取得
+      ✓ バックテストモードでの価格取得
+    saveStrategySignal
+      ✓ 買いシグナルの保存
+      ✓ 売りシグナルの保存 (1 ms)
+      ✓ noneシグナルは保存されない
+    createLogInfoBase
+      ✓ 基本的なログ情報フォーマット (1 ms)
+      ✓ 情報不足時のデフォルト値適用
+    fetchAndValidateOHLCVWithBacktestSetup
+      ✓ 正常なOHLCVデータ取得とバックテスト設定 (1 ms)
+      ✓ データ取得失敗時はnullを返す
+      ✓ 非バックテストモードではohlcvData設定されない
+    executeStrategyTemplate
+      ✓ 正常な戦略実行 (1 ms)
+      ✓ 戦略実行エラーの統一処理 (2 ms)
+      ✓ 非同期エラーの適切な処理 (34 ms)
+
+  console.log
+    ⚡ 性能ベンチマーク結果:
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:350:15)
+
+  console.log
+       量子最適化: 2622.8510618294285ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:351:15)
+
+  console.log
+       バックテスト強化: 7843.935865576507ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:352:15)
+
+  console.log
+       リアルタイム検証: 82.04329699312812ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:353:15)
+
+  console.log
+       メモリ使用量: 295.41MB
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:354:15)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    相互情報量戦略: データが不足しています BTC/USDT, minLength: 3
+
+      at log (src/strategies/mutualInformation.js:531:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    処理時間: 0ms
+
+      at Object.log (test/unit/marketParametersErrorHandling.test.js:151:13)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+PASS test/unit/strategies/mutualInformation.test.js
+  Mutual Information Calculations
+    calculateReturns function
+      ✓ calculates returns correctly (4 ms)
+      ✓ handles empty array (1 ms)
+      ✓ handles single element array (1 ms)
+    calculateMutualInformation function
+      ✓ calculates mutual information for identical series
+      ✓ calculates mutual information for independent series
+      ✓ handles different length arrays (1 ms)
+      ✓ handles empty arrays
+      ✓ handles constant series (1 ms)
+    calculateMutualInformationMatrix function
+      ✓ calculates mutual information matrix correctly (4 ms)
+      ✓ handles empty array
+      ✓ handles single series
+    Integration tests
+      ✓ mutual information workflow with real-like data (1 ms)
+      ✓ handles realistic trading scenario (2 ms)
+  Mutual Information Strategy
+    calculateMutualInformationSignals function
+      ✓ returns null for insufficient data (8 ms)
+      ✓ generates signals with proper structure (1 ms)
+    formatMutualInformationLogInfo function
+      ✓ formats log info correctly
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+FAIL test/unit/marketParametersErrorHandling.test.js
+  marketParameters エラーハンドリング
+    ✕ APE/JPY - サポートされている通貨ペアの正常取得 (4 ms)
+    ✕ 未対応通貨ペア - 適切なエラーハンドリング
+    ✕ 混在ケース - サポート済みと未対応ペアの混在 (1 ms)
+    ✕ エラーレスポンス構造の検証
+    ✕ パフォーマンス - 複数通貨ペアの並列処理 (2 ms)
+
+  ● marketParameters エラーハンドリング › APE/JPY - サポートされている通貨ペアの正常取得
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      16 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      17 |     
+    > 18 |     expect(result).toBeDefined();
+         |                    ^
+      19 |     expect(result.bitbank).toBeDefined();
+      20 |     expect(result.bitbank['APE/JPY']).toBeDefined();
+      21 |     
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:18:20)
+
+  ● marketParameters エラーハンドリング › 未対応通貨ペア - 適切なエラーハンドリング
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      49 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      50 |     
+    > 51 |     expect(result).toBeDefined();
+         |                    ^
+      52 |     expect(result.bitbank).toBeDefined();
+      53 |     
+      54 |     // TEST/JPYの処理結果を確認
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:51:20)
+
+  ● marketParameters エラーハンドリング › 混在ケース - サポート済みと未対応ペアの混在
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      78 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      79 |     
+    > 80 |     expect(result).toBeDefined();
+         |                    ^
+      81 |     expect(result.bitbank).toBeDefined();
+      82 |     
+      83 |     const symbols = Object.keys(result.bitbank);
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:80:20)
+
+  ● marketParameters エラーハンドリング › エラーレスポンス構造の検証
+
+    TypeError: Cannot read properties of undefined (reading 'bitbank')
+
+      119 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      120 |     
+    > 121 |     const errorParams = result.bitbank['NONEXISTENT/JPY'];
+          |                                ^
+      122 |     
+      123 |     // エラーレスポンスの必須フィールドを検証
+      124 |     expect(errorParams.error).toBe(true);
+
+      at Object.bitbank (test/unit/marketParametersErrorHandling.test.js:121:32)
+
+  ● marketParameters エラーハンドリング › パフォーマンス - 複数通貨ペアの並列処理
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      151 |     console.log(`処理時間: ${processingTime}ms`);
+      152 |     
+    > 153 |     expect(result).toBeDefined();
+          |                    ^
+      154 |     expect(result.bitbank).toBeDefined();
+      155 |     
+      156 |     const symbols = Object.keys(result.bitbank);
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:153:20)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    🔬 高度Monte Carlo Bootstrapping分析を実行中...
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:784:19)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+PASS test/strategies/multiIndicator.test.js
+  ADX指標テスト
+    ✓ ADXが正しく計算される (7 ms)
+    ✓ データ不足時にADXが空の配列を返す
+  マルチ指標確認システムテスト
+    ✓ 強気シグナルが正しく確認される
+    ✓ 弱気シグナルが正しく確認される (4 ms)
+    ✓ 確認数不足でシグナルが否定される
+  市場環境識別テスト
+    ✓ 強いトレンド相場が正しく識別される (1 ms)
+    ✓ レンジ相場が正しく識別される
+    ✓ データ不足時の処理
+    ✓ カスタム閾値での環境識別
+  統合テスト
+    ✓ マルチ指標戦略の総合的な動作 (1 ms)
+    ✓ レンジ相場での慎重な判定
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    ✅ 高度Monte Carlo分析完了
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:790:19)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+  console.log
+    [QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了
+
+      at new log (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:27:13)
+
+  console.log
+    [QuantumOptimizer] 量子アニーリング最適化開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as optimizeUrgencyParameters] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:44:15)
+
+  console.log
+    [QuantumEntanglement] 量子もつれ効果適用開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as applyQuantumEntanglement] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:464:13)
+
+  console.log
+    [QuantumMeasurement] 量子測定と状態収束開始
+
+      at QuantumInspiredUrgencyOptimizer.log [as measureAndCollapse] (src/strategies/utils/quantumInspiredUrgencyOptimizer.js:541:13)
+
+PASS test/unit/strategies/utils/quantumInspiredUrgencyOptimizer.test.js
+  量子インスパイア緊急度最適化システム包括テスト
+    🔴 Red Phase: 基本初期化テスト
+      ✓ 量子最適化システムが正しく初期化される (17 ms)
+      ✓ 無効化設定で初期化される (4 ms)
+      ✓ カスタム設定が適用される (2 ms)
+    🟢 Green Phase: 基本最適化機能
+      ✓ 量子アニーリング最適化が実行される (144 ms)
+      ✓ 無効化時にオリジナルパラメータを返す (3 ms)
+      ✓ 市場コンテキストに応じた最適化 (79 ms)
+    🔵 Blue Phase: 高度な量子最適化機能
+      ✓ 量子もつれ最適化が実行される (108 ms)
+      ✓ ハミルトニアン最適化による性能向上 (80 ms)
+      ✓ 量子回路設計による並列処理 (58 ms)
+      ✓ アニーリングスケジュール最適化 (62 ms)
+    🎯 性能向上測定テスト
+      ✓ 最適化による性能改善の測定 (51 ms)
+      ✓ 複数回実行での一貫性確認 (163 ms)
+      ✓ 極端な市場条件での堅牢性 (49 ms)
+    🔬 量子力学的特性テスト
+      ✓ 量子重ね合わせの維持 (34 ms)
+      ✓ 量子もつれによる相関最適化 (37 ms)
+      ✓ デコヒーレンス時間の管理 (39 ms)
+    ⚡ パフォーマンステスト
+      ✓ 並列処理による高速化 (38 ms)
+      ✓ メモリ効率性 (38 ms)
+      ✓ キャッシュシステムの効率性 (80 ms)
+    🛡️ エラーハンドリングと堅牢性
+      ✓ 無効な市場コンテキストの処理 (40 ms)
+      ✓ 量子デコヒーレンスの対処 (33 ms)
+      ✓ ノイズ耐性の確認 (48 ms)
+    🔗 ベイジアン最適化との統合
+      ✓ 量子ベイジアンハイブリッド最適化 (33 ms)
+      ✓ ガウス過程と量子回路の統合 (51 ms)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    [Phase 2] 取引所注文実行 (試行 2/3)
+
+      at TransactionalOrderManager.log [as executeExchangeOrder] (src/common/transactionalOrderManager.js:123:17)
+
+  console.log
+    [Phase 2] 取引所注文成功: 12345
+
+      at TransactionalOrderManager.log [as executeExchangeOrder] (src/common/transactionalOrderManager.js:137:19)
+
+  console.log
+    [Phase 3] 注文更新完了: 12345 (事前ID: pre_tx_1751179017217_d0az0y2vd)
+
+      at TransactionalOrderManager.log [as updateOrderAfterExecution] (src/common/transactionalOrderManager.js:194:15)
+
+  console.log
+    [Phase 4] トランザクション完了: tx_1751179017217_d0az0y2vd
+
+      at TransactionalOrderManager.log [as completeTransaction] (src/common/transactionalOrderManager.js:216:13)
+
+  console.log
+    [トランザクショナル注文] 成功: tx_1751179017217_d0az0y2vd -> 12345
+
+      at TransactionalOrderManager.log [as executeTransactionalOrder] (src/common/transactionalOrderManager.js:51:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    📈 1000件処理: 692ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:373:17)
+
+PASS test/unit/strategies/utils/walkForwardAnalysis.test.js
+  Walk-Forward Analysis 包括テストスイート
+    🔴 Red Phase: 失敗ケース - 基本機能
+      ✓ 時系列データの分割が正しく失敗する（データ不足） (23 ms)
+      ✓ 未来データリークが正しく検出される (4 ms)
+      ✓ 不正なパラメータ設定が正しく拒否される (3 ms)
+    🟢 Green Phase: 最小実装 - 基本機能
+      ✓ 時系列データが正しく分割される (13 ms)
+      ✓ ローリングウィンドウが正しく動作する (2 ms)
+      ✓ アンカードウィンドウが正しく動作する (1 ms)
+    🔵 Blue Phase: リファクタリング - 基本機能
+      ✓ 時系列分割のパフォーマンスが適切 (9 ms)
+      ✓ メモリ効率的な分割が実行される (7 ms)
+      ✓ Builder パターンが正しく動作する (3 ms)
+    🔴 Red Phase: 失敗ケース - データリーケージ防止
+      ✓ 未来データアクセスが検出される (2 ms)
+      ✓ 時系列順序の破綻が検出される (5 ms)
+      ✓ 境界条件での漏洩が検出される (3 ms)
+    🟢 Green Phase: 最小実装 - データリーケージ防止
+      ✓ データリーケージ検出器が正常動作する (2 ms)
+      ✓ 時系列の整合性が検証される (2 ms)
+      ✓ パラメータ再最適化タイミングが適切 (4 ms)
+    🔵 Blue Phase: リファクタリング - データリーケージ防止
+      ✓ 高度なリーケージ検出パターン (4 ms)
+      ✓ 動的境界検証システム (5 ms)
+    🔴 Red Phase: 失敗ケース - 統計的堅牢性
+      ✓ パラメータドリフトが検出される (6 ms)
+      ✓ レジーム変化が検出される (3 ms)
+      ✓ 不安定なパフォーマンスが検出される (2 ms)
+    🟢 Green Phase: 最小実装 - 統計的堅牢性
+      ✓ 複数期間でのパフォーマンス安定性 (2 ms)
+      ✓ パラメータドリフト検出 (2 ms)
+      ✓ レジーム変化への適応 (8 ms)
+    🔵 Blue Phase: リファクタリング - 統計的堅牢性
+      ✓ 高度な統計的堅牢性検証 (98 ms)
+      ✓ 適応的パラメータ調整システム (4 ms)
+    🏆 統合テスト - 非定常性対応
+      ✓ 金融時系列の非定常性を考慮した包括テスト (13 ms)
+      ✓ 構造変化検出と対応 (132 ms)
+      ✓ 高頻度データでのパフォーマンス (22 ms)
+    🔧 ユーティリティとヘルパー関数
+      ✓ 時系列統計の計算 (4 ms)
+      ✓ パフォーマンス指標の計算 (4 ms)
+      ✓ リスク調整済みリターンの計算 (1 ms)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.error
+    損益の取得に失敗しました: Error: API error
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/common/utils.test.js:130:52)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      56 |     return totalSell - totalBuy; // 総損益を返す
+      57 |   } catch (error) {
+    > 58 |     console.error('損益の取得に失敗しました:', error);
+         |             ^
+      59 |     postErrorToDiscord(`損益の取得に失敗しました ${error.message}`);
+      60 |     return 0; // エラー時は0を返す
+      61 |   }
+
+      at Object.error [as fetchTotal] (src/common/utils.js:58:13)
+      at Object.<anonymous> (test/unit/common/utils.test.js:133:22)
+
+  console.log
+    🔬 高度Monte Carlo Bootstrapping分析を実行中...
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:784:19)
+
+PASS test/index.test.js
+  Utils module
+    weightedAverage function
+      ✓ calculates weighted average correctly (1 ms)
+      ✓ handles single item arrays
+    timeframeToMs function
+      ✓ converts minutes correctly
+      ✓ converts hours correctly
+      ✓ converts days correctly
+      ✓ converts weeks correctly (1 ms)
+      ✓ throws error for unknown units (9 ms)
+    sleep function
+      ✓ sleeps for approximately the given time (101 ms)
+    fetchTotal function
+      ✓ calculates profit/loss correctly from trades (1 ms)
+      ✓ handles trades with non-JPY fees (1 ms)
+      ✓ handles trades with no fees
+      ✓ returns 0 on error (3 ms)
+  Database Manager Module
+    timeframeToTimestamp function
+      ✓ converts timeframe to timestamp correctly
+  Strategy Common Utils
+    validateOHLCVData function
+      ✓ returns valid result for valid data
+      ✓ returns invalid result if data length is insufficient
+      ✓ returns invalid result if data contains invalid prices
+      ✓ returns invalid result if data is not an array
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.error
+    堅牢性検証エラー: パフォーマンスが不安定です
+
+      176 |       
+      177 |     } catch (error) {
+    > 178 |       console.error('堅牢性検証エラー:', error.message);
+          |               ^
+      179 |       return { 
+      180 |         enabled: true, 
+      181 |         error: error.message,
+
+      at BacktestEnhancer.error [as _performRobustnessValidation] (src/strategies/utils/backtestEnhancer.js:178:15)
+      at BacktestEnhancer._performRobustnessValidation [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:81:44)
+      at Object.<anonymous> (test/integration/backtestEnhancementIntegration.test.js:492:22)
+
+  console.log
+    📊 シャープレシオ改善結果:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:110:15)
+
+  console.log
+    ベースライン: 1.200
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:111:15)
+
+  console.log
+    改善後: 1.440
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:112:15)
+
+  console.log
+    改善率: 20.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:113:15)
+
+  console.error
+    損益の取得に失敗しました: Error: API error
+        at Object.<anonymous> (/Users/azumag/work/harvest3/test/unit/common/utils.test.js:130:52)
+        at Promise.then.completed (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/azumag/work/harvest3/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:316:40)
+        at _runTest (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/azumag/work/harvest3/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/azumag/work/harvest3/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/azumag/work/harvest3/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/azumag/work/harvest3/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      56 |     return totalSell - totalBuy; // 総損益を返す
+      57 |   } catch (error) {
+    > 58 |     console.error('損益の取得に失敗しました:', error);
+         |             ^
+      59 |     postErrorToDiscord(`損益の取得に失敗しました ${error.message}`);
+      60 |     return 0; // エラー時は0を返す
+      61 |   }
+
+      at Object.error [as fetchTotal] (src/common/utils.js:58:13)
+      at Object.<anonymous> (test/unit/common/utils.test.js:133:22)
+
+PASS test/unit/common/utils.test.js
+  Utils module
+    weightedAverage function
+      ✓ calculates weighted average correctly
+      ✓ handles single item arrays
+    timeframeToMs function
+      ✓ converts minutes correctly
+      ✓ converts hours correctly
+      ✓ converts days correctly
+      ✓ converts weeks correctly
+      ✓ throws error for unknown units (7 ms)
+    sleep function
+      ✓ sleeps for approximately the given time (101 ms)
+    fetchTotal function
+      ✓ calculates profit/loss correctly from trades (1 ms)
+      ✓ handles trades with non-JPY fees (1 ms)
+      ✓ handles trades with no fees
+      ✓ returns 0 on error (3 ms)
+
+  console.log
+    ⏰ 1h シャープレシオ: 4.270 → 6.150 (44.0%)
+
+      at log (test/performance/performanceValidationSuite.test.js:159:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    ⏰ 4h シャープレシオ: 5.236 → 6.963 (33.0%)
+
+      at log (test/performance/performanceValidationSuite.test.js:159:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    ⏰ 1d シャープレシオ: 5.074 → 8.181 (61.2%)
+
+      at log (test/performance/performanceValidationSuite.test.js:159:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    📉 ドローダウン削減結果:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:178:15)
+
+  console.log
+    ベースライン: 15.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:179:15)
+
+  console.log
+    改善後: 11.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:180:15)
+
+  console.log
+    削減率: 26.7%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:181:15)
+
+  console.log
+    🔧 NaN問題修正検証:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:202:15)
+
+  console.log
+    Calmar Ratio: 0
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:203:15)
+
+  console.log
+    Sortino Ratio: 0
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:204:15)
+
+  console.log
+    Max Drawdown: 0
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:205:15)
+
+  console.log
+    ⚖️ リスク調整済み指標比較:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:232:15)
+
+  console.log
+    Calmar Ratio: 0.424 → 4.821
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:233:15)
+
+  console.log
+    VaR95: -0.78% → -0.76%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:234:15)
+
+  console.log
+    💰 BTC/USDT: { '勝率': '55.3%', '総PnL': '49615', '最大DD': '65.4%', Calmar: '1.85' }
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:267:17)
+
+PASS test/unit/strategies/utils/bayesianOptimizer.test.js
+  ベイジアン最適化アルゴリズムのテスト
+    KernelFunctions (カーネル関数)
+      ✓ RBF(ガウシアン)カーネルを正確に計算する (1 ms)
+      ✓ Matérnカーネル(ν=1.5)を正確に計算する
+      ✓ カーネル行列を正しく構築する (1 ms)
+      ✓ 異なるカーネルタイプに対応する (1 ms)
+    GaussianProcessRegression (ガウス過程回帰)
+      ✓ ガウス過程を正しく訓練する (1 ms)
+      ✓ 予測平均と分散を正確に計算する (1 ms)
+      ✓ 訓練データポイントで完全適合する（ノイズなし） (1 ms)
+      ✓ ハイパーパラメータ最適化を実行する (6 ms)
+      ✓ 対数尤度を正しく計算する
+    AcquisitionFunctions (獲得関数)
+      ✓ Expected Improvement (EI)を正確に計算する (1 ms)
+      ✓ Upper Confidence Bound (UCB)を正確に計算する
+      ✓ Probability of Improvement (PI)を正確に計算する
+      ✓ 複数ポイントの獲得関数を同時計算する (3 ms)
+    ConstraintHandler (制約処理)
+      ✓ 範囲制約を正しく処理する
+      ✓ 合計制約を正しく処理する (1 ms)
+      ✓ 制約違反ペナルティを計算する
+      ✓ 制約違反点を実行可能領域に投影する
+      ✓ リスク管理パラメータの制約を処理する (1 ms)
+    ConvergenceDetector (収束判定)
+      ✓ 目標値での収束を検出する (1 ms)
+      ✓ 改善停止での収束を検出する
+      ✓ 最大イテレーション数での停止を検出する (1 ms)
+      ✓ 収束統計を提供する
+    BayesianOptimizer (統合システム)
+      ✓ 最適化問題を設定する
+      ✓ 初期サンプリングを実行する
+      ✓ ベイジアン最適化イテレーションを実行する (46 ms)
+      ✓ 制約付き最適化を実行する (11 ms)
+      ✓ 異なる獲得関数を使用できる (1 ms)
+    RiskParameterOptimizer (リスクパラメータ最適化)
+      ✓ リスクパラメータ最適化問題を設定する
+      ✓ リスク調整済みパフォーマンス目的関数を計算する
+      ✓ リスクパラメータ最適化を実行する (236 ms)
+      ✓ 量子最適化との統合インターフェースを提供する (1 ms)
+    数学的精度テスト
+      ✓ コレスキー分解の数値安定性
+      ✓ 正定値行列の確保
+      ✓ 獲得関数の数値微分精度
+    金融工学的検証
+      ✓ リスク・リターン最適化の現実性
+      ✓ 取引コスト考慮の最適化
+
+  console.log
+    💰 ETH/USDT: { '勝率': '50.7%', '総PnL': '23163', '最大DD': '247.7%', Calmar: '0.23' }
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:267:17)
+
+  console.log
+    💰 ADA/USDT: { '勝率': '58.0%', '総PnL': '22822', '最大DD': '147.2%', Calmar: '0.38' }
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:267:17)
+
+  console.log
+    🌊 Bull Market: { '勝率': '64.0%', '総PnL': '49561', '最大DD': '49.4%' }
+
+      at log (test/performance/performanceValidationSuite.test.js:311:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    🌊 Bear Market: { '勝率': '68.0%', '総PnL': '38723', '最大DD': '12.0%' }
+
+      at log (test/performance/performanceValidationSuite.test.js:311:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    🌊 Sideways Market: { '勝率': '63.0%', '総PnL': '39431', '最大DD': '551.9%' }
+
+      at log (test/performance/performanceValidationSuite.test.js:311:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    🌊 High Volatility: { '勝率': '61.0%', '総PnL': '36103', '最大DD': '70.7%' }
+
+      at log (test/performance/performanceValidationSuite.test.js:311:17)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    🔍 オーバーフィッティング検出:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:347:15)
+
+  console.log
+    トレーニング勝率: 72.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:348:15)
+
+  console.log
+    テスト勝率: 43.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:349:15)
+
+  console.log
+    性能劣化: 40.3%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:350:15)
+
+  console.warn
+    ⚠️ オーバーフィッティングの可能性が検出されました
+
+      352 |       // オーバーフィッティングの検出基準
+      353 |       if (performanceDegradation > 0.1) { // 10%以上の劣化
+    > 354 |         console.warn('⚠️ オーバーフィッティングの可能性が検出されました');
+          |                 ^
+      355 |       }
+      356 |
+      357 |       expect(performanceDegradation).toBeLessThan(0.4); // 40%以下の劣化許容（現実的）
+
+      at Object.warn (test/performance/performanceValidationSuite.test.js:354:17)
+
+PASS test/unit/strategies/utils/riskManagement.test.js
+  リスク管理機能のテスト
+    calculateStopLossPrice
+      ✓ 固定ストップロス価格を正しく計算する
+      ✓ トレーリングストップが発動しない場合
+      ✓ トレーリングストップが発動する場合
+      ✓ トレーリングストップが固定ストップロスより高い場合
+    checkPositionLimits
+      ✓ ポジション制限内の場合は許可される (1 ms)
+      ✓ 同一通貨ペアの制限に達した場合 (1 ms)
+    recordBuyPosition
+      ✓ 買いポジションを正しく記録する (445 ms)
+    checkStopLoss
+      ✓ 価格ベースのストップロスを検出する
+      ✓ 時間ベースのストップロスを検出する
+      ✓ 最高値を更新する (305 ms)
+    recordPnL
+      ✓ 損益を正しく記録する
+
+  console.log
+    📊 統計的有意性:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:382:15)
+
+  console.log
+    平均勝率: 58.1%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:383:15)
+
+  console.log
+    95%信頼区間: [50.0%, 69.0%]
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:384:15)
+
+  console.log
+    🏆 Issue #151 目標達成度評価:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:407:15)
+
+  console.log
+    ✅ シャープレシオ改善: 20.0% (目標: 15-25%)
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:408:15)
+
+  console.log
+    ✅ ドローダウン削減: 26.7% (目標: 20-30%)
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:409:15)
+
+  console.log
+    ✅ Calmar Ratio改善: 25.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:410:15)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    ✅ Sortino Ratio改善: 20.0%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:411:15)
+
+  console.log
+    ✅ 勝率改善: 12.7%
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:412:15)
+
+  console.log
+    
+    🎯 目標達成状況:
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:418:15)
+
+  console.log
+    シャープレシオ目標: ✅ 達成
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:419:15)
+
+  console.log
+    ドローダウン目標: ✅ 達成
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:420:15)
+
+  console.log
+    
+    📊 総合達成度: 100/100点
+
+      at Object.log (test/performance/performanceValidationSuite.test.js:436:15)
+
+  console.warn
+    無効なRedisキーを検出してスキップ: summary:trade:undefined:undefined:undefined
+
+      135 |           symbol === 'undefined' || !symbol || 
+      136 |           strategyKey === 'undefined' || !strategyKey) {
+    > 137 |         console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+          |                 ^
+      138 |         continue;
+      139 |       }
+      140 |       
+
+      at warn (src/database/redisDatabase.js:137:17)
+      at Object.<anonymous> (test/unit/database/redisDatabase.tradeSummary.test.js:203:24)
+
+PASS test/unit/positionSizing.test.js
+  calculateDynamicParams
+    ✓ should return default parameters for normal volatility (1 ms)
+    ✓ should adjust parameters for high volatility (1 ms)
+    ✓ should adjust parameters for low volatility
+    ✓ should handle insufficient OHLCV data gracefully
+    ✓ should throw error for invalid OHLCV data (high < low) (5 ms)
+    ✓ should throw error for invalid OHLCV data (null/undefined values) (1 ms)
+    ✓ should return default parameters for empty OHLCV data
+
+  console.warn
+    無効なRedisキーを検出してスキップ: summary:trade::BTC/JPY:strategy
+
+      135 |           symbol === 'undefined' || !symbol || 
+      136 |           strategyKey === 'undefined' || !strategyKey) {
+    > 137 |         console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+          |                 ^
+      138 |         continue;
+      139 |       }
+      140 |       
+
+      at warn (src/database/redisDatabase.js:137:17)
+      at Object.<anonymous> (test/unit/database/redisDatabase.tradeSummary.test.js:203:24)
+
+  console.warn
+    無効なRedisキーを検出してスキップ: summary:trade:exchange::strategy
+
+      135 |           symbol === 'undefined' || !symbol || 
+      136 |           strategyKey === 'undefined' || !strategyKey) {
+    > 137 |         console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+          |                 ^
+      138 |         continue;
+      139 |       }
+      140 |       
+
+      at warn (src/database/redisDatabase.js:137:17)
+      at Object.<anonymous> (test/unit/database/redisDatabase.tradeSummary.test.js:203:24)
+
+FAIL test/performance/performanceValidationSuite.test.js
+  性能目標検証統合テストスイート
+    🎯 シャープレシオ改善検証 (15-25%目標)
+      ✓ シャープレシオの定量測定と改善率計算 (6 ms)
+      ✓ 複数時間足でのシャープレシオ安定性検証 (15 ms)
+    📉 ドローダウン削減実証 (20-30%目標)
+      ✓ ドローダウンの定量測定と削減率計算 (1 ms)
+      ✓ NaN問題の特定と修正検証 (1 ms)
+      ✓ リスク調整済み指標での検証 (3 ms)
+    📊 実取引データ検証
+      ✓ BTC/USDT、ETH/USDT等での実測シミュレーション (5 ms)
+      ✓ 複数市場条件での性能確認 (3 ms)
+      ✕ オーバーフィッティング検出精度確認 (3 ms)
+    📈 統計的有意性確認
+      ✓ 信頼区間での統計的妥当性確認 (4 ms)
+    🎯 総合性能目標達成度評価
+      ✓ issue #151目標達成度の定量評価 (6 ms)
+
+  ● 性能目標検証統合テストスイート › 📊 実取引データ検証 › オーバーフィッティング検出精度確認
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 0.4
+    Received:   0.4027777777777778
+
+      355 |       }
+      356 |
+    > 357 |       expect(performanceDegradation).toBeLessThan(0.4); // 40%以下の劣化許容（現実的）
+          |                                      ^
+      358 |       expect(testWinRate).toBeGreaterThan(0.4); // テストでも40%以上
+      359 |     });
+      360 |   });
+
+      at Object.toBeLessThan (test/performance/performanceValidationSuite.test.js:357:38)
+
+PASS test/unit/database/redisDatabase.tradeSummary.test.js
+  redisDatabase - 取引サマリー機能
+    getAllTradeSummaries
+      🔴 Red: Redisキーの解析が正しく行われること
+        ✓ 正しいキー形式から正しくフィールドを抽出すること (2 ms)
+        ✓ 修正された形式のキーから正しくフィールドを抽出すること (1 ms)
+      🟢 Green: 複数のサマリーデータを正しく処理すること
+        ✓ 複数の取引サマリーを正しく返すこと
+      🔵 Refactor: エッジケースの処理
+        ✓ 無効なキーをスキップすること (12 ms)
+        ✓ 空のサマリーデータをスキップすること
+    updateTradeSummary
+      🔴 Red: 新規サマリーの作成
+        ✓ 新しい買い注文でサマリーを作成すること (2 ms)
+      🟢 Green: 既存サマリーの更新
+        ✓ 売り注文でサマリーを更新すること (1 ms)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+PASS test/unit/database/fetchTicker.test.js
+  Enhanced fetchTicker functionality
+    fetchTickerFromMongoDB
+      ✓ should return null when no ticker data is found
+      ✓ should return ticker data when found
+    fetchTicker backtest mode improvements
+      ✓ should use MongoDB data when available in backtest mode
+      ✓ should fallback to generated data when MongoDB data unavailable
+      ✓ should consider volume in price generation algorithm
+    Execution accuracy and slippage calculations
+      ✓ should calculate realistic execution probability based on volume
+      ✓ should calculate slippage based on liquidity factors
+      ✓ should generate realistic bid/ask spreads
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+PASS test/unit/strategies/utils/advancedPerformanceMetrics.test.js
+  高度パフォーマンス指標のテスト
+    calculateCalmarRatio
+      ✓ 正常な年間リターンとドローダウンでCalmar Ratioを計算する
+      ✓ ドローダウンが0の場合は高い値を返す
+      ✓ 年間リターンが負の場合は負のCalmar Ratioを返す (1 ms)
+      ✓ 無効な入力に対して0を返す
+    calculateDownsideDeviation
+      ✓ 正常なリターン系列でダウンサイド偏差を計算する
+      ✓ 全て正のリターンの場合は0を返す (1 ms)
+      ✓ 空配列の場合は0を返す
+    calculateSortinoRatio
+      ✓ 正常なリターン系列でSortino Ratioを計算する
+      ✓ 全て正のリターンの場合は高い値を返す (1 ms)
+    calculateVaR
+      ✓ 95%信頼区間でVaRを計算する（ヒストリカル法） (4 ms)
+      ✓ 99%信頼区間でVaRを計算する
+      ✓ 信頼区間50%（メディアン）のテスト
+      ✓ 空配列の場合は0を返す
+    calculateAnnualizedReturn
+      ✓ 日次リターンから年換算リターンを計算する (1 ms)
+      ✓ 空配列の場合は0を返す
+    AdvancedPerformanceMetrics クラス
+      ✓ インスタンス化できる
+      ✓ 全メトリクスを一括計算する
+      ✓ 不十分なデータでデフォルト値を返す
+    エッジケースと例外処理
+      ✓ 無効なデータ形式を処理する
+      ✓ 極端な値を処理する
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+  console.log
+    Jest setup completed - Redis mocked with stateful behavior for test environment
+
+      at Object.log (jest.setup.js:125:9)
+
+PASS test/unit/database/manager.test.js
+  Database Manager Module
+    timeframeToTimestamp function
+      ✓ converts timeframe to timestamp correctly
+
+PASS test/unit/strategies/utils/common.test.js
+  Strategy Common Utils
+    validateOHLCVData function
+      ✓ returns valid result for valid data (4 ms)
+      ✓ returns invalid result if data length is insufficient (1 ms)
+      ✓ returns invalid result if data contains invalid prices
+      ✓ returns invalid result if data is not an array
+
+PASS test/unit/strategies/utils/correlation.test.js
+  Correlation Utilities
+    calculatePearsonCorrelation
+      ✓ calculates perfect positive correlation
+      ✓ calculates perfect negative correlation (5 ms)
+      ✓ calculates zero correlation for independent variables
+      ✓ handles empty arrays (1 ms)
+      ✓ handles mismatched array lengths
+    calculateSpearmanCorrelation
+      ✓ calculates spearman correlation correctly
+      ✓ handles empty arrays
+    calculateSpread
+      ✓ calculates logarithmic spread correctly
+      ✓ calculates linear spread correctly (1 ms)
+      ✓ handles empty arrays
+    calculateZScore
+      ✓ calculates z-score correctly
+      ✓ handles insufficient data (1 ms)
+    calculateHalfLife
+      ✓ calculates half life for mean reverting series
+      ✓ returns null for non-mean reverting series
+      ✓ handles insufficient data
+    DynamicPairSelector
+      ✓ initializes correctly
+      ✓ records correlation data
+      ✓ selects reference pairs with default fallback (1 ms)
+      ✓ provides correlation statistics
+    StatisticalPairTrading
+      ✓ initializes with correct parameters (1 ms)
+      ✓ finds trading pairs with high correlation
+      ✓ generates pair trade signal for mean reversion (1 ms)
+      ✓ generates exit signal correctly
+      ✓ handles insufficient data gracefully
+    Integration Tests
+      ✓ complete workflow from correlation to trading signal (1 ms)
+
+PASS test/unit/monteCarloBootstrapping.test.js
+  MonteCarloBootstrapping
+    🔴 基本コンストラクタテスト
+      ✓ デフォルト設定でインスタンス化できる (2 ms)
+      ✓ カスタム設定が適用される (2 ms)
+    🔴 Sharpe比率信頼区間計算
+      ✓ 空のリターンデータでエラーが発生しない (5 ms)
+      ✓ 🟢 正常なリターンデータでSharpe比率信頼区間を計算 (33 ms)
+      ✓ リスクフリーレートを考慮したSharpe比率計算 (31 ms)
+      ✓ バイアス修正が正しく適用される (36 ms)
+      ✓ BCa信頼区間が計算される (19 ms)
+    🔴 最大ドローダウン分布推定
+      ✓ 🔴 空のデータで適切なデフォルト値を返す (1 ms)
+      ✓ 🟢 正常データで最大ドローダウン分布を計算 (27 ms)
+      ✓ リスク指標（VaR, CVaR）が計算される (40 ms)
+    🔴 VaR堅牢性検証
+      ✓ 🔴 無効な信頼水準でエラーが発生しない (24 ms)
+      ✓ 🟢 VaR堅牢性が正しく検証される (34 ms)
+      ✓ バックテスト結果が含まれる (7 ms)
+      ✓ 99%信頼水準でのVaR検証 (14 ms)
+    🔴 包括的パフォーマンス分析
+      ✓ 🔴 最小限のオプションで実行できる (103 ms)
+      ✓ 🟢 基本統計が計算される (95 ms)
+      ✓ 全ての主要分析が実行される (75 ms)
+      ✓ 高次モーメント分析が正しく実行される (75 ms)
+      ✓ テールリスク分析が実行される (62 ms)
+    🔴 ブートストラップサンプリング手法
+      ✓ 🔴 伝統的ブートストラップでサンプル長が保持される
+      ✓ 🟢 ブロックブートストラップが正しく動作する
+      ✓ 定常ブートストラップが実行される (1 ms)
+    🔴 金融指標計算
+      ✓ 🔴 ゼロボラティリティでSharpe比率が0
+      ✓ 🟢 Sharpe比率が正しく計算される
+      ✓ 最大ドローダウンが非負値
+      ✓ VaRが正の値として計算される
+      ✓ Calmar比率が計算される
+      ✓ Sortino比率が計算される
+      ✓ Omega比率が計算される
+    🔴 統計的関数
+      ✓ 🔴 パーセンタイル計算が境界値で正しく動作
+      ✓ 🟢 分布分析が完全な統計を返す
+      ✓ 信頼区間が正しい範囲を返す (1 ms)
+      ✓ 基本統計計算が正確
+    🔴 エラーハンドリング
+      ✓ 🔴 空配列でエラーが発生しない
+      ✓ 🔴 無効な指標名でエラーが発生 (19 ms)
+      ✓ 🟢 NaN値を含むデータの処理 (4 ms)
+    🔵 パフォーマンステスト
+      ✓ 大量データでの実行時間が妥当 (209 ms)
+      ✓ メモリ使用量が適切
+    🔵 再現性テスト
+      ✓ 同じシードで同じ結果を返す (1 ms)
+    🔵 実際の金融データ模擬テスト
+      ✓ 高ボラティリティ市場での安定性 (325 ms)
+      ✓ 低ボラティリティ市場での精度 (315 ms)
+      ✓ トレンド市場での分析 (244 ms)
+  🔵 統合テスト
+    ✓ harvest3システムとの互換性確認
+    ✓ 設定オブジェクトの完全性
+
+PASS test/unit/strategies/utils/timeSeriesCrossValidation.test.js
+  Time Series Cross-Validation 包括テストスイート
+    🔴 Red Phase: 失敗ケース - Time Series Split機能
+      ✓ 時系列順序が破綻したデータで分割が正しく失敗する (78 ms)
+      ✓ 不十分なデータサイズで分割が正しく失敗する (3 ms)
+      ✓ 無効なsplit数設定が正しく拒否される (3 ms)
+      ✓ 未来データアクセスが検出される (20 ms)
+    🟢 Green Phase: 最小実装 - Time Series Split機能
+      ✓ 基本的な時系列分割が正しく動作する (11 ms)
+      ✓ 時系列順序が保持される (83 ms)
+      ✓ 分割サイズが正しく計算される (3 ms)
+    🔵 Blue Phase: リファクタリング - Time Series Split機能
+      ✓ 大規模データでのパフォーマンスが適切 (185 ms)
+      ✓ メモリ効率的な分割が実行される (5 ms)
+      ✓ 適応的分割サイズ調整機能 (2 ms)
+    🔴 Red Phase: 失敗ケース - Purged GroupKFold機能
+      ✓ グループラベルが不正な場合に正しく失敗する (2 ms)
+      ✓ グループ数が分割数より少ない場合に正しく失敗する (3 ms)
+      ✓ purgeGapが負の値の場合に正しく失敗する (3 ms)
+    🟢 Green Phase: 最小実装 - Purged GroupKFold機能
+      ✓ 基本的なPurged GroupKFoldが正しく動作する (3 ms)
+      ✓ purgeGapが正しく適用される (218 ms)
+      ✓ グループの重複が避けられる (3 ms)
+    🔵 Blue Phase: リファクタリング - Purged GroupKFold機能
+      ✓ 最適化されたグループ分割アルゴリズム (2 ms)
+      ✓ 動的purgeGap調整機能 (7 ms)
+    🔴 Red Phase: 失敗ケース - Embargo period実装
+      ✓ 無効なembargo期間設定で正しく失敗する (1 ms)
+      ✓ embargo期間がデータ長より長い場合に正しく失敗する (2 ms)
+      ✓ embargo違反データが検出される (2 ms)
+    🟢 Green Phase: 最小実装 - Embargo period実装
+      ✓ 基本的なembargo期間が正しく適用される (5 ms)
+      ✓ embargo期間でのデータギャップが確保される (1 ms)
+      ✓ 動的embargo期間調整 (2 ms)
+    🔵 Blue Phase: リファクタリング - Embargo period実装
+      ✓ 高度なembargo最適化アルゴリズム (3 ms)
+      ✓ 市場マイクロ構造を考慮したembargo調整 (4 ms)
+    🔴 Red Phase: 失敗ケース - Nested Cross-Validation
+      ✓ ネストレベルが不正な場合に正しく失敗する (4 ms)
+      ✓ 内側分割数が外側分割数より多い場合に警告が発生する (1 ms)
+    🟢 Green Phase: 最小実装 - Nested Cross-Validation
+      ✓ 基本的なNested CVが正しく動作する (11 ms)
+      ✓ 時系列順序がネスト構造で保持される (6 ms)
+    🔵 Blue Phase: リファクタリング - Nested Cross-Validation
+      ✓ パフォーマンス最適化されたNested CV (5 ms)
+    🔴 Red Phase: 失敗ケース - Lopez de Prado手法実装
+      ✓ triplet barriers設定が不正な場合に正しく失敗する (2 ms)
+      ✓ サンプル重み付けが不正な場合に正しく失敗する (1 ms)
+    🟢 Green Phase: 最小実装 - Lopez de Prado手法実装
+      ✓ Triplet Barrier Methodが正しく動作する (163 ms)
+      ✓ Sample Uniquenessが適用される (862 ms)
+      ✓ Sequential Bootstrappingが実装される (25 ms)
+    🔵 Blue Phase: リファクタリング - Lopez de Prado手法実装
+      ✓ 高度なMeta-Labeling実装 (132 ms)
+      ✓ Fractional Differentiation統合 (49 ms)
+    🏆 統合テスト - 包括的クロスバリデーション
+      ✓ 全手法統合パイプライン (3 ms)
+      ✓ 金融時系列特有問題の検出と対応 (7 ms)
+      ✓ リアルタイム検証システム (2 ms)
+
+  console.log
+    📈 5000件処理: 853ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:373:17)
+
+  console.log
+    ✅ Monte Carlo Bootstrapping分析が完了しました
+
+      at BacktestEnhancer.log [as enhanceBacktestResults] (src/strategies/utils/backtestEnhancer.js:102:15)
+
+  console.log
+    ✅ 高度Monte Carlo分析完了
+
+      at RobustnessValidator.log [as comprehensiveValidation] (src/strategies/utils/walkForwardAnalysis.js:790:19)
+
+PASS test/integration/backtestEnhancementIntegration.test.js
+  Backtest Enhancement Integration Tests
+    Walk-Forward Analysis Integration
+      ✓ should successfully analyze backtest results with WFA (7 ms)
+      ✓ should validate data integrity (22 ms)
+    Time Series Cross-Validation Integration
+      ✓ should perform time series split correctly (1 ms)
+      ✓ should calculate adaptive test size (1 ms)
+    Monte Carlo Bootstrapping Integration
+      ✓ should perform comprehensive analysis (41 ms)
+      ✓ should calculate Sharpe ratio confidence interval (14 ms)
+    Backtest Enhancer Integration
+      ✓ should enhance backtest results with all features (114 ms)
+      ✓ should generate Discord report (54 ms)
+      ✓ should handle insufficient data gracefully (3 ms)
+    Realtime Validation System Integration
+      ✓ should start and stop monitoring (4 ms)
+      ✓ should add trade results and maintain window size (1 ms)
+      ✓ should set and use performance baseline (3 ms)
+      ✓ should detect performance degradation (2 ms)
+      ✓ should generate monitoring summary (1 ms)
+      ✓ should generate Discord report
+    Financial Time Series Validator Integration
+      ✓ should perform comprehensive validation (2 ms)
+      ✓ should diagnose time series characteristics (1 ms)
+    Overfitting Detection Integration
+      ✓ should detect parameter instability
+      ✓ should estimate out-of-sample performance
+    Error Handling and Edge Cases
+      ✓ should handle empty data gracefully (1 ms)
+      ✓ should handle invalid time series data (1 ms)
+      ✓ should handle NaN and infinite values
+    Performance and Memory Tests
+      ✓ should handle large datasets efficiently (1912 ms)
+      ✓ should maintain memory efficiency in realtime system (1 ms)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+  console.warn
+    bitbankはIOCをサポートしていません。通常のlimit注文を使用します。
+
+      514 |       case ORDER_TYPES.LIMIT_IOC:
+      515 |         // bitbankではIOCをサポートしていないため、通常のlimit注文として処理
+    > 516 |         console.warn('bitbankはIOCをサポートしていません。通常のlimit注文を使用します。');
+          |                 ^
+      517 |         break;
+      518 |       case ORDER_TYPES.STOP_LIMIT:
+      519 |         if (options.stopPrice) {
+
+      at AdvancedOrderManager.warn [as buildOrderParams] (src/strategies/utils/orderManager.js:516:17)
+      at Object.buildOrderParams (test/unit/strategies/utils/orderManager.test.js:232:35)
+
+  console.log
+    [注文管理] Redis接続完了
+
+      at AdvancedOrderManager.log [as initRedisConnection] (src/strategies/utils/orderManager.js:67:15)
+
+PASS test/unit/strategies/utils/orderManager.test.js
+  AdvancedOrderManager
+    最適注文タイプ選択
+      ✓ 高緊急度・高流動性の場合はマーケット注文を選択 (7 ms)
+      ✓ 中緊急度・中流動性の場合はLIMIT注文を選択
+      ✓ 大口注文の場合は氷山注文を選択 (1 ms)
+    流動性評価
+      ✓ 低スプレッド・高ボリュームで高流動性を返す
+      ✓ 高スプレッド・低ボリュームで低流動性を返す
+    価格調整
+      ✓ 買い注文で高緊急度の場合、スプレッド50%上乗せ (1 ms)
+      ✓ 売り注文で高緊急度の場合、スプレッド50%減額
+      ✓ 低緊急度の場合、スプレッド1%のみ調整 (1 ms)
+    高度注文実行
+      ✓ 正常な注文実行の場合、成功結果を返す (8 ms)
+      ✓ 注文失敗時はリトライ実行 (1007 ms)
+    氷山注文実行
+      ✓ 大口注文を複数のチャンクに分割して実行 (917 ms)
+    注文パラメータ構築
+      ✓ POST_ONLYタイプでpostOnlyパラメータを設定
+      ✓ IOCタイプでは通常のlimit注文として処理（bitbank制限） (1 ms)
+      ✓ STOP_LIMITタイプでstopPriceパラメータを設定
+  定数とエクスポート
+    ✓ ORDER_TYPESが正しく定義されている
+    ✓ URGENCY_LEVELSが正しく定義されている
+
+  console.log
+    📈 10000件処理: 924ms
+
+      at Object.log (test/integration/overfittingPreventionSystemIntegration.test.js:373:17)
+
+  console.log
+    🧹 テスト環境クリーンアップ完了 (実行時間: 2973ms)
+
+      at log (test/integration/overfittingPreventionSystemIntegration.test.js:718:11)
+
+FAIL test/integration/overfittingPreventionSystemIntegration.test.js
+  オーバーフィッティング防止システム統合テスト
+    🎯 性能目標達成測定テスト
+      ✓ シャープレシオ15-25%改善を達成する (24 ms)
+      ✓ 最大ドローダウン20-30%削減を達成する (8 ms)
+      ✓ 複合パフォーマンス指標の総合改善 (18 ms)
+    🔬 統合システム機能テスト
+      ✓ 量子インスパイア最適化とパフォーマンス追跡の連携 (111 ms)
+      ✓ リアルタイム検証システムの統合動作 (12 ms)
+      ✓ 時系列交差検証とウォークフォワード分析の統合 (7 ms)
+    🚀 エンドツーエンドシナリオテスト
+      ✓ 完全な取引シナリオでの性能検証 (272 ms)
+      ✕ 異なる市場条件での堅牢性テスト (5 ms)
+    📊 性能ベンチマーク測定
+      ✓ 処理性能とメモリ効率 (3 ms)
+      ✓ スケーラビリティテスト (2472 ms)
+
+  ● オーバーフィッティング防止システム統合テスト › 🚀 エンドツーエンドシナリオテスト › 異なる市場条件での堅牢性テスト
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 300
+    Received:   1630.2376548247842
+
+      323 |       for (const result of robustnessResults) {
+      324 |         expect(result.sharpeRatio || 0).toBeGreaterThan(-20); // 極端に悪くない
+    > 325 |         expect(isNaN(result.maxDrawdown) ? 0 : result.maxDrawdown).toBeLessThan(300); // より現実的な閾値：30000%以下
+          |                                                                    ^
+      326 |         expect(result.profitFactor || 0).toBeGreaterThan(0); // 正の値
+      327 |         
+      328 |         console.log(`📊 ${result.condition}: Sharpe=${result.sharpeRatio.toFixed(3)}, DD=${(result.maxDrawdown*100).toFixed(2)}%`);
+
+      at Object.toBeLessThan (test/integration/overfittingPreventionSystemIntegration.test.js:325:68)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+-------------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                
+-------------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files                            |    33.2 |    25.68 |    43.8 |   31.95 |                                                                                                                                                                  
+ src                                 |     100 |      100 |     100 |     100 |                                                                                                                                                                  
+  config.js                          |     100 |      100 |     100 |     100 |                                                                                                                                                                  
+ src/api/controllers                 |    7.69 |        0 |       0 |    7.69 |                                                                                                                                                                  
+  errorStats.js                      |    7.69 |        0 |       0 |    7.69 | 21-104                                                                                                                                                           
+ src/common                          |   29.48 |    13.42 |   31.25 |   29.33 |                                                                                                                                                                  
+  const.js                           |     100 |      100 |     100 |     100 |                                                                                                                                                                  
+  errorHandler.js                    |    13.2 |        0 |   14.28 |   13.46 | 20-116,127                                                                                                                                                       
+  notifications.js                   |   17.04 |     3.92 |   14.28 |   18.07 | 19-52,65-66,76-168                                                                                                                                               
+  orderValidation.js                 |    9.72 |        0 |    12.5 |   10.29 | 14-190                                                                                                                                                           
+  tradingUtils.js                    |     2.7 |        0 |       0 |     2.7 | 17-181                                                                                                                                                           
+  transactionalOrderManager.js       |   48.38 |    41.93 |   66.66 |   47.54 | 61-66,109-110,127,140,153,186-188,197-198,223-290,314,332-399                                                                                                    
+  utils.js                           |   47.72 |       20 |   43.75 |   46.34 | 95-257                                                                                                                                                           
+ src/database                        |    5.32 |     3.38 |    2.16 |    5.42 |                                                                                                                                                                  
+  exchangeAPI.js                     |    5.55 |        0 |       0 |    5.76 | 27,38-388                                                                                                                                                        
+  manager.js                         |    1.86 |        0 |       0 |     1.9 | 68-183,192-507,516-1835                                                                                                                                          
+  mongoDatabase.js                   |    3.05 |        0 |       0 |     3.1 | 29-740                                                                                                                                                           
+  ohlcvCache.js                      |    2.83 |        0 |       0 |    2.87 | 10-440,451-463                                                                                                                                                   
+  ohlcvQueue.js                      |    3.88 |        0 |       0 |    3.94 | 14-529,540-552                                                                                                                                                   
+  redisDatabase.js                   |     9.3 |    12.18 |    5.88 |    9.45 | 16-52,60-61,112-115,162-185,202-1152,1217-1473                                                                                                                   
+  schemas.js                         |   47.36 |        0 |      20 |   47.36 | 21-78,89,109,129,149,170-178,190-194                                                                                                                             
+ src/hft                             |   29.68 |    34.61 |       0 |   29.68 |                                                                                                                                                                  
+  config.js                          |     100 |       90 |     100 |     100 | 17                                                                                                                                                               
+  index.js                           |      25 |        0 |       0 |      25 | 23-115                                                                                                                                                           
+ src/hft/bitbank                     |    5.52 |        0 |       0 |    5.52 |                                                                                                                                                                  
+  PrivateStreamClient.js             |   11.53 |        0 |       0 |   11.53 | 7-93                                                                                                                                                             
+  PublicStreamClient.js              |     5.4 |        0 |       0 |     5.4 | 7-174                                                                                                                                                            
+  WebSocketClient.js                 |    4.04 |        0 |       0 |    4.04 | 7-237                                                                                                                                                            
+ src/hft/datastore                   |    2.97 |        0 |       0 |    3.03 |                                                                                                                                                                  
+  MarketDataStore.js                 |    2.97 |        0 |       0 |    3.03 | 6-280                                                                                                                                                            
+ src/hft/strategy                    |       8 |        0 |       0 |       8 |                                                                                                                                                                  
+  HFTStrategy.js                     |    6.25 |        0 |       0 |    6.25 | 6-94                                                                                                                                                             
+  OrderProcessor.js                  |   11.11 |      100 |       0 |   11.11 | 6-75                                                                                                                                                             
+ src/hft/utils                       |   15.62 |     8.33 |    7.14 |   16.12 |                                                                                                                                                                  
+  Logger.js                          |   15.62 |     8.33 |    7.14 |   16.12 | 32-103                                                                                                                                                           
+ src/strategies                      |    8.92 |     2.88 |    8.77 |    9.24 |                                                                                                                                                                  
+  meanReversion.js                   |    8.19 |        0 |       0 |    8.92 | 37-291                                                                                                                                                           
+  mutualInformation.js               |   14.14 |     5.96 |      20 |   14.59 | 57-487,536-606,627-636,653-658,705-710                                                                                                                           
+  trendFollowing.js                  |    3.37 |        0 |       0 |    3.52 | 45-769                                                                                                                                                           
+ src/strategies/utils                |   44.83 |    35.34 |   58.93 |   43.59 |                                                                                                                                                                  
+  advancedPerformanceMetrics.js      |   71.65 |    73.75 |   95.83 |   70.96 | 32,75,102,109,136,146,165,171,178,202,220,293-336                                                                                                                
+  backtestEnhancer.js                |   81.04 |    57.73 |      96 |   80.78 | 138-142,157,243-244,270,284,295-296,302-308,318,320,324-330,371,382,393,401-412,470,477,479,485-486,543,547,613-615,623                                          
+  bayesianOptimizer.js               |   86.18 |       62 |   89.62 |   86.01 | 42-45,62-63,84,88-90,124,193,281,317,370,451,485,585-596,623,627-634,648,803,887,920,929,961,973,995,1010-1020,1060,1067,1128,1222-1230,1301-1307,1338-1372,1392 
+  common.js                          |   24.51 |    23.88 |   41.93 |   23.62 | 46-109,132-133,142,150-154,187-1182,1245-1246,1250-1251,1368-1370,1572-1581,1617-1705                                                                            
+  correlation.js                     |   89.15 |       74 |   93.33 |   92.53 | 65-72,208,299,322,346                                                                                                                                            
+  dynamicUrgencyCalculator.js        |    6.19 |        0 |       0 |     6.3 | 21-347                                                                                                                                                           
+  indicators.js                      |    47.2 |    34.86 |      50 |   46.18 | 13-256,375-441,482,551-556,576-577                                                                                                                               
+  mlUrgencyPredictor.js              |    0.61 |        0 |       0 |    0.62 | 8-519                                                                                                                                                            
+  monteCarloBootstrapping.js         |    84.3 |     72.9 |   87.95 |   86.46 | 59-76,108,248,342-352,542,833,975-1037                                                                                                                           
+  multiTimeframeUrgencyAnalysis.js   |    0.63 |        0 |       0 |    0.74 | 10-761                                                                                                                                                           
+  orderManager.js                    |   43.22 |    29.33 |   59.09 |    42.6 | 69-70,99-100,115,139-140,156,172,181-184,190-191,233-283,314-491,513,559,578-670,696-697                                                                         
+  performanceAnalyzer.js             |    8.33 |     6.48 |   11.11 |    8.65 | 35-322                                                                                                                                                           
+  performanceTracker.js              |   13.69 |    19.24 |   13.63 |   14.13 | 51-77,92-242,265-270,289-306,363,413-948                                                                                                                         
+  portfolioRiskAnalyzer.js           |    2.17 |        0 |       0 |    2.17 | 10-232                                                                                                                                                           
+  positionSizing.js                  |    2.15 |        0 |       0 |    2.19 | 8-290                                                                                                                                                            
+  quantumInspiredUrgencyOptimizer.js |   95.57 |    68.49 |    98.5 |   95.54 | 194-195,405-406,604,798,870-879                                                                                                                                  
+  realtimeValidationSystem.js        |   39.02 |    36.03 |    37.5 |   40.41 | 82-83,90,104,184-210,220,225,262-519,566-584,626-631,635-647                                                                                                     
+  riskManagement.js                  |   14.61 |     8.86 |   44.44 |   14.41 | 55-67,78,95-99,116,122-123,176,241-857,873,885-969,989-1108,1163-1172,1178,1235-1539                                                                             
+  timeSeriesCrossValidation.js       |   92.61 |    76.51 |   91.59 |   93.17 | 48,52,56,82,92,122,128,147,157,230,313,527,765,805,839-910,946,962,1387-1392,1493,1497,1501,1558                                                                 
+  timezoneAnalyzer.js                |    1.25 |        0 |       0 |    1.25 | 8-265                                                                                                                                                            
+  unifiedUrgencySystem.js            |    2.92 |        0 |       0 |       3 | 14-664                                                                                                                                                           
+  urgencyABTestingSystem.js          |    0.76 |        0 |       0 |    0.85 | 10-783                                                                                                                                                           
+  urgencyPerformanceMonitor.js       |    0.99 |        0 |       0 |    1.05 | 10-552                                                                                                                                                           
+  volatilityAnalyzer.js              |    0.98 |        0 |       0 |    1.05 | 8-249                                                                                                                                                            
+  walkForwardAnalysis.js             |   91.19 |    81.93 |     100 |   91.69 | 49-51,137,453,502,510,517,648,652,752-756,763-764,772-776,792-801,823,828,834,855-856,885,929-930                                                                
+ src/utils                           |   96.87 |     92.3 |     100 |   96.42 |                                                                                                                                                                  
+  positionSizing.js                  |   96.87 |     92.3 |     100 |   96.42 | 3                                                                                                                                                                
+-------------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Summary of all failing tests
+FAIL test/unit/marketParametersErrorHandling.test.js
+  ● marketParameters エラーハンドリング › APE/JPY - サポートされている通貨ペアの正常取得
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      16 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      17 |     
+    > 18 |     expect(result).toBeDefined();
+         |                    ^
+      19 |     expect(result.bitbank).toBeDefined();
+      20 |     expect(result.bitbank['APE/JPY']).toBeDefined();
+      21 |     
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:18:20)
+
+  ● marketParameters エラーハンドリング › 未対応通貨ペア - 適切なエラーハンドリング
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      49 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      50 |     
+    > 51 |     expect(result).toBeDefined();
+         |                    ^
+      52 |     expect(result.bitbank).toBeDefined();
+      53 |     
+      54 |     // TEST/JPYの処理結果を確認
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:51:20)
+
+  ● marketParameters エラーハンドリング › 混在ケース - サポート済みと未対応ペアの混在
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      78 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      79 |     
+    > 80 |     expect(result).toBeDefined();
+         |                    ^
+      81 |     expect(result.bitbank).toBeDefined();
+      82 |     
+      83 |     const symbols = Object.keys(result.bitbank);
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:80:20)
+
+  ● marketParameters エラーハンドリング › エラーレスポンス構造の検証
+
+    TypeError: Cannot read properties of undefined (reading 'bitbank')
+
+      119 |     const result = await getMarketParametersByExchangeSymbol(symbolByExchange, config);
+      120 |     
+    > 121 |     const errorParams = result.bitbank['NONEXISTENT/JPY'];
+          |                                ^
+      122 |     
+      123 |     // エラーレスポンスの必須フィールドを検証
+      124 |     expect(errorParams.error).toBe(true);
+
+      at Object.bitbank (test/unit/marketParametersErrorHandling.test.js:121:32)
+
+  ● marketParameters エラーハンドリング › パフォーマンス - 複数通貨ペアの並列処理
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      151 |     console.log(`処理時間: ${processingTime}ms`);
+      152 |     
+    > 153 |     expect(result).toBeDefined();
+          |                    ^
+      154 |     expect(result.bitbank).toBeDefined();
+      155 |     
+      156 |     const symbols = Object.keys(result.bitbank);
+
+      at Object.toBeDefined (test/unit/marketParametersErrorHandling.test.js:153:20)
+
+FAIL test/performance/performanceValidationSuite.test.js
+  ● 性能目標検証統合テストスイート › �� 実取引データ検証 › オーバーフィッティング検出精度確認
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 0.4
+    Received:   0.4027777777777778
+
+      355 |       }
+      356 |
+    > 357 |       expect(performanceDegradation).toBeLessThan(0.4); // 40%以下の劣化許容（現実的）
+          |                                      ^
+      358 |       expect(testWinRate).toBeGreaterThan(0.4); // テストでも40%以上
+      359 |     });
+      360 |   });
+
+      at Object.toBeLessThan (test/performance/performanceValidationSuite.test.js:357:38)
+
+FAIL test/integration/overfittingPreventionSystemIntegration.test.js
+  ● オーバーフィッティング防止システム統合テスト › �� エンドツーエンドシナリオテスト › 異なる市場条件での堅牢性テスト
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 300
+    Received:   1630.2376548247842
+
+      323 |       for (const result of robustnessResults) {
+      324 |         expect(result.sharpeRatio || 0).toBeGreaterThan(-20); // 極端に悪くない
+    > 325 |         expect(isNaN(result.maxDrawdown) ? 0 : result.maxDrawdown).toBeLessThan(300); // より現実的な閾値：30000%以下
+          |                                                                    ^
+      326 |         expect(result.profitFactor || 0).toBeGreaterThan(0); // 正の値
+      327 |         
+      328 |         console.log(`�� ${result.condition}: Sharpe=${result.sharpeRatio.toFixed(3)}, DD=${(result.maxDrawdown*100).toFixed(2)}%`);
+
+      at Object.toBeLessThan (test/integration/overfittingPreventionSystemIntegration.test.js:325:68)
+
+
+Test Suites: 3 failed, 20 passed, 23 total
+Tests:       7 failed, 388 passed, 395 total
+Snapshots:   0 total
+Time:        4.295 s
+Ran all test suites.

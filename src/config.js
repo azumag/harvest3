@@ -404,7 +404,7 @@ const config = {
     },
 
     OSCILLATOR: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true', // 環境変数から動的設定
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -428,7 +428,7 @@ const config = {
     },
 
     RSI: {
-      enabled: false, // *** EMERGENCY HALT: API TIMEOUT ISSUES DETECTED ***
+      enabled: process.env.STRATEGY_RSI_ENABLED === 'true', // 環境変数から動的設定
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
@@ -453,7 +453,7 @@ const config = {
 
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: process.env.STRATEGY_MULTI_INDICATOR_ENABLED === 'true', // 環境変数から動的設定
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],
