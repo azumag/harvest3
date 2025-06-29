@@ -23,12 +23,14 @@ function getStrategyKey(strategyDisplayName) {
   const strategyMapping = {
     'BB戦略': 'BOLLINGER_BANDS',
     'オシレーター戦略': 'OSCILLATOR',
-    'MA戦略': 'MACD',
+    'MA戦略': 'MA',  // MA戦略はMAキーにマップする（MACDではない）
+    'MACD戦略': 'MACD', // MACD戦略の表示名マッピングを追加
     'マルチ指標戦略': 'MULTI_INDICATOR',
     'RSI戦略': 'RSI',
     'BOLLINGER_BANDS': 'BOLLINGER_BANDS', // 既に正しいキーの場合はそのまま
     'OSCILLATOR': 'OSCILLATOR',
     'MACD': 'MACD',
+    'MA': 'MA', // MAキーもそのまま返す
     'MULTI_INDICATOR': 'MULTI_INDICATOR',
     'RSI': 'RSI'
   };
@@ -1902,4 +1904,5 @@ module.exports = {
   getAllPendingOrdersRedis,
   cleanupInvalidPendingOrders,
   recalculateTradeSummaryFromMongoDB,
+  getStrategyKey, // 戦略名マッピング関数を追加
 };
