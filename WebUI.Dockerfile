@@ -15,9 +15,10 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # 依存関係をインストール
+# Web UIで使用するschemas.jsがzodに依存するため、全依存関係をインストール
 # better-sqlite3はネイティブモジュールなので、ここでビルドが必要な場合がある
 # RUN npm install --build-from-source=better-sqlite3
-RUN npm install --production
+RUN npm install
 # localtunnelはpackage.jsonの依存関係に含まれているため、グローバルインストールは不要
 
 # アプリケーションのソースコードをコピー（ボリュームマウントで上書きされる）

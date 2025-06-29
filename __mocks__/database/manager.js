@@ -74,6 +74,34 @@ module.exports = {
   getBacktestOHLCVRedisBeforeTimestamp: jest.fn().mockResolvedValue([]),
   deleteKey: jest.fn().mockResolvedValue(true),
   
+  // Market parameters function
+  getMarketParametersByExchangeSymbol: jest.fn().mockImplementation((symbolByExchange) => {
+    const result = {};
+    for (const [exchange, symbols] of Object.entries(symbolByExchange)) {
+      result[exchange] = {};
+      for (const symbol of symbols) {
+        if (symbol === 'APE/JPY' || symbol === 'BTC/JPY') {
+          result[exchange][symbol] = {
+            success: true,
+            minTradeAmount: 1,
+            pricePrecision: 2,
+            amountPrecision: 3,
+            timestamp: Date.now()
+          };
+        } else {
+          result[exchange][symbol] = {
+            success: false,
+            error: true,
+            errorType: 'UNSUPPORTED_PAIR',
+            errorMessage: `Symbol ${symbol} not supported`,
+            timestamp: Date.now()
+          };
+        }
+      }
+    }
+    return Promise.resolve(result);
+  }),
+  
   // Add backtest mode functions
   timeframeToTimestamp: jest.fn().mockImplementation((timeframe) => {
     const value = parseInt(timeframe);

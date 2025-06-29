@@ -1,0 +1,328 @@
+バックテストを開始します...
+対象シンボル: BTC/JPY
+Redisに接続しました
+Redisデータベースモジュールが初期化されました
+{ mongoDbName: 'harvest3', mongoUrl: 'mongodb://localhost:27017' }
+(node:33766) [MONGODB DRIVER] Warning: useNewUrlParser is a deprecated option: useNewUrlParser has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33766) [MONGODB DRIVER] Warning: useUnifiedTopology is a deprecated option: useUnifiedTopology has no effect since Node.js Driver version 4.0.0 and will be removed in the next major version
+MongoDBに接続しました
+コレクション orders のインデックスが既に存在: {"orderId":1}
+コレクション orders のインデックスが既に存在: {"timestamp":1}
+コレクション orders のインデックスが既に存在: {"timestamp":-1}
+コレクション orders のインデックスが既に存在: {"exchange":1}
+コレクション orders のインデックスが既に存在: {"symbol":1}
+コレクション trades のインデックスが既に存在: {"orderId":1}
+コレクション trades のインデックスが既に存在: {"tradeId":1}
+コレクション trades のインデックスが既に存在: {"filledAt":1}
+コレクション trades のインデックスが既に存在: {"filledAt":-1}
+コレクション signals のインデックスが既に存在: {"timestamp":1}
+コレクション signals のインデックスが既に存在: {"timestamp":-1}
+コレクション ohlcv のインデックスが既に存在: {"exchange":1,"symbol":1,"timeframe":1,"timestamp":1}
+コレクション ohlcv のインデックスが既に存在: {"timestamp":1}
+コレクション ohlcv のインデックスが既に存在: {"timestamp":-1}
+コレクション tickers のインデックスが既に存在: {"exchange":1,"symbol":1,"timestamp":1}
+コレクション tickers のインデックスが既に存在: {"timestamp":1}
+コレクション tickers のインデックスが既に存在: {"timestamp":-1}
+MongoDBインデックスの確認/作成が完了しました
+取引所 bitbank のシンボルを取得しました: BTC/JPY,XRP/JPY,ETH/JPY,SOL/JPY,DOT/JPY,DOGE/JPY,LTC/JPY,MONA/JPY,XLM/JPY,QTUM/JPY,BAT/JPY,OMG/JPY,XYM/JPY,LINK/JPY,MKR/JPY,BOBA/JPY,ENJ/JPY,ASTR/JPY,ADA/JPY,AVAX/JPY,AXS/JPY,FLR/JPY,SAND/JPY,GALA/JPY,CHZ/JPY,APE/JPY,OAS/JPY,MANA/JPY,GRT/JPY,BNB/JPY,DAI/JPY,OP/JPY,ARB/JPY,KLAY/JPY,IMX/JPY,MASK/JPY,POL/JPY,CYBER/JPY,RENDER/JPY,TRX/JPY,LPT/JPY,ATOM/JPY
+[getMarketParameters] bitbank:BTC/JPY 基本パラメータ抽出: minTradeAmount=0.0001, pricePrecision=1, amountPrecision=0.0001
+[getMarketParameters] bitbank:BTC/JPY 数量精度を正規化: 4
+[getMarketParameters] bitbank:BTC/JPY ✅ パラメータ取得成功: { minTradeAmount: 0.0001, pricePrecision: 1, amountPrecision: 4 }
+✅ bitbank:BTC/JPY パラメータ取得成功: { minTradeAmount: 0.0001, pricePrecision: 1, amountPrecision: 4 }
+=== bitbank のOHLCVデータを取得 ===
+Last data for BTC/JPY/1m is from 2025-06-29T06:17:00.000Z
+fetching 1 days of data
+[OHLCVData] 通常モード: bitbank BTC/JPY 1m 1460
+[OHLCVData] APIから新しいデータを取得: bitbank BTC/JPY 1m
+[OHLCVQueue] リクエストをキューに追加: bitbank:BTC/JPY:1m:1460:rt:force (優先度: medium)
+[OHLCVQueue] リクエスト処理開始: bitbank:BTC/JPY:1m:1460:rt:force
+[BACKTEST] fetchOHLCVDataAPI呼び出し: bitbank BTC/JPY 1m 1460
+[DEBUG] exchange.id: bitbank, timeframe: 1m, mapping: 1min
+[BACKTEST] Bitbank専用API使用
+[Bitbank API] データ取得開始: btc_jpy 1min 1460件 (形式: YYYYMMDD)
+[Bitbank API] 20250629のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250629: 378件取得 (合計: 378件)
+[Bitbank API] 20250628のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250628: 1440件取得 (合計: 1818件)
+[Bitbank API] データ取得完了: 1460件
+[BACKTEST] Bitbank専用API結果: 1460件
+[OHLCVQueue] リクエスト完了: bitbank:BTC/JPY:1m:1460:rt:force (1460件, 443ms)
+[OHLCVData] API取得完了: bitbank BTC/JPY 1m (1460件, 574ms)
+Last data for BTC/JPY/5m is from 2025-06-29T06:15:00.000Z
+fetching 1 days of data
+[OHLCVData] 通常モード: bitbank BTC/JPY 5m 308
+[OHLCVData] APIから新しいデータを取得: bitbank BTC/JPY 5m
+[OHLCVQueue] リクエストをキューに追加: bitbank:BTC/JPY:5m:308:rt:force (優先度: medium)
+[OHLCVQueue] リクエスト処理開始: bitbank:BTC/JPY:5m:308:rt:force
+[BACKTEST] fetchOHLCVDataAPI呼び出し: bitbank BTC/JPY 5m 308
+[DEBUG] exchange.id: bitbank, timeframe: 5m, mapping: 5min
+[BACKTEST] Bitbank専用API使用
+[Bitbank API] データ取得開始: btc_jpy 5min 308件 (形式: YYYYMMDD)
+[Bitbank API] 20250629のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250629: 76件取得 (合計: 76件)
+[Bitbank API] 20250628のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250628: 288件取得 (合計: 364件)
+[Bitbank API] データ取得完了: 308件
+[BACKTEST] Bitbank専用API結果: 308件
+[OHLCVQueue] リクエスト完了: bitbank:BTC/JPY:5m:308:rt:force (308件, 427ms)
+[OHLCVData] API取得完了: bitbank BTC/JPY 5m (308件, 1209ms)
+Last data for BTC/JPY/15m is from 2025-06-29T06:15:00.000Z
+fetching 1 days of data
+[OHLCVData] 通常モード: bitbank BTC/JPY 15m 116
+[OHLCVData] APIから新しいデータを取得: bitbank BTC/JPY 15m
+[OHLCVQueue] リクエストをキューに追加: bitbank:BTC/JPY:15m:116:rt:force (優先度: medium)
+[OHLCVQueue] リクエスト処理開始: bitbank:BTC/JPY:15m:116:rt:force
+[BACKTEST] fetchOHLCVDataAPI呼び出し: bitbank BTC/JPY 15m 116
+[DEBUG] exchange.id: bitbank, timeframe: 15m, mapping: 15min
+[BACKTEST] Bitbank専用API使用
+[Bitbank API] データ取得開始: btc_jpy 15min 116件 (形式: YYYYMMDD)
+[Bitbank API] 20250629のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250629: 26件取得 (合計: 26件)
+[Bitbank API] 20250628のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250628: 96件取得 (合計: 122件)
+[Bitbank API] データ取得完了: 116件
+[BACKTEST] Bitbank専用API結果: 116件
+[OHLCVQueue] リクエスト完了: bitbank:BTC/JPY:15m:116:rt:force (116件, 395ms)
+[OHLCVData] API取得完了: bitbank BTC/JPY 15m (116件, 1376ms)
+Last data for BTC/JPY/30m is from 2025-06-29T06:00:00.000Z
+fetching 1 days of data
+[OHLCVData] 通常モード: bitbank BTC/JPY 30m 68
+[OHLCVData] APIから新しいデータを取得: bitbank BTC/JPY 30m
+[OHLCVQueue] リクエストをキューに追加: bitbank:BTC/JPY:30m:68:rt:force (優先度: medium)
+[OHLCVQueue] リクエスト処理開始: bitbank:BTC/JPY:30m:68:rt:force
+[BACKTEST] fetchOHLCVDataAPI呼び出し: bitbank BTC/JPY 30m 68
+[DEBUG] exchange.id: bitbank, timeframe: 30m, mapping: 30min
+[BACKTEST] Bitbank専用API使用
+[Bitbank API] データ取得開始: btc_jpy 30min 68件 (形式: YYYYMMDD)
+[Bitbank API] 20250629のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250629: 13件取得 (合計: 13件)
+[Bitbank API] 20250628のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250628: 48件取得 (合計: 61件)
+[Bitbank API] 20250627のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250627: 48件取得 (合計: 109件)
+[Bitbank API] データ取得完了: 68件
+[BACKTEST] Bitbank専用API結果: 68件
+[OHLCVQueue] リクエスト完了: bitbank:BTC/JPY:30m:68:rt:force (68件, 589ms)
+[OHLCVData] API取得完了: bitbank BTC/JPY 30m (68件, 1571ms)
+Last data for BTC/JPY/1h is from 2025-06-29T06:00:00.000Z
+fetching 1 days of data
+[OHLCVData] 通常モード: bitbank BTC/JPY 1h 44
+[OHLCVData] APIから新しいデータを取得: bitbank BTC/JPY 1h
+[OHLCVQueue] リクエストをキューに追加: bitbank:BTC/JPY:1h:44:rt:force (優先度: medium)
+[OHLCVQueue] リクエスト処理開始: bitbank:BTC/JPY:1h:44:rt:force
+[BACKTEST] fetchOHLCVDataAPI呼び出し: bitbank BTC/JPY 1h 44
+[DEBUG] exchange.id: bitbank, timeframe: 1h, mapping: 1hour
+[BACKTEST] Bitbank専用API使用
+[Bitbank API] データ取得開始: btc_jpy 1hour 44件 (形式: YYYYMMDD)
+[Bitbank API] 20250629のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250629: 7件取得 (合計: 7件)
+[Bitbank API] 20250628のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250628: 24件取得 (合計: 31件)
+[Bitbank API] 20250627のデータ取得中... (ペア: btc_jpy)
+[Bitbank API] 20250627: 24件取得 (合計: 55件)
+[Bitbank API] データ取得完了: 44件
+[BACKTEST] Bitbank専用API結果: 44件
+[OHLCVQueue] リクエスト完了: bitbank:BTC/JPY:1h:44:rt:force (44件, 580ms)
+[OHLCVData] API取得完了: bitbank BTC/JPY 1h (44件, 1560ms)
+=== bitbank のOHLCVデータをREDISにロード ===
+RedisにOHLCVデータを保存しました: bitbank BTC/JPY 1m 10280件
+RedisにOHLCVデータを保存しました: bitbank BTC/JPY 5m 2216件
+RedisにOHLCVデータを保存しました: bitbank BTC/JPY 15m 872件
+RedisにOHLCVデータを保存しました: bitbank BTC/JPY 30m 536件
+RedisにOHLCVデータを保存しました: bitbank BTC/JPY 1h 368件
+戦略 HFT はスキップされました
+戦略 MUTUAL_INFO はスキップされました
+戦略 MEAN_REVERSION はスキップされました
+戦略 MACD はスキップされました
+戦略 BOLLINGER_BANDS はスキップされました
+戦略 MA の処理を開始します...
+MA: バッチ 1/1 (BTC/JPY) の処理を開始
+BTC/JPY のバックテストを開始...
+  1m タイムフレームのバックテストを開始...
+  5m タイムフレームのバックテストを開始...
+  15m タイムフレームのバックテストを開始...
+  30m タイムフレームのバックテストを開始...
+  1h タイムフレームのバックテストを開始...
+数値パラメータ: shortPeriod, longPeriod
+1m: 正規乱数を使ったランダムサーチを実行します
+1m: 重複排除: 10 組み合わせから 6 組み合わせに削減されました
+1m: テスト対象の組み合わせ数: 6
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":16}
+数値パラメータ: shortPeriod, longPeriod
+5m: 正規乱数を使ったランダムサーチを実行します
+5m: 重複排除: 10 組み合わせから 8 組み合わせに削減されました
+5m: テスト対象の組み合わせ数: 8
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":16}
+数値パラメータ: shortPeriod, longPeriod
+15m: 正規乱数を使ったランダムサーチを実行します
+15m: 重複排除: 10 組み合わせから 9 組み合わせに削減されました
+15m: テスト対象の組み合わせ数: 9
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":16}
+数値パラメータ: shortPeriod, longPeriod
+30m: 正規乱数を使ったランダムサーチを実行します
+30m: 重複排除: 10 組み合わせから 6 組み合わせに削減されました
+30m: テスト対象の組み合わせ数: 6
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":16}
+数値パラメータ: shortPeriod, longPeriod
+1h: 正規乱数を使ったランダムサーチを実行します
+1h: 重複排除: 10 組み合わせから 6 組み合わせに削減されました
+1h: テスト対象の組み合わせ数: 6
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":16}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":18}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":17}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":17}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":15}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":14}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":17}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":14}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":3,"longPeriod":14}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":16}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":14}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":17}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":19}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":14}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":18}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":17}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":19}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":3,"longPeriod":15}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":19}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":17}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":19}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1m: パラメータ組み合わせをテスト: {"shortPeriod":3,"longPeriod":15}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":15}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":15}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  30m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":14}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  1h: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":15}
+1m: バックテスト完了: 全10081回の処理を実行しました
+  1m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+===== BTC/JPY (1m) MA パラメータ最適化結果 =====
+1位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":18}
+3位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":17}
+4位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":17}
+5位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":19}
+6位: 10000.00 - パラメータ: {"shortPeriod":3,"longPeriod":15}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":2,"longPeriod":18}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":17}
+30m: バックテスト完了: 全10081回の処理を実行しました
+  30m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+===== BTC/JPY (30m) MA パラメータ最適化結果 =====
+1位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":15}
+3位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":16}
+4位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":18}
+5位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":17}
+6位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":14}
+1h: バックテスト完了: 全10081回の処理を実行しました
+  1h: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+===== BTC/JPY (1h) MA パラメータ最適化結果 =====
+1位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":14}
+3位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":14}
+4位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":17}
+5位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":19}
+6位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":15}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  5m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":18}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":20}
+5m: バックテスト完了: 全10081回の処理を実行しました
+  5m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+===== BTC/JPY (5m) MA パラメータ最適化結果 =====
+1位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":17}
+3位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":14}
+4位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":19}
+5位: 10000.00 - パラメータ: {"shortPeriod":3,"longPeriod":15}
+6位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":15}
+7位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":18}
+8位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":18}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+  15m: パラメータ組み合わせをテスト: {"shortPeriod":1,"longPeriod":13}
+15m: バックテスト完了: 全10081回の処理を実行しました
+  15m: 結果: 10000, buySignalCount: 0, sellSignalCount: 0 buyOrderCount: 0, sellOrderCount: 0
+===== BTC/JPY (15m) MA パラメータ最適化結果 =====
+1位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":17}
+3位: 10000.00 - パラメータ: {"shortPeriod":3,"longPeriod":14}
+4位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":14}
+5位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":19}
+6位: 10000.00 - パラメータ: {"shortPeriod":2,"longPeriod":15}
+7位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":17}
+8位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":20}
+9位: 10000.00 - パラメータ: {"shortPeriod":1,"longPeriod":13}
+===== BTC/JPY MA パラメータ最適化結果 =====
+1位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":1,"longPeriod":16}
+2位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":1,"longPeriod":18}
+3位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":1,"longPeriod":17}
+4位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":2,"longPeriod":17}
+5位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":2,"longPeriod":19}
+6位: 10000.00 - タイムフレーム: 1m - パラメータ: {"shortPeriod":3,"longPeriod":15}
+7位: 10000.00 - タイムフレーム: 5m - パラメータ: {"shortPeriod":1,"longPeriod":16}
+8位: 10000.00 - タイムフレーム: 5m - パラメータ: {"shortPeriod":2,"longPeriod":17}
+9位: 10000.00 - タイムフレーム: 5m - パラメータ: {"shortPeriod":1,"longPeriod":14}
+10位: 10000.00 - タイムフレーム: 5m - パラメータ: {"shortPeriod":2,"longPeriod":19}
+BTC/JPY のバックテスト完了
+戦略 MA の処理が完了しました
+戦略 OSCILLATOR はスキップされました
+戦略 RSI はスキップされました
+戦略 MULTI_INDICATOR はスキップされました
+バックテストが完了しました。

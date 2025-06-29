@@ -1,10 +1,31 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+<language>Japanese</language>
+<character_code>UTF-8</character_code>
+<law>
+原則
 
-# perform
+- 戦略でエラーが出たからといって、無効化してはならない
+- 改善後は bot, backtest をかならず再起動して実行し直す
 - one commit should be created per task
 - git notes should be created to save ai prompt
+- 得られた知見は docs ディレクトリの下に md ファイルで日付とともにまとめること
+
+### 実践ガイド
+- **すべての判断・実装時に`gemini -p <質問内容>`で壁打ち**を必ず実施
+- Geminiの意見を鵜呑みにせず、1意見として判断。聞き方を変えて多角的な意見を抽出
+- Claude Code内蔵のWebSearchツールは使用しない
+- Geminiがエラーの場合は、聞き方を工夫してリトライ：
+  - ファイル名や実行コマンドを渡す（Geminiがコマンドを実行可能）
+  - 複数回に分割して聞く
+
+### 主要な活用場面
+1. **前提確認**: ユーザー、Claude自身に思い込みや勘違い、過信がないかどうか逐一確認（例: `gemini -p "この前提は正しいか？"`）
+2. **技術調査**: 最新情報・エラー解決・ドキュメント検索（例: `gemini -p "Rails 7.2 新機能"`）
+3. **設計検証**: アーキテクチャ・実装方針の妥当性確認（例: `gemini -p "この設計パターンは適切か？"`）
+4. **コードレビュー**: 品質・保守性・パフォーマンスの評価（例: `gemini -p "このコードの改善点は？"`）
+5. **計画立案**: タスクの実行計画レビュー・改善提案（例: `gemini -p "この実装計画の問題点は？"`）
+6. **技術選定**: ライブラリ・手法の比較検討 （例: `gemini -p "このライブラリは他と比べてどうか？"`）
 
 ## test
 - TDD must perfomed
@@ -22,19 +43,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - テストリストを常に更新する
 - 不安なところからテストを書く
 
-# Gemini および manager-claude からの指示を受けた場合
+# manager-claude からの指示を受けた場合
 - 指示者をプロジェクトマネージャーとし、協調作業すること
 - tmux の send-keys でやりとりし、マネージャとして指示を仰ぐこと
 - 結果レポート、作業内容を 指示者に必ず伝えること
-- Gemini は tmux の gemini-harvest で起動している
 - manager-claude は tmux の manager-claude で起動している
 - 自分を worker-claude と名乗る
-
-## tmux 操作
-- メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "gemini-harvest" -p
-- Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
-- tmux send-keys -t "gemini-harvest" "内容" Enter && sleep 5 && tmux send-keys -t "gemini-harvest" "" Enter
-- Enterは10秒間をおいて2回送る必要がある
 
 # worker-claude から指示が来た場合
 - 細かい操作、調査、実際の作業は worker-claude に任せて、自分をmanager-claudeとし、プロジェクトマネジメントだけに徹してください。
@@ -55,69 +69,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 例：
 tmux send-keys -t "claude-harvest" "指示 レポートを tmux send-keys を用いて manager-claude に返すこと。" Enter
 
-# 調査
-何か調査する必要がある時は、gemini に websearchをたのむこと
-gemini -p "WebSearch: ..."
+</law>
 
-## 🏗️ Project Overview
+<every_chat>
+[原則]
 
-**harvest3** is a sophisticated cryptocurrency trading bot system built with Node.js that executes multiple trading strategies in parallel. The system uses a microservices architecture with Docker containers and dual-database approach (Redis + MongoDB) for optimal performance.
+[main_output]
 
-### Tech Stack
-- **Runtime**: Node.js 16
-- **Exchange API**: ccxt v3.1.60  
-- **Databases**: Redis 8 (real-time), MongoDB 7.0 (historical)
-- **Web Framework**: Express.js
-- **UI**: Vanilla JavaScript + Chart.js 4.4.9
-- **Testing**: Jest 29.7.0
-- **Containers**: Docker + Docker Compose
-
-### Core Services
-```
-bot (strategy-runner)    # Main strategy execution container
-hft                     # High-frequency trading container  
-backtest               # Backtesting execution container
-web-ui (trade_viewer)  # Web UI container
-redis                  # Real-time database
-mongodb               # Historical database
-```
-
-## 🛠️ Essential Commands
-
-
-## 重要: 実行結果や応答を以下のコマンドでDiscordに送信                                                                                                                                                 
-```bash
-claude-discord-bot send-to-discord "あなたの応答内容" --session claude-harvest
-```                                                                                                                                                   
-
-## ⚠️ データベース操作における重要な制約
-
-### RedisとMongoDBのデータ削除禁止
-**絶対にRedisとMongoDBのデータを全削除してはならない**
-
-理由：
-- ポジション管理データが失われる
-- オーダー戦略データが消失する
-- **取引所側のオープンオーダーとの不整合が発生**
-- 金銭的損失につながる可能性
-
-### やむを得ずデータを全削除する場合の必須手順
-1. **取引所側の全オープンオーダーをキャンセル**
-2. **`closeAllPositions.js` を実行** - 全ポジションを解消
-3. **`updateAllSummaryTimestamp.js` を実行** - サマリータイムスタンプを更新
-4. 取引所との整合性を確認
-
-この手順を踏まずにデータ削除を行うことは厳禁とする。
-
-## 残高チェックにおける制約
-
-### JPY（日本円）の除外
-**残高チェック機能では、JPY（日本円）を比較対象から除外する**
-
-理由：
-- 暗号通貨の残高管理に焦点を当てるため
-- JPY残高は取引所側で別途管理されるため
-
-## Geminiへの指示における重要な注意点
-- geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
-
+#[n] times. # n = increment each chat, end line, etc(#1, #2...)
+</every_chat>

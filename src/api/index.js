@@ -11,15 +11,8 @@ console.log('環境変数 USE_LOCALTUNNEL:', process.env.USE_LOCALTUNNEL);
 console.log('localtunnelモジュールを読み込む前...');
 
 // localtunnelモジュールをグローバルスコープで宣言
-let localtunnel;
-
-try {
-  localtunnel = require('localtunnel');
-  console.log('localtunnelモジュールの読み込み成功');
-} catch (error) {
-  console.error('localtunnelモジュールの読み込みエラー:', error.message);
-  console.error('このエラーは、package.jsonに"localtunnel"が依存関係として含まれていないことが原因である可能性があります');
-}
+// Note: localtunnelは削除されました（セキュリティ脆弱性のため）
+let localtunnel = null;
 
 // APIサーバーセットアップ
 const app = express();
@@ -62,10 +55,10 @@ app.listen(PORT, '0.0.0.0', async () => {
   }
 
   if (process.env.USE_LOCALTUNNEL === 'true') {
-    console.log('localtunnel機能が有効になっています');
-    try {
-      // localtunnelモジュールが正常に読み込まれている場合のみ実行
-      if (typeof localtunnel === 'function') {
+    console.log('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
+    console.log('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
+    // localtunnelは削除されたため、この機能は無効です
+    if (false) {
         try {
           const tunnel = await localtunnel({ port: PORT });
           console.log(`Localtunnel URL: ${tunnel.url}`);

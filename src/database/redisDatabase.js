@@ -512,12 +512,12 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
   
   // timestampより古いデータを降順（新しい順）で取得
-  const result = await client.zRange(
+  // Redis 7 compatibility: use zRangeByScore instead of zRange with BY: 'SCORE'
+  const result = await client.zRangeByScore(
     key,
-    timestamp,
     '-inf',
+    timestamp.toString(),
     {
-      BY: 'SCORE',
       REV: true,
       LIMIT: {
         offset: 0,
@@ -814,9 +814,13 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
     
     // 履歴を保存（オプションで有効な場合）
     if (saveHistory) {
-      const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
-      if (!historySaved) {
-        console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+      try {
+        const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
+        if (!historySaved) {
+          console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+        }
+      } catch (historyError) {
+        console.warn(`履歴保存でエラーが発生しましたが処理を継続します: ${positionKey}`, historyError.message);
       }
     }
     

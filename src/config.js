@@ -1,5 +1,6 @@
 const ccxt = require('ccxt');
 const dotenv = require('dotenv');
+const { EXCHANGE_SETTINGS, TRADING_SETTINGS, BITFLYER_MIN_TRADE_AMOUNTS, ORDER_MANAGEMENT_SETTINGS } = require('./common/const');
 dotenv.config(); // .envファイルから環境変数を読み込む
 
 // strategies 
@@ -20,12 +21,12 @@ const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
     secret: BBApiSecret,
     enableRateLimit: true,
-    rateLimit: 1500, // 1.5秒間隔に拡大（API負荷軽減）
-    timeout: 30000, // 30秒タイムアウト（10秒から拡大）
+    rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
+    timeout: EXCHANGE_SETTINGS.TIMEOUT,
     options: {
-        'maxThrottleQueueSize': 1000, // キューサイズを削減（メモリ効率向上）
+        'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
         'defaultType': 'spot',
-        'recvWindow': 60000,
+        'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
         'adjustForTimeDifference': true
     }
 });
@@ -37,64 +38,88 @@ const exchangeBF = new ccxt.bitflyer({
     rateLimit: 1000 // 1リクエストあたり1000ミリ秒（1秒）の制限
 });
 
-const bitflyerMinTradeAmounts = {
-  'BTC/JPY': 0.001,
-  'ELF/JPY': 0.01,
-  'ETH/BTC': 0.01,
-  'BCH/BTC': 0.01,
-  'ETH/JPY': 0.01,
-  'XRP/JPY': 0.1,
-  'XLM/JPY': 0.1,
-  'MONA/JPY': 0.1,
-};
+const bitflyerMinTradeAmounts = BITFLYER_MIN_TRADE_AMOUNTS;
 
 // 設定パラメータ
 const config = {
 
   global: {
     // 共通設定
-    amount: 0.0001,  // 最小取引単位
-    tradePercentage: 0.01,  // 資金の%で取引（動的サイジング無効時）
+    amount: TRADING_SETTINGS.DEFAULT_AMOUNT,
+    tradePercentage: TRADING_SETTINGS.TRADE_PERCENTAGE,
 
     // 除外シンボル
-    excludeSymbols: [
-      'ELF/',
-      'MATIC/',
-      'RNDR/',
-      'BCH/',  // ゼロボリューム・データ不足のため除外
-      // 'ATOM/',
-    ],
+    excludeSymbols: TRADING_SETTINGS.EXCLUDE_SYMBOLS,
     
     // 動的ポジションサイジング設定
+    // 市場状況と戦略パフォーマンスに基づいて取引サイズを自動調整
+    // ATR（Average True Range）とKelly基準を使用してリスク管理を最適化
     dynamicPositionSizing: {
       enabled: true,
-      baseRiskPerTrade: 0.01, // 1%
-      atrPeriod: 14,
-      atrMultiplier: 2,
-      maxPositionPercent: 0.1, // 10%
-      minPositionPercent: 0.001, // 0.1%
+      baseRiskPerTrade: 0.01, // 1% - 基本リスク割合（ポートフォリオの1%をリスク）
+      atrPeriod: 14, // ATR計算期間（14期間でボラティリティ測定）
+      atrMultiplier: 2, // ATR倍数（ストップロス距離の計算に使用）
+      maxPositionPercent: 0.1, // 10% - 単一ポジションの最大サイズ制限
+      minPositionPercent: 0.001, // 0.1% - 単一ポジションの最小サイズ制限
+      
+      // OHLCV データ取得設定（ハードコード除去）
+      ohlcv: {
+        timeframe: '1h', // デフォルトタイムフレーム
+        limit: 50        // デフォルト取得期間
+      },
+      
+      // ボラティリティ調整設定
+      volatility: {
+        window: 20,               // ボラティリティ計算ウィンドウ（直近N本）
+        threshold: 0.05,          // 高ボラティリティ閾値（5%）
+        riskReductionFactor: 0.7  // 高ボラティリティ時のリスク削減率（30%削減）
+      },
+      
+      // 市場状況別調整設定
+      marketConditions: {
+        trend: {
+          strong: {
+            atrMultiplierAdjustment: 1.2  // 強いトレンド時のATR倍数調整（20%増加）
+          }
+        }
+      },
       
       // Kelly基準設定
       // TODO: 理解する
       kellyEnabled: false, // Phase 1では無効
       kellyFraction: 0.25,
       
-      // パフォーマンス調整
-      performanceAdjustment: true,
-      lookbackDays: 30
+      // パフォーマンス調整設定
+      performanceAdjustment: {
+        enabled: true,
+        lookbackDays: 30,
+        loss: {
+          factor: 2,              // 損失率に対する調整係数
+          maxReductionRatio: 0.7  // 最大削減率（70%）
+        },
+        profit: {
+          factor: 0.5,            // 利益率に対する調整係数
+          maxIncreaseRatio: 0.5   // 最大増加率（50%）
+        }
+      }
     },
     
     // 高度注文管理設定（Issue #147）
     advancedOrderManagement: {
       enabled: true,
-      defaultUrgency: 'medium', // low, medium, high TODO: どうやって決まる？
-      maxSlippage: 0.005, // 0.5%
-      orderTimeout: 60000, // 60秒
-      maxRetries: 3,
-      retryDelay: 1000, // 1秒
+      defaultUrgency: 'medium', // 基本緊急度レベル（low/medium/high）
+      // 市場状況、ボラティリティ、ポートフォリオリスク、時間帯、戦略パフォーマンスにより動的調整
+      // low: 時間重視、手数料優先（post_only使用）
+      // medium: バランス型（limit注文使用） 
+      // high: 実行優先（market注文使用）
+      maxSlippage: ORDER_MANAGEMENT_SETTINGS.MAX_SLIPPAGE,
+      orderTimeout: ORDER_MANAGEMENT_SETTINGS.ORDER_TIMEOUT,
+      maxRetries: ORDER_MANAGEMENT_SETTINGS.MAX_RETRIES,
+      retryDelay: ORDER_MANAGEMENT_SETTINGS.RETRY_DELAY,
       
       // 注文タイプ別設定
-      // TODO: 対応している注文タイプのみ
+      // bitbank取引所でサポートされている注文タイプのみ有効化
+      // 各注文タイプに緊急度レベルを割り当て、市場状況に応じて自動選択
       orderTypes: {
         market: {
           enabled: true,
@@ -109,7 +134,8 @@ const config = {
           urgencyLevel: 'low'
         },
         ioc: {
-          enabled: false, // bitbankはIOCをサポートしていないため無効
+          enabled: false, // bitbank取引所はIOC（Immediate or Cancel）注文をサポートしていないため無効
+          // IOC: 即座に約定可能な数量のみ約定し、残りはキャンセルする注文タイプ
           urgencyLevel: 'medium'
         },
         iceberg: {
@@ -258,7 +284,7 @@ const config = {
     },
 
     MUTUAL_INFO: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       threshold: 0.5,
       ohlcvInterval: '5m',
       deviationThreshold: 3,
@@ -284,7 +310,7 @@ const config = {
 
     // 逆張り戦略
     MEAN_REVERSION: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       period: 20,
       ohlcvInterval: '15m',
       deviationThreshold: 3,
@@ -307,7 +333,7 @@ const config = {
     },
 
     MACD: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
@@ -331,7 +357,7 @@ const config = {
     },
 
     BOLLINGER_BANDS: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
@@ -355,7 +381,7 @@ const config = {
 
     // トレンドフォロー戦略
     MA: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: true,
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
@@ -378,7 +404,7 @@ const config = {
     },
 
     OSCILLATOR: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true', // 環境変数から動的設定
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -402,7 +428,7 @@ const config = {
     },
 
     RSI: {
-      enabled: false, // *** EMERGENCY HALT: API TIMEOUT ISSUES DETECTED ***
+      enabled: process.env.STRATEGY_RSI_ENABLED === 'true', // 環境変数から動的設定
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
@@ -427,7 +453,7 @@ const config = {
 
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: process.env.STRATEGY_MULTI_INDICATOR_ENABLED === 'true', // 環境変数から動的設定
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],

@@ -11,6 +11,16 @@ const discordWebWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL; // Discord Web
 const discordBacktestURL = process.env.DISCORD_BACKTEST_WEBHOOK_URL; // Discord Webhook URL
 
 /**
+ * MongoDB接続エラーをDiscordに通知する関数
+ * @param {String} errorMessage - エラーメッセージ
+ * @param {String} mongoUrl - MongoDB接続URL
+ */
+async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
+  const message = `🚨 **MongoDB接続エラー**\n\`\`\`\nエラー: ${errorMessage}\n接続先: ${mongoUrl}\n時刻: ${new Date().toISOString()}\n\`\`\``;
+  await postErrorToDiscord(message);
+}
+
+/**
  * エラーメッセージをDiscordに投稿する関数（レートリミット対応）
  * @param {String} message - 投稿するメッセージ
  * @param {number} [maxRetries=3] - 最大リトライ回数
@@ -175,6 +185,7 @@ async function postResultToDiscord(message, discordWebhookURL = discordResultWeb
 
 module.exports = {
   postErrorToDiscord,
+  postMongoConnectionErrorToDiscord,
   postOrderToDiscord,
   postResultToDiscord,
   discordWebWebhookUrl,
