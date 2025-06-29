@@ -211,7 +211,14 @@ async function handleStrategySignals(
     
     // ストップロスが必要なポジションを処理
     for (const position of stopLossPositions) {
-      await executeStopLoss(exchange, symbol, strategyKey, position, marketParameters);
+      // marketParametersが未定義の場合の安全処理
+      const safeMarketParameters = marketParameters || {
+        amountPrecision: 4,
+        pricePrecision: 2,
+        minTradeAmount: 0.0001,
+        maxTradeAmount: 1000000
+      };
+      await executeStopLoss(exchange, symbol, strategyKey, position, safeMarketParameters);
     }
     
     // ドローダウンチェック
@@ -349,6 +356,12 @@ async function handleStrategySignals(
  * @returns {Object|void} 注文結果
  */
 async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
+  // marketParametersが未定義の場合の安全処理
+  if (!marketParameters) {
+    console.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
+    return { success: false, reason: 'marketParameters is undefined' };
+  }
+  
   const { tradePercentage } = config;
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
@@ -676,6 +689,12 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
  * @returns {Object} 注文結果
  */
 async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
+  // marketParametersが未定義の場合の安全処理
+  if (!marketParameters) {
+    console.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
+    return { success: false, reason: 'marketParameters is undefined' };
+  }
+  
   const { amountPrecision, minTradeAmount } = marketParameters;
   const { orderType } = config;
 

@@ -1271,23 +1271,36 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
   for (const exchangeId of exchanges) {
     const symbols = symbolByExchange[exchangeId];
     const exchangeInstance = config.exchanges[exchangeId].instance;
+    
     for (const symbol of symbols) {
       if (options.targetSymbol) {
         if (symbol !== options.targetSymbol) {
           continue;
         }
       }
-      const params = await getMarketParameters(exchangeInstance, symbol);
-      const { minTradeAmount, pricePrecision, amountPrecision } = params;
+      
+      try {
+        const params = await getMarketParameters(exchangeInstance, symbol);
+        
+        if (params) {
+          const { minTradeAmount, pricePrecision, amountPrecision } = params;
 
-      marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
-      marketParametersByExchange[exchangeId][symbol] = {
-        minTradeAmount,
-        pricePrecision,
-        amountPrecision,
-      };
+          marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+          marketParametersByExchange[exchangeId][symbol] = {
+            minTradeAmount,
+            pricePrecision,
+            amountPrecision,
+          };
 
-      console.log(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータを取得しました:`, params)
+          console.log(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータを取得しました:`, params);
+        } else {
+          console.warn(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータ取得に失敗しました（未サポートペア）`);
+        }
+      } catch (error) {
+        console.error(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータ取得でエラーが発生しました: ${error.message}`);
+        // エラーが発生した場合はそのシンボルをスキップして処理を続行
+      }
+      
       await sleep(300);
     }
   }
@@ -1334,23 +1347,28 @@ async function getStrategyConfig(exchange, symbol, strategyKey, config) {
  * @returns {Object|null} - マーケットパラメータまたはnull（エラー時）
  */
 async function getMarketParameters(exchange, symbol) {
-  // マーケットが読み込まれていない場合は読み込み
-  if (!exchange.markets) {
-    console.log(`[INFO] マーケットデータ未読み込み、読み込み中: ${exchange.id}`);
-    await exchange.loadMarkets();
-  }
-  
-  let market = exchange.markets[symbol];
-  if (!market) {
-    // マーケットが見つからない場合、再読み込みを試行
-    console.log(`[WARNING] ${symbol} マーケットが見つからず、再読み込み試行: ${exchange.id}`);
-    await exchange.loadMarkets();
-    market = exchange.markets[symbol];
-    
-    if (!market) {
-      console.error(`マーケットデータが取得できませんでした: ${symbol} ${exchange.id}`);
-      return null;
+  try {
+    // マーケットが読み込まれていない場合は読み込み
+    if (!exchange.markets) {
+      console.log(`[INFO] マーケットデータ未読み込み、読み込み中: ${exchange.id}`);
+      await exchange.loadMarkets();
     }
+    
+    let market = exchange.markets[symbol];
+    if (!market) {
+      // マーケットが見つからない場合、再読み込みを試行
+      console.log(`[WARNING] ${symbol} マーケットが見つからず、再読み込み試行: ${exchange.id}`);
+      await exchange.loadMarkets();
+      market = exchange.markets[symbol];
+      
+      if (!market) {
+        console.error(`❌ 取引所 ${exchange.id} で通貨ペア ${symbol} がサポートされていません`);
+        return null;
+      }
+    }
+  } catch (loadError) {
+    console.error(`❌ 取引所 ${exchange.id} のマーケットデータ読み込みエラー (${symbol}): ${loadError.message}`);
+    return null;
   }
   
   const minTradeAmount = (market.limits?.amount?.min || 0.0001);
@@ -1417,17 +1435,27 @@ async function getSymbolsByExchange(config) {
   const symbolsByExchange = {};
 
   for (const exchange of exchanges) {
-    const exchangeInstance = config.exchanges[exchange].instance;
-    const markets = await exchangeInstance.loadMarkets();
+    try {
+      const exchangeInstance = config.exchanges[exchange].instance;
+      const markets = await exchangeInstance.loadMarkets();
 
-    // 除外シンボル
-    const symbols = Object.keys(markets).filter(symbol =>
-      symbol.endsWith('/JPY') 
-        && !config.global.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
-    );
+      // 除外シンボル
+      const symbols = Object.keys(markets).filter(symbol =>
+        symbol.endsWith('/JPY') 
+          && !config.global.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
+      );
 
-    symbolsByExchange[exchange] = symbols;
-    console.log(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
+      symbolsByExchange[exchange] = symbols;
+      console.log(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
+    } catch (error) {
+      console.error(`取引所 ${exchange} のマーケット情報取得でエラーが発生しました: ${error.message}`);
+      symbolsByExchange[exchange] = []; // エラー時は空配列を設定
+      
+      // 重要なエラー（認証エラー等）の場合は続行を停止
+      if (error.name === 'AuthenticationError' || error.message.includes('API key')) {
+        throw new Error(`取引所 ${exchange} の認証エラー: ${error.message}`);
+      }
+    }
   }
 
   return symbolsByExchange;

@@ -75,7 +75,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // marketParameter, symbolByExchange を一度だけ取得
     const symbolsByExchange = await getSymbolsByExchange(config);
-    const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, options = { targetSymbol });
+    const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
 
     // すべての取引所とシンボルの組み合わせを作成
     const allExchangeSymbolPairs = [];
@@ -172,7 +172,12 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
       
       for (const exchange of strategy.exchanges) {
         const exchangeId = exchange.id;
-        const symbols = symbolsByExchange[exchangeId].sort();
+        let symbols = symbolsByExchange[exchangeId].sort();
+        
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol) {
+          symbols = symbols.filter(symbol => symbol === targetSymbol);
+        }
 
         // 並列処理するシンボルの数を制限
         const MAX_CONCURRENT_SYMBOLS = 3; // 同時に処理するシンボルの数を制限
