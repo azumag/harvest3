@@ -4,8 +4,9 @@
  */
 
 const TradingEngine = require('./TradingEngine');
-const { formattedAvailableAmount } = require('../strategies/utils/common');
-const { backtestCreateLimitSellOrder, createLimitSellOrder } = require('../strategies/utils/orderManager');
+const { formattedAvailableAmount } = require('../database/manager');
+const { backtestCreateLimitSellOrder } = require('../database/manager');
+const { createLimitSellOrder } = require('../strategies/utils/common');
 
 class SellOrderExecutor extends TradingEngine {
   constructor(exchange, symbol, strategyKey, config, marketParameters, options = {}) {

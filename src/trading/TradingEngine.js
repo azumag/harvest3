@@ -3,9 +3,8 @@
  * Eliminates 320+ lines of duplication across executeBuyOrder, executeSellOrder, and runBacktestForSymbol
  */
 
-const { getAvailableFund, getRealizedPnL } = require('../database/manager');
+const { getAvailableFund, getRealizedPnL, updateFilledTrades } = require('../database/manager');
 const { checkPositionLimits, checkStopLoss, executeStopLoss } = require('../strategies/utils/riskManagement');
-const { updateFilledTrades } = require('../common/tradingUtils');
 const { postOrderToDiscord } = require('../common/notifications');
 
 class TradingEngine {
