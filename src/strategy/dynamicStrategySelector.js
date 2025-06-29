@@ -235,9 +235,9 @@ class DynamicStrategySelector {
     const data = [];
     const baseTime = Date.now() - 24 * 60 * 60 * 1000; // 24時間前
     
-    for (let i = 0; i < 24; i++) {
+    for (let _i = 0; _i < 24; _i++) {
       data.push({
-        timestamp: baseTime + i * 60 * 60 * 1000,
+        timestamp: baseTime + _i * 60 * 60 * 1000,
         price: 5000000 + Math.random() * 100000, // BTCベース価格
         volume: Math.random() * 100,
         change: (Math.random() - 0.5) * 0.1 // ±5%変化
@@ -272,7 +272,7 @@ class DynamicStrategySelector {
   calculateVolatility(data) {
     if (data.length < 2) return 0;
     
-    const changes = data.slice(1).map((d, i) => Math.abs(d.change));
+    const changes = data.slice(1).map((d, _i) => Math.abs(d.change));
     const avgVolatility = changes.reduce((sum, change) => sum + change, 0) / changes.length;
     
     return Math.min(avgVolatility * 10, 1); // 正規化
@@ -422,7 +422,7 @@ class DynamicStrategySelector {
           strategyStats[strategy].positions++;
           strategyStats[strategy].totalValue += value;
           
-        } catch (err) {
+        } catch {
           // エラーはスキップ
         }
       }

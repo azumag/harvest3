@@ -4,7 +4,7 @@
  */
 
 const { getAvailableFund, getRealizedPnL, updateFilledTrades } = require('../database/manager');
-const { checkPositionLimits, checkStopLoss, executeStopLoss } = require('../strategies/utils/riskManagement');
+const { checkStopLoss, executeStopLoss } = require('../strategies/utils/riskManagement');
 const { postOrderToDiscord } = require('../common/notifications');
 
 class TradingEngine {
@@ -32,7 +32,7 @@ class TradingEngine {
       throw new Error(`[${this.strategyName}] marketParameters is undefined: ${this.symbol}`);
     }
     
-    const { amountPrecision, minTradeAmount, pricePrecision } = this.marketParameters;
+    const { amountPrecision, minTradeAmount } = this.marketParameters;
     if (amountPrecision === undefined || minTradeAmount === undefined) {
       throw new Error(`[${this.strategyName}] Invalid marketParameters for ${this.symbol}`);
     }
@@ -44,7 +44,7 @@ class TradingEngine {
   getSafeMarketParameters() {
     return {
       amountPrecision: this.marketParameters.amountPrecision || 4,
-      pricePrecision: this.marketParameters.pricePrecision || 2,
+      pricePrecision: this.marketParameters.pricePrecision || 2, // _pricePrecision
       minTradeAmount: this.marketParameters.minTradeAmount || 0.0001,
       maxTradeAmount: this.marketParameters.maxTradeAmount || 1000000,
       ...this.marketParameters

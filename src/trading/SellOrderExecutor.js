@@ -16,7 +16,7 @@ class SellOrderExecutor extends TradingEngine {
   /**
    * Execute sell order with all extracted common logic
    */
-  async execute(currentPrice, signalInfo, globalConfig = null) {
+  async execute(currentPrice, signalInfo, _globalConfig = null) {
     try {
       // Perform common risk management checks
       const riskCheck = await this.performRiskManagement(currentPrice);
@@ -41,9 +41,6 @@ class SellOrderExecutor extends TradingEngine {
 
       // Validate sell amount
       if (formattedAmount < minTradeAmount) {
-        const message = `Adjusted sell amount below minimum trade amount: ${this.symbol} - ` +
-                       `Adjusted: ${formattedAmount}, Minimum: ${minTradeAmount}`;
-        
         return this.handleValidationFailure(
           'Adjusted amount below minimum trade amount',
           {
@@ -116,14 +113,14 @@ class SellOrderExecutor extends TradingEngine {
       }
 
       // Create success result with extracted common formatting
-      const successMessage = `✅ [${this.strategyName}] Sell order executed\n` +
+      const _message = `✅ [${this.strategyName}] Sell order executed\n` +
                             `Exchange: ${this.exchange.id}\n` +
                             `Symbol: ${this.symbol}\n` +
                             `Amount: ${amount}\n` +
                             `Price: ${currentPrice.toLocaleString()}円\n` +
                             `P&L: ${realizedPnL?.toFixed(2) || 'N/A'}円`;
 
-      await this.sendNotification(successMessage);
+      await this.sendNotification(_message);
 
       return this.createOrderResult(true, {
         order,

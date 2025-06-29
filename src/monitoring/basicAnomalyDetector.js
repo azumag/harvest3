@@ -112,7 +112,6 @@ class BasicAnomalyDetector {
       console.log('🔍 Position-Summary整合性チェック実行中...');
       
       const positionKeys = await this.client.keys('position:*');
-      const summaryKeys = await this.client.keys('summary:trade:*');
       
       let missingCount = 0;
       const missingCombinations = [];
@@ -141,7 +140,7 @@ class BasicAnomalyDetector {
               positionKey: posKey
             });
           }
-        } catch (err) {
+        } catch {
           // エラーはスキップ
         }
       }
@@ -205,7 +204,7 @@ class BasicAnomalyDetector {
           } else if (amount < 0) {
             shortCount++;
           }
-        } catch (err) {
+        } catch {
           // エラーはスキップ
         }
       }
@@ -276,7 +275,7 @@ class BasicAnomalyDetector {
           if (orderTime < Date.now() - 60 * 60 * 1000) {
             expiredOrders++;
           }
-        } catch (err) {
+        } catch {
           // エラーはスキップ  
         }
       }
@@ -290,7 +289,7 @@ class BasicAnomalyDetector {
           if (tradeTime > since) {
             recentFills++;
           }
-        } catch (err) {
+        } catch {
           // エラーはスキップ
         }
       }

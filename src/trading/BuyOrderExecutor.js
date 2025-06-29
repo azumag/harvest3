@@ -16,7 +16,7 @@ class BuyOrderExecutor extends TradingEngine {
   /**
    * Execute buy order with all extracted common logic
    */
-  async execute(currentPrice, signalInfo, globalConfig = null) {
+  async execute(currentPrice, signalInfo, _globalConfig = null) {
     try {
       // Perform common risk management checks
       const riskCheck = await this.performRiskManagement(currentPrice);

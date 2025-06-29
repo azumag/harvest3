@@ -189,7 +189,7 @@ TECHNICAL_MOMENTUM: 5%
             shortPositions++;
           }
           
-        } catch (err) {
+        } catch {
           // エラーはスキップ
         }
       }

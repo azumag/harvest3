@@ -4,7 +4,6 @@
  */
 
 const TradingEngine = require('./TradingEngine');
-const BuyOrderExecutor = require('./BuyOrderExecutor');
 const SellOrderExecutor = require('./SellOrderExecutor');
 const { OHLCVTimeFrames } = require('../common/const');
 const { timeframeToMs } = require('../common/utils');
@@ -158,11 +157,9 @@ class BacktestExecutor extends TradingEngine {
 
     // Calculate total iterations
     const totalIterations = Math.floor((this.endDate.getTime() - this.startDate.getTime()) / timeframeMs) + 1;
-    let currentIteration = 0;
 
     // Run backtest loop
     for (let timestamp = this.startDate.getTime(); timestamp <= this.endDate.getTime(); timestamp += timeframeMs) {
-      currentIteration++;
       backtestOptions.backtest.timestamp = timestamp;
 
       try {
