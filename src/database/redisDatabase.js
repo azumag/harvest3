@@ -813,14 +813,17 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
     };
     
     // 履歴を保存（オプションで有効な場合）
+    let historyWarning = null;
     if (saveHistory) {
       try {
         const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
         if (!historySaved) {
-          console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+          historyWarning = `履歴保存に失敗しましたが処理を継続します: ${positionKey}`;
+          console.warn(historyWarning);
         }
       } catch (historyError) {
-        console.warn(`履歴保存でエラーが発生しましたが処理を継続します: ${positionKey}`, historyError.message);
+        historyWarning = `履歴保存でエラーが発生しましたが処理を継続します: ${positionKey} - ${historyError.message}`;
+        console.warn(historyWarning);
       }
     }
     
@@ -835,7 +838,8 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
         success: true,
         action: 'delayed_cleanup',
         delayHours,
-        historyKey: saveHistory ? closedPositionData.positionKey : null
+        historyKey: saveHistory ? closedPositionData.positionKey : null,
+        historyWarning
       };
     } else {
       // 即座に削除
@@ -845,7 +849,8 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
         return {
           success: true,
           action: 'immediate_cleanup',
-          historyKey: saveHistory ? closedPositionData.positionKey : null
+          historyKey: saveHistory ? closedPositionData.positionKey : null,
+          historyWarning
         };
       } else {
         return { success: false, reason: 'delete_failed' };
