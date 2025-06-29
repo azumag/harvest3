@@ -769,9 +769,21 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
           const strategyKey = getStrategyKey(_trade.strategy);
           const positionKey = `${_trade.exchange}:${_trade.symbol}:${strategyKey}:${_trade.orderId}`;
           
+          // デバッグログ: 戦略名マッピングの詳細を記録
+          if (!isBacktest) {
+            console.log(`[DEBUG] 約定処理 - 戦略名マッピング: "${_trade.strategy}" → "${strategyKey}"`);
+            console.log(`[DEBUG] 生成されたポジションキー: ${positionKey}`);
+          }
+          
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
               const { closeAndCleanupPosition } = require('./redisDatabase');
+              
+              // デバッグログ: クローズ試行の詳細を記録
+              if (!isBacktest) {
+                console.log(`[DEBUG] ポジションクローズ試行 ${attempt}/3: ${positionKey}`);
+              }
+              
               const closeResult = await closeAndCleanupPosition(positionKey, { saveHistory: true });
               
               if (closeResult.success) {
