@@ -18,6 +18,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. **計画立案**: タスクの実行計画レビュー・改善提案（例: `gemini -p "この実装計画の問題点は？"`）
 6. **技術選定**: ライブラリ・手法の比較検討 （例: `gemini -p "このライブラリは他と比べてどうか？"`）
 
+### 重要な心得
+- 発見された課題を見逃さず、解決すること
+
 # 重要
 - one commit should be created per task
 - git notes should be created to save ai prompt
@@ -134,4 +137,3 @@ claude-discord-bot send-to-discord "あなたの応答内容" --session claude-h
 
 ## Geminiへの指示における重要な注意点
 - geminiにレポートを送信する際は、送信した後、10秒ほど待ってからenterを再送信してください
-

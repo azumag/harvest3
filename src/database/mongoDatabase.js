@@ -4,6 +4,7 @@ const {
   safeValidateTradeData, 
   safeValidateOrderData 
 } = require('./schemas');
+const { postMongoConnectionErrorToDiscord } = require('../common/notifications');
 dotenv.config();
 
 const mongoUrl = process.env.MONGO_URL;
@@ -50,6 +51,7 @@ async function connectDB() {
 
     } catch (error) {
       console.error('MongoDB接続エラー:', error);
+      await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
       throw error;
     }
   }

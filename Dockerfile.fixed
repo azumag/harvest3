@@ -1,0 +1,50 @@
+# Fixed Dockerfile with proper dependency management
+FROM node:16-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    g++ \
+    make \
+    gcc \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install newer GCC for C++20 support
+RUN apt-get update && apt-get install -y gcc-10 g++-10 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy package files first for better caching
+COPY package*.json ./
+
+# Install all dependencies including zod
+RUN npm install
+
+# Verify critical dependencies are installed
+RUN npm ls zod || (echo "❌ zod missing - critical dependency" && exit 1)
+RUN npm ls mongodb || (echo "❌ mongodb missing - critical dependency" && exit 1)
+RUN npm ls redis || (echo "❌ redis missing - critical dependency" && exit 1)
+
+# Audit and fix security issues
+RUN npm audit fix || true
+
+# Copy application source code
+COPY src/ ./src/
+COPY strategies/ ./strategies/
+COPY scripts/ ./scripts/
+COPY test/ ./test/
+COPY bot.js .
+COPY *.json ./
+
+# Create .dockerignore to prevent conflicts
+RUN echo "node_modules\nnpm-debug.log\n.git\n.DS_Store" > .dockerignore
+
+# Set default command
+CMD [ "npm", "start" ]

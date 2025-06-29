@@ -1,0 +1,20 @@
+🚀 Comprehensive Integration Test 開始
+
+=== Phase 1: Infrastructure Tests ===
+📡 Redis接続テスト...
+Redis: ✅
+📡 MongoDB接続テスト...
+MongoDB: ✅
+📈 OHLCV取得テスト...
+OHLCV: ✅
+
+=== Phase 2: Basic Backtest ===
+🔬 基本バックテスト実行...
+データ取得: ✅
+戦略実行: ✅
+
+=== Phase 3: Advanced Features ===
+🧪 Advanced Features テスト...
+バックテスト終了コード: null
+データ取得: ✅
+戦略実行: ✅

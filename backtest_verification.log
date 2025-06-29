@@ -1,0 +1,37 @@
+バックテストを開始します...
+対象シンボル: BTC/USDT
+Redisエラー: Error: getaddrinfo ENOTFOUND redis
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'redis'
+}
+Redisエラー: Error: getaddrinfo ENOTFOUND redis
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'redis'
+}
+Redisエラー: Error: getaddrinfo ENOTFOUND redis
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'redis'
+}
+取引所 bitbank のシンボルを取得しました: BTC/JPY,XRP/JPY,ETH/JPY,SOL/JPY,DOT/JPY,DOGE/JPY,LTC/JPY,MONA/JPY,XLM/JPY,QTUM/JPY,BAT/JPY,OMG/JPY,XYM/JPY,LINK/JPY,MKR/JPY,BOBA/JPY,ENJ/JPY,ASTR/JPY,ADA/JPY,AVAX/JPY,AXS/JPY,FLR/JPY,SAND/JPY,GALA/JPY,CHZ/JPY,APE/JPY,OAS/JPY,MANA/JPY,GRT/JPY,BNB/JPY,DAI/JPY,OP/JPY,ARB/JPY,KLAY/JPY,IMX/JPY,MASK/JPY,POL/JPY,CYBER/JPY,RENDER/JPY,TRX/JPY,LPT/JPY,ATOM/JPY
+=== bitbank のOHLCVデータを取得 ===
+=== bitbank のOHLCVデータをREDISにロード ===
+戦略 HFT はスキップされました
+戦略 MUTUAL_INFO はスキップされました
+戦略 MEAN_REVERSION はスキップされました
+戦略 MACD はスキップされました
+戦略 BOLLINGER_BANDS はスキップされました
+戦略 MA の処理を開始します...
+戦略 MA の処理が完了しました
+戦略 OSCILLATOR はスキップされました
+戦略 RSI はスキップされました
+戦略 MULTI_INDICATOR はスキップされました
+バックテストが完了しました。

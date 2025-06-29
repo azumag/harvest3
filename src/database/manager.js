@@ -1282,7 +1282,33 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
       try {
         const params = await getMarketParameters(exchangeInstance, symbol);
         
-        if (params) {
+        // エラーレスポンスかどうかをチェック
+        if (params && params.error) {
+          const { error, message, severity } = params;
+          
+          // エラーレベルに応じた処理
+          if (severity === 'CRITICAL') {
+            console.error(`❌ [CRITICAL] ${exchangeId}:${symbol} - ${message}`);
+            // 重要なエラーの場合は処理を停止
+            throw new Error(`Critical error for ${exchangeId}:${symbol} - ${message}`);
+          } else if (error === 'UNSUPPORTED_SYMBOL') {
+            console.warn(`⚠️ ${exchangeId}:${symbol} - ${message}`);
+            console.log(`   参考 - サポートペア例: ${params.examples?.join(', ') || 'なし'}`);
+          } else {
+            console.warn(`⚠️ ${exchangeId}:${symbol} - ${message} (エラータイプ: ${error})`);
+          }
+          
+          // エラーメトリクスの記録
+          marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+          marketParametersByExchange[exchangeId][symbol] = {
+            error: true,
+            errorType: error,
+            errorMessage: message,
+            timestamp: new Date().toISOString()
+          };
+          
+        } else if (params && !params.error) {
+          // 正常なレスポンスの場合
           const { minTradeAmount, pricePrecision, amountPrecision } = params;
 
           marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
@@ -1290,15 +1316,49 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
             minTradeAmount,
             pricePrecision,
             amountPrecision,
+            timestamp: new Date().toISOString(),
+            success: true
           };
 
-          console.log(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータを取得しました:`, params);
+          console.log(`✅ ${exchangeId}:${symbol} パラメータ取得成功:`, {
+            minTradeAmount,
+            pricePrecision,
+            amountPrecision
+          });
         } else {
-          console.warn(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータ取得に失敗しました（未サポートペア）`);
+          // nullまたは予期しないレスポンスの場合
+          console.warn(`⚠️ ${exchangeId}:${symbol} - 予期しないレスポンス:`, params);
+          
+          marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+          marketParametersByExchange[exchangeId][symbol] = {
+            error: true,
+            errorType: 'UNEXPECTED_RESPONSE',
+            errorMessage: '予期しないレスポンスを受信',
+            response: params,
+            timestamp: new Date().toISOString()
+          };
         }
+        
       } catch (error) {
-        console.error(`取引所 ${exchangeId} の通貨ペア ${symbol} のパラメータ取得でエラーが発生しました: ${error.message}`);
-        // エラーが発生した場合はそのシンボルをスキップして処理を続行
+        console.error(`❌ ${exchangeId}:${symbol} パラメータ取得で予期しないエラー: ${error.message}`);
+        console.error(`   エラータイプ: ${error.name}`);
+        console.error(`   スタック: ${error.stack}`);
+        
+        // エラー情報を記録
+        marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
+        marketParametersByExchange[exchangeId][symbol] = {
+          error: true,
+          errorType: 'UNEXPECTED_ERROR',
+          errorMessage: error.message,
+          errorName: error.name,
+          timestamp: new Date().toISOString()
+        };
+        
+        // 重要なエラーの場合は処理を停止
+        if (error.message.includes('Critical error')) {
+          throw error;
+        }
+        // その他のエラーは処理を続行
       }
       
       await sleep(300);
@@ -1347,87 +1407,177 @@ async function getStrategyConfig(exchange, symbol, strategyKey, config) {
  * @returns {Object|null} - マーケットパラメータまたはnull（エラー時）
  */
 async function getMarketParameters(exchange, symbol) {
+  const logPrefix = `[getMarketParameters] ${exchange.id}:${symbol}`;
+  let market = null;
+  
   try {
     // マーケットが読み込まれていない場合は読み込み
     if (!exchange.markets) {
-      console.log(`[INFO] マーケットデータ未読み込み、読み込み中: ${exchange.id}`);
+      console.log(`${logPrefix} マーケットデータ未読み込み、読み込み中...`);
       await exchange.loadMarkets();
+      console.log(`${logPrefix} マーケットデータ読み込み完了`);
     }
     
-    let market = exchange.markets[symbol];
+    market = exchange.markets[symbol];
     if (!market) {
       // マーケットが見つからない場合、再読み込みを試行
-      console.log(`[WARNING] ${symbol} マーケットが見つからず、再読み込み試行: ${exchange.id}`);
+      console.log(`${logPrefix} マーケットが見つからず、再読み込み試行...`);
       await exchange.loadMarkets();
       market = exchange.markets[symbol];
       
       if (!market) {
-        console.error(`❌ 取引所 ${exchange.id} で通貨ペア ${symbol} がサポートされていません`);
-        return null;
+        // サポートされている通貨ペアの一覧を取得（デバッグ用）
+        const supportedSymbols = Object.keys(exchange.markets)
+          .filter(s => s.includes('/JPY'))
+          .sort();
+        
+        console.error(`${logPrefix} ❌ 通貨ペア ${symbol} は取引所 ${exchange.id} でサポートされていません`);
+        console.error(`${logPrefix} サポートされているJPYペア数: ${supportedSymbols.length}`);
+        console.log(`${logPrefix} 参考 - サポートされているJPYペア（一部）: ${supportedSymbols.slice(0, 10).join(', ')}${supportedSymbols.length > 10 ? '...' : ''}`);
+        
+        return {
+          error: 'UNSUPPORTED_SYMBOL',
+          message: `通貨ペア ${symbol} は取引所 ${exchange.id} でサポートされていません`,
+          supportedJPYPairs: supportedSymbols.length,
+          examples: supportedSymbols.slice(0, 5)
+        };
       }
     }
   } catch (loadError) {
-    console.error(`❌ 取引所 ${exchange.id} のマーケットデータ読み込みエラー (${symbol}): ${loadError.message}`);
-    return null;
+    // エラーのタイプに応じた詳細分類
+    let errorType = 'UNKNOWN_ERROR';
+    let errorSeverity = 'ERROR';
+    
+    if (loadError.name === 'NetworkError' || loadError.message.includes('network')) {
+      errorType = 'NETWORK_ERROR';
+      errorSeverity = 'WARNING';
+    } else if (loadError.name === 'AuthenticationError' || loadError.message.includes('authentication')) {
+      errorType = 'AUTHENTICATION_ERROR';
+      errorSeverity = 'CRITICAL';
+    } else if (loadError.name === 'RateLimitExceeded' || loadError.message.includes('rate limit')) {
+      errorType = 'RATE_LIMIT_ERROR';
+      errorSeverity = 'WARNING';
+    } else if (loadError.message.includes('timeout')) {
+      errorType = 'TIMEOUT_ERROR';
+      errorSeverity = 'WARNING';
+    }
+    
+    console.error(`${logPrefix} ❌ [${errorSeverity}] マーケットデータ読み込みエラー (${errorType}): ${loadError.message}`);
+    
+    return {
+      error: errorType,
+      message: `マーケットデータ読み込みエラー: ${loadError.message}`,
+      severity: errorSeverity,
+      originalError: loadError.name
+    };
   }
   
-  const minTradeAmount = (market.limits?.amount?.min || 0.0001);
-    
-  let pricePrecision = market.precision ? market.precision.price : undefined;
+  // market変数が正しく設定されているかチェック
+  if (!market) {
+    console.error(`${logPrefix} ❌ 予期しないエラー: market変数が未定義です`);
+    return {
+      error: 'MARKET_UNDEFINED',
+      message: `予期しないエラー: market変数が未定義です`,
+      severity: 'ERROR'
+    };
+  }
   
+  // 基本パラメータの抽出と検証
+  const minTradeAmount = market.limits?.amount?.min || 0.0001;
+  let pricePrecision = market.precision ? market.precision.price : undefined;
+  let amountPrecision = market.precision ? market.precision.amount : undefined;
+  
+  console.log(`${logPrefix} 基本パラメータ抽出: minTradeAmount=${minTradeAmount}, pricePrecision=${pricePrecision}, amountPrecision=${amountPrecision}`);
+  
+  // 最小取引量の検証
+  if (!minTradeAmount || minTradeAmount <= 0) {
+    console.error(`${logPrefix} ❌ 無効な最小取引量: ${minTradeAmount}`);
+    return {
+      error: 'INVALID_MIN_TRADE_AMOUNT',
+      message: `最小取引量が無効です: ${minTradeAmount}`,
+      marketData: {
+        limits: market.limits,
+        precision: market.precision
+      }
+    };
+  }
+  
+  // 価格精度の補完処理
   if (!pricePrecision) {
+    console.log(`${logPrefix} 価格精度が未定義のため、ティッカーから取得を試行...`);
     try {
       const ticker = await exchange.fetchTicker(symbol);
       const lastPrice = ticker.last;
       
-      if (lastPrice) {
+      if (lastPrice && lastPrice > 0) {
         const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
         pricePrecision = priceDecimals;
+        console.log(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
       } else {
-        const errorMessage = `ティッカーのlast価格が取得できませんでした: ${symbol} ${exchange.name}`;
-        console.error(errorMessage);
-        if (postErrorToDiscord) {
-          await postErrorToDiscord(errorMessage);
-        }
-        return null;
+        console.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
+        return {
+          error: 'INVALID_TICKER_PRICE',
+          message: `ティッカーの価格が無効です: ${lastPrice}`,
+          ticker: ticker
+        };
       }
-    } catch (error) {
-      const errorMessage = `価格精度が取得できず、ティッカーの取得にも失敗しました: ${symbol} ${exchange.name}`;
-      console.error(errorMessage, error);
-      if (postErrorToDiscord) {
-        await postErrorToDiscord(errorMessage);
+    } catch (tickerError) {
+      // ティッカー取得エラーの詳細分類
+      let tickerErrorType = 'TICKER_FETCH_ERROR';
+      
+      if (tickerError.name === 'NetworkError') {
+        tickerErrorType = 'TICKER_NETWORK_ERROR';
+      } else if (tickerError.name === 'RateLimitExceeded') {
+        tickerErrorType = 'TICKER_RATE_LIMIT_ERROR';
+      } else if (tickerError.message.includes('Invalid symbol')) {
+        tickerErrorType = 'TICKER_INVALID_SYMBOL_ERROR';
       }
-      return null;
+      
+      console.error(`${logPrefix} ❌ ティッカー取得エラー (${tickerErrorType}): ${tickerError.message}`);
+      
+      return {
+        error: tickerErrorType,
+        message: `価格精度取得のためのティッカー取得に失敗: ${tickerError.message}`,
+        originalError: tickerError.name
+      };
     }
   }
   
+  // 価格精度の正規化
   if (pricePrecision > 0 && pricePrecision < 1) {
     const priceDecimals = (pricePrecision.toString().split('.')[1] || '').length;
     pricePrecision = priceDecimals;
+    console.log(`${logPrefix} 価格精度を正規化: ${pricePrecision}`);
   }
   
-  let amountPrecision = market.precision ? market.precision.amount : undefined;
-  
-  if (!minTradeAmount) {
-    const errorMessage = `最小取引単位が取得できませんでした: ${symbol} ${exchange.name}`;
-    console.error(errorMessage);
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(errorMessage);
-    }
-    return null;
-  }
-  
+  // 数量精度の補完
   if (!amountPrecision) {
     const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
     amountPrecision = minTradeAmountDecimals;
+    console.log(`${logPrefix} minTradeAmountから数量精度を算出: ${amountPrecision}`);
   }
   
+  // 数量精度の正規化
   if (amountPrecision > 0 && amountPrecision < 1) {
     const amountDecimals = (amountPrecision.toString().split('.')[1] || '').length;
     amountPrecision = amountDecimals;
+    console.log(`${logPrefix} 数量精度を正規化: ${amountPrecision}`);
   }
   
-  return { minTradeAmount, pricePrecision, amountPrecision };
+  // 最終検証
+  if (pricePrecision === undefined || amountPrecision === undefined) {
+    console.error(`${logPrefix} ❌ 精度パラメータが未定義: price=${pricePrecision}, amount=${amountPrecision}`);
+    return {
+      error: 'UNDEFINED_PRECISION',
+      message: `精度パラメータが未定義です: price=${pricePrecision}, amount=${amountPrecision}`,
+      extractedData: { minTradeAmount, pricePrecision, amountPrecision }
+    };
+  }
+  
+  const result = { minTradeAmount, pricePrecision, amountPrecision };
+  console.log(`${logPrefix} ✅ パラメータ取得成功:`, result);
+  
+  return result;
 }
 
 async function getSymbolsByExchange(config) {

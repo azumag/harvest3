@@ -26,7 +26,7 @@ const TradeSchema = z.object({
   
   // Order type and fees
   orderType: z.string().default('market'),
-  fee: z.number().min(0, "Fee cannot be negative").default(0),
+  fee: z.number().default(0), // Allow negative fees for rebates
   
   // Timestamps
   timestamp: z.number().int().positive("Timestamp must be a positive integer"),
@@ -113,7 +113,7 @@ const PositionSchema = z.object({
   highestPrice: z.number().positive("Highest price must be positive").optional(),
   status: z.string().min(1, "Status is required"),
   createdAt: z.number().int().positive("CreatedAt must be a positive integer"),
-  updatedAt: z.number().int().positive("UpdatedAt must be a positive integer"),
+  updatedAt: z.number().int().positive("UpdatedAt must be a positive integer").optional(),
   _id: z.any().optional()
 });
 
@@ -148,7 +148,7 @@ const TradeSummarySchema = z.object({
   side: z.enum(['buy', 'sell'], {
     errorMap: () => ({ message: "Side must be 'buy' or 'sell'" })
   }),
-  fee: z.number().min(0, "Fee cannot be negative").default(0)
+  fee: z.number().default(0) // Allow negative fees for rebates
 });
 
 /**
