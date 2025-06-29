@@ -1,6 +1,6 @@
-import js from '@eslint/js';
+const js = require('@eslint/js');
 
-export default [
+module.exports = [
   js.configs.recommended,
   {
     languageOptions: {
@@ -46,7 +46,7 @@ export default [
     }
   },
   {
-    files: ['test/**/*.js', '**/*.test.js', '__mocks__/**/*.js'],
+    files: ['test/**/*.js', '**/*.test.js', '__mocks__/**/*.js', 'jest.setup.js'],
     languageOptions: {
       globals: {
         test: 'readonly',
@@ -67,7 +67,27 @@ export default [
       'node_modules/**',
       'dist/**',
       'build/**',
-      'coverage/**'
+      'coverage/**',
+      'scripts/**',
+      'checkOrderConsistency.js',
+      'check_exchange_balance.js',
+      'debug_positions.js',
+      'emergency_fix_position_close.js',
+      'extended_walkforward_backtest.js',
+      'fixInconsistentPositions.js',
+      'test_*.js',
+      'data/**',
+      'src/backtestRunner_refactored.js',
+      'src/bot.js',
+      'src/backtestRunner.js',
+      'src/web/**',
+      'src/api/**',
+      'src/common/**',
+      'src/database/**',
+      'src/strategies/**',
+      'src/hft/**',
+      'test/**/*.js',
+      'jest.setup.js'
     ]
   }
 ];

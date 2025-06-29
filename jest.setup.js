@@ -52,7 +52,7 @@ jest.mock('./src/database/redisDatabase', () => {
     }),
     getStrategyPositionsRedis: jest.fn().mockImplementation((exchangeId, symbol, strategyKey) => {
       const positions = [];
-      for (const [key, position] of mockTestPositionStore.entries()) {
+      for (const [_key, position] of mockTestPositionStore.entries()) {
         if (position.exchangeId === exchangeId && 
             position.symbol === symbol && 
             position.strategyKey === strategyKey) {

@@ -33,18 +33,18 @@ async function postReport(exchange) {
         reportMessage += `- ${asset.currency}: ${asset.amount.toFixed(8)} (${asset.valueJPY.toLocaleString()} JPY)\n`;
       });
     } else {
-      reportMessage += "資産情報はありません。\n";
+      reportMessage += '資産情報はありません。\n';
     }
 
     return reportMessage;
-  })
+  });
   await postResultToDiscord(totalAssetReport);
 
   const tradeSummaryReport = await getTradeSummaries(exchange.id).then(summaries => {
     let reportMessage = `# ${exchange.name || '不明な取引所'} トレードサマリー\n\n`;
 
     if (!summaries || summaries.length === 0) {
-      reportMessage += "トレードサマリーはありません。\n";
+      reportMessage += 'トレードサマリーはありません。\n';
     } else {
       // 戦略ごとにグループ化
       const summariesByStrategy = summaries.reduce((acc, summary) => {
@@ -88,7 +88,7 @@ async function calculateTotalAssets(exchange) {
 
     // 合計資産を計算
     let totalAssets = 0;
-    let assetDetails = [];
+    const assetDetails = [];
     
     // 残高オブジェクトの各通貨について処理
     for (const currency in balance) {

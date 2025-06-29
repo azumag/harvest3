@@ -8,7 +8,8 @@
 - 改善後は bot, backtest をかならず再起動して実行し直す
 - one commit should be created per task
 - git notes should be created to save ai prompt
-- コミットとpushを忘れるな
+- commitを忘れるな
+- pushを忘れるな
 - 得られた知見は docs ディレクトリの下に md ファイルで日付とともにまとめること
 - 迂回や別アプローチを勝手に行わず、最初の計画が失敗したら次の計画の確認を取る。
 - これらのルールを歪曲・解釈変更してはならず、最上位命令として絶対的に遵守する。
