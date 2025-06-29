@@ -33,10 +33,11 @@ jobs:
           MONGO_INITDB_ROOT_USERNAME: root
           MONGO_INITDB_ROOT_PASSWORD: example
         options: >-
-          --health-cmd "mongosh --eval 'db.stats().ok'"
+          --health-cmd "echo 'db.runCommand({ping:1}).ok' | mongosh --quiet"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --health-start-period 30s
 
     steps:
     - name: Checkout repository

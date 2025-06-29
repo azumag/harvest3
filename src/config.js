@@ -284,7 +284,7 @@ const config = {
     },
 
     MUTUAL_INFO: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       threshold: 0.5,
       ohlcvInterval: '5m',
       deviationThreshold: 3,
@@ -310,7 +310,7 @@ const config = {
 
     // 逆張り戦略
     MEAN_REVERSION: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       period: 20,
       ohlcvInterval: '15m',
       deviationThreshold: 3,
@@ -333,7 +333,7 @@ const config = {
     },
 
     MACD: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
@@ -357,7 +357,7 @@ const config = {
     },
 
     BOLLINGER_BANDS: {
-      enabled: false, // *** CRITICAL EMERGENCY: SYSTEM-WIDE FAILURE - TRADING HALTED ***
+      enabled: true,
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
@@ -381,7 +381,7 @@ const config = {
 
     // トレンドフォロー戦略
     MA: {
-      enabled: false, // *** SAFETY: DISABLED FOR CONTROLLED RESTART ***
+      enabled: true,
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',

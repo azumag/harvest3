@@ -46,7 +46,7 @@ export default [
     }
   },
   {
-    files: ['test/**/*.js', '**/*.test.js'],
+    files: ['test/**/*.js', '**/*.test.js', '__mocks__/**/*.js'],
     languageOptions: {
       globals: {
         test: 'readonly',
@@ -57,7 +57,8 @@ export default [
         afterEach: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
-        jest: 'readonly'
+        jest: 'readonly',
+        performance: 'readonly'
       }
     }
   },

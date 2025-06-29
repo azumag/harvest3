@@ -814,9 +814,13 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
     
     // 履歴を保存（オプションで有効な場合）
     if (saveHistory) {
-      const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
-      if (!historySaved) {
-        console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+      try {
+        const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
+        if (!historySaved) {
+          console.warn(`履歴保存に失敗しましたが処理を継続します: ${positionKey}`);
+        }
+      } catch (historyError) {
+        console.warn(`履歴保存でエラーが発生しましたが処理を継続します: ${positionKey}`, historyError.message);
       }
     }
     
