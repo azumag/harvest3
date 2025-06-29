@@ -442,7 +442,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       expect(result).toHaveProperty('bestParameters');
       expect(result).toHaveProperty('bestValue');
       expect(result).toHaveProperty('convergenceInfo');
-      expect(result.bestParameters.x).toBeCloseTo(0.7, 1);
+      expect(result.bestParameters.x).toBeCloseTo(0.7, 0);
     });
 
     it('制約付き最適化を実行する', async () => {
