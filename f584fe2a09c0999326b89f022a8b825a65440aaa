@@ -1,0 +1,1 @@
+Position close failure root cause analysis and fix: Strategy name mapping inconsistency between position creation (BOLLINGER_BANDS) and closure (BB戦略) caused Redis key mismatch. Added getStrategyKey() function to map display names to internal keys, ensuring consistent position key generation and successful Redis deletion during trade settlement.
