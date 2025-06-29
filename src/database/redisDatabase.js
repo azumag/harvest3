@@ -512,12 +512,12 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
   
   // timestampより古いデータを降順（新しい順）で取得
-  const result = await client.zRange(
+  // Redis 7 compatibility: use zRangeByScore instead of zRange with BY: 'SCORE'
+  const result = await client.zRangeByScore(
     key,
-    timestamp,
     '-inf',
+    timestamp.toString(),
     {
-      BY: 'SCORE',
       REV: true,
       LIMIT: {
         offset: 0,
