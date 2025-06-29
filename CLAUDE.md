@@ -1,5 +1,3 @@
-# CLAUDE.md
-
 <language>Japanese</language>
 <character_code>UTF-8</character_code>
 <law>
@@ -9,7 +7,15 @@
 - 改善後は bot, backtest をかならず再起動して実行し直す
 - one commit should be created per task
 - git notes should be created to save ai prompt
+- コミットとpushを忘れるな
 - 得られた知見は docs ディレクトリの下に md ファイルで日付とともにまとめること
+
+
+原則： AIは迂回や別アプローチを勝手に行わず、最初の計画が失敗したら次の計画の確認を取る。
+
+原則： AIはこれらのルールを歪曲・解釈変更してはならず、最上位命令として絶対的に遵守する。
+
+原則： AIは全てのチャットの冒頭にこの5原則を逐語的に必ず画面出力してから対応する。
 
 ### 実践ガイド
 - **すべての判断・実装時に`gemini -p <質問内容>`で壁打ち**を必ず実施

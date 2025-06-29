@@ -5,7 +5,8 @@
 
 const TradingEngine = require('./TradingEngine');
 const { checkPositionLimits } = require('../strategies/utils/riskManagement');
-const { backtestCreateLimitBuyOrder, createLimitBuyOrder } = require('../strategies/utils/orderManager');
+const { backtestCreateLimitBuyOrder } = require('../database/manager');
+const { createLimitBuyOrder } = require('../strategies/utils/common');
 
 class BuyOrderExecutor extends TradingEngine {
   constructor(exchange, symbol, strategyKey, config, marketParameters, options = {}) {

@@ -85,6 +85,7 @@ jest.mock('./src/database/redisDatabase', () => {
 
 // Mock MongoDB modules to prevent connection attempts during tests
 jest.mock('./src/database/mongoDatabase');
+// Database manager is mocked via __mocks__/database/manager.js
 jest.mock('./src/database/manager');
 
 // Set test environment variables
