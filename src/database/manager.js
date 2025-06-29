@@ -18,6 +18,24 @@ const {
   listFilledPositions,
 } = require('./mongoDatabase');
 
+// 戦略名マッピング: 表示名 → 内部キー
+function getStrategyKey(strategyDisplayName) {
+  const strategyMapping = {
+    'BB戦略': 'BOLLINGER_BANDS',
+    'オシレーター戦略': 'OSCILLATOR',
+    'MA戦略': 'MACD',
+    'マルチ指標戦略': 'MULTI_INDICATOR',
+    'RSI戦略': 'RSI',
+    'BOLLINGER_BANDS': 'BOLLINGER_BANDS', // 既に正しいキーの場合はそのまま
+    'OSCILLATOR': 'OSCILLATOR',
+    'MACD': 'MACD',
+    'MULTI_INDICATOR': 'MULTI_INDICATOR',
+    'RSI': 'RSI'
+  };
+  
+  return strategyMapping[strategyDisplayName] || strategyDisplayName;
+}
+
 const {
   savePendingOrderRedis,
   deletePendingOrderRedis,
@@ -746,7 +764,8 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
           
           // 約定時に対応するポジションをクローズ（最大3回再試行）
           let positionCloseSuccess = false;
-          const positionKey = `${_trade.exchange}:${_trade.symbol}:${_trade.strategy}:${_trade.orderId}`;
+          const strategyKey = getStrategyKey(_trade.strategy);
+          const positionKey = `${_trade.exchange}:${_trade.symbol}:${strategyKey}:${_trade.orderId}`;
           
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
@@ -755,7 +774,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
               
               if (closeResult.success) {
                 if (!isBacktest) {
-                  console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
+                  console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${strategyKey})`);
                 }
                 positionCloseSuccess = true;
                 break;
