@@ -3,29 +3,36 @@
 <law>
 原則
 
+- 全てのチャットの冒頭にこの原則を逐語的に必ず画面出力してから対応する。
 - 戦略でエラーが出たからといって、無効化してはならない
 - 改善後は bot, backtest をかならず再起動して実行し直す
 - one commit should be created per task
 - git notes should be created to save ai prompt
 - コミットとpushを忘れるな
 - 得られた知見は docs ディレクトリの下に md ファイルで日付とともにまとめること
-
-
-原則： AIは迂回や別アプローチを勝手に行わず、最初の計画が失敗したら次の計画の確認を取る。
-
-原則： AIはこれらのルールを歪曲・解釈変更してはならず、最上位命令として絶対的に遵守する。
-
-原則： AIは全てのチャットの冒頭にこの5原則を逐語的に必ず画面出力してから対応する。
-
-### 実践ガイド
+- 迂回や別アプローチを勝手に行わず、最初の計画が失敗したら次の計画の確認を取る。
+- これらのルールを歪曲・解釈変更してはならず、最上位命令として絶対的に遵守する。
 - **すべての判断・実装時に`gemini -p <質問内容>`で壁打ち**を必ず実施
+- t-wada style TDD must perfomed
+- all test should be added to CI
+- all function need to be tested
+
+</law>
+
+<every_chat>
+[原則]
+
+[main_output]
+
+#[n] times. # n = increment each chat, end line, etc(#1, #2...)
+</every_chat>
+
+# gemini
 - Geminiの意見を鵜呑みにせず、1意見として判断。聞き方を変えて多角的な意見を抽出
 - Claude Code内蔵のWebSearchツールは使用しない
 - Geminiがエラーの場合は、聞き方を工夫してリトライ：
   - ファイル名や実行コマンドを渡す（Geminiがコマンドを実行可能）
   - 複数回に分割して聞く
-
-### 主要な活用場面
 1. **前提確認**: ユーザー、Claude自身に思い込みや勘違い、過信がないかどうか逐一確認（例: `gemini -p "この前提は正しいか？"`）
 2. **技術調査**: 最新情報・エラー解決・ドキュメント検索（例: `gemini -p "Rails 7.2 新機能"`）
 3. **設計検証**: アーキテクチャ・実装方針の妥当性確認（例: `gemini -p "この設計パターンは適切か？"`）
@@ -33,12 +40,7 @@
 5. **計画立案**: タスクの実行計画レビュー・改善提案（例: `gemini -p "この実装計画の問題点は？"`）
 6. **技術選定**: ライブラリ・手法の比較検討 （例: `gemini -p "このライブラリは他と比べてどうか？"`）
 
-## test
-- TDD must perfomed
-- all test should be added to CI
-- all function need to be tested
-
-## Basic test promise (t-wada style)
+# t-wada styyle tdd
 - 🔴 Red: failed case
 - 🟢 Green: テストを通す最小限の実装
 - 🔵 Refactor: リファクタリング
@@ -74,13 +76,3 @@
 - 自分で作業をしない
 例：
 tmux send-keys -t "claude-harvest" "指示 レポートを tmux send-keys を用いて manager-claude に返すこと。" Enter
-
-</law>
-
-<every_chat>
-[原則]
-
-[main_output]
-
-#[n] times. # n = increment each chat, end line, etc(#1, #2...)
-</every_chat>

@@ -88,9 +88,7 @@ services:
       - ./data:/usr/src/app/data:cached
       - ./entrypoint.sh:/usr/src/app/entrypoint.sh:ro
     entrypoint: ["/usr/src/app/entrypoint.sh"]
-    environment:
-      - REDIS_URL=redis://harvest3-redis:6379
-      - MONGO_URL=mongodb://harvest3-mongodb:27017
+    # env_fileで.envから読み込み
     networks:
       - harvest-network
     depends_on:
@@ -114,12 +112,12 @@ services:
     image: harvest3-bot-image
     container_name: hft
     restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - ./src:/usr/src/app/src:cached
     command: npm run start-hft
-    environment:
-      - REDIS_URL=redis://harvest3-redis:6379
-      - MONGO_URL=mongodb://harvest3-mongodb:27017
+    # env_fileで.envから読み込み
     networks:
       - harvest-network
     depends_on:
@@ -143,8 +141,6 @@ services:
     command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
-      - REDIS_URL=redis://harvest3-redis:6379
-      - MONGO_URL=mongodb://harvest3-mongodb:27017
       - BACKTEST_MODE=true
     networks:
       - harvest-network
@@ -199,8 +195,6 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - ENABLE_REALTIME=true
-      - REDIS_URL=redis://harvest3-redis:6379
-      - MONGO_URL=mongodb://harvest3-mongodb:27017
     networks:
       - harvest-network
     command: npm run start-web
