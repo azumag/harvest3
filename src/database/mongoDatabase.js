@@ -51,7 +51,8 @@ async function connectDB() {
 
     } catch (error) {
       console.error('MongoDB接続エラー:', error);
-      await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
+      // Discord通知を一時的に無効化（循環エラーを防ぐため）
+      // await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
       throw error;
     }
   }
