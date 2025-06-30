@@ -1,0 +1,9 @@
+AI prompt: まずパフォーマンステストを削除して、それからCIの修正に入ろう think
+
+Performance test removal and CI stabilization:
+1. Deleted test/performance/ directory and performanceValidationSuite.test.js
+2. Removed performance test job from GitHub Actions workflow
+3. Updated Discord notification configuration
+4. Resolved Node.js version compatibility issues (18.x, 20.x)
+5. Achieved complete CI/CD pipeline success: Security Audit ✓, Test Suite (16.x/18.x/20.x) ✓, Build Verification ✓, Deploy to Staging ✓
+6. Created comprehensive documentation of removal rationale and impact
