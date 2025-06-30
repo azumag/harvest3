@@ -401,18 +401,29 @@ async function prepareTestDatasets() {
 }
 
 function generateHistoricalData(size) {
+  // 固定的なデータセットを使用してNode.jsバージョン間の一貫性を確保
+  const fixedReturns = [
+    0.01, -0.02, 0.03, -0.015, 0.025, -0.005, 0.01, -0.03, 0.02, -0.01,
+    -0.01, 0.015, -0.025, 0.01, -0.005, 0.03, -0.02, 0.01, -0.01, 0.02,
+    0.005, -0.01, 0.015, -0.02, 0.01, -0.015, 0.02, -0.005, 0.01, -0.025,
+    0.015, -0.01, 0.02, -0.03, 0.01, -0.015, 0.025, -0.005, 0.015, -0.02
+  ];
+
   return Array.from({ length: size }, (_, i) => ({
     timestamp: Date.now() - (size - i) * 60000,
-    returns: (Math.random() - 0.5) * 0.1,
-    price: 100 + Math.sin(i * 0.01) * 10 + (Math.random() - 0.5) * 5
+    returns: fixedReturns[i % fixedReturns.length],
+    price: 100 + Math.sin(i * 0.01) * 10 + (fixedReturns[i % fixedReturns.length] * 50)
   }));
 }
 
 function generateRealtimeData(size) {
+  const fixedReturnValues = [0.02, -0.01, 0.015, -0.005, 0.01, 0.03, -0.02, 0.01];
+  const fixedProfits = [500, -200, 300, -100, 200, 800, -400, 150];
+  
   return Array.from({ length: size }, (_, i) => ({
     timestamp: new Date(Date.now() - (size - i) * 60000),
-    returnValue: (Math.random() - 0.48) * 0.1, // 若干の正のバイアス
-    profit: (Math.random() - 0.45) * 1000,
+    returnValue: fixedReturnValues[i % fixedReturnValues.length],
+    profit: fixedProfits[i % fixedProfits.length],
     parameters: { period: 20, threshold: 0.5 },
     strategyName: 'TEST_STRATEGY',
     symbol: 'BTC/USDT'
@@ -420,30 +431,45 @@ function generateRealtimeData(size) {
 }
 
 function generateTimeSeriesData(size) {
-  return Array.from({ length: size }, (_, i) => ({
-    timestamp: new Date(Date.now() - (size - i) * 3600000),
-    value: 100 + Math.sin(i * 0.1) * 15 + (Math.random() - 0.5) * 8,
-    price: 100 + Math.sin(i * 0.1) * 15 + (Math.random() - 0.5) * 8
-  }));
+  const fixedOffsets = [2, -1, 3, -2, 1, 4, -3, 2, -1, 3];
+  
+  return Array.from({ length: size }, (_, i) => {
+    const baseValue = 100 + Math.sin(i * 0.1) * 15;
+    const offset = fixedOffsets[i % fixedOffsets.length];
+    return {
+      timestamp: new Date(Date.now() - (size - i) * 3600000),
+      value: baseValue + offset,
+      price: baseValue + offset
+    };
+  });
 }
 
 function generateBacktestResults(size) {
+  const fixedFunds = [11000, 9500, 12000, 10500, 11500, 9000, 13000, 10000];
+  const fixedPeriods = [20, 15, 25, 18, 22, 16, 30, 14];
+  const fixedThresholds = [0.5, 0.4, 0.6, 0.45, 0.55, 0.35, 0.65, 0.5];
+  const fixedTimeframes = ['1h', '4h', '1d'];
+  
   return Array.from({ length: size }, (_, i) => ({
-    finalBaseFund: 10000 + (Math.random() - 0.4) * 3000, // 若干の正のバイアス
+    finalBaseFund: fixedFunds[i % fixedFunds.length],
     parameters: {
-      period: 15 + Math.floor(Math.random() * 15),
-      threshold: 0.3 + Math.random() * 0.4
+      period: fixedPeriods[i % fixedPeriods.length],
+      threshold: fixedThresholds[i % fixedThresholds.length]
     },
-    timeframe: ['1h', '4h', '1d'][Math.floor(Math.random() * 3)]
+    timeframe: fixedTimeframes[i % fixedTimeframes.length]
   }));
 }
 
 function generateLiveMarketData(size) {
+  const fixedPriceOffsets = [1000, -500, 2000, -1000, 1500, -800, 2500, -300];
+  const fixedVolumes = [1200, 800, 1500, 1100, 1300, 900, 1400, 1000];
+  const fixedVolatilities = [0.03, 0.05, 0.02, 0.04, 0.06, 0.025, 0.045, 0.035];
+  
   return Array.from({ length: size }, (_, i) => ({
     timestamp: Date.now() + i * 60000,
-    price: 50000 + (Math.random() - 0.5) * 5000,
-    volume: 1000 + Math.random() * 500,
-    volatility: 0.02 + Math.random() * 0.06
+    price: 50000 + fixedPriceOffsets[i % fixedPriceOffsets.length],
+    volume: fixedVolumes[i % fixedVolumes.length],
+    volatility: fixedVolatilities[i % fixedVolatilities.length]
   }));
 }
 
