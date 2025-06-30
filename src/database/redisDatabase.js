@@ -805,7 +805,8 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
     // 現在のポジション情報を取得
     const positionData = await getPositionRedis(positionKey);
     if (!positionData) {
-      return { success: false, reason: 'position_not_found' };
+      // ポジションが見つからない場合は既にクローズ済みとして成功扱い（冪等性）
+      return { success: true, reason: 'already_closed', action: 'idempotent_success' };
     }
     
     // ポジションを閉じた状態に更新
