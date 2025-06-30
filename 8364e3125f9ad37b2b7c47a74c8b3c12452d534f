@@ -1,0 +1,8 @@
+AI prompt: testStrategyなんて戦略は定義していない。何？ think
+
+Investigation and fix for testStrategy Discord notifications:
+1. Identified testRiskManagementNotifications.js as source of 'testStrategy' notifications
+2. Root cause: Test script sending notifications to production Discord channels
+3. Implemented production environment detection and safety checks
+4. Added TEST_ALLOW_PROD_DISCORD environment variable for explicit approval
+5. Documented complete investigation and resolution process
