@@ -17,6 +17,32 @@ const { postOrderToDiscord } = require('../src/common/notifications');
 async function testRiskManagementNotifications() {
   console.log('=== リスク管理Discord通知機能テスト開始 ===\n');
   
+  // 🚨 本番環境での実行警告
+  console.log('⚠️  警告: このテストは本番のDiscordチャンネルに通知を送信します！');
+  console.log('💡 テスト環境で実行してください。');
+  console.log('');
+  
+  // 環境確認
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.DISCORD_ORDER_WEBHOOK_URL;
+  if (isProduction) {
+    console.log('🚨 本番環境を検出しました！');
+    console.log('このテストを実行すると本番のDiscordチャンネルにテストメッセージが送信されます。');
+    console.log('');
+    console.log('テスト続行を希望する場合は、環境変数 TEST_ALLOW_PROD_DISCORD=true を設定してください。');
+    
+    if (process.env.TEST_ALLOW_PROD_DISCORD !== 'true') {
+      console.log('');
+      console.log('❌ 安全のためテストを中止しました。');
+      console.log('テスト環境での実行またはTEST_ALLOW_PROD_DISCORD=true設定後に再実行してください。');
+      process.exit(1);
+    }
+    
+    console.log('');
+    console.log('✅ TEST_ALLOW_PROD_DISCORD=true が設定されています。テストを続行します。');
+    console.log('🔔 本番Discordチャンネルにテスト通知が送信されます。');
+    console.log('');
+  }
+  
   try {
     // Redis初期化
     await initialize();
