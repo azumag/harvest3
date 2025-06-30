@@ -159,3 +159,69 @@ jobs:
       run: |
         echo "Deploying to staging environment..."
         # Add your deployment commands here
+
+  notify-discord:
+    name: Discord Notification
+    runs-on: ubuntu-latest
+    needs: [test, security, build, performance]
+    if: always() && (needs.test.result == 'failure' || needs.security.result == 'failure' || needs.build.result == 'failure' || needs.performance.result == 'failure')
+    
+    steps:
+    - name: Send Discord notification on CI failure
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        # CI失敗の詳細情報を収集
+        FAILED_JOBS=""
+        if [[ "${{ needs.test.result }}" == "failure" ]]; then
+          FAILED_JOBS="$FAILED_JOBS• Test Suite\\n"
+        fi
+        if [[ "${{ needs.security.result }}" == "failure" ]]; then
+          FAILED_JOBS="$FAILED_JOBS• Security Audit\\n"
+        fi
+        if [[ "${{ needs.build.result }}" == "failure" ]]; then
+          FAILED_JOBS="$FAILED_JOBS• Build Verification\\n"
+        fi
+        if [[ "${{ needs.performance.result }}" == "failure" ]]; then
+          FAILED_JOBS="$FAILED_JOBS• Performance Tests\\n"
+        fi
+
+        # Branch情報を取得
+        BRANCH_NAME="${{ github.ref_name }}"
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          BRANCH_NAME="${{ github.head_ref }}"
+        fi
+
+        # Discord Webhookに送信
+        curl -H "Content-Type: application/json" \
+             -X POST \
+             -d "{
+               \"content\": \"🚨 **CI/CD Pipeline Failed** 🚨\",
+               \"embeds\": [{
+                 \"title\": \"Failed CI/CD Pipeline\",
+                 \"description\": \"**Repository:** ${{ github.repository }}\\n**Branch:** ${BRANCH_NAME}\\n**Commit:** ${{ github.sha }}\\n\\n**Failed Jobs:**\\n${FAILED_JOBS}\",
+                 \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                 \"color\": 15158332,
+                 \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",
+                 \"author\": {
+                   \"name\": \"GitHub Actions\",
+                   \"icon_url\": \"https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png\"
+                 },
+                 \"footer\": {
+                   \"text\": \"Click the title to view the failed workflow\"
+                 },
+                 \"fields\": [
+                   {
+                     \"name\": \"Commit Message\",
+                     \"value\": \"${{ github.event.head_commit.message || github.event.pull_request.title }}\",
+                     \"inline\": false
+                   },
+                   {
+                     \"name\": \"Author\",
+                     \"value\": \"${{ github.actor }}\",
+                     \"inline\": true
+                   }
+                 ]
+               }]
+             }" \
+             "$DISCORD_WEBHOOK"
