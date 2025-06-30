@@ -828,6 +828,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       } catch (historyError) {
         historyWarning = `履歴保存でエラーが発生しましたが処理を継続します: ${positionKey} - ${historyError.message}`;
         console.warn(historyWarning);
+        // MongoDB接続エラーでも処理を継続するため、エラーを再throwしない
       }
     }
     
