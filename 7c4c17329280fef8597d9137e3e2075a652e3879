@@ -1,0 +1,1 @@
+売りポジション作成フローの包括的分析により、formattedAvailableAmount関数での未約定売り注文による過剰控除が根本原因と特定。getOrderStrategyKeyByOrderId関数の戦略解決ロジック改善が必要。
