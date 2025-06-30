@@ -61,7 +61,11 @@ async function updateTradeSummary(trade) {
     return;
   }
 
-  const summaryKey = `summary:trade:${validatedTrade.exchange}:${validatedTrade.symbol}:${validatedTrade.strategy}`;
+  // 戦略名を内部キーに変換（日本語表示名 → 英語キー）
+  const { getStrategyKey } = require('./manager');
+  const strategyKey = getStrategyKey(validatedTrade.strategy);
+  
+  const summaryKey = `summary:trade:${validatedTrade.exchange}:${validatedTrade.symbol}:${strategyKey}`;
   const now = Date.now();
 
   const exists = await client.exists(summaryKey);

@@ -29,12 +29,20 @@ jest.mock('../../../src/database/redisClient', () => ({
   initRedisClient: jest.fn()
 }));
 
+// manager.jsのgetStrategyKeyをモック化
+const mockGetStrategyKey = jest.fn();
+jest.mock('../../../src/database/manager', () => ({
+  getStrategyKey: mockGetStrategyKey
+}));
+
 // テスト対象をインポート
 const { getAllTradeSummaries, updateTradeSummary } = require('../../../src/database/redisDatabase');
 
 describe('redisDatabase - 取引サマリー機能', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // getStrategyKeyのモックをデフォルトで通すように設定
+    mockGetStrategyKey.mockImplementation(strategy => strategy);
   });
 
   describe('getAllTradeSummaries', () => {

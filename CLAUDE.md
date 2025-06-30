@@ -2,7 +2,6 @@
 <character_code>UTF-8</character_code>
 <law>
 原則
-
 - 全てのチャットの冒頭にこの原則を逐語的に必ず画面出力してから対応する。
 - 戦略でエラーが出たからといって、無効化してはならない
 - 改善後は bot, backtest をかならず再起動して実行し直す
@@ -17,7 +16,6 @@
 - t-wada style TDD must perfomed
 - all test should be added to CI
 - all function need to be tested
-
 </law>
 
 <every_chat>

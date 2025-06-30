@@ -1035,6 +1035,13 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     //   .filter(order => order.side === 'sell')
     //   .reduce((sum, order) => sum + order.amount, 0);
 
+    // デバッグログ: 売却量計算の詳細
+    if (!options.backtest) {
+      console.log(`[売却量DEBUG] ${exchange.id} ${symbol} ${strategyKey}:`);
+      console.log(`  ネットポジション: ${netPosition}`);
+      console.log(`  未約定売り注文量: ${totalSellOrderAmount}`);
+    }
+
     // 利用可能量 = ネットポジション - 未約定売り注文量
     let availableAmount = netPosition - totalSellOrderAmount;
 
@@ -1042,7 +1049,14 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     if (availableAmount < 0) availableAmount = 0;
 
     // 精度を考慮して、最小精度以上の値を確保
-    return parseFloat(availableAmount !== null && availableAmount !== undefined ? availableAmount.toFixed(amountPrecision) : 0);
+    const result = parseFloat(availableAmount !== null && availableAmount !== undefined ? availableAmount.toFixed(amountPrecision) : 0);
+    
+    // デバッグログ: 最終結果
+    if (!options.backtest) {
+      console.log(`  計算結果: ${availableAmount} → ${result} (精度: ${amountPrecision})`);
+    }
+    
+    return result;
   } catch (error) {
     console.error('利用可能量の計算に失敗しました:', error);
     // エラーとなった取引所とシンボルを記録
