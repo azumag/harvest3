@@ -319,10 +319,10 @@ describe('オーバーフィッティング防止システム統合テスト', (
         });
       }
       
-      // 全条件での最小性能要件（NaN値の安全な処理、より現実的）
+      // 全条件での最小性能要件（修正されたmaxDrawdown計算に基づく）
       for (const result of robustnessResults) {
         expect(result.sharpeRatio || 0).toBeGreaterThan(-20); // 極端に悪くない
-        expect(isNaN(result.maxDrawdown) ? 0 : result.maxDrawdown).toBeLessThan(5000); // より現実的な閾値：500000%以下
+        expect(isNaN(result.maxDrawdown) ? 0 : result.maxDrawdown).toBeLessThan(1.5); // maxDrawdownは150%以下（極端な市場条件を考慮）
         expect(result.profitFactor || 0).toBeGreaterThan(0); // 正の値
         
         console.log(`📊 ${result.condition}: Sharpe=${result.sharpeRatio.toFixed(3)}, DD=${(result.maxDrawdown*100).toFixed(2)}%`);
@@ -540,28 +540,32 @@ function calculateSharpeRatio(returns) {
 }
 
 function calculateMaxDrawdown(returns) {
-  if (returns.length === 0) return 0;
-  let peak = 0;
+  if (!returns || returns.length === 0) {
+    return 0;
+  }
+
+  let cumulativeReturns = 1;
+  let peak = 1;
   let maxDrawdown = 0;
-  let cumulative = 0;
-  
+
   for (const ret of returns) {
-    cumulative += ret;
-    if (cumulative > peak) peak = cumulative;
-    
-    // ゼロ除算を防止し、NaNを排除
-    if (peak === 0) {
-      // peakが0の場合、ドローダウンは0とする
+    if (typeof ret !== 'number' || !isFinite(ret)) {
+      // 不正なリターン値は無視する
       continue;
     }
-    
-    const drawdown = (peak - cumulative) / Math.abs(peak);
-    // NaN, Infinity, -Infinityをチェック
-    if (isFinite(drawdown) && !isNaN(drawdown)) {
-      maxDrawdown = Math.max(maxDrawdown, drawdown);
+    cumulativeReturns *= (1 + ret);
+    if (cumulativeReturns > peak) {
+      peak = cumulativeReturns;
+    }
+
+    if (peak > 0) {
+      const drawdown = (peak - cumulativeReturns) / peak;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
     }
   }
-  
+
   return maxDrawdown;
 }
 

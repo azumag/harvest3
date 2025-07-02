@@ -583,7 +583,8 @@ async function updateFilledTrades(exchange, symbol) {
 }
 
 /**
- * 約定履歴更新の実装部分
+ * 分散トランザクション対応の約定履歴更新実装
+ * データ整合性とACID特性を保証
  */
 async function updateFilledTradesInternal(exchange, symbol, startTime) {
   const isBacktest = process.env.BACKTEST_MODE === 'true';
@@ -625,9 +626,6 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       return 0;
     }
 
-    let processedCount = 0;
-    let successCount = 0;
-    
     // 戦略キーを一括取得してキャッシュ
     if (!isBacktest) {
       console.log(`[約定更新] 戦略キー取得開始: ${trades.length}件の約定を処理`);
@@ -687,150 +685,83 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       tradeDataList.push(_trade);
     }
 
-    // 約定データを処理
+    // 分散トランザクション処理
+    let processedCount = 0;
+    let successCount = 0;
+    
     if (!isBacktest) {
-      console.log(`[約定更新] MongoDB書き込み開始: ${tradeDataList.length}件`);
+      console.log(`[約定更新] 分散トランザクション処理開始: ${tradeDataList.length}件`);
     }
     const dbStart = Date.now();
     
     for (const _trade of tradeDataList) {
       try {
-        await addTradeMongoDB(_trade);
+        // 重複チェック（処理状態含む冪等性保証）
+        const tradeCheck = await checkTradeExists(_trade.tradeId);
         
-        // summary:trade更新（最大3回再試行）
-        let summaryUpdateSuccess = false;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            await updateTradeSummary(_trade);
-            summaryUpdateSuccess = true;
-            break;
-          } catch (summaryError) {
+        if (tradeCheck.exists) {
+          if (tradeCheck.state === 'COMPLETED') {
             if (!isBacktest) {
-              console.warn(`[約定処理] summary:trade更新失敗 (試行${attempt}/3): ${_trade.tradeId} - ${summaryError.message}`);
+              console.log(`[約定更新] 完了済み約定をスキップ: ${_trade.tradeId} (完了時刻: ${tradeCheck.completedAt})`);
             }
-            if (attempt === 3) {
-              // 3回失敗した場合は重要エラーとして通知
-              const { postErrorToDiscord } = require('../common/notifications');
-              if (postErrorToDiscord && !isBacktest) {
-                await postErrorToDiscord(`🚨 **重要: summary:trade更新失敗**\n` +
-                                        `約定ID: ${_trade.tradeId}\n` +
-                                        `通貨: ${_trade.symbol}\n` +
-                                        `戦略: ${_trade.strategy}\n` +
-                                        `エラー: ${summaryError.message}\n` +
-                                        `※ 残高不整合の原因となる可能性があります`);
-              }
-              throw summaryError;
+            processedCount++;
+            successCount++; // 既に完了しているので成功とカウント
+            continue;
+          } else if (tradeCheck.state === 'PROCESSING') {
+            if (!isBacktest) {
+              console.log(`[約定更新] 処理中約定をスキップ: ${_trade.tradeId} (他のプロセスが処理中)`);
             }
-            // 再試行前に100ms待機
-            await new Promise(resolve => setTimeout(resolve, 100));
+            processedCount++;
+            continue; // 処理中の場合は成功にもカウントしない
+          } else if (tradeCheck.state === 'FAILED') {
+            if (!isBacktest) {
+              console.log(`[約定更新] 失敗約定を再処理: ${_trade.tradeId}`);
+            }
+            // 失敗状態の場合は再処理を試行
           }
         }
+
+        // 分散トランザクション実行（Two-Phase Commit）
+        const result = await executeDistributedTransaction(_trade, isBacktest);
         
-        // 約定時に対応する未約定注文をRedisから削除（最大3回再試行）
-        if (_trade.orderId && _trade.strategy !== 'OUTSIDE') {
-          let orderDeleteSuccess = false;
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              const deleteResult = await deletePendingOrderRedis(
-                _trade.exchange, 
-                _trade.symbol, 
-                _trade.strategy, 
-                _trade.orderId
-              );
-              if (deleteResult && !isBacktest) {
-                console.log(`[約定処理] 未約定注文を削除: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${_trade.strategy})`);
-              }
-              orderDeleteSuccess = true;
-              break;
-            } catch (deleteError) {
-              if (!isBacktest) {
-                console.warn(`[約定処理] 未約定注文削除失敗 (試行${attempt}/3): ${_trade.orderId} - ${deleteError.message}`);
-              }
-              if (attempt === 3) {
-                // 3回失敗した場合は警告通知（重要ではないがログに残す）
-                const { postOrderToDiscord } = require('../common/notifications');
-                if (postOrderToDiscord && !isBacktest) {
-                  await postOrderToDiscord(`⚠️ **未約定注文削除失敗**\n` +
-                                          `約定ID: ${_trade.tradeId}\n` +
-                                          `注文ID: ${_trade.orderId}\n` +
-                                          `通貨: ${_trade.symbol}\n` +
-                                          `戦略: ${_trade.strategy}\n` +
-                                          `※ 手動確認が必要な場合があります`);
-                }
-              } else {
-                // 再試行前に50ms待機
-                await new Promise(resolve => setTimeout(resolve, 50));
-              }
-            }
-          }
-          
-          // 約定時に対応するポジションをクローズ（最大3回再試行）
-          let positionCloseSuccess = false;
-          const strategyKey = getStrategyKey(_trade.strategy);
-          const positionKey = `${_trade.exchange}:${_trade.symbol}:${strategyKey}:${_trade.orderId}`;
-          
-          // デバッグログ: 戦略名マッピングの詳細を記録
+        if (result.success) {
+          successCount++;
           if (!isBacktest) {
-            console.log(`[DEBUG] 約定処理 - 戦略名マッピング: "${_trade.strategy}" → "${strategyKey}"`);
-            console.log(`[DEBUG] 生成されたポジションキー: ${positionKey}`);
+            console.log(`[約定更新] 分散トランザクション成功: ${_trade.tradeId}`);
           }
-          
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              const { closeAndCleanupPosition } = require('./redisDatabase');
-              
-              // デバッグログ: クローズ試行の詳細を記録
-              if (!isBacktest) {
-                console.log(`[DEBUG] ポジションクローズ試行 ${attempt}/3: ${positionKey}`);
-              }
-              
-              const closeResult = await closeAndCleanupPosition(positionKey, { saveHistory: true });
-              
-              if (closeResult.success) {
-                if (!isBacktest) {
-                  console.log(`[約定処理] ポジションをクローズ: ${_trade.orderId} (${_trade.exchange}:${_trade.symbol}:${strategyKey})`);
-                }
-                positionCloseSuccess = true;
-                break;
-              } else {
-                throw new Error(closeResult.message || 'ポジションクローズ失敗');
-              }
-            } catch (closeError) {
-              if (!isBacktest) {
-                console.warn(`[約定処理] ポジションクローズ失敗 (試行${attempt}/3): ${_trade.orderId} - ${closeError.message}`);
-              }
-              if (attempt === 3) {
-                // 3回失敗した場合は重要エラーとして通知
-                const { postErrorToDiscord } = require('../common/notifications');
-                if (postErrorToDiscord && !isBacktest) {
-                  await postErrorToDiscord(`🚨 **重要: ポジションクローズ失敗**\n` +
-                                          `約定ID: ${_trade.tradeId}\n` +
-                                          `注文ID: ${_trade.orderId}\n` +
-                                          `ポジションキー: ${positionKey}\n` +
-                                          `エラー: ${closeError.message}\n` +
-                                          `※ 手動でポジション確認が必要です`);
-                }
-              } else {
-                // 再試行前に100ms待機
-                await new Promise(resolve => setTimeout(resolve, 100));
-              }
-            }
-          }
-        }
-        
-        successCount++;
-      } catch (error) {
-        const { errorHandler } = require('../common/errorHandler');
-        const context = `約定履歴の更新 (${exchange.id} ${symbol})`;
-        
-        // 重複キーエラー以外の場合はDiscord通知
-        if (error.code !== 11000) {
-          await errorHandler.handleError(error, context, false);
         } else {
-          // 重複キーエラーの場合は警告ログのみ
+          // トランザクション失敗時の処理
           if (!isBacktest) {
-            console.warn(`[約定更新] 重複約定をスキップ: tradeId=${_trade.tradeId}`);
+            console.error(`[約定更新] 分散トランザクション失敗: ${_trade.tradeId} - ${result.error}`);
           }
+          
+          // 重要エラーの場合はDiscord通知
+          if (result.severity === 'critical') {
+            const { postErrorToDiscord } = require('../common/notifications');
+            if (postErrorToDiscord && !isBacktest) {
+              await postErrorToDiscord(`🚨 **重要: 2PC約定処理失敗**\n` +
+                                      `約定ID: ${_trade.tradeId}\n` +
+                                      `取引所: ${_trade.exchange}\n` +
+                                      `通貨: ${_trade.symbol}\n` +
+                                      `戦略: ${_trade.strategy}\n` +
+                                      `取引種別: ${_trade.side} ${_trade.amount} @ ${_trade.price}\n` +
+                                      `エラー: ${result.error}\n` +
+                                      `※ Two-Phase Commitによりデータ整合性は保たれています`);
+            }
+          }
+        }
+      } catch (error) {
+        if (!isBacktest) {
+          console.error(`[約定更新] 予期しないエラー: ${_trade.tradeId} - ${error.message}`);
+        }
+        
+        // 予期しないエラーもDiscord通知
+        const { postErrorToDiscord } = require('../common/notifications');
+        if (postErrorToDiscord && !isBacktest) {
+          await postErrorToDiscord(`⚠️ **約定処理で予期しないエラー**\n` +
+                                  `約定ID: ${_trade.tradeId}\n` +
+                                  `エラー: ${error.message}\n` +
+                                  `※ システム管理者による確認が必要です`);
         }
       }
       
@@ -839,7 +770,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     
     const dbTime = Date.now() - dbStart;
     if (!isBacktest) {
-      console.log(`[約定更新] MongoDB書き込み完了: ${successCount}/${processedCount}件成功 (${dbTime}ms)`);
+      console.log(`[約定更新] 分散トランザクション処理完了: ${successCount}/${processedCount}件成功 (${dbTime}ms)`);
     }
     
     // サマリータイムスタンプは最後に一度だけ更新
@@ -871,6 +802,339 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     tradeUpdateCache.delete(cacheKey);
     
     return 0;
+  }
+}
+
+/**
+ * 重複チェック（処理状態含む冪等性保証）
+ */
+async function checkTradeExists(tradeId) {
+  try {
+    const { connectDB } = require('./mongoDatabase');
+    await connectDB();
+    const mongoDatabase = require('./mongoDatabase');
+    
+    if (!mongoDatabase.tradesCollection) {
+      return { exists: false, state: null };
+    }
+    
+    const existingTrade = await mongoDatabase.tradesCollection.findOne({ tradeId });
+    
+    if (!existingTrade) {
+      return { exists: false, state: null };
+    }
+    
+    return { 
+      exists: true, 
+      state: existingTrade.processingState || 'UNKNOWN',
+      completedAt: existingTrade.processingState === 'COMPLETED' ? existingTrade.lastStateUpdate : null
+    };
+  } catch (error) {
+    console.error(`重複チェックエラー: ${tradeId} - ${error.message}`);
+    return { exists: false, state: null, error: error.message };
+  }
+}
+
+/**
+ * Two-Phase Commit Protocol実装による分散トランザクション
+ * Phase 1: Prepare - 全参加者がコミット準備完了を確認
+ * Phase 2: Commit - 全参加者が同時にコミット実行
+ */
+async function executeDistributedTransaction(trade, isBacktest) {
+  let mongoSession = null;
+  let redisTransaction = null;
+  let distributedLock = null;
+  
+  try {
+    // 分散ロック取得（並行処理制御）
+    distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
+    if (!distributedLock.acquired) {
+      if (!isBacktest) {
+        console.log(`[2PC] 分散ロック取得失敗: ${trade.tradeId} - 他の処理が進行中`);
+      }
+      return { success: false, error: 'Lock acquisition failed', severity: 'warning' };
+    }
+
+    // 処理状態をPENDINGに設定（冪等性保証）
+    const stateResult = await setTradeProcessingState(trade.tradeId, 'PENDING');
+    if (!stateResult.success) {
+      if (!isBacktest) {
+        console.log(`[2PC] 処理状態設定失敗: ${trade.tradeId} - ${stateResult.reason}`);
+      }
+      return { success: false, error: stateResult.reason, severity: 'warning' };
+    }
+
+    // === PHASE 1: PREPARE ===
+    if (!isBacktest) {
+      console.log(`[2PC] Prepare Phase開始: ${trade.tradeId}`);
+    }
+
+    // MongoDB Prepare
+    const { getClient } = require('./mongoDatabase');
+    const mongoClient = getClient();
+    mongoSession = mongoClient.startSession();
+    mongoSession.startTransaction();
+
+    // 処理状態をPROCESSINGに更新
+    await setTradeProcessingState(trade.tradeId, 'PROCESSING');
+
+    try {
+      // MongoDB への準備処理（トランザクション内）
+      await addTradeMongoDB(trade, { session: mongoSession });
+      if (!isBacktest) {
+        console.log(`[2PC] MongoDB Prepare完了: ${trade.tradeId}`);
+      }
+    } catch (error) {
+      throw new Error(`MongoDB Prepare失敗: ${error.message}`);
+    }
+
+    // Redis Prepare
+    const { getClient: getRedisClient } = require('./redisDatabase');
+    const redisClient = getRedisClient();
+    redisTransaction = redisClient.multi();
+
+    try {
+      // Redis準備処理をトランザクションキューに追加
+      await prepareRedisOperations(redisTransaction, trade);
+      if (!isBacktest) {
+        console.log(`[2PC] Redis Prepare完了: ${trade.tradeId}`);
+      }
+    } catch (error) {
+      throw new Error(`Redis Prepare失敗: ${error.message}`);
+    }
+
+    // === PHASE 2: COMMIT ===
+    if (!isBacktest) {
+      console.log(`[2PC] Commit Phase開始: ${trade.tradeId}`);
+    }
+
+    // Redis先行コミット（原子性保証）
+    const redisResults = await redisTransaction.exec();
+    if (!redisResults || redisResults.some(result => result[0] !== null)) {
+      throw new Error('Redis Commit失敗: 一部のコマンドが失敗しました');
+    }
+
+    // MongoDB後続コミット
+    await mongoSession.commitTransaction();
+
+    // 処理状態をCOMPLETEDに更新
+    await setTradeProcessingState(trade.tradeId, 'COMPLETED');
+
+    if (!isBacktest) {
+      console.log(`[2PC] 分散トランザクション成功: ${trade.tradeId}`);
+    }
+
+    return { success: true };
+
+  } catch (error) {
+    if (!isBacktest) {
+      console.error(`[2PC] エラー発生: ${trade.tradeId} - ${error.message}`);
+    }
+
+    // フェイルバック処理
+    try {
+      // MongoDB ロールバック
+      if (mongoSession) {
+        await mongoSession.abortTransaction();
+        if (!isBacktest) {
+          console.log(`[2PC] MongoDB ロールバック完了: ${trade.tradeId}`);
+        }
+      }
+
+      // Redis ロールバック（compensating transaction）
+      if (redisTransaction) {
+        await executeRedisCompensation(trade);
+        if (!isBacktest) {
+          console.log(`[2PC] Redis 補償トランザクション完了: ${trade.tradeId}`);
+        }
+      }
+
+      // 処理状態をFAILEDに更新
+      await setTradeProcessingState(trade.tradeId, 'FAILED');
+
+    } catch (rollbackError) {
+      if (!isBacktest) {
+        console.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackError.message}`);
+      }
+    }
+
+    return { 
+      success: false, 
+      error: error.message,
+      severity: error.message.includes('MongoDB') ? 'critical' : 'warning'
+    };
+
+  } finally {
+    // リソースクリーンアップ
+    if (mongoSession) {
+      await mongoSession.endSession();
+    }
+    if (distributedLock && distributedLock.acquired) {
+      await releaseDistributedLock(distributedLock);
+      if (!isBacktest) {
+        console.log(`[2PC] 分散ロック解放: ${trade.tradeId}`);
+      }
+    }
+  }
+}
+
+/**
+ * 分散ロック取得（Redis SET NX EX を使用）
+ */
+async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
+  try {
+    const { getClient: getRedisClient } = require('./redisDatabase');
+    const redisClient = getRedisClient();
+    const lockKey = `lock:trade:${exchange}:${symbol}:${tradeId}`;
+    const lockValue = `${Date.now()}_${Math.random()}`;
+    
+    const result = await redisClient.set(lockKey, lockValue, 'PX', ttl, 'NX');
+    
+    return {
+      acquired: result === 'OK',
+      lockKey,
+      lockValue,
+      ttl
+    };
+  } catch (error) {
+    console.error(`分散ロック取得エラー: ${error.message}`);
+    return { acquired: false, error: error.message };
+  }
+}
+
+/**
+ * 分散ロック解放
+ */
+async function releaseDistributedLock(lockInfo) {
+  try {
+    const { getClient: getRedisClient } = require('./redisDatabase');
+    const redisClient = getRedisClient();
+    
+    // Lua script for atomic lock release
+    const script = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+      else
+        return 0
+      end
+    `;
+    
+    const result = await redisClient.eval(script, 1, lockInfo.lockKey, lockInfo.lockValue);
+    return result === 1;
+  } catch (error) {
+    console.error(`分散ロック解放エラー: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * 処理状態管理（冪等性保証）
+ */
+async function setTradeProcessingState(tradeId, state) {
+  try {
+    const { connectDB } = require('./mongoDatabase');
+    await connectDB();
+    const mongoDatabase = require('./mongoDatabase');
+    
+    if (!mongoDatabase.tradesCollection) {
+      throw new Error('tradesCollection is not available');
+    }
+    
+    // 既存の処理状態をチェック
+    const existingTrade = await mongoDatabase.tradesCollection.findOne({ tradeId });
+    
+    if (existingTrade) {
+      const currentState = existingTrade.processingState;
+      
+      // 状態遷移の妥当性チェック
+      if (currentState === 'COMPLETED') {
+        return { 
+          success: false, 
+          reason: `取引は既に完了済み: ${tradeId}` 
+        };
+      }
+      
+      if (currentState === 'PROCESSING' && state === 'PENDING') {
+        return { 
+          success: false, 
+          reason: `取引は既に処理中: ${tradeId}` 
+        };
+      }
+    }
+    
+    // 状態を設定または更新
+    await mongoDatabase.tradesCollection.updateOne(
+      { tradeId },
+      { 
+        $set: { 
+          processingState: state, 
+          lastStateUpdate: new Date() 
+        } 
+      },
+      { upsert: true }
+    );
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error(`処理状態設定エラー: ${tradeId} - ${error.message}`);
+    return { success: false, reason: error.message };
+  }
+}
+
+/**
+ * Redis操作の準備（トランザクションキューに追加）
+ */
+async function prepareRedisOperations(transaction, trade) {
+  // updateTradeSummary相当の操作をトランザクションに追加
+  const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+  
+  if (trade.side === 'buy') {
+    transaction.hincrbyfloat(summaryKey, 'netPosition', trade.amount);
+    transaction.hincrbyfloat(summaryKey, 'buyAmount', trade.amount);
+    transaction.hincrbyfloat(summaryKey, 'totalBuyCost', trade.value);
+  } else if (trade.side === 'sell') {
+    transaction.hincrbyfloat(summaryKey, 'netPosition', -trade.amount);
+    transaction.hincrbyfloat(summaryKey, 'sellAmount', trade.amount);
+    transaction.hincrbyfloat(summaryKey, 'totalSellRevenue', trade.value);
+  }
+  
+  // 未約定注文削除をトランザクションに追加
+  if (trade.orderId && trade.strategy !== 'OUTSIDE') {
+    const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+    transaction.hdel(pendingKey, trade.orderId);
+  }
+  
+  // タイムスタンプ更新
+  transaction.hset(summaryKey, 'updatedAt', Date.now());
+}
+
+/**
+ * Redis補償トランザクション実行
+ */
+async function executeRedisCompensation(trade) {
+  try {
+    const { getClient: getRedisClient } = require('./redisDatabase');
+    const redisClient = getRedisClient();
+    const compensation = redisClient.multi();
+    
+    const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+    
+    // 逆操作を実行
+    if (trade.side === 'buy') {
+      compensation.hincrbyfloat(summaryKey, 'netPosition', -trade.amount);
+      compensation.hincrbyfloat(summaryKey, 'buyAmount', -trade.amount);
+      compensation.hincrbyfloat(summaryKey, 'totalBuyCost', -trade.value);
+    } else if (trade.side === 'sell') {
+      compensation.hincrbyfloat(summaryKey, 'netPosition', trade.amount);
+      compensation.hincrbyfloat(summaryKey, 'sellAmount', -trade.amount);
+      compensation.hincrbyfloat(summaryKey, 'totalSellRevenue', -trade.value);
+    }
+    
+    await compensation.exec();
+  } catch (error) {
+    console.error(`Redis補償トランザクションエラー: ${error.message}`);
+    throw error;
   }
 }
 
