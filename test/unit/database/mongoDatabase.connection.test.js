@@ -220,14 +220,14 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
           'mongodb://test:27017',
           expect.objectContaining({
             serverSelectionTimeoutMS: 30000,
-            connectTimeoutMS: 30000,
-            socketTimeoutMS: 30000,
+            connectTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
             maxPoolSize: 50,
             minPoolSize: 5,
             maxIdleTimeMS: 30000,
             retryWrites: true,
             heartbeatFrequencyMS: 10000,
-            bufferMaxEntries: 0,
+            // bufferMaxEntries: 削除（新しいドライバでは非対応）
             compressors: ['zlib'],
             maxConnecting: 10
           })

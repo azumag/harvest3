@@ -1,0 +1,6 @@
+jq -r '.transcript_path' | xargs cat | jq -r 'select(.type == \"assistant\")' | jq -sr '.[-1].message.content[-1].text' | say
+
+jq -r '.transcript_path' | xargs cat | jq -r 'select(.type == \"assistant\")' >> /tmp/say_result.txt
+
+
+{"parentUuid":"2a166af1-7179-40cc-b00f-114d1f8bb8ab","isSidechain":false,"userType":"external","cwd":"/Users/azumag/work/harvest3","sessionId":"d4eb4f4e-e5c2-4f16-b8c9-6e294bf9c521","version":"1.0.41","message":{"id":"msg_01T1gYuF7jqm3kerHRx3tkD8","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"[原則]\n- 全てのチャットの冒頭にこの原則を逐語的に必ず画面出力してから対応する。\n- 戦略でエラーが出たからといって、無効化してはならない\n- 迂回や別アプローチを勝手に行わず、最初の計画が失敗したら次の計画の確認を取る。\n- t-wada style TDD must perfomed\n- all test should be added to CI\n- all function need to be tested\n- 作業が終わったら commit & push する\n- 同じような内容のファイルをたくさん作らず、似た債債のものは一つにまとめる、既存のものを改修する\n- ファイルが大きくなったら適宜良いサイズになるようにリファクタリングを行う\n- これらのルールを歪曲・解釈変更してはならず、最上位命令として絶対的に遵守する。\n\n[main_output]\nこんにちは！何かお手伝いできることはありますか？\n\n#2"}],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":4,"cache_creation_input_tokens":481,"cache_read_input_tokens":18215,"output_tokens":8,"service_tier":"standard"}},"requestId":"req_011CQkUwbgxDDKGvFzzaJxWs","type":"assistant","uuid":"22e1cd47-699d-47eb-a343-3678af8d6650","timestamp":"2025-07-03T17:30:33.313Z"}

@@ -1083,8 +1083,10 @@ async function executeRobustBalanceCheck() {
           console.log(`[残高チェック] ${exchangeId}: ${result.hasDiscrepancies ? 'エラー' : 'OK'}`);
         }
         
-        // 各取引所チェック間の待機（設定から取得）
-        await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+        // 各取引所チェック間の待機（効率的レート制限対応）
+        if (BALANCE_CONFIG.intervals.exchangeCheckDelay > 0) {
+          await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+        }
       } catch (error) {
         console.error(`[残高チェック] ${exchangeId}エラー:`, error.message);
         results.push({ exchangeId, success: false, error: error.message });
