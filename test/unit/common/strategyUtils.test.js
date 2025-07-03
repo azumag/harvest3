@@ -152,6 +152,20 @@ describe('getBalanceCheckEligibleStrategies', () => {
       
       expect(result).not.toContain('NO_BALANCE_CHECK');
     });
+
+    it('configがnullの場合は空配列を返すこと', () => {
+      const result = getBalanceCheckEligibleStrategies(null);
+      
+      expect(result).toBeInstanceOf(Array);
+      expect(result).toHaveLength(0);
+    });
+
+    it('config.strategiesがnullの場合は空配列を返すこと', () => {
+      const result = getBalanceCheckEligibleStrategies({ strategies: null });
+      
+      expect(result).toBeInstanceOf(Array);
+      expect(result).toHaveLength(0);
+    });
   });
 
   describe('統合テスト', () => {

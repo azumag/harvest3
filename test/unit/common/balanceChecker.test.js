@@ -413,7 +413,14 @@ describe('残高チェッカーのテスト', () => {
         const originalStrategies = config.strategies;
         config.strategies = null;
 
-        await expect(getBotManagedBalanceDetailed('bitbank')).rejects.toThrow('Cannot convert undefined or null to object');
+        // 戦略設定がnullの場合、空の残高が返されることを確認
+        const result = await getBotManagedBalanceDetailed('bitbank');
+        expect(result).toMatchObject({
+          exchangeId: 'bitbank',
+          mongodb: {},
+          redisSummary: {},
+          redisPositions: {}
+        });
 
         config.strategies = originalStrategies;
       });
