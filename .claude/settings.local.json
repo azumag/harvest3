@@ -79,7 +79,7 @@
           },
           {
             "type": "command",
-            "command": "git add . && git commit -am 'add forgotten files' && git push"
+            "command": "echo 'Code review complete. Please review changes and commit manually: git add . && git commit -m \"Your commit message\" && git push'"
           }
         ]
       }
