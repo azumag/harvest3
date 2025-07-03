@@ -1,10 +1,18 @@
 /**
  * 残高チェッカー - 取引所残高とbot管理残高の比較・監視
- * 完全再構築テスト用
+ * geminiの指摘に基づく堅牢な実装
  */
 const { config } = require('../config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
-const { getAllPositionsRedis } = require('../database/redisDatabase');
+const { 
+  getClient: getRedisClient,
+  getAllPositionsRedis,
+  getAllTradeSummaries
+} = require('../database/redisDatabase');
+const { 
+  getAllTradeSummaries: getAllTradeSummariesFromDB,
+  getTradeCurrentPosition
+} = require('../database/manager');
 
 /**
  * 取引所残高を取得する
@@ -225,10 +233,414 @@ async function checkSingleExchange(exchangeId) {
   }
 }
 
+/**
+ * チェック状態の管理（Redis）
+ */
+const CHECKER_STATE_KEY = 'balance_checker_state';
+const CHECKER_LOCK_KEY = 'balance_checker_lock';
+const LOCK_TTL = 300000; // 5分
+
+/**
+ * チェック状態
+ */
+const STATE = {
+  OK: 'OK',
+  ERROR: 'ERROR',
+  PROCESSING: 'PROCESSING'
+};
+
+/**
+ * 分散ロックを取得
+ */
+async function acquireCheckerLock() {
+  const redisClient = getRedisClient();
+  const lockValue = `${Date.now()}_${Math.random()}`;
+  
+  const result = await redisClient.set(CHECKER_LOCK_KEY, lockValue, 'PX', LOCK_TTL, 'NX');
+  
+  return {
+    acquired: result === 'OK',
+    lockValue,
+    release: async () => {
+      const script = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      return await redisClient.eval(script, 1, CHECKER_LOCK_KEY, lockValue);
+    }
+  };
+}
+
+/**
+ * チェック状態を取得
+ */
+async function getCheckerState() {
+  const redisClient = getRedisClient();
+  const state = await redisClient.get(CHECKER_STATE_KEY);
+  return state ? JSON.parse(state) : { state: STATE.OK };
+}
+
+/**
+ * チェック状態を設定
+ */
+async function setCheckerState(state, details = null) {
+  const redisClient = getRedisClient();
+  const stateData = {
+    state,
+    timestamp: Date.now(),
+    details
+  };
+  await redisClient.set(CHECKER_STATE_KEY, JSON.stringify(stateData));
+}
+
+/**
+ * BOT管理残高を3つのソースから取得
+ * 1. MongoDB取引履歴から再計算
+ * 2. Redisサマリーキャッシュ
+ * 3. Redisポジションデータ
+ */
+async function getBotManagedBalanceDetailed(exchangeId) {
+  try {
+    console.log(`[BALANCE_CHECKER] Calculating detailed BOT managed balance for ${exchangeId}`);
+    
+    // 1. MongoDB取引履歴から再計算
+    const mongoBalances = await calculateBalanceFromMongoDB(exchangeId);
+    
+    // 2. Redisサマリーから取得
+    const redisBalances = await calculateBalanceFromRedisSummary(exchangeId);
+    
+    // 3. Redisポジションから取得（既存の関数を流用）
+    const positionBalances = await getBotManagedBalance();
+    
+    const snapshot = {
+      timestamp: Date.now(),
+      exchangeId,
+      mongodb: mongoBalances,
+      redisSummary: redisBalances,
+      redisPositions: positionBalances
+    };
+    
+    console.log(`[BALANCE_CHECKER] Detailed BOT balance calculated: ${exchangeId}`);
+    return snapshot;
+  } catch (error) {
+    console.error(`[BALANCE_CHECKER] Detailed BOT balance error (${exchangeId}):`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * MongoDBの取引履歴から残高を再計算
+ */
+async function calculateBalanceFromMongoDB(exchangeId) {
+  const balances = {};
+  
+  try {
+    // 設定から対象シンボルを取得
+    const exchangeConfig = config.exchanges[exchangeId];
+    if (!exchangeConfig || !exchangeConfig.symbols) {
+      return balances;
+    }
+    
+    // 設定から全戦略キーを取得（enabled/disabledに関わらず）
+    const allStrategies = Object.keys(config.strategies);
+    // 追加で既知の戦略も含める（設定にないものも含む）
+    const additionalStrategies = ['OUTSIDE', 'UNKNOWN'];
+    const strategies = [...new Set([...allStrategies, ...additionalStrategies])];
+    
+    for (const symbol of exchangeConfig.symbols) {
+      const [baseCurrency] = symbol.split('/');
+      
+      // 全戦略の合計残高を取得
+      let totalBalance = 0;
+      
+      for (const strategy of strategies) {
+        try {
+          const position = await getTradeCurrentPosition(exchangeId, symbol, strategy);
+          totalBalance += position || 0;
+        } catch (error) {
+          console.warn(`[BALANCE_CHECKER] Error getting position for ${strategy}:`, error.message);
+        }
+      }
+      
+      if (totalBalance > 0) {
+        balances[baseCurrency] = (balances[baseCurrency] || 0) + totalBalance;
+      }
+    }
+    
+    return balances;
+  } catch (error) {
+    console.error(`[BALANCE_CHECKER] MongoDB calculation error:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Redisサマリーから残高を計算
+ */
+async function calculateBalanceFromRedisSummary(exchangeId) {
+  try {
+    const summaries = await getAllTradeSummaries();
+    const balances = {};
+    
+    for (const summary of summaries) {
+      if (summary.exchange === exchangeId) {
+        const [baseCurrency] = summary.symbol.split('/');
+        const netPosition = summary.netPosition || 0;
+        
+        if (netPosition > 0) {
+          balances[baseCurrency] = (balances[baseCurrency] || 0) + netPosition;
+        }
+      }
+    }
+    
+    return balances;
+  } catch (error) {
+    console.error(`[BALANCE_CHECKER] Redis summary calculation error:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * 堅牢な残高比較（分散ロック付き）
+ */
+async function compareBalancesRobust(exchangeId) {
+  const lock = await acquireCheckerLock();
+  
+  if (!lock.acquired) {
+    console.log(`[BALANCE_CHECKER] Another check is already running, skipping`);
+    return { skipped: true, reason: 'another_check_running' };
+  }
+  
+  try {
+    console.log(`[BALANCE_CHECKER] Starting robust balance check for ${exchangeId}`);
+    
+    // 現在の状態を取得
+    const currentStateData = await getCheckerState();
+    const currentState = currentStateData.state;
+    
+    // PROCESSING状態に設定
+    await setCheckerState(STATE.PROCESSING, { exchangeId, startTime: Date.now() });
+    
+    // 取引所残高とBOT詳細残高を取得
+    const [exchangeBalance, botDetailedBalance] = await Promise.all([
+      getExchangeBalance(exchangeId),
+      getBotManagedBalanceDetailed(exchangeId)
+    ]);
+    
+    // 詳細比較を実行
+    const comparison = await performDetailedComparison(exchangeBalance, botDetailedBalance);
+    
+    // 結果の判定
+    const hasDiscrepancies = comparison.discrepancies.length > 0;
+    const hasInternalInconsistencies = comparison.internalInconsistencies.length > 0;
+    const hasAnyIssues = hasDiscrepancies || hasInternalInconsistencies;
+    
+    // 状態遷移の判定
+    const newState = hasAnyIssues ? STATE.ERROR : STATE.OK;
+    
+    // 初回エラー検出または状態変化時のみ通知
+    const shouldNotify = (currentState === STATE.OK && newState === STATE.ERROR) ||
+                        (currentState === STATE.ERROR && newState === STATE.OK);
+    
+    if (shouldNotify && hasAnyIssues) {
+      const message = createDetailedDiscrepancyMessage(comparison);
+      await postOrderToDiscord(message);
+      console.error(`[BALANCE_CHECKER] Discrepancies detected for ${exchangeId}:`, comparison);
+    } else if (shouldNotify && !hasAnyIssues) {
+      const message = `✅ **残高整合性回復**\n取引所: ${exchangeId}\n時刻: ${new Date().toLocaleString('ja-JP')}`;
+      await postOrderToDiscord(message);
+      console.log(`[BALANCE_CHECKER] Balance consistency restored for ${exchangeId}`);
+    }
+    
+    // 状態を更新
+    await setCheckerState(newState, {
+      exchangeId,
+      lastCheck: Date.now(),
+      hasDiscrepancies,
+      hasInternalInconsistencies,
+      comparison: hasAnyIssues ? comparison : null
+    });
+    
+    return {
+      exchangeId,
+      success: true,
+      hasDiscrepancies,
+      hasInternalInconsistencies,
+      comparison,
+      stateChanged: currentState !== newState
+    };
+    
+  } catch (error) {
+    console.error(`[BALANCE_CHECKER] Robust check failed for ${exchangeId}:`, error.message);
+    
+    // エラー状態に設定
+    await setCheckerState(STATE.ERROR, {
+      exchangeId,
+      error: error.message,
+      timestamp: Date.now()
+    });
+    
+    // エラー通知
+    const errorMessage = `❌ **残高チェックエラー**\n取引所: ${exchangeId}\nエラー: ${error.message}`;
+    await postErrorToDiscord(errorMessage);
+    
+    throw error;
+  } finally {
+    await lock.release();
+  }
+}
+
+/**
+ * 残高の詳細比較と分析
+ */
+async function performDetailedComparison(exchangeSnapshot, botSnapshot) {
+  const comparison = {
+    timestamp: Date.now(),
+    exchangeData: exchangeSnapshot,
+    botData: botSnapshot,
+    discrepancies: [],
+    internalInconsistencies: []
+  };
+  
+  // 取引所残高 vs BOT残高の比較
+  const exchangeBalances = exchangeSnapshot.total;
+  const mongoBalances = botSnapshot.mongodb;
+  const redisBalances = botSnapshot.redisSummary;
+  const positionBalances = botSnapshot.redisPositions;
+  
+  // 全ての通貨を取得
+  const allCurrencies = new Set([
+    ...Object.keys(exchangeBalances),
+    ...Object.keys(mongoBalances),
+    ...Object.keys(redisBalances),
+    ...Object.keys(positionBalances)
+  ]);
+  
+  for (const currency of allCurrencies) {
+    // JPYは除外
+    if (currency === 'JPY') continue;
+    
+    const exchangeAmount = exchangeBalances[currency] || 0;
+    const mongoAmount = mongoBalances[currency] || 0;
+    const redisAmount = redisBalances[currency] || 0;
+    const positionAmount = positionBalances[currency] || 0;
+    
+    // 有意な残高がある場合のみチェック
+    const maxAmount = Math.max(exchangeAmount, mongoAmount, redisAmount, positionAmount);
+    if (maxAmount < 0.00001) continue;
+    
+    const currencyComparison = {
+      currency,
+      exchange: exchangeAmount,
+      mongodb: mongoAmount,
+      redisSummary: redisAmount,
+      redisPositions: positionAmount,
+      discrepancies: {}
+    };
+    
+    // 各ソース間の比較
+    if (Math.abs(exchangeAmount - mongoAmount) > 0) {
+      currencyComparison.discrepancies.exchangeVsMongo = exchangeAmount - mongoAmount;
+    }
+    
+    if (Math.abs(mongoAmount - redisAmount) > 0) {
+      currencyComparison.discrepancies.mongoVsRedis = mongoAmount - redisAmount;
+      comparison.internalInconsistencies.push({
+        currency,
+        type: 'mongo_redis_mismatch',
+        mongo: mongoAmount,
+        redis: redisAmount,
+        difference: mongoAmount - redisAmount
+      });
+    }
+    
+    if (Math.abs(redisAmount - positionAmount) > 0) {
+      currencyComparison.discrepancies.redisVsPosition = redisAmount - positionAmount;
+      comparison.internalInconsistencies.push({
+        currency,
+        type: 'redis_position_mismatch',
+        summary: redisAmount,
+        positions: positionAmount,
+        difference: redisAmount - positionAmount
+      });
+    }
+    
+    if (Object.keys(currencyComparison.discrepancies).length > 0) {
+      comparison.discrepancies.push(currencyComparison);
+    }
+  }
+  
+  return comparison;
+}
+
+/**
+ * 詳細なDiscordメッセージを作成
+ */
+function createDetailedDiscrepancyMessage(comparison) {
+  const { exchangeData, discrepancies, internalInconsistencies } = comparison;
+  
+  let message = `🚨 **残高整合性エラー検出**\n`;
+  message += `取引所: ${exchangeData.id || 'Unknown'}\n`;
+  message += `検出時刻: ${new Date(comparison.timestamp).toLocaleString('ja-JP')}\n\n`;
+  
+  if (discrepancies.length > 0) {
+    message += `**🔍 残高乖離詳細:**\n`;
+    for (const disc of discrepancies.slice(0, 5)) { // 最大5通貨まで表示
+      message += `**${disc.currency}:**\n`;
+      message += `  取引所: ${disc.exchange.toFixed(8)}\n`;
+      message += `  MongoDB: ${disc.mongodb.toFixed(8)}\n`;
+      message += `  Redis: ${disc.redisSummary.toFixed(8)}\n`;
+      message += `  ポジション: ${disc.redisPositions.toFixed(8)}\n`;
+      
+      if (disc.discrepancies.exchangeVsMongo) {
+        message += `  ⚠️ 取引所-MongoDB差異: ${disc.discrepancies.exchangeVsMongo.toFixed(8)}\n`;
+      }
+      message += `\n`;
+    }
+    
+    if (discrepancies.length > 5) {
+      message += `...他${discrepancies.length - 5}通貨でも乖離あり\n\n`;
+    }
+  }
+  
+  if (internalInconsistencies.length > 0) {
+    message += `**⚠️ 内部データ不整合:**\n`;
+    for (const inc of internalInconsistencies.slice(0, 3)) { // 最大3件まで表示
+      message += `  ${inc.currency}: ${inc.type} (差異: ${inc.difference.toFixed(8)})\n`;
+    }
+    
+    if (internalInconsistencies.length > 3) {
+      message += `...他${internalInconsistencies.length - 3}件の不整合あり\n`;
+    }
+    message += `\n`;
+  }
+  
+  message += `**🔧 緊急対応が必要です**`;
+  
+  return message;
+}
+
+/**
+ * チェック状態の手動リセット（開発者用）
+ */
+async function resetCheckerState() {
+  await setCheckerState(STATE.OK, { reset: true, timestamp: Date.now() });
+  console.log(`[BALANCE_CHECKER] State manually reset to OK`);
+}
+
 module.exports = {
   getExchangeBalance,
   getBotManagedBalance,
   compareBalances,
   checkAllExchangeBalances,
-  checkSingleExchange  // ✅ FIX: Added missing function for bot.js compatibility
+  checkSingleExchange,
+  // 新しい堅牢な機能
+  compareBalancesRobust,
+  getBotManagedBalanceDetailed,
+  getCheckerState,
+  resetCheckerState,
+  STATE
 };

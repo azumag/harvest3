@@ -389,19 +389,19 @@ async function startBot() {
           if (now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
             try {
               console.log(`[残高チェック] 開始: ${exchangeId}`);
-              const { checkSingleExchange } = require('./common/balanceChecker');
-              const result = await checkSingleExchange(exchangeId);
+              const { compareBalances } = require('./common/balanceChecker');
+              const result = await compareBalances(exchangeId);
               
-              if (result.discrepancyCount > 0) {
-                console.log(`[残高チェック] 不整合検出: ${result.discrepancyCount}件`);
+              if (result.discrepancies.length > 0) {
+                console.log(`[残高チェック] 不整合検出: ${result.discrepancies.length}件`);
                 
                 // 不整合が検出された場合の詳細ログ
                 for (const discrepancy of result.discrepancies) {
-                  console.log(`  ${discrepancy.currency}: Bot ${discrepancy.botBalance} vs 取引所 ${discrepancy.exchangeBalance} (${discrepancy.percentage}%差)`);
+                  console.log(`  ${discrepancy.currency}: Bot ${discrepancy.botAmount} vs 取引所 ${discrepancy.exchangeAmount} (${discrepancy.discrepancyPercent}%差)`);
                 }
                 
                 // 高い不整合（10%以上）が検出された場合、Discord通知
-                const highDiscrepancies = result.discrepancies.filter(d => Math.abs(d.percentage) >= 10);
+                const highDiscrepancies = result.discrepancies.filter(d => Math.abs(d.discrepancyPercent) >= 10);
                 if (highDiscrepancies.length > 0) {
                   let message = `⚠️ **残高不整合検出** (${exchangeId})\n` +
                                `━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -409,9 +409,9 @@ async function startBot() {
                   
                   highDiscrepancies.forEach(d => {
                     message += `💱 **${d.currency}**\n` +
-                              `　Bot計算: ${d.botBalance.toFixed(6)}\n` +
-                              `　取引所: ${d.exchangeBalance.toFixed(6)}\n` +
-                              `　差異: ${d.percentage.toFixed(2)}%\n\n`;
+                              `　Bot計算: ${d.botAmount.toFixed(6)}\n` +
+                              `　取引所: ${d.exchangeAmount.toFixed(6)}\n` +
+                              `　差異: ${d.discrepancyPercent.toFixed(2)}%\n\n`;
                   });
                   
                   message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
@@ -1030,17 +1030,38 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 //   }
 // }, 60000); // 1分ごとにチェック
 
-// 残高チェックを1時間ごとに実行（完全一致チェック）
+// 残高整合性チェックを1時間ごとに実行（堅牢版）
 setInterval(async () => {
   const now = new Date();
   if (now.getMinutes() === 0) { // 毎時0分に実行
     try {
-      console.log('=== 定期残高チェック開始 ===');
-      await checkAllExchangeBalances();
-      console.log('=== 定期残高チェック完了 ===');
+      console.log('=== 定期残高整合性チェック開始 ===');
+      const { compareBalancesRobust } = require('./common/balanceChecker');
+      
+      const results = [];
+      for (const exchangeId of Object.keys(config.exchanges)) {
+        try {
+          const result = await compareBalancesRobust(exchangeId);
+          results.push(result);
+          
+          if (!result.skipped) {
+            console.log(`[残高チェック] ${exchangeId}: ${result.hasDiscrepancies ? 'エラー' : 'OK'}`);
+          }
+          
+          // 各取引所チェック間に2秒待機
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (error) {
+          console.error(`[残高チェック] ${exchangeId}エラー:`, error.message);
+          results.push({ exchangeId, success: false, error: error.message });
+        }
+      }
+      
+      const errorCount = results.filter(r => !r.success || r.hasDiscrepancies).length;
+      console.log(`=== 定期残高整合性チェック完了 (${errorCount}件のエラー) ===`);
+      
     } catch (error) {
-      console.error('定期残高チェックエラー:', error.message);
-      await postErrorToDiscord(`定期残高チェック失敗: ${error.message}`);
+      console.error('定期残高整合性チェックエラー:', error.message);
+      await postErrorToDiscord(`定期残高整合性チェック失敗: ${error.message}`);
     }
   }
 }, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
