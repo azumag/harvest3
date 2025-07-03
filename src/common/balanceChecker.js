@@ -1,8 +1,9 @@
 /**
  * 残高チェッカー - 取引所残高とbot管理残高の比較・監視
- * geminiの指摘に基づく堅牢な実装
+ * geminiの指摘に基づく堅牢な実装（設定外部化対応）
  */
 const { config } = require('../config');
+const { getValidatedConfig } = require('./balanceCheckerConfig');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const { 
   getClient: getRedisClient,
@@ -13,6 +14,9 @@ const {
   getAllTradeSummaries: getAllTradeSummariesFromDB,
   getTradeCurrentPosition
 } = require('../database/manager');
+
+// 設定の取得
+const BALANCE_CONFIG = getValidatedConfig();
 
 /**
  * 取引所残高を取得する
@@ -90,7 +94,7 @@ async function compareBalances(exchangeId, thresholdPercent = 0) {
     const botBalance = await getBotManagedBalance();
     
     // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
-    const significantThreshold = 0.00001; // 0.00001以上を有意とする（完全一致チェックのため閾値を大幅に下げる）
+    const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
     const exchangeCurrencies = Object.keys(exchangeBalance.total).filter(
       currency => exchangeBalance.total[currency] >= significantThreshold
     );
@@ -190,8 +194,8 @@ async function checkAllExchangeBalances() {
         const result = await compareBalances(exchangeId);
         results.push(result);
         
-        // 各取引所チェック間に1秒待機
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 各取引所チェック間の待機（設定から取得）
+        await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
       } catch (error) {
         console.error(`${exchangeId} の残高チェックに失敗:`, error.message);
         results.push({
@@ -234,11 +238,11 @@ async function checkSingleExchange(exchangeId) {
 }
 
 /**
- * チェック状態の管理（Redis）
+ * チェック状態の管理（Redis）- 設定から取得
  */
-const CHECKER_STATE_KEY = 'balance_checker_state';
-const CHECKER_LOCK_KEY = 'balance_checker_lock';
-const LOCK_TTL = 300000; // 5分
+const CHECKER_STATE_KEY = BALANCE_CONFIG.distributedLock.stateKey;
+const CHECKER_LOCK_KEY = BALANCE_CONFIG.distributedLock.lockKeyPrefix;
+const LOCK_TTL = BALANCE_CONFIG.distributedLock.defaultTtl;
 
 /**
  * チェック状態
@@ -346,8 +350,8 @@ async function calculateBalanceFromMongoDB(exchangeId) {
     
     // 設定から全戦略キーを取得（enabled/disabledに関わらず）
     const allStrategies = Object.keys(config.strategies);
-    // 追加で既知の戦略も含める（設定にないものも含む）
-    const additionalStrategies = ['OUTSIDE', 'UNKNOWN'];
+    // 追加で既知の戦略も含める（設定から取得）
+    const additionalStrategies = BALANCE_CONFIG.strategies.additionalStrategies;
     const strategies = [...new Set([...allStrategies, ...additionalStrategies])];
     
     for (const symbol of exchangeConfig.symbols) {
@@ -530,7 +534,7 @@ async function performDetailedComparison(exchangeSnapshot, botSnapshot) {
     
     // 有意な残高がある場合のみチェック
     const maxAmount = Math.max(exchangeAmount, mongoAmount, redisAmount, positionAmount);
-    if (maxAmount < 0.00001) continue;
+    if (maxAmount < BALANCE_CONFIG.thresholds.significantBalance) continue;
     
     const currencyComparison = {
       currency,
@@ -588,7 +592,8 @@ function createDetailedDiscrepancyMessage(comparison) {
   
   if (discrepancies.length > 0) {
     message += `**🔍 残高乖離詳細:**\n`;
-    for (const disc of discrepancies.slice(0, 5)) { // 最大5通貨まで表示
+    const maxCurrencies = BALANCE_CONFIG.notifications.maxCurrenciesToShow;
+    for (const disc of discrepancies.slice(0, maxCurrencies)) {
       message += `**${disc.currency}:**\n`;
       message += `  取引所: ${disc.exchange.toFixed(8)}\n`;
       message += `  MongoDB: ${disc.mongodb.toFixed(8)}\n`;
@@ -601,19 +606,20 @@ function createDetailedDiscrepancyMessage(comparison) {
       message += `\n`;
     }
     
-    if (discrepancies.length > 5) {
-      message += `...他${discrepancies.length - 5}通貨でも乖離あり\n\n`;
+    if (discrepancies.length > maxCurrencies) {
+      message += `...他${discrepancies.length - maxCurrencies}通貨でも乖離あり\n\n`;
     }
   }
   
   if (internalInconsistencies.length > 0) {
     message += `**⚠️ 内部データ不整合:**\n`;
-    for (const inc of internalInconsistencies.slice(0, 3)) { // 最大3件まで表示
+    const maxInconsistencies = BALANCE_CONFIG.notifications.maxInconsistenciesToShow;
+    for (const inc of internalInconsistencies.slice(0, maxInconsistencies)) {
       message += `  ${inc.currency}: ${inc.type} (差異: ${inc.difference.toFixed(8)})\n`;
     }
     
-    if (internalInconsistencies.length > 3) {
-      message += `...他${internalInconsistencies.length - 3}件の不整合あり\n`;
+    if (internalInconsistencies.length > maxInconsistencies) {
+      message += `...他${internalInconsistencies.length - maxInconsistencies}件の不整合あり\n`;
     }
     message += `\n`;
   }

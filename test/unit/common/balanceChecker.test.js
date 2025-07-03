@@ -347,4 +347,161 @@ describe('残高チェッカーのテスト', () => {
       );
     });
   });
+
+  describe('エラーケースのテスト', () => {
+    describe('ネットワークエラー処理', () => {
+      it('取引所API接続失敗時の適切なエラーハンドリング', async () => {
+        config.exchanges.bitbank.instance.fetchBalance.mockRejectedValue(
+          new Error('Network timeout')
+        );
+
+        await expect(compareBalances('bitbank')).rejects.toThrow('Network timeout');
+      });
+
+      it('Redis接続失敗時の堅牢な比較エラーハンドリング', async () => {
+        const mockRedisClient = {
+          set: jest.fn().mockRejectedValue(new Error('Redis connection failed'))
+        };
+
+        require('../../../src/database/redisDatabase').getClient.mockReturnValue(mockRedisClient);
+
+        await expect(compareBalancesRobust('bitbank')).rejects.toThrow('Redis connection failed');
+      });
+    });
+
+    describe('データ不整合エラー', () => {
+      it('MongoDB取引履歴が破損している場合のエラーハンドリング', async () => {
+        // 全て正常に設定してから個別にエラーを設定
+        getAllTradeSummaries.mockResolvedValue([]);
+        getAllPositionsRedis.mockResolvedValue([]);
+        getTradeCurrentPosition.mockRejectedValue(new Error('MongoDB connection error'));
+
+        // MongoDBエラーは内部でキャッチされ、空の結果を返す
+        const result = await getBotManagedBalanceDetailed('bitbank');
+        expect(result.mongodb).toEqual({});
+        expect(result.exchangeId).toBe('bitbank');
+      });
+
+      it('Redis Summary データが不正な場合のエラーハンドリング', async () => {
+        getAllTradeSummaries.mockRejectedValue(new Error('Redis summary corrupted'));
+
+        await expect(getBotManagedBalanceDetailed('bitbank')).rejects.toThrow('Redis summary corrupted');
+      });
+
+      it('Redis Positions データが不正な場合のエラーハンドリング', async () => {
+        getAllPositionsRedis.mockRejectedValue(new Error('Redis positions corrupted'));
+
+        await expect(getBotManagedBalance()).rejects.toThrow('Redis positions corrupted');
+      });
+    });
+
+    describe('設定エラー処理', () => {
+      it('存在しない取引所での詳細残高取得エラー', async () => {
+        // Redis mocks を正常な状態にリセット
+        getAllTradeSummaries.mockResolvedValue([]);
+        getAllPositionsRedis.mockResolvedValue([]);
+        getTradeCurrentPosition.mockResolvedValue(0);
+
+        await expect(getBotManagedBalanceDetailed('nonexistent_exchange')).resolves.toEqual(
+          expect.objectContaining({
+            exchangeId: 'nonexistent_exchange',
+            mongodb: {},
+            redisSummary: {},
+            redisPositions: expect.any(Object)
+          })
+        );
+      });
+
+      it('戦略設定が破損している場合の処理', async () => {
+        // 戦略設定を一時的に破損させる
+        const originalStrategies = config.strategies;
+        config.strategies = null;
+
+        // 破損した設定でエラーが発生することを確認
+        await expect(getBotManagedBalanceDetailed('bitbank')).rejects.toThrow('Cannot convert undefined or null to object');
+
+        // 設定を復元
+        config.strategies = originalStrategies;
+      });
+    });
+
+    describe('極端な値の処理', () => {
+      it('非常に大きな残高値の処理', async () => {
+        const largeBalance = {
+          total: { BTC: 9999999999.99999999 }
+        };
+        config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue(largeBalance);
+
+        getAllPositionsRedis.mockResolvedValue([
+          {
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 9999999999.99999999,
+            status: 'open'
+          }
+        ]);
+
+        const result = await compareBalances('bitbank');
+        expect(result.isHealthy).toBe(true);
+      });
+
+      it('非常に小さな残高値の処理', async () => {
+        const smallBalance = {
+          total: { BTC: 0.000000001 }
+        };
+        config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue(smallBalance);
+
+        getAllPositionsRedis.mockResolvedValue([
+          {
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 0.000000001,
+            status: 'open'
+          }
+        ]);
+
+        const result = await compareBalances('bitbank');
+        // 有意な閾値未満なので不整合にはならない
+        expect(result.discrepancies).toHaveLength(0);
+      });
+
+      it('ゼロ残高の適切な処理', async () => {
+        const zeroBalance = {
+          total: { BTC: 0, ETH: 0 }
+        };
+        config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue(zeroBalance);
+
+        getAllPositionsRedis.mockResolvedValue([]);
+
+        const result = await compareBalances('bitbank');
+        expect(result.isHealthy).toBe(true);
+        expect(result.discrepancies).toHaveLength(0);
+      });
+    });
+
+    describe('同期エラー処理', () => {
+      it('Discord通知送信失敗時の処理', async () => {
+        const { postOrderToDiscord } = require('../../../src/common/notifications');
+        postOrderToDiscord.mockRejectedValue(new Error('Discord API error'));
+
+        config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+          total: { BTC: 1.0 }
+        });
+        getAllPositionsRedis.mockResolvedValue([
+          {
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 2.0, // 不整合
+            status: 'open'
+          }
+        ]);
+
+        // Discord送信失敗時はエラーが伝播される
+        await expect(compareBalances('bitbank')).rejects.toThrow('Discord API error');
+      });
+    });
+  });
 });

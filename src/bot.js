@@ -2,6 +2,7 @@
 const { config } = require('./config');
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { checkAllExchangeBalances } = require('./common/balanceChecker');
+const { getValidatedConfig } = require('./common/balanceCheckerConfig');
 const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
 const { 
@@ -40,9 +41,11 @@ let lastComprehensiveCleanupTime = 0;
 const SELF_HEALING_INTERVAL = 30 * 60 * 1000;
 let lastSelfHealingTime = 0;
 
-// 残高整合性チェックの実行間隔 (5分)
-const BALANCE_CHECK_INTERVAL = 5 * 60 * 1000;
+// 残高整合性チェック設定を取得
+const BALANCE_CONFIG = getValidatedConfig();
+const BALANCE_CHECK_INTERVAL = BALANCE_CONFIG.intervals.lightweightCheck;
 let lastBalanceCheckTime = 0;
+let lastRobustBalanceCheckTime = 0;
 
 /**
  * 強化版未約定注文クリーンアップ機能
@@ -1030,43 +1033,72 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
 //   }
 // }, 60000); // 1分ごとにチェック
 
-// 残高整合性チェックを1時間ごとに実行（堅牢版）
-setInterval(async () => {
-  const now = new Date();
-  if (now.getMinutes() === 0) { // 毎時0分に実行
-    try {
-      console.log('=== 定期残高整合性チェック開始 ===');
-      const { compareBalancesRobust } = require('./common/balanceChecker');
-      
-      const results = [];
-      for (const exchangeId of Object.keys(config.exchanges)) {
-        try {
-          const result = await compareBalancesRobust(exchangeId);
-          results.push(result);
-          
-          if (!result.skipped) {
-            console.log(`[残高チェック] ${exchangeId}: ${result.hasDiscrepancies ? 'エラー' : 'OK'}`);
-          }
-          
-          // 各取引所チェック間に2秒待機
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } catch (error) {
-          console.error(`[残高チェック] ${exchangeId}エラー:`, error.message);
-          results.push({ exchangeId, success: false, error: error.message });
+/**
+ * 堅牢な残高チェックの実行関数
+ */
+async function executeRobustBalanceCheck() {
+  try {
+    console.log('=== 定期残高整合性チェック開始 ===');
+    const { compareBalancesRobust } = require('./common/balanceChecker');
+    
+    const results = [];
+    for (const exchangeId of Object.keys(config.exchanges)) {
+      try {
+        const result = await compareBalancesRobust(exchangeId);
+        results.push(result);
+        
+        if (!result.skipped) {
+          console.log(`[残高チェック] ${exchangeId}: ${result.hasDiscrepancies ? 'エラー' : 'OK'}`);
         }
+        
+        // 各取引所チェック間の待機（設定から取得）
+        await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+      } catch (error) {
+        console.error(`[残高チェック] ${exchangeId}エラー:`, error.message);
+        results.push({ exchangeId, success: false, error: error.message });
       }
-      
-      const errorCount = results.filter(r => !r.success || r.hasDiscrepancies).length;
-      console.log(`=== 定期残高整合性チェック完了 (${errorCount}件のエラー) ===`);
-      
-    } catch (error) {
-      console.error('定期残高整合性チェックエラー:', error.message);
-      await postErrorToDiscord(`定期残高整合性チェック失敗: ${error.message}`);
     }
+    
+    const errorCount = results.filter(r => !r.success || r.hasDiscrepancies).length;
+    console.log(`=== 定期残高整合性チェック完了 (${errorCount}件のエラー) ===`);
+    
+  } catch (error) {
+    console.error('定期残高整合性チェックエラー:', error.message);
+    await postErrorToDiscord(`定期残高整合性チェック失敗: ${error.message}`);
   }
-}, 60000); // 1分ごとにチェック（毎時0分にのみ実行）
+}
 
-// リスク管理処理を5分ごとに実行
+/**
+ * 効率的な1時間ごとのスケジューリング
+ */
+function scheduleHourlyRobustBalanceCheck() {
+  const now = new Date();
+  const nextHour = new Date(now);
+  nextHour.setHours(now.getHours() + 1, 0, 0, 0); // 次の時間の0分0秒に設定
+  
+  const timeUntilNextHour = nextHour.getTime() - now.getTime();
+  
+  console.log(`[スケジューラー] 次回堅牢残高チェック: ${nextHour.toLocaleString('ja-JP')} (${Math.round(timeUntilNextHour / 1000 / 60)}分後)`);
+  
+  // 最初の実行を次の正時にスケジュール
+  setTimeout(() => {
+    executeRobustBalanceCheck().catch(error => {
+      console.error('堅牢残高チェック実行エラー:', error.message);
+    });
+    
+    // その後は1時間ごとに実行
+    setInterval(() => {
+      executeRobustBalanceCheck().catch(error => {
+        console.error('堅牢残高チェック実行エラー:', error.message);
+      });
+    }, BALANCE_CONFIG.intervals.robustCheck);
+  }, timeUntilNextHour);
+}
+
+// 残高整合性チェックを1時間ごとに実行（堅牢版）- 効率的なスケジューリング
+scheduleHourlyRobustBalanceCheck();
+
+// リスク管理処理を定期実行（設定から間隔を取得）
 setInterval(async () => {
   try {
     console.log('=== 定期リスク管理チェック開始 ===');
@@ -1074,9 +1106,13 @@ setInterval(async () => {
     console.log('=== 定期リスク管理チェック完了 ===');
   } catch (error) {
     console.error('定期リスク管理チェックエラー:', error.message);
-    await postErrorToDiscord(`定期リスク管理チェック失敗: ${error.message}`);
+    try {
+      await postErrorToDiscord(`定期リスク管理チェック失敗: ${error.message}`);
+    } catch (discordError) {
+      console.error('Discord通知送信エラー:', discordError.message);
+    }
   }
-}, 5 * 60 * 1000); // 5分ごとに実行
+}, BALANCE_CONFIG.intervals.lightweightCheck); // 設定から間隔を取得（5分間隔）
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);
