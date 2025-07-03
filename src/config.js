@@ -282,6 +282,8 @@ const config = {
       function: require('./hft').startHFTStrategy,
       atomicExec: true,
       exchanges: [exchangeBB],
+      // DEPRECATED: enableBalanceCheck is replaced by type-based filtering
+      // High-frequency strategies (type: 'high_frequency') are automatically excluded from balance checking
       enableBalanceCheck: false,  // HFTは残高チェック対象外
     },
 
@@ -549,6 +551,8 @@ const config = {
       type: 'legacy',
       enabled: false,
       description: 'Legacy strategy for external or manual trades',
+      // DEPRECATED: enableBalanceCheck is being phased out in favor of type-based filtering
+      // All strategies except 'high_frequency' type are included in balance checking by default
       enableBalanceCheck: true,  // 残高チェック対象
       function: null,  // 実行関数なし（レガシー対応）
       exchanges: [exchangeBB],
@@ -558,6 +562,8 @@ const config = {
       type: 'legacy',
       enabled: false,
       description: 'Legacy strategy for unidentified trades',
+      // DEPRECATED: enableBalanceCheck is being phased out in favor of type-based filtering
+      // All strategies except 'high_frequency' type are included in balance checking by default
       enableBalanceCheck: true,  // 残高チェック対象
       function: null,  // 実行関数なし（レガシー対応）
       exchanges: [exchangeBB],

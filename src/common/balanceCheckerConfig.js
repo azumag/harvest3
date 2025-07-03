@@ -39,7 +39,10 @@ const BALANCE_CHECKER_CONFIG = {
     // 戦略取得方法の設定
     dynamicStrategyLoading: true,       // 動的戦略読み込みの有効化
     includeDisabledStrategies: true     // 無効化された戦略も含める
-    // 注意: additionalStrategies は廃止し、config.js の enableBalanceCheck を使用
+    // 注意: additionalStrategies と enableBalanceCheck は廃止
+    // 新アプローチ: strategy.type による自動フィルタリング
+    // - type: 'high_frequency' の戦略は自動的に残高チェックから除外
+    // - その他のtype（または未定義）の戦略は自動的に残高チェック対象
   },
 
   // データソース設定

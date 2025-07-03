@@ -348,10 +348,25 @@ async function calculateBalanceFromMongoDB(exchangeId) {
       return balances;
     }
     
-    // 設定から残高チェック有効な戦略キーを取得
+    // Type-based filtering: exclude high-frequency strategies from balance checking
+    // High-frequency strategies manage their own balance tracking due to performance requirements
+    // 
+    // Strategy types eligible for balance checking:
+    // - 'trend_following': MA, MACD strategies that track market trends
+    // - 'mean_reversion': MEAN_REVERSION, BOLLINGER_BANDS, OSCILLATOR, RSI strategies
+    // - 'statistical': MUTUAL_INFO strategy using statistical analysis
+    // - 'composite': MULTI_INDICATOR strategy combining multiple indicators
+    // - 'legacy': OUTSIDE, UNKNOWN for backward compatibility
+    // - undefined/null: Included for backward compatibility
+    //
+    // Excluded from balance checking:
+    // - 'high_frequency': HFT strategies that require specialized balance tracking
+    //
+    // Note: enableBalanceCheck field is deprecated - type-based filtering is the new approach
     const strategies = Object.keys(config.strategies).filter(strategyKey => {
       const strategy = config.strategies[strategyKey];
-      return strategy.enableBalanceCheck === true;
+      // Check if type exists for backward compatibility
+      return !strategy.type || strategy.type !== 'high_frequency';
     });
     
     for (const symbol of exchangeConfig.symbols) {
