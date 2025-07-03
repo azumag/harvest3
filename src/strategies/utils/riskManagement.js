@@ -240,6 +240,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   // 最優先で変数を初期化（エラーハンドリングでも参照するため）
   let availableToSell = 0;
   let baseAsset;
+  let distributedLock = null;
   
   console.log(`[DEBUG] executeStopLoss開始: ${symbol}, strategy: ${strategyKey}, availableToSell初期値: ${availableToSell}`);
   
@@ -250,7 +251,22 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     baseAsset = symbol.split('/')[0];
     
     // formattedAvailableAmountを使用して利用可能量を取得
-    const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades } = require('../../database/manager');
+    const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades, acquireDistributedLock, releaseDistributedLock } = require('../../database/manager');
+    
+    // 分散ロックを取得（他のストップロス処理との競合を防ぐ）
+    const lockId = `stopLoss_${Date.now()}_${Math.random()}`;
+    distributedLock = await acquireDistributedLock(exchange.id, symbol, lockId, 30000); // 30秒のタイムアウト
+    
+    if (!distributedLock.acquired) {
+      console.warn(`[WARNING] Failed to acquire lock for stop-loss: ${symbol} - ${strategyKey}. Another process may be handling this.`);
+      return { 
+        success: false, 
+        reason: 'lock_failed',
+        message: `他のプロセスが${symbol}の処理中のため、ストップロスをスキップしました`
+      };
+    }
+    
+    console.log(`[DEBUG] Acquired distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
     
     // リスク管理実行前に約定情報を強制更新
     try {
@@ -855,6 +871,17 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     
     // エラーを再スローして上位でも処理できるようにする
     throw error;
+  } finally {
+    // 分散ロックを必ず解放
+    if (distributedLock && distributedLock.acquired) {
+      try {
+        const { releaseDistributedLock } = require('../../database/manager');
+        await releaseDistributedLock(distributedLock);
+        console.log(`[DEBUG] Released distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
+      } catch (releaseError) {
+        console.error(`[ERROR] Failed to release distributed lock: ${releaseError.message}`);
+      }
+    }
   }
 }
 

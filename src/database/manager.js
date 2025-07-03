@@ -1315,6 +1315,22 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     // 負の値にならないようにする
     if (availableAmount < 0) availableAmount = 0;
 
+    // 実際の取引所残高との整合性チェック
+    try {
+      const baseAsset = symbol.split('/')[0];
+      const balance = await exchange.fetchBalance();
+      const actualBalance = balance.total[baseAsset] || 0;
+      
+      // 計算された利用可能量が実際の残高を超えている場合は、実際の残高を使用
+      if (availableAmount > actualBalance) {
+        console.warn(`[WARNING] Available amount (${availableAmount}) exceeds actual balance (${actualBalance}) for ${symbol} - ${strategyKey}. Using actual balance.`);
+        availableAmount = actualBalance;
+      }
+    } catch (balanceError) {
+      console.warn(`[WARNING] Failed to verify actual balance: ${balanceError.message}`);
+      // エラーの場合は計算値をそのまま使用
+    }
+
     // 精度を考慮して、最小精度以上の値を確保
     const result = parseFloat(availableAmount !== null && availableAmount !== undefined ? availableAmount.toFixed(amountPrecision) : 0);
     
@@ -2190,6 +2206,8 @@ module.exports = {
   getCurrentSellOrderPosition,
   fetchHistoricalOHLCVData,
   loadHistoricalOHLCVToBacktestRedis,
+  acquireDistributedLock,
+  releaseDistributedLock,
   fetchBacktestOHLCVData,
   deleteTradeSummary,
   savePendingOrderRedis,
