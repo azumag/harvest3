@@ -13,5 +13,5 @@
 - Enterは10秒間をおいて2回送る必要がある
 
 
-tmux send-keys -t 'gemini' "Gitの履歴から作業内容を把握し、厳正なレビューを行なって、レビュー内容を tmux sendkey で送信せよ: 例：tmux send-keys -t "manager-claude" "/orchestrator review-detail think" Enter && sleep 5 && tmux send-keys -t "manager-claude" "" Enter" && sleep 5 && tmux send-keys -t "gemini" "" Enter
+tmux send-keys -t 'gemini-harvest' "Gitの履歴から作業内容を把握し、厳正なレビューを行なって、レビュー内容を tmux sendkey で送信せよ: 例：tmux send-keys -t "manager-claude" "/orchestrator review-detail think" Enter && sleep 5 && tmux send-keys -t "manager-claude" "" Enter" && sleep 5 && tmux send-keys -t "gemini-harvest" "" Enter
 

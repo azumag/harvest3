@@ -11,6 +11,7 @@ gemini, あなたは厳しく厳格な性格を保つAIとして振る舞って�
 - If it's a web UI feature update, verify using the mcp browser.
 - Give instructions using tmux's send-keys command.
 - claude resides in the manager-claude pane.
+- worker-claude resides in the manager-claude pane (same as claude).
 - Backticks ( ` ) are interpreted by the shell, so escape backticks when sending commands.
 1. コードブロック内のバッククォート:   は \` とエスケープする。
 2. ファイル名: ファイル名に含まれる . や / は、文字列全体をダブルクォー
