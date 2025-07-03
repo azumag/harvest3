@@ -21,15 +21,14 @@ function getBalanceCheckEligibleStrategies(config = defaultConfig, options = {})
   const strategies = config.strategies;
   const eligibleStrategies = [];
 
-  // 高頻度取引戦略は自動的に除外
+  // 高頻度取引戦略は自動的に除外（type-based filtering）
   const excludedTypes = ['high_frequency'];
 
   for (const [strategyKey, strategy] of Object.entries(strategies)) {
     // 基本条件のチェック
     if (!strategy.enabled) continue;
-    if (!strategy.enableBalanceCheck) continue;
 
-    // 型による除外チェック
+    // 型による除外チェック（pure type-based filtering）
     if (excludedTypes.includes(strategy.type)) continue;
 
     // オプションで指定された型フィルタリング

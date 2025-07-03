@@ -43,11 +43,11 @@ const mockHelpers = {
    */
   mockStrategies: (strategies = {}) => {
     const defaultStrategies = {
-      MA: { enabled: true, enableBalanceCheck: true },
-      BOLLINGER_BANDS: { enabled: true, enableBalanceCheck: true },
-      MULTI_INDICATOR: { enabled: true, enableBalanceCheck: true },
-      OSCILLATOR: { enabled: true, enableBalanceCheck: true },
-      MUTUAL_INFO: { enabled: true, enableBalanceCheck: true }
+      MA: { enabled: true, type: 'trend_following' },
+      BOLLINGER_BANDS: { enabled: true, type: 'mean_reversion' },
+      MULTI_INDICATOR: { enabled: true, type: 'composite' },
+      OSCILLATOR: { enabled: true, type: 'mean_reversion' },
+      MUTUAL_INFO: { enabled: true, type: 'statistical' }
     };
     
     const { config } = require('../../src/config');

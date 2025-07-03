@@ -9,28 +9,23 @@ describe('getBalanceCheckEligibleStrategies', () => {
       strategies: {
         HFT: {
           type: 'high_frequency',
-          enabled: false,
-          enableBalanceCheck: false
+          enabled: false
         },
         MUTUAL_INFO: {
           type: 'statistical',
-          enabled: true,
-          enableBalanceCheck: true
+          enabled: true
         },
         MEAN_REVERSION: {
           type: 'mean_reversion',
-          enabled: true,
-          enableBalanceCheck: true
+          enabled: true
         },
         MACD: {
           type: 'trend_following',
-          enabled: true,
-          enableBalanceCheck: true
+          enabled: true
         },
         DISABLED_STRATEGY: {
           type: 'trend_following',
-          enabled: false,
-          enableBalanceCheck: true
+          enabled: false
         }
       }
     };
@@ -52,13 +47,13 @@ describe('getBalanceCheckEligibleStrategies', () => {
       expect(result).not.toContain('DISABLED_STRATEGY');
     });
 
-    it('enableBalanceCheckがtrueかつenabledがtrueの戦略のみを返すこと', () => {
+    it('enabledがtrueかつhigh_frequency以外の戦略のみを返すこと', () => {
       const result = getBalanceCheckEligibleStrategies(mockConfig);
       
       result.forEach(strategyKey => {
         const strategy = mockConfig.strategies[strategyKey];
-        expect(strategy.enableBalanceCheck).toBe(true);
         expect(strategy.enabled).toBe(true);
+        expect(strategy.type).not.toBe('high_frequency');
       });
     });
 
@@ -79,7 +74,6 @@ describe('getBalanceCheckEligibleStrategies', () => {
 
   describe('型によるフィルタリング', () => {
     it('high_frequency型の戦略は除外されること', () => {
-      mockConfig.strategies.HFT.enableBalanceCheck = true;
       mockConfig.strategies.HFT.enabled = true;
       
       const result = getBalanceCheckEligibleStrategies(mockConfig);
@@ -129,11 +123,10 @@ describe('getBalanceCheckEligibleStrategies', () => {
       expect(result.length).toBe(0);
     });
 
-    it('enableBalanceCheckが明示的にfalseの戦略は除外されること', () => {
+    it('high_frequency型の戦略は除外されること', () => {
       mockConfig.strategies.TEST_STRATEGY = {
-        type: 'test',
-        enabled: true,
-        enableBalanceCheck: false
+        type: 'high_frequency',
+        enabled: true
       };
       
       const result = getBalanceCheckEligibleStrategies(mockConfig);
@@ -141,16 +134,15 @@ describe('getBalanceCheckEligibleStrategies', () => {
       expect(result).not.toContain('TEST_STRATEGY');
     });
 
-    it('enableBalanceCheckが未定義の戦略は除外されること', () => {
-      mockConfig.strategies.NO_BALANCE_CHECK = {
-        type: 'test',
+    it('有効かhigh_frequency以外の戦略は含まれること', () => {
+      mockConfig.strategies.VALID_STRATEGY = {
+        type: 'trend_following',
         enabled: true
-        // enableBalanceCheck is undefined
       };
       
       const result = getBalanceCheckEligibleStrategies(mockConfig);
       
-      expect(result).not.toContain('NO_BALANCE_CHECK');
+      expect(result).toContain('VALID_STRATEGY');
     });
 
     it('configがnullの場合は空配列を返すこと', () => {
@@ -177,8 +169,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
             enabled: false,
             function: () => {},
             atomicExec: true,
-            exchanges: [],
-            enableBalanceCheck: false
+            exchanges: []
           },
           MUTUAL_INFO: {
             type: 'statistical',
@@ -191,7 +182,6 @@ describe('getBalanceCheckEligibleStrategies', () => {
             function: () => {},
             exchanges: [],
             enableRiskManagement: true,
-            enableBalanceCheck: true,
             riskSettings: {}
           }
         }

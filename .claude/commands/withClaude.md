@@ -13,6 +13,6 @@
 ## tmux 操作
 - メッセージを送信する前に、capture-pane でプロンプトが表示されていることを必ず確認すること：tmux capture-pane -t "manager-claude" -p
 - Gemini の作業を一旦キャンセルしたいときは esc を send-keys すべし
-- tmux send-keys -t "manaer-claude" "内容" Enter
+- tmux send-keys -t "manager-claude" "内容" Enter
 - tmux send-keys -t "manager-claude" "" Enter
 - Enterは10秒間をおいて2回送る必要がある
