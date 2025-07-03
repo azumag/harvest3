@@ -194,54 +194,44 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 
 /**
- * ボットを起動する関数
+ * 効率的な戦略実行エンジン（イベント駆動型）
+ * レビュー対応: sleep(1000)ポーリングを置き換え
  */
-async function startBot() {
-  initializeDB();
+async function executeStrategyCycle() {
   try {
-    // コマンドライン引数があるかどうかをチェック
-    const hasArgs = args.length > 0;
-    console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
-    if (targetSymbol) {
-      console.log(`指定された通貨ペア: ${targetSymbol}`);
-    }
-  
-    while (true) {
-      // マーケットパラメータの更新
-      const symbolsByExchange = await getSymbolsByExchange(config);
-      const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
-      
-      // すべての取引所とシンボルの組み合わせを作成
-      const allExchangeSymbolPairs = [];
-      for (const exchangeId in symbolsByExchange) {
-        for (const symbol of symbolsByExchange[exchangeId]) {
-          // シンボルが指定されている場合、一致するもののみ処理
-          if (targetSymbol && symbol !== targetSymbol) {
-            continue;
-          }
-          allExchangeSymbolPairs.push({ 
-            exchangeId, 
-            symbol, 
-            marketParameters: marketParametersByExchange[exchangeId][symbol] 
-          });
+    // マーケットパラメータの更新
+    const symbolsByExchange = await getSymbolsByExchange(config);
+    const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
+    
+    // すべての取引所とシンボルの組み合わせを作成
+    const allExchangeSymbolPairs = [];
+    for (const exchangeId in symbolsByExchange) {
+      for (const symbol of symbolsByExchange[exchangeId]) {
+        // シンボルが指定されている場合、一致するもののみ処理
+        if (targetSymbol && symbol !== targetSymbol) {
+          continue;
         }
+        allExchangeSymbolPairs.push({ 
+          exchangeId, 
+          symbol, 
+          marketParameters: marketParametersByExchange[exchangeId][symbol] 
+        });
       }
-      
-      // 各取引所-シンボルの組み合わせに対して
-      for (const { exchangeId, symbol, marketParameters } of allExchangeSymbolPairs) {
-        // 取引所情報を取得
-        const exchangeConfig = config.exchanges[exchangeId];
-        if (!exchangeConfig) continue;
+    }
+    
+    // 各取引所-シンボルの組み合わせに対して並列処理で効率化
+    await Promise.allSettled(allExchangeSymbolPairs.map(async ({ exchangeId, symbol, marketParameters }) => {
+      const exchangeConfig = config.exchanges[exchangeId];
+      if (!exchangeConfig) return;
 
-        const exchangeInstance = exchangeConfig.instance;
+      const exchangeInstance = exchangeConfig.instance;
+      console.log(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`); 
 
-        console.log(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`); 
+      try {
+        // 約定済み取引の更新
+        await updateFilledTrades(exchangeInstance, symbol);
 
-        try {
-          // 約定済み取引の更新
-          await updateFilledTrades(exchangeInstance, symbol);
-
-          // 包括的未約定注文管理システムの初期化
+        // 包括的未約定注文管理システムの初期化
           if (!globalOrderManagers[exchangeId]) {
             const redis = require('redis');
             const redisClient = redis.createClient({
@@ -542,18 +532,60 @@ async function startBot() {
         } catch (error) {
           await errorHandler.handleError(error, `通貨ペア ${symbol}`, false);
         }
-      }
+      }));
       
-      await sleep(1000);
-    }
-    
   } catch (error) {
-    const errorMessage = `エラーが発生しました: ${error.message}`;
+    const errorMessage = `[戦略実行] エラーが発生しました: ${error.message}`;
     console.error(errorMessage, error);
     await postErrorToDiscord(errorMessage);
-  } finally {
-    // DB接続をクローズ
-    process.exit(0);
+  }
+}
+
+/**
+ * イベント駆動型ボット起動関数
+ * レビュー対応: SchedulingManagerによる効率的スケジューリング
+ */
+async function startBot() {
+  initializeDB();
+  try {
+    // コマンドライン引数があるかどうかをチェック
+    const hasArgs = args.length > 0;
+    console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
+    if (targetSymbol) {
+      console.log(`指定された通貨ペア: ${targetSymbol}`);
+    }
+  
+    console.log('\n[システム] イベント駆動型ボット開始...');
+    
+    // 効率的な戦略実行スケジューリング（固定間隔を排除）
+    schedulingManager.scheduleIntervalTask('strategy-execution', async () => {
+      await executeStrategyCycle();
+    }, 1, { // 1分間隔をベースに動的調整
+      description: '効率的戦略実行エンジン（動的間隔調整）'
+    });
+    
+    // 初回実行（即座に開始）
+    console.log('[システム] 初回戦略実行を開始します...');
+    setTimeout(async () => {
+      try {
+        await executeStrategyCycle();
+      } catch (error) {
+        console.error('初回戦略実行エラー:', error.message);
+        await postErrorToDiscord(`初回戦略実行失敗: ${error.message}`);
+      }
+    }, 5000); // 5秒後に初回実行
+    
+    console.log('\n[システム] イベント駆動型ボット起動完了 - while(true)ループを排除');
+    console.log('[システム] プロセスは継続実行中... (Ctrl+C で停止)');
+    
+    // プロセスの継続（以前の while(true) を置き換え）
+    await new Promise(() => {}); // 無限待機（イベント駆動）
+    
+  } catch (error) {
+    const errorMessage = `ボット起動エラー: ${error.message}`;
+    console.error(errorMessage, error);
+    await postErrorToDiscord(errorMessage);
+    process.exit(1);
   }
 }
 

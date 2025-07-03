@@ -11,18 +11,17 @@ const mongoUrl = process.env.MONGO_URL;
 const mongoDbName = process.env.MONGO_DB_NAME;
 
 // MongoDB接続オプションを追加 - 本番環境向けに最適化
+// レビュー対応: 非対応オプションを削除し、安定した接続設定に変更
 const mongoOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
   serverSelectionTimeoutMS: 30000, // 30秒に延長
-  connectTimeoutMS: 30000,          // 30秒に延長
-  socketTimeoutMS: 30000,           // 30秒に延長
+  connectTimeoutMS: 10000,          // 10秒に設定
+  socketTimeoutMS: 45000,           // 45秒に設定
   maxPoolSize: 50,                  // プールサイズを拡大
   minPoolSize: 5,                   // 最小プールサイズを設定
   maxIdleTimeMS: 30000,             // アイドル接続のタイムアウト
   retryWrites: true,                // 書き込み再試行を有効化
   heartbeatFrequencyMS: 10000,      // ハートビート間隔
-  bufferMaxEntries: 0,              // バッファリングを無効化
+  // bufferMaxEntries: 削除（新しいドライバでは非対応）
   compressors: ['zlib'],            // データ圧縮を有効化
   maxConnecting: 10                 // 同時接続数の制限
 };
