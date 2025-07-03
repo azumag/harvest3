@@ -59,5 +59,18 @@
     "deny": [
       "Bash(rm -rf:*)"
     ]
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat | jq -r '\\\"display notification \\\\\\\"\\\" + .message + \\\"\\\\\\\" with title \\\\\\\"\\\" + .title + \\\"\\\\\\\" sound name \\\\\\\"Glass\\\\\\\"\\\"' | xargs -I {} osascript -e '{}'"
+          }
+        ]
+      }
+    ]
   }
 }

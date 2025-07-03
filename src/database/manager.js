@@ -532,22 +532,25 @@ const tradeUpdateCache = new Map();
 const CACHE_DURATION = 30000; // 30秒間キャッシュ
 
 // 定期的なキャッシュクリーンアップ (5分ごと)
-setInterval(() => {
-  const now = Date.now();
-  const expiredKeys = [];
-  
-  for (const [key, cache] of tradeUpdateCache.entries()) {
-    if (now - cache.timestamp > CACHE_DURATION * 2) { // 有効期限の2倍で削除
-      expiredKeys.push(key);
+let cacheCleanupInterval;
+if (process.env.NODE_ENV !== 'test') {
+  cacheCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    const expiredKeys = [];
+    
+    for (const [key, cache] of tradeUpdateCache.entries()) {
+      if (now - cache.timestamp > CACHE_DURATION * 2) { // 有効期限の2倍で削除
+        expiredKeys.push(key);
+      }
     }
-  }
-  
-  expiredKeys.forEach(key => tradeUpdateCache.delete(key));
-  
-  if (expiredKeys.length > 0) {
-    console.log(`[約定更新キャッシュ] 期限切れエントリを${expiredKeys.length}件削除`);
-  }
-}, 5 * 60 * 1000);
+    
+    expiredKeys.forEach(key => tradeUpdateCache.delete(key));
+    
+    if (expiredKeys.length > 0) {
+      console.log(`[約定更新キャッシュ] 期限切れエントリを${expiredKeys.length}件削除`);
+    }
+  }, 5 * 60 * 1000);
+}
 
 /**
  * 前回チェック時から現在までの約定履歴を取得し記録する（キャッシュ付き）
