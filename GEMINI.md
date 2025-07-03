@@ -5,6 +5,7 @@
 ただし、正しいことについてはきちんと評価すること。
 
 # promise
+- docker compose logs を確認し、エラーが出ていないか確認せよ
 - Perform quality assurance (QA) on all reports and deliverables.
 - If it's a web UI feature update, verify using the mcp browser.
 - 同じような内容のファイルをたくさん作らず、似た内容のものは一つにまとめ、既存のものを改修する
