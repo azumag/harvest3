@@ -1070,49 +1070,89 @@ async function executeRobustBalanceCheck() {
 
 /**
  * 効率的な1時間ごとのスケジューリング
+ * TODO: 将来的にnode-cronライブラリの使用を検討（docs/scheduling-improvement-proposal.md参照）
  */
 function scheduleHourlyRobustBalanceCheck() {
+  const schedule = calculateNextHourlyExecution();
+  
+  console.log(`[スケジューラー] 次回堅牢残高チェック: ${schedule.nextExecution.toLocaleString('ja-JP')} (${schedule.minutesUntilNext}分後)`);
+  
+  // 最初の実行を次の正時にスケジュール
+  const initialTimer = setTimeout(() => {
+    executeScheduledTask('堅牢残高チェック', executeRobustBalanceCheck);
+    
+    // その後は1時間ごとに実行
+    const recurringTimer = setInterval(() => {
+      executeScheduledTask('堅牢残高チェック', executeRobustBalanceCheck);
+    }, BALANCE_CONFIG.intervals.robustCheck);
+    
+    // タイマーをグローバルに保存（必要に応じて停止可能）
+    global.balanceCheckTimers = global.balanceCheckTimers || {};
+    global.balanceCheckTimers.robust = recurringTimer;
+  }, schedule.millisecondsUntilNext);
+  
+  // 初回タイマーもグローバルに保存
+  global.balanceCheckTimers = global.balanceCheckTimers || {};
+  global.balanceCheckTimers.robustInitial = initialTimer;
+}
+
+/**
+ * 次回の毎時実行時刻を計算
+ * @returns {Object} スケジュール情報
+ */
+function calculateNextHourlyExecution() {
   const now = new Date();
   const nextHour = new Date(now);
   nextHour.setHours(now.getHours() + 1, 0, 0, 0); // 次の時間の0分0秒に設定
   
-  const timeUntilNextHour = nextHour.getTime() - now.getTime();
+  const millisecondsUntilNext = nextHour.getTime() - now.getTime();
+  const minutesUntilNext = Math.round(millisecondsUntilNext / 1000 / 60);
   
-  console.log(`[スケジューラー] 次回堅牢残高チェック: ${nextHour.toLocaleString('ja-JP')} (${Math.round(timeUntilNextHour / 1000 / 60)}分後)`);
-  
-  // 最初の実行を次の正時にスケジュール
-  setTimeout(() => {
-    executeRobustBalanceCheck().catch(error => {
-      console.error('堅牢残高チェック実行エラー:', error.message);
-    });
-    
-    // その後は1時間ごとに実行
-    setInterval(() => {
-      executeRobustBalanceCheck().catch(error => {
-        console.error('堅牢残高チェック実行エラー:', error.message);
-      });
-    }, BALANCE_CONFIG.intervals.robustCheck);
-  }, timeUntilNextHour);
+  return {
+    nextExecution: nextHour,
+    millisecondsUntilNext,
+    minutesUntilNext
+  };
+}
+
+/**
+ * スケジュールされたタスクの統一実行関数
+ * @param {string} taskName - タスク名
+ * @param {Function} taskFunction - 実行する関数
+ */
+async function executeScheduledTask(taskName, taskFunction) {
+  try {
+    console.log(`[スケジューラー] ${taskName}を開始`);
+    await taskFunction();
+    console.log(`[スケジューラー] ${taskName}が完了`);
+  } catch (error) {
+    console.error(`[スケジューラー] ${taskName}実行エラー:`, error.message);
+    // TODO: Discord通知やアラート送信を検討
+  }
 }
 
 // 残高整合性チェックを1時間ごとに実行（堅牢版）- 効率的なスケジューリング
 scheduleHourlyRobustBalanceCheck();
 
-// リスク管理処理を定期実行（設定から間隔を取得）
-setInterval(async () => {
-  try {
-    console.log('=== 定期リスク管理チェック開始 ===');
-    await executeRiskManagementCheck();
-    console.log('=== 定期リスク管理チェック完了 ===');
-  } catch (error) {
-    console.error('定期リスク管理チェックエラー:', error.message);
-    try {
-      await postErrorToDiscord(`定期リスク管理チェック失敗: ${error.message}`);
-    } catch (discordError) {
-      console.error('Discord通知送信エラー:', discordError.message);
-    }
-  }
-}, BALANCE_CONFIG.intervals.lightweightCheck); // 設定から間隔を取得（5分間隔）
+/**
+ * 軽量リスク管理チェックのスケジューリング
+ * TODO: 将来的にnode-cronライブラリの使用を検討（docs/scheduling-improvement-proposal.md参照）
+ */
+function scheduleLightweightRiskManagementCheck() {
+  const intervalMinutes = BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60);
+  console.log(`[スケジューラー] 軽量リスク管理チェックを${intervalMinutes}分間隔で開始`);
+  
+  const timer = setInterval(async () => {
+    await executeScheduledTask('軽量リスク管理チェック', executeRiskManagementCheck);
+  }, BALANCE_CONFIG.intervals.lightweightCheck);
+  
+  // タイマーをグローバルに保存（必要に応じて停止可能）
+  global.balanceCheckTimers = global.balanceCheckTimers || {};
+  global.balanceCheckTimers.lightweight = timer;
+}
+
+// 軽量リスク管理チェックの開始
+scheduleLightweightRiskManagementCheck();
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);

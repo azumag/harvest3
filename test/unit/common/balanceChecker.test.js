@@ -16,11 +16,11 @@ jest.mock('../../../src/config', () => ({
       }
     },
     strategies: {
-      MA: { enabled: true },
-      BOLLINGER_BANDS: { enabled: true },
-      MULTI_INDICATOR: { enabled: true },
-      OSCILLATOR: { enabled: true },
-      MUTUAL_INFO: { enabled: true }
+      MA: { enabled: true, enableBalanceCheck: true },
+      BOLLINGER_BANDS: { enabled: true, enableBalanceCheck: true },
+      MULTI_INDICATOR: { enabled: true, enableBalanceCheck: true },
+      OSCILLATOR: { enabled: true, enableBalanceCheck: true },
+      MUTUAL_INFO: { enabled: true, enableBalanceCheck: true }
     }
   }
 }));

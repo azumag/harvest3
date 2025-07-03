@@ -348,11 +348,11 @@ async function calculateBalanceFromMongoDB(exchangeId) {
       return balances;
     }
     
-    // 設定から全戦略キーを取得（enabled/disabledに関わらず）
-    const allStrategies = Object.keys(config.strategies);
-    // 追加で既知の戦略も含める（設定から取得）
-    const additionalStrategies = BALANCE_CONFIG.strategies.additionalStrategies;
-    const strategies = [...new Set([...allStrategies, ...additionalStrategies])];
+    // 設定から残高チェック有効な戦略キーを取得
+    const strategies = Object.keys(config.strategies).filter(strategyKey => {
+      const strategy = config.strategies[strategyKey];
+      return strategy.enableBalanceCheck === true;
+    });
     
     for (const symbol of exchangeConfig.symbols) {
       const [baseCurrency] = symbol.split('/');

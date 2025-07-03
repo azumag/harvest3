@@ -36,12 +36,10 @@ const BALANCE_CHECKER_CONFIG = {
 
   // 戦略関連設定
   strategies: {
-    // 設定ファイルにない追加戦略（レガシー対応）
-    additionalStrategies: ['OUTSIDE', 'UNKNOWN'],
-    
     // 戦略取得方法の設定
     dynamicStrategyLoading: true,       // 動的戦略読み込みの有効化
     includeDisabledStrategies: true     // 無効化された戦略も含める
+    // 注意: additionalStrategies は廃止し、config.js の enableBalanceCheck を使用
   },
 
   // データソース設定

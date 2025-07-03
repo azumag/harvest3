@@ -281,6 +281,7 @@ const config = {
       function: require('./hft').startHFTStrategy,
       atomicExec: true,
       exchanges: [exchangeBB],
+      enableBalanceCheck: false,  // HFTは残高チェック対象外
     },
 
     MUTUAL_INFO: {
@@ -293,6 +294,7 @@ const config = {
       function: mutualInformationStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -317,6 +319,7 @@ const config = {
       function: meanReversionStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -341,6 +344,7 @@ const config = {
       function: macdStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -364,6 +368,7 @@ const config = {
       function: bollingerBandsStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -388,6 +393,7 @@ const config = {
       function: maStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -412,6 +418,7 @@ const config = {
       function: oscillatorStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -436,6 +443,7 @@ const config = {
       function: rsiStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // リスク管理設定（実装に合わせた形式）
       riskSettings: {
@@ -458,6 +466,7 @@ const config = {
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],
       enableRiskManagement: true,
+      enableBalanceCheck: true,
       
       // マルチ指標設定（フラット化構造）
       requiredConfirmations: 3,
@@ -525,6 +534,23 @@ const config = {
     //   function: inyoStrategy,
     //   exchanges: [exchangeBB],
     // },
+
+    // レガシー戦略（残高チェック用）
+    OUTSIDE: {
+      enabled: false,
+      description: 'Legacy strategy for external or manual trades',
+      enableBalanceCheck: true,  // 残高チェック対象
+      function: null,  // 実行関数なし（レガシー対応）
+      exchanges: [exchangeBB],
+    },
+
+    UNKNOWN: {
+      enabled: false,
+      description: 'Legacy strategy for unidentified trades',
+      enableBalanceCheck: true,  // 残高チェック対象
+      function: null,  // 実行関数なし（レガシー対応）
+      exchanges: [exchangeBB],
+    },
 
   },
 
