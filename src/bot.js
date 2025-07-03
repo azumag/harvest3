@@ -1069,90 +1069,45 @@ async function executeRobustBalanceCheck() {
 }
 
 /**
- * 効率的な1時間ごとのスケジューリング
- * TODO: 将来的にnode-cronライブラリの使用を検討（docs/scheduling-improvement-proposal.md参照）
+ * 改善されたスケジューリングシステム
+ * geminiレビュー対応: node-cronによる宣言的スケジューリング実装
  */
-function scheduleHourlyRobustBalanceCheck() {
-  const schedule = calculateNextHourlyExecution();
-  
-  console.log(`[スケジューラー] 次回堅牢残高チェック: ${schedule.nextExecution.toLocaleString('ja-JP')} (${schedule.minutesUntilNext}分後)`);
-  
-  // 最初の実行を次の正時にスケジュール
-  const initialTimer = setTimeout(() => {
-    executeScheduledTask('堅牢残高チェック', executeRobustBalanceCheck);
-    
-    // その後は1時間ごとに実行
-    const recurringTimer = setInterval(() => {
-      executeScheduledTask('堅牢残高チェック', executeRobustBalanceCheck);
-    }, BALANCE_CONFIG.intervals.robustCheck);
-    
-    // タイマーをグローバルに保存（必要に応じて停止可能）
-    global.balanceCheckTimers = global.balanceCheckTimers || {};
-    global.balanceCheckTimers.robust = recurringTimer;
-  }, schedule.millisecondsUntilNext);
-  
-  // 初回タイマーもグローバルに保存
-  global.balanceCheckTimers = global.balanceCheckTimers || {};
-  global.balanceCheckTimers.robustInitial = initialTimer;
-}
+const { getSchedulingManager } = require('./common/schedulingManager');
 
-/**
- * 次回の毎時実行時刻を計算
- * @returns {Object} スケジュール情報
- */
-function calculateNextHourlyExecution() {
-  const now = new Date();
-  const nextHour = new Date(now);
-  nextHour.setHours(now.getHours() + 1, 0, 0, 0); // 次の時間の0分0秒に設定
-  
-  const millisecondsUntilNext = nextHour.getTime() - now.getTime();
-  const minutesUntilNext = Math.round(millisecondsUntilNext / 1000 / 60);
-  
-  return {
-    nextExecution: nextHour,
-    millisecondsUntilNext,
-    minutesUntilNext
-  };
-}
+// スケジューリングマネージャーの初期化と設定
+const schedulingManager = getSchedulingManager();
 
-/**
- * スケジュールされたタスクの統一実行関数
- * @param {string} taskName - タスク名
- * @param {Function} taskFunction - 実行する関数
- */
-async function executeScheduledTask(taskName, taskFunction) {
-  try {
-    console.log(`[スケジューラー] ${taskName}を開始`);
-    await taskFunction();
-    console.log(`[スケジューラー] ${taskName}が完了`);
-  } catch (error) {
-    console.error(`[スケジューラー] ${taskName}実行エラー:`, error.message);
-    // TODO: Discord通知やアラート送信を検討
-  }
-}
+// 堅牢残高チェック（毎時0分実行）
+schedulingManager.scheduleHourlyTask('robust-balance-check', async () => {
+  await executeRobustBalanceCheck();
+}, {
+  description: '堅牢残高整合性チェック（毎時0分実行）'
+});
 
-// 残高整合性チェックを1時間ごとに実行（堅牢版）- 効率的なスケジューリング
-scheduleHourlyRobustBalanceCheck();
+// 軽量リスク管理チェック（設定間隔）
+const lightweightIntervalMinutes = Math.round(BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60));
+schedulingManager.scheduleIntervalTask('lightweight-risk-management', async () => {
+  await executeRiskManagementCheck();
+}, lightweightIntervalMinutes, {
+  description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
+});
 
-/**
- * 軽量リスク管理チェックのスケジューリング
- * TODO: 将来的にnode-cronライブラリの使用を検討（docs/scheduling-improvement-proposal.md参照）
- */
-function scheduleLightweightRiskManagementCheck() {
-  const intervalMinutes = BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60);
-  console.log(`[スケジューラー] 軽量リスク管理チェックを${intervalMinutes}分間隔で開始`);
-  
-  const timer = setInterval(async () => {
-    await executeScheduledTask('軽量リスク管理チェック', executeRiskManagementCheck);
-  }, BALANCE_CONFIG.intervals.lightweightCheck);
-  
-  // タイマーをグローバルに保存（必要に応じて停止可能）
-  global.balanceCheckTimers = global.balanceCheckTimers || {};
-  global.balanceCheckTimers.lightweight = timer;
-}
+// デバッグ用: スケジュール状況の表示
+console.log('\n[スケジューラー] 登録されたタスク:');
+schedulingManager.showNextExecutions();
 
-// 軽量リスク管理チェックの開始
-scheduleLightweightRiskManagementCheck();
+// 優雅なシャットダウンハンドラー
+process.on('SIGINT', async () => {
+  console.log('\n[システム] シャットダウン要求を受信しました...');
+  await schedulingManager.gracefulShutdown();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n[システム] 終了要求を受信しました...');
+  await schedulingManager.gracefulShutdown();
+  process.exit(0);
+});
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);
@@ -1165,17 +1120,23 @@ scheduleLightweightRiskManagementCheck();
 // ボットを起動
 startBot();
 
-// 初回リスク管理チェックを実行（起動から30秒後）
-setTimeout(async () => {
+// 初回リスク管理チェックをスケジュール（起動から30秒後）
+schedulingManager.scheduleCustomTask('initial-risk-check', '*/30 * * * * *', async () => {
   try {
     console.log('=== 初回リスク管理チェック開始 ===');
     await executeRiskManagementCheck();
     console.log('=== 初回リスク管理チェック完了 ===');
+    
+    // 一度だけ実行するためタスクを削除
+    schedulingManager.removeTask('initial-risk-check');
   } catch (error) {
     console.error('初回リスク管理チェックエラー:', error.message);
     await postErrorToDiscord(`初回リスク管理チェック失敗: ${error.message}`);
+    schedulingManager.removeTask('initial-risk-check');
   }
-}, 30000); // 30秒後に実行
+}, {
+  description: '初回リスク管理チェック（30秒後実行）'
+});
 
 // アービトラージ戦略を実行
     // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {

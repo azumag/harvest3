@@ -51,43 +51,43 @@ describe('残高チェッカー設定のテスト', () => {
     });
   });
 
-  describe('環境変数オーバーライドのテスト', () => {
-    it('significantBalance を環境変数でオーバーライドできる', () => {
+  describe('環境変数オーバーライド', () => {
+    it('significantBalance設定', () => {
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = '0.001';
       
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.significantBalance).toBe(0.001);
     });
 
-    it('highDiscrepancyPercent を環境変数でオーバーライドできる', () => {
+    it('highDiscrepancyPercent設定', () => {
       process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT = '15';
       
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.highDiscrepancyPercent).toBe(15);
     });
 
-    it('lockTtl を環境変数でオーバーライドできる', () => {
+    it('lockTtl設定', () => {
       process.env.BALANCE_CHECKER_LOCK_TTL = '600000';
       
       const config = getBalanceCheckerConfig();
       expect(config.distributedLock.defaultTtl).toBe(600000);
     });
 
-    it('lightweightInterval を環境変数でオーバーライドできる', () => {
+    it('lightweightInterval設定', () => {
       process.env.BALANCE_CHECKER_LIGHTWEIGHT_INTERVAL = '120000';
       
       const config = getBalanceCheckerConfig();
       expect(config.intervals.lightweightCheck).toBe(120000);
     });
 
-    it('robustInterval を環境変数でオーバーライドできる', () => {
+    it('robustInterval設定', () => {
       process.env.BALANCE_CHECKER_ROBUST_INTERVAL = '3600000';
       
       const config = getBalanceCheckerConfig();
       expect(config.intervals.robustCheck).toBe(3600000);
     });
 
-    it('デバッグモードを環境変数で有効化できる', () => {
+    it('デバッグモード有効化', () => {
       process.env.BALANCE_CHECKER_DEBUG = 'true';
       
       const config = getBalanceCheckerConfig();
@@ -96,7 +96,7 @@ describe('残高チェッカー設定のテスト', () => {
       expect(config.debug.enablePerformanceMetrics).toBe(true);
     });
 
-    it('複数の環境変数を同時にオーバーライドできる', () => {
+    it('複数設定同時オーバーライド', () => {
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = '0.0001';
       process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT = '20';
       process.env.BALANCE_CHECKER_DEBUG = 'true';
