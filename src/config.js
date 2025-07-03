@@ -277,6 +277,7 @@ const config = {
 
     // 高頻度取引戦略 (bitbank WebSocket)
     HFT: {
+      type: 'high_frequency',
       enabled: false, // *** EMERGENCY SHUTDOWN: CATASTROPHIC SYSTEM FAILURE ***
       function: require('./hft').startHFTStrategy,
       atomicExec: true,
@@ -285,6 +286,7 @@ const config = {
     },
 
     MUTUAL_INFO: {
+      type: 'statistical',
       enabled: true,
       threshold: 0.5,
       ohlcvInterval: '5m',
@@ -312,6 +314,7 @@ const config = {
 
     // 逆張り戦略
     MEAN_REVERSION: {
+      type: 'mean_reversion',
       enabled: true,
       period: 20,
       ohlcvInterval: '15m',
@@ -336,6 +339,7 @@ const config = {
     },
 
     MACD: {
+      type: 'trend_following',
       enabled: true,
       fastPeriod: 12,
       slowPeriod: 26,
@@ -361,6 +365,7 @@ const config = {
     },
 
     BOLLINGER_BANDS: {
+      type: 'mean_reversion',
       enabled: true,
       period: 20,
       stdDev: 2,
@@ -386,6 +391,7 @@ const config = {
 
     // トレンドフォロー戦略
     MA: {
+      type: 'trend_following',
       enabled: true,
       shortPeriod: 5,
       longPeriod: 20,
@@ -410,6 +416,7 @@ const config = {
     },
 
     OSCILLATOR: {
+      type: 'mean_reversion',
       enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true', // 環境変数から動的設定
       period: 20,
       oversoldThreshold: 20,
@@ -435,6 +442,7 @@ const config = {
     },
 
     RSI: {
+      type: 'mean_reversion',
       enabled: process.env.STRATEGY_RSI_ENABLED === 'true', // 環境変数から動的設定
       period: 14,
       oversoldThreshold: 30,
@@ -461,6 +469,7 @@ const config = {
 
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
+      type: 'composite',
       enabled: process.env.STRATEGY_MULTI_INDICATOR_ENABLED === 'true', // 環境変数から動的設定
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
@@ -537,6 +546,7 @@ const config = {
 
     // レガシー戦略（残高チェック用）
     OUTSIDE: {
+      type: 'legacy',
       enabled: false,
       description: 'Legacy strategy for external or manual trades',
       enableBalanceCheck: true,  // 残高チェック対象
@@ -545,6 +555,7 @@ const config = {
     },
 
     UNKNOWN: {
+      type: 'legacy',
       enabled: false,
       description: 'Legacy strategy for unidentified trades',
       enableBalanceCheck: true,  // 残高チェック対象
