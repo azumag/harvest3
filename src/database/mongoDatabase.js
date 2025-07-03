@@ -10,24 +10,45 @@ dotenv.config();
 const mongoUrl = process.env.MONGO_URL;
 const mongoDbName = process.env.MONGO_DB_NAME;
 
-// MongoDB接続オプションを追加
+// MongoDB接続オプションを追加 - 本番環境向けに最適化
 const mongoOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
-  connectTimeoutMS: 5000,
-  socketTimeoutMS: 5000,
-  maxPoolSize: 10
+  serverSelectionTimeoutMS: 30000, // 30秒に延長
+  connectTimeoutMS: 30000,          // 30秒に延長
+  socketTimeoutMS: 30000,           // 30秒に延長
+  maxPoolSize: 50,                  // プールサイズを拡大
+  minPoolSize: 5,                   // 最小プールサイズを設定
+  maxIdleTimeMS: 30000,             // アイドル接続のタイムアウト
+  retryWrites: true,                // 書き込み再試行を有効化
+  heartbeatFrequencyMS: 10000,      // ハートビート間隔
+  bufferMaxEntries: 0,              // バッファリングを無効化
+  compressors: ['zlib'],            // データ圧縮を有効化
+  maxConnecting: 10                 // 同時接続数の制限
 };
 
 let client;
 let db;
 
 /**
+ * MongoDB接続状態を確認する (非推奨APIに依存しない)
+ */
+async function isConnected() {
+  try {
+    if (!client) return false;
+    // ping コマンドで接続状態を確認
+    await client.db('admin').command({ ping: 1 });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
  * MongoDBに接続し、データベースとコレクションへの参照を取得する
  */
 async function connectDB() {
-  if (!client || !client.topology || !client.topology.isConnected()) {
+  if (!await isConnected()) {
     try {
       console.log({mongoDbName, mongoUrl});
       client = new MongoClient(mongoUrl, mongoOptions);
@@ -51,8 +72,12 @@ async function connectDB() {
 
     } catch (error) {
       console.error('MongoDB接続エラー:', error);
-      // Discord通知を一時的に無効化（循環エラーを防ぐため）
-      // await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
+      // Discord通知を再有効化（改善されたエラーハンドリングで安全）
+      try {
+        await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
+      } catch (notificationError) {
+        console.warn('Discord通知送信に失敗:', notificationError.message);
+      }
       throw error;
     }
   }
@@ -88,11 +113,16 @@ async function ensureCollectionsExist() {
  * MongoDB接続を閉じる
  */
 async function closeDB() {
-  if (client && client.connected) {
-    await client.close();
-    console.log('MongoDB接続を閉じました');
-    client = null;
-    db = null;
+  try {
+    stopHealthCheck();
+    if (client) {
+      await client.close();
+      console.log('MongoDB接続を閉じました');
+      client = null;
+      db = null;
+    }
+  } catch (error) {
+    console.error('MongoDB接続切断エラー:', error);
   }
 }
 
@@ -552,15 +582,16 @@ async function getSignalById(id) {
 }
 
 /**
- * MongoDBに接続し、再試行メカニズム付き
+ * MongoDBに接続し、指数バックオフ再試行メカニズム付き
  * @param {number} maxRetries - 最大再試行回数
- * @param {number} retryDelayMs - 再試行間隔（ミリ秒）
+ * @param {number} baseDelayMs - 基本再試行間隔（ミリ秒）
  */
-async function connectWithRetry(maxRetries = 3, retryDelayMs = 1000) {
+async function connectWithRetry(maxRetries = 5, baseDelayMs = 1000) {
   let retries = 0;
   while (retries < maxRetries) {
     try {
       await connectDB();
+      console.log(`MongoDB接続成功（${retries > 0 ? `${retries}回目の再試行後` : '初回'}）`);
       return;
     } catch (error) {
       retries++;
@@ -568,9 +599,40 @@ async function connectWithRetry(maxRetries = 3, retryDelayMs = 1000) {
       if (retries >= maxRetries) {
         throw new Error(`MongoDB接続が${maxRetries}回失敗しました: ${error.message}`);
       }
-      // 再試行前に待機
-      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      // 指数バックオフ: 1秒、2秒、4秒、8秒、16秒（最大30秒）
+      const delay = Math.min(baseDelayMs * Math.pow(2, retries - 1), 30000);
+      console.log(`${delay}ms後に再試行します...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
+  }
+}
+
+/**
+ * 接続監視とヘルスチェック機能
+ */
+let healthCheckInterval;
+
+function startHealthCheck() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+  }
+  
+  healthCheckInterval = setInterval(async () => {
+    try {
+      if (!await isConnected()) {
+        console.warn('MongoDB接続が失われました。再接続を試行します...');
+        await connectWithRetry();
+      }
+    } catch (error) {
+      console.error('MongoDB接続監視エラー:', error);
+    }
+  }, 60000); // 1分間隔でチェック
+}
+
+function stopHealthCheck() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
   }
 }
 
@@ -748,6 +810,10 @@ async function listFilledPositions(filter = {}, limit = 1000) {
 module.exports = {
   connectDB,
   closeDB,
+  isConnected,
+  connectWithRetry,
+  startHealthCheck,
+  stopHealthCheck,
   addOrderMongoDB,
   addOrdersBulk,
   addTradeMongoDB,
@@ -770,6 +836,5 @@ module.exports = {
   ohlcvCollection: null,
   setupGracefulShutdown,
   fetchHistoricalOHLCVData,
-  connectDB,
   listFilledPositions
 };

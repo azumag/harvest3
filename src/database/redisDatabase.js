@@ -120,6 +120,190 @@ async function updateTradeSummary(trade) {
     }
   }
   
+  // 更新後の整合性チェック（非同期実行、エラーは無視）
+  setImmediate(async () => {
+    try {
+      const validation = await validateAndFixTradeSummary(summaryKey, { autoFix: true, logLevel: 'warn' });
+      if (!validation.isValid) {
+        console.warn(`[Redis] 更新後の整合性問題を検出・修正: ${summaryKey}`, validation.actions);
+      }
+    } catch (validationError) {
+      console.error(`[Redis] 更新後の整合性チェック失敗: ${validationError.message}`);
+    }
+  });
+}
+
+/**
+ * サマリーの整合性を検証し、異常を検出・修正する
+ * @param {string} summaryKey - 検証対象のサマリーキー
+ * @param {Object} options - オプション設定
+ * @returns {Object} 検証結果と修正アクション
+ */
+async function validateAndFixTradeSummary(summaryKey, options = {}) {
+  const { autoFix = false, logLevel = 'warn' } = options;
+  
+  try {
+    const summary = await client.hGetAll(summaryKey);
+    if (!summary || Object.keys(summary).length === 0) {
+      return { isValid: true, warnings: [], errors: [], actions: [] };
+    }
+    
+    const validation = {
+      isValid: true,
+      warnings: [],
+      errors: [],
+      actions: []
+    };
+    
+    // データを数値に変換
+    const buyAmount = parseFloat(summary.buyAmount || 0);
+    const sellAmount = parseFloat(summary.sellAmount || 0);
+    const netPosition = parseFloat(summary.netPosition || 0);
+    const totalBuyCost = parseFloat(summary.totalBuyCost || 0);
+    const totalSellValue = parseFloat(summary.totalSellValue || 0);
+    const realizedPnL = parseFloat(summary.realizedPnL || 0);
+    
+    // 基本的な整合性チェック
+    const expectedNetPosition = buyAmount - sellAmount;
+    const netPositionDiff = Math.abs(netPosition - expectedNetPosition);
+    
+    // 1. ネットポジション整合性チェック
+    if (netPositionDiff > 0.0001) {
+      const error = `ネットポジション不整合: 記録値=${netPosition}, 計算値=${expectedNetPosition}, 差=${netPositionDiff}`;
+      validation.errors.push(error);
+      validation.isValid = false;
+      
+      if (autoFix) {
+        validation.actions.push(`ネットポジション修正: ${netPosition} → ${expectedNetPosition}`);
+      }
+    }
+    
+    // 2. 負のネットポジションチェック
+    if (netPosition < -0.0001) {
+      const error = `負のネットポジション検出: ${netPosition}`;
+      validation.errors.push(error);
+      validation.isValid = false;
+      
+      if (autoFix) {
+        validation.actions.push(`負のネットポジション修正: ${netPosition} → 0`);
+      }
+    }
+    
+    // 3. 負の累積値チェック
+    if (buyAmount < 0 || sellAmount < 0) {
+      const error = `負の累積量検出: buyAmount=${buyAmount}, sellAmount=${sellAmount}`;
+      validation.errors.push(error);
+      validation.isValid = false;
+    }
+    
+    // 4. 極端な値のチェック
+    const maxReasonableAmount = 1000000; // 100万単位を上限とする
+    if (Math.abs(netPosition) > maxReasonableAmount) {
+      const warning = `極端なネットポジション: ${netPosition}`;
+      validation.warnings.push(warning);
+    }
+    
+    // 5. 実現損益の妥当性チェック
+    if (Math.abs(realizedPnL) > 100000000) { // 1億円を超える損益
+      const warning = `極端な実現損益: ${realizedPnL}円`;
+      validation.warnings.push(warning);
+    }
+    
+    // 自動修正実行
+    if (autoFix && validation.actions.length > 0) {
+      try {
+        const multi = client.multi();
+        
+        // ネットポジション修正
+        if (netPositionDiff > 0.0001) {
+          multi.hSet(summaryKey, 'netPosition', expectedNetPosition.toString());
+        }
+        
+        // 負のネットポジション修正
+        if (netPosition < -0.0001) {
+          multi.hSet(summaryKey, 'netPosition', '0');
+          // 極端に負の場合は全体をリセット
+          if (netPosition < -1) {
+            multi.hSet(summaryKey, {
+              buyAmount: '0',
+              sellAmount: '0',
+              netPosition: '0',
+              totalBuyCost: '0',
+              totalSellValue: '0',
+              realizedPnL: '0',
+              updatedAt: Date.now().toString()
+            });
+            validation.actions.push('サマリー全体をリセット');
+          }
+        }
+        
+        multi.hSet(summaryKey, 'lastValidated', Date.now().toString());
+        await multi.exec();
+        
+        validation.fixed = true;
+      } catch (fixError) {
+        validation.errors.push(`自動修正失敗: ${fixError.message}`);
+      }
+    }
+    
+    // ログ出力
+    if (logLevel !== 'silent') {
+      if (validation.errors.length > 0 && logLevel !== 'warn') {
+        console.error(`[整合性チェック] ${summaryKey}:`, validation.errors);
+      }
+      if (validation.warnings.length > 0 && logLevel === 'verbose') {
+        console.warn(`[整合性チェック] ${summaryKey}:`, validation.warnings);
+      }
+      if (validation.actions.length > 0) {
+        console.log(`[整合性修正] ${summaryKey}:`, validation.actions);
+      }
+    }
+    
+    return validation;
+    
+  } catch (error) {
+    console.error(`[整合性チェック] 検証エラー ${summaryKey}:`, error.message);
+    return {
+      isValid: false,
+      errors: [`検証処理エラー: ${error.message}`],
+      warnings: [],
+      actions: []
+    };
+  }
+}
+
+/**
+ * 戦略キーマッピングを強化し、一意性を保証する
+ * @param {string} orderId - 注文ID
+ * @param {string} fallbackStrategy - フォールバック戦略名
+ * @returns {string} 正規化された戦略キー
+ */
+async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
+  try {
+    // 既存の注文から戦略情報を取得
+    const orderKey = `pending_order:${orderId}`;
+    const orderData = await client.hGetAll(orderKey);
+    
+    if (orderData && orderData.strategyKey) {
+      return orderData.strategyKey;
+    }
+    
+    // MongoDBから注文履歴を検索
+    const { getOrderByOrderId } = require('./mongoDatabase');
+    const orderRecord = await getOrderByOrderId(orderId);
+    
+    if (orderRecord && orderRecord.strategy) {
+      const { getStrategyKey } = require('./manager');
+      return getStrategyKey(orderRecord.strategy);
+    }
+    
+    console.warn(`[戦略マッピング] 注文ID ${orderId} の戦略情報が見つかりません。フォールバック: ${fallbackStrategy}`);
+    return fallbackStrategy;
+    
+  } catch (error) {
+    console.error(`[戦略マッピング] エラー ${orderId}:`, error.message);
+    return fallbackStrategy;
+  }
 }
 
 async function getAllTradeSummaries() {
@@ -1218,6 +1402,9 @@ module.exports = {
   deletePendingOrderRedis,
   cleanupInvalidPendingOrders,
   cleanupStrategyPendingOrders,
+  // 整合性チェック・修正機能
+  validateAndFixTradeSummary,
+  getValidatedStrategyKey,
 };
 
 /**

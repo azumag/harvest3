@@ -1073,9 +1073,11 @@ async function executeRobustBalanceCheck() {
  * geminiレビュー対応: node-cronによる宣言的スケジューリング実装
  */
 const { getSchedulingManager } = require('./common/schedulingManager');
+const { getMaintenanceScheduler } = require('./common/maintenanceScheduler');
 
 // スケジューリングマネージャーの初期化と設定
 const schedulingManager = getSchedulingManager();
+const maintenanceScheduler = getMaintenanceScheduler();
 
 // 堅牢残高チェック（毎時0分実行）
 schedulingManager.scheduleHourlyTask('robust-balance-check', async () => {
@@ -1095,6 +1097,10 @@ schedulingManager.scheduleIntervalTask('lightweight-risk-management', async () =
 // デバッグ用: スケジュール状況の表示
 console.log('\n[スケジューラー] 登録されたタスク:');
 schedulingManager.showNextExecutions();
+
+// メンテナンススケジューラーの初期化
+console.log('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');
+maintenanceScheduler.initializeSchedules();
 
 // 優雅なシャットダウンハンドラー
 process.on('SIGINT', async () => {

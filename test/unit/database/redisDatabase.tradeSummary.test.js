@@ -36,7 +36,16 @@ jest.mock('../../../src/database/manager', () => ({
 }));
 
 // テスト対象をインポート
-const { getAllTradeSummaries, updateTradeSummary } = require('../../../src/database/redisDatabase');
+const redisDatabase = require('../../../src/database/redisDatabase');
+const { getAllTradeSummaries, updateTradeSummary } = redisDatabase;
+
+// validateAndFixTradeSummaryをモック化
+jest.spyOn(redisDatabase, 'validateAndFixTradeSummary').mockResolvedValue({
+  isValid: true,
+  errors: [],
+  warnings: [],
+  actions: []
+});
 
 describe('redisDatabase - 取引サマリー機能', () => {
   beforeEach(() => {

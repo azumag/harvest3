@@ -7,6 +7,8 @@ const {
   updateOrderByOrderId,
   deleteOrderByOrderId,
   connectDB,
+  connectWithRetry,
+  startHealthCheck,
   listOrders,
   listTrades,
   listSignals,
@@ -131,9 +133,26 @@ function generateRealisticSpread(midPrice, volume, volatility) {
 }
 
 async function initializeDB() {
-  // MongoDBとRedisの初期化を行う
-  await initialize();
-  await connectDB();
+  try {
+    console.log('[DB初期化] データベース接続を開始します...');
+    
+    // Redisの初期化
+    console.log('[DB初期化] Redis接続中...');
+    await initialize();
+    
+    // MongoDBの初期化（改善された接続メカニズム使用）
+    console.log('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
+    await connectWithRetry(5, 1000); // 最大5回、1秒から開始の指数バックオフ
+    
+    // 接続監視の開始
+    console.log('[DB初期化] MongoDB接続監視を開始します...');
+    startHealthCheck();
+    
+    console.log('[DB初期化] データベース初期化が完了しました ✓');
+  } catch (error) {
+    console.error('[DB初期化] データベース初期化に失敗しました:', error.message);
+    throw new Error(`データベース初期化失敗: ${error.message}`);
+  }
 }
 
 /**
