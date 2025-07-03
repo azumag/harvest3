@@ -1,6 +1,0 @@
-Analyzing code similarity...
-
-=== Function Similarity ===
-Checking 26 files for duplicates...
-
-No duplicate functions found!

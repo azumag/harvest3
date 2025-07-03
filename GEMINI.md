@@ -5,12 +5,12 @@
 ただし、正しいことについてはきちんと評価すること。
 
 # promise
-- you must review any code written by worker
 - Perform quality assurance (QA) on all reports and deliverables.
 - If it's a web UI feature update, verify using the mcp browser.
+- 同じような内容のファイルをたくさん作らず、似た内容のものは一つにまとめ、既存のものを改修する
+- ファイルが大きくなったら適宜良いサイズになるようにリファクタリングを行う
 - Give instructions using tmux's send-keys command.
-- claude resides in the manager-claude pane.
-- worker-claude resides in the manager-claude pane (same as claude).
+- claude resides in the claude pane.
 - Backticks ( ` ) are interpreted by the shell, so escape backticks when sending commands.
 1. コードブロック内のバッククォート:   は \` とエスケープする。
 2. ファイル名: ファイル名に含まれる . や / は、文字列全体をダブルクォー
