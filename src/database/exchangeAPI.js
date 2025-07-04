@@ -2,6 +2,7 @@ const https = require('https');
 const { postErrorToDiscord } = require('../common/notifications');
 const { recordError } = require('../api/controllers/errorStats');
 const { isBacktestMode } = require('../common/utils');
+const { throttleMonitor } = require('../common/throttleMonitor');
 
 // Bitbank API関連の定数
 const BITBANK_PUBLIC_API_URL = 'https://public.bitbank.cc';
@@ -47,14 +48,27 @@ async function executeBitbankAPIWithRateLimit(apiCall) {
   try {
     const result = await apiCall();
     lastBitbankRequestTime = Date.now();
+    consecutiveFailures = 0; // 成功時は失敗カウンターをリセット
+    throttleMonitor.recordRequest(false); // 成功を記録
     return result;
   } catch (error) {
     lastBitbankRequestTime = Date.now();
+    consecutiveFailures++;
+    console.error(`[Bitbank API Error] 連続失敗: ${consecutiveFailures}回`, error.message);
+    throttleMonitor.recordRequest(true, error.message); // エラーを記録
     
-    // レートリミットエラーの場合は追加の待機
-    if (error.message.includes('rate limit') || error.message.includes('429')) {
-      console.warn('[Bitbank API] レートリミットエラー検出、1秒待機します');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // レートリミットエラーの場合はスマートな待機時間を使用
+    if (error.message.includes('rate limit') || error.message.includes('429') || error.message.includes('throttle') || error.message.includes('maxCapacity')) {
+      const recommendedDelay = throttleMonitor.getRecommendedDelay();
+      const throttleDelay = Math.max(recommendedDelay, Math.min(1000 * consecutiveFailures, 30000)); // 最大 30秒
+      console.warn(`[Bitbank API Throttle] スロットリングエラーのため${throttleDelay}ms待機...`);
+      await new Promise(resolve => setTimeout(resolve, throttleDelay));
+    }
+    
+    // 連続失敗が多い場合はエラーを抜けて続行
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(`[Bitbank API Critical] 連続失敗が${MAX_CONSECUTIVE_FAILURES}回を超えました。エラーを抜けて続行します。`);
+      return null;
     }
     
     throw error;
@@ -391,4 +405,6 @@ async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 10
 
 module.exports = {
   fetchOHLCVDataAPI,
+  executeBitbankAPIWithRateLimit,
+  waitForAPILimit
 };

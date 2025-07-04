@@ -625,6 +625,10 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
 
     // 現在の価格を取得
     const ticker = await fetchTicker(exchange, symbol, options);
+    if (!ticker || !ticker.last) {
+      console.warn(`[multiIndicatorStrategy] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+      return null;
+    }
     const currentPrice = ticker.last;
 
     // 市場環境を識別

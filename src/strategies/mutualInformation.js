@@ -559,6 +559,10 @@ async function calculateMutualInformationSignals(
   
   // 現在の価格を取得
   const ticker = await fetchTicker(exchange, symbol, options);
+  if (!ticker || !ticker.last) {
+    console.warn(`[mutualInformationStrategy] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+    return null;
+  }
   const currentPrice = ticker.last;
 
   // 最近の価格トレンドを分析（短期移動平均を使用）
@@ -704,6 +708,10 @@ function formatMutualInformationLogInfo(signalResult) {
 async function getCurrentPrice(exchange, symbol, options) {
   try {
     const ticker = await fetchTicker(exchange, symbol, options);
+    if (!ticker || !ticker.last) {
+      console.warn(`[getCurrentPrice] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+      return null;
+    }
     return ticker.last;
   } catch (error) {
     console.warn(`価格取得に失敗: ${symbol}`, error.message);

@@ -20,6 +20,9 @@ const {
   listFilledPositions,
 } = require('./mongoDatabase');
 
+// フォールバック定数
+const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
+
 // 戦略名マッピング: 表示名 → 内部キー
 function getStrategyKey(strategyDisplayName) {
   const strategyMapping = {
@@ -1494,34 +1497,45 @@ async function fetchTicker(exchange, symbol, options = {}) {
 
     // console.log(redisTicker);
 
-    if (!redisTicker || (timestamp - redisTicker.timestamp > timeframeToMs('1m'))) {
-      // EMERGENCY: Temporarily increase cache time to reduce fetchTicker calls
-      console.warn(`[EMERGENCY] Skipping fetchTicker for ${symbol} due to throttling crisis`);
-      // Return stale data if available to prevent throttling
-      if (redisTicker) {
+    if (!redisTicker || (timestamp - redisTicker.timestamp > timeframeToMs('5m'))) {
+      // 改善版: スロットリング危機時のインテリジェントな対応
+      // 古いデータがある場合はそれを使用し、ない場合は慎重にAPI呼び出しを試行
+      if (redisTicker && (timestamp - redisTicker.timestamp <= timeframeToMs('30m'))) {
+        console.warn(`[CACHE_EXTENDED] ${symbol} - スロットリング危機のため、古いデータを使用 (${Math.round((timestamp - redisTicker.timestamp) / 1000)}s old)`);
         return redisTicker;
       }
-      return null;
       
-      // ticker が redis にないか、前回更新時刻から 1m 時間以上経過している場合
-      // TODO: 並列実行の場合 1s でもよい
-      // const ticker = await exchange.fetchTicker(symbol);
-      if (!ticker) {
-        console.log(`${symbol} - ティッカーが見つかりませんでした。`);
+      // 古いデータがないか、古すぎる場合は慎重にAPI呼び出しを試行
+      console.log(`[API_ATTEMPT] ${symbol} - データ更新のためAPI呼び出しを試行...`);
+      
+      // ticker が redis にないか、前回更新時刻から 5m 時間以上経過している場合
+      try {
+        const ticker = await exchange.fetchTicker(symbol);
+        if (!ticker) {
+          console.log(`${symbol} - ティッカーが見つかりませんでした。`);
+          return null;
+        }
+
+        // Save to Redis
+        await updateTickerRedis(exchange.id, symbol, ticker);
+        // mongoDB にも保存 - exchange と symbol を追加
+        const tickerWithMeta = {
+          ...ticker,
+          exchange: exchange.id,
+          symbol: symbol
+        };
+        await saveTickerMongoDB(tickerWithMeta);
+
+        return ticker;
+      } catch (apiError) {
+        console.error(`[API_ERROR] ${symbol} - fetchTicker失敗:`, apiError.message);
+        // API失敗時は古いデータがあればそれを使用
+        if (redisTicker) {
+          console.warn(`[FALLBACK] ${symbol} - API失敗のため古いデータを使用 (${Math.round((timestamp - redisTicker.timestamp) / 1000)}s old)`);
+          return redisTicker;
+        }
         return null;
       }
-
-      // Save to Redis
-      await updateTickerRedis(exchange.id, symbol, ticker);
-      // mongoDB にも保存 - exchange と symbol を追加
-      const tickerWithMeta = {
-        ...ticker,
-        exchange: exchange.id,
-        symbol: symbol
-      };
-      await saveTickerMongoDB(tickerWithMeta);
-
-      return ticker;
     } else {
       // Redisに保存されたティッカーを返す
       return redisTicker;
@@ -1864,14 +1878,18 @@ async function getMarketParameters(exchange, symbol) {
     console.log(`${logPrefix} 価格精度が未定義のため、ティッカーから取得を試行...`);
     try {
       const ticker = await exchange.fetchTicker(symbol);
-      const lastPrice = ticker.last;
-      
-      if (lastPrice && lastPrice > 0) {
-        const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
-        pricePrecision = priceDecimals;
-        console.log(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
+      if (!ticker || !ticker.last) {
+        console.warn(`${logPrefix} ⚠️ ティッカーまたはlast価格が取得できませんでした`);
+        pricePrecision = FALLBACK_PRICE_PRECISION;
+        console.log(`${logPrefix} フォールバック価格精度を使用: ${pricePrecision}`);
       } else {
-        console.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
+        const lastPrice = ticker.last;
+        if (lastPrice && lastPrice > 0) {
+        const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
+          pricePrecision = priceDecimals;
+          console.log(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
+        } else {
+          console.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
         return {
           error: 'INVALID_TICKER_PRICE',
           message: `ティッカーの価格が無効です: ${lastPrice}`,

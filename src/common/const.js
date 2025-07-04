@@ -4,12 +4,20 @@
 const OHLCVTimeFrames = ['1m', '5m', '15m', '30m', '1h'];
 // const OHLCVTimeFrames = ["1d"]; // 古い設定（使用不可）
 
-// API/Exchange設定定数 - 極限緊急スロットリング制御
+// API/Exchange設定定数 - 改善されたスロットリング制御
 const EXCHANGE_SETTINGS = {
-  RATE_LIMIT: 10000, // 10秒間隔に拡大（極限緊急API負荷軽減）
-  TIMEOUT: 120000, // 120秒タイムアウト（極限緊急時延長）
-  MAX_THROTTLE_QUEUE_SIZE: 10, // キューサイズを極限まで削減（極限緊急制御）
-  RECV_WINDOW: 120000
+  RATE_LIMIT: 1000, // 1秒間隔に戻す（適切な負荷制御）
+  TIMEOUT: 60000, // 60秒タイムアウト（適切な応答時間）
+  MAX_THROTTLE_QUEUE_SIZE: 500, // キューサイズを適切に拡大（安定性確保）
+  RECV_WINDOW: 60000,
+  // 新しい設定: 段階的バックオフ
+  BACKOFF_ENABLED: true,
+  BACKOFF_INITIAL_DELAY: 1000, // 初期遅延 1秒
+  BACKOFF_MAX_DELAY: 30000, // 最大遅延 30秒
+  BACKOFF_MULTIPLIER: 2, // 遅延倍数
+  // 新しい設定: 接続監視
+  HEALTH_CHECK_INTERVAL: 60000, // 1分間隔でヘルスチェック
+  MAX_CONSECUTIVE_FAILURES: 5 // 連続失敗回数の閾値
 };
 
 // 取引設定定数

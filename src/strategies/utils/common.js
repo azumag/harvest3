@@ -1470,6 +1470,10 @@ async function handleStrategyError(error, symbol, strategyName, strategyId, exch
  */
 async function getCurrentPrice(exchange, symbol, options = {}) {
   const ticker = await fetchTicker(exchange, symbol, options);
+  if (!ticker || !ticker.last) {
+    console.warn(`[getCurrentPrice] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+    return null;
+  }
   return ticker.last;
 }
 
