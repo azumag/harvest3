@@ -1495,9 +1495,17 @@ async function fetchTicker(exchange, symbol, options = {}) {
     // console.log(redisTicker);
 
     if (!redisTicker || (timestamp - redisTicker.timestamp > timeframeToMs('1m'))) {
+      // EMERGENCY: Temporarily increase cache time to reduce fetchTicker calls
+      console.warn(`[EMERGENCY] Skipping fetchTicker for ${symbol} due to throttling crisis`);
+      // Return stale data if available to prevent throttling
+      if (redisTicker) {
+        return redisTicker;
+      }
+      return null;
+      
       // ticker が redis にないか、前回更新時刻から 1m 時間以上経過している場合
       // TODO: 並列実行の場合 1s でもよい
-      const ticker = await exchange.fetchTicker(symbol);
+      // const ticker = await exchange.fetchTicker(symbol);
       if (!ticker) {
         console.log(`${symbol} - ティッカーが見つかりませんでした。`);
         return null;

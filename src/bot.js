@@ -175,6 +175,7 @@ async function enhancedPendingOrderCleanup(exchangeInstance, exchangeId, verbose
 }
 
 const args = process.argv.slice(2);
+const hasArgs = args.length > 0;
 // 通貨ペア（シンボル）の取得
 let targetSymbol = null;
 const symbolArgIndex = args.findIndex(arg => arg === '--symbol' || arg === '-s');
@@ -379,7 +380,8 @@ async function executeStrategyCycle() {
           }
 
           // 残高整合性チェック（5分間隔）
-          if (now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
+          // EMERGENCY: Temporarily disable balance check due to CCXT throttling crisis
+          if (false && now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
             try {
               console.log(`[残高チェック] 開始: ${exchangeId}`);
               const { compareBalances } = require('./common/balanceChecker');
@@ -549,7 +551,6 @@ async function startBot() {
   initializeDB();
   try {
     // コマンドライン引数があるかどうかをチェック
-    const hasArgs = args.length > 0;
     console.log(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
     if (targetSymbol) {
       console.log(`指定された通貨ペア: ${targetSymbol}`);

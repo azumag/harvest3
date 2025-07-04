@@ -325,6 +325,10 @@ class MaintenanceScheduler {
       return;
     }
     
+    // EMERGENCY: Temporarily disable maintenance scheduler due to CCXT throttling crisis
+    console.log('[メンテナンス] ⚠️ 緊急: CCXTスロットリング問題のため、メンテナンススケジュールを一時的に無効化');
+    return;
+    
     console.log('[メンテナンス] 自動メンテナンススケジュールを初期化中...');
     
     // 1. ポジション整合性チェック（2時間間隔）

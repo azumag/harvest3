@@ -4,12 +4,12 @@
 const OHLCVTimeFrames = ['1m', '5m', '15m', '30m', '1h'];
 // const OHLCVTimeFrames = ["1d"]; // 古い設定（使用不可）
 
-// API/Exchange設定定数
+// API/Exchange設定定数 - 極限緊急スロットリング制御
 const EXCHANGE_SETTINGS = {
-  RATE_LIMIT: 1500, // 1.5秒間隔に拡大（API負荷軽減）
-  TIMEOUT: 30000, // 30秒タイムアウト（10秒から拡大）
-  MAX_THROTTLE_QUEUE_SIZE: 1000, // キューサイズを削減（メモリ効率向上）
-  RECV_WINDOW: 60000
+  RATE_LIMIT: 10000, // 10秒間隔に拡大（極限緊急API負荷軽減）
+  TIMEOUT: 120000, // 120秒タイムアウト（極限緊急時延長）
+  MAX_THROTTLE_QUEUE_SIZE: 10, // キューサイズを極限まで削減（極限緊急制御）
+  RECV_WINDOW: 120000
 };
 
 // 取引設定定数

@@ -104,6 +104,17 @@ const config = {
       }
     },
     
+    // バックテスト動的Period設定（Issue #184）
+    backtest: {
+      dynamicPeriods: {
+        enabled: true,
+        bufferPercent: 0.3,        // 30%バッファ
+        minBuffer: 50,             // 最小バッファ
+        maxBuffer: 500,            // 最大バッファ
+        cacheDuration: 300000      // 5分間キャッシュ
+      }
+    },
+    
     // 高度注文管理設定（Issue #147）
     advancedOrderManagement: {
       enabled: true,

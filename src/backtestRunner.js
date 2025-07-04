@@ -1,6 +1,11 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { getSymbolsByExchange, getStrategyConfig, getMarketParametersByExchangeSymbol } = require('./database/manager');
+const { 
+  extractStrategyPeriods, 
+  calculateDynamicLimit, 
+  getEnabledStrategiesForSymbol 
+} = require('./strategies/utils/periodExtractor');
 const { backtestCreateLimitSellOrder,
   saveStrategyParameters,
   getStrategyParameters,
@@ -147,9 +152,26 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         }
         for (const timeframe of OHLCVTimeFrames) {
           // バックテストに必要なローソク足の本数を計算する
-          // バッファを持たせプラスする.
-          // TODO: この値は戦略で使う period の最大値+bufferを設定したい
-          const limit = calculateLimit(timeframe, days) + 200;
+          // Issue #184: 動的Period設定による最適化
+          let dynamicBuffer = 200; // デフォルトフォールバック値
+          
+          try {
+            // 動的Period計算が有効な場合
+            if (config.global.backtest?.dynamicPeriods?.enabled) {
+              const strategiesForSymbol = getEnabledStrategiesForSymbol(symbol, config);
+              const { maxPeriod } = extractStrategyPeriods({ strategies: strategiesForSymbol }, symbol);
+              
+              if (maxPeriod > 0) {
+                const options = config.global.backtest.dynamicPeriods;
+                dynamicBuffer = calculateDynamicLimit(timeframe, days, maxPeriod, options);
+                console.log(`[Dynamic Period] ${symbol}/${timeframe}: maxPeriod=${maxPeriod}, buffer=${dynamicBuffer}`);
+              }
+            }
+          } catch (error) {
+            console.warn(`[Dynamic Period] 計算エラー、フォールバック値使用: ${error.message}`);
+          }
+          
+          const limit = calculateLimit(timeframe, days) + dynamicBuffer;
           await loadHistoricalOHLCVToBacktestRedis(exchangeInstance, symbol, timeframe, limit)
         }
       }
