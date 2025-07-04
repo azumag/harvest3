@@ -384,26 +384,26 @@ grep -A 10 "constructor" src/data/marketDataProvider.js
 - **取引設定**: `src/common/const.js` の `TRADING_SETTINGS`
 - **注文管理設定**: `src/common/const.js` の `ORDER_MANAGEMENT_SETTINGS`
 
-**参考値（2024年7月時点）**
+**参考値（2024年7月時点 - 緊急対応後）**
 ```javascript
 // src/common/const.js - EXCHANGE_SETTINGS（参考値）
 const EXCHANGE_SETTINGS = {
-  RATE_LIMIT: 5000,                    // 基本レート制限: 5秒間隔
+  RATE_LIMIT: 8000,                    // 緊急対応: 8秒間隔（throttle queue問題解決）
   TIMEOUT: 60000,                      // タイムアウト: 60秒
-  MAX_THROTTLE_QUEUE_SIZE: 1500,       // 最大キューサイズ: 1500リクエスト
+  MAX_THROTTLE_QUEUE_SIZE: 2000,       // 緊急対応: 2000に拡大（安全マージン確保）
   
   // 段階的バックオフ設定
-  BACKOFF_INITIAL_DELAY: 1000,         // 初期遅延: 1秒
-  BACKOFF_MAX_DELAY: 30000,            // 最大遅延: 30秒
+  BACKOFF_INITIAL_DELAY: 2000,         // 初期遅延: 2秒に拡大
+  BACKOFF_MAX_DELAY: 60000,            // 最大遅延: 60秒に拡大
   BACKOFF_MULTIPLIER: 2,               // 遅延倍数: 2倍
   
   // 並列実行制限
-  MAX_CONCURRENT_PAIRS: 3,             // 同時処理ペア数: 3
-  EXECUTION_DELAY_MS: 1000,            // 処理間隔: 1秒
+  MAX_CONCURRENT_PAIRS: 2,             // 同時処理ペア数: 2（負荷軽減）
+  EXECUTION_DELAY_MS: 2000,            // 処理間隔: 2秒（負荷軽減）
   
   // 監視設定
   HEALTH_CHECK_INTERVAL: 60000,        // ヘルスチェック: 1分間隔
-  MAX_CONSECUTIVE_FAILURES: 5          // 連続失敗許容数: 5回
+  MAX_CONSECUTIVE_FAILURES: 3          // 連続失敗許容数: 3回（早期検知）
 };
 ```
 

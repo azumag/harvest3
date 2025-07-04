@@ -137,13 +137,20 @@ main() {
     # 6. 環境変数チェック
     log_info "6. 環境変数チェック"
     local env_vars=("EXCHANGE_RATE_LIMIT" "EXCHANGE_MAX_CONCURRENT_PAIRS" "EXCHANGE_EXECUTION_DELAY_MS")
+    local env_unset_count=0
     for var in "${env_vars[@]}"; do
         if [[ -n "${!var}" ]]; then
             log_info "  ${var}=${!var} (設定済み)"
         else
             echo "  ${var}=未設定"
+            ((env_unset_count++))
         fi
     done
+    
+    # CI環境では環境変数未設定は警告のみ
+    if [[ $env_unset_count -gt 0 ]] && [[ "${CI:-}" == "true" ]]; then
+        log_warn "CI環境: ${env_unset_count}個の環境変数が未設定ですが、これは正常です"
+    fi
     
     # 7. 最終結果
     if [[ $exit_code -eq 0 ]]; then
