@@ -5,6 +5,7 @@
 
 const { config } = require('../../config');
 const { orderCheckCancel } = require('./highFrequencyTrading');
+const marketDataProvider = require('../../data/marketDataProvider');
 
 /**
  * 陰陽戦略
@@ -71,7 +72,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
     }
 
     // 現在の価格を取得
-    const ticker = await exchange.fetchTicker(symbol);
+    const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
     const currentPrice = ticker.last;
 
     // シグナルを判定

@@ -2,6 +2,7 @@
  *取引の集計サマリーを取得するコントローラー
  */
 const { getAllTradeSummaries, getAvailableFund, getMarketParameters } = require('../../database/manager');
+const marketDataProvider = require('../../src/data/marketDataProvider');
 const { config } = require('../../config');
 
 /**
@@ -100,7 +101,7 @@ async function calculateAvailableAmounts(summaryData) {
           
           // ticker取得とmarketParams取得を並列実行（同一シンボルなのでレート制限に問題なし）
           const [ticker, marketParams] = await Promise.all([
-            exchange.fetchTicker(symbol),
+            marketDataProvider.fetchTicker(exchange, symbol),
             getMarketParameters(exchange, symbol)
           ]);
           

@@ -15,10 +15,11 @@ const {
   countSignals,
   addOhlcvMongoDB,
   fetchHistoricalOHLCVData,
-  saveTickerMongoDB,
   fetchTickerFromMongoDB,
   listFilledPositions,
 } = require('./mongoDatabase');
+
+const marketDataProvider = require('../data/marketDataProvider');
 
 // フォールバック定数
 const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
@@ -1491,55 +1492,8 @@ async function fetchTicker(exchange, symbol, options = {}) {
       };
     }
     
-    // REDISに最新データがあるか確認
-    const timestamp = Date.now();
-    const redisTicker = await getTickerRedis(exchange.id, symbol);
-
-    // console.log(redisTicker);
-
-    if (!redisTicker || (timestamp - redisTicker.timestamp > timeframeToMs('5m'))) {
-      // 改善版: スロットリング危機時のインテリジェントな対応
-      // 古いデータがある場合はそれを使用し、ない場合は慎重にAPI呼び出しを試行
-      if (redisTicker && (timestamp - redisTicker.timestamp <= timeframeToMs('30m'))) {
-        console.warn(`[CACHE_EXTENDED] ${symbol} - スロットリング危機のため、古いデータを使用 (${Math.round((timestamp - redisTicker.timestamp) / 1000)}s old)`);
-        return redisTicker;
-      }
-      
-      // 古いデータがないか、古すぎる場合は慎重にAPI呼び出しを試行
-      console.log(`[API_ATTEMPT] ${symbol} - データ更新のためAPI呼び出しを試行...`);
-      
-      // ticker が redis にないか、前回更新時刻から 5m 時間以上経過している場合
-      try {
-        const ticker = await exchange.fetchTicker(symbol);
-        if (!ticker) {
-          console.log(`${symbol} - ティッカーが見つかりませんでした。`);
-          return null;
-        }
-
-        // Save to Redis
-        await updateTickerRedis(exchange.id, symbol, ticker);
-        // mongoDB にも保存 - exchange と symbol を追加
-        const tickerWithMeta = {
-          ...ticker,
-          exchange: exchange.id,
-          symbol: symbol
-        };
-        await saveTickerMongoDB(tickerWithMeta);
-
-        return ticker;
-      } catch (apiError) {
-        console.error(`[API_ERROR] ${symbol} - fetchTicker失敗:`, apiError.message);
-        // API失敗時は古いデータがあればそれを使用
-        if (redisTicker) {
-          console.warn(`[FALLBACK] ${symbol} - API失敗のため古いデータを使用 (${Math.round((timestamp - redisTicker.timestamp) / 1000)}s old)`);
-          return redisTicker;
-        }
-        return null;
-      }
-    } else {
-      // Redisに保存されたティッカーを返す
-      return redisTicker;
-    }
+    // リアルタイムモードの場合、marketDataProvider を使用
+    return await marketDataProvider.fetchTicker(exchange, symbol);
 
   } catch (error) {
     console.error(`Error fetching ticker for ${symbol}:`, error);

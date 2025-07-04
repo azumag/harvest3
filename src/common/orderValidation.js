@@ -1,4 +1,5 @@
 const ccxt = require('ccxt');
+const marketDataProvider = require('../data/marketDataProvider');
 
 class OrderValidation {
     constructor(exchangeInstance) {
@@ -12,7 +13,7 @@ class OrderValidation {
     // 市場価格に対する注文価格の妥当性チェック
     async validateOrderPrice(symbol, side, orderPrice) {
         try {
-            const ticker = await this.exchange.fetchTicker(symbol);
+            const ticker = await marketDataProvider.fetchTicker(this.exchange, symbol);
             const marketPrice = ticker.last;
             
             if (!marketPrice || marketPrice <= 0) {
@@ -160,7 +161,7 @@ class OrderValidation {
     // 推奨注文価格の算出
     async getRecommendedPrice(symbol, side) {
         try {
-            const ticker = await this.exchange.fetchTicker(symbol);
+            const ticker = await marketDataProvider.fetchTicker(this.exchange, symbol);
             const marketPrice = ticker.last;
             
             if (side === 'buy') {

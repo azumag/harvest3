@@ -1,6 +1,7 @@
 const { getTradeCurrentPosition, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { errorHandler } = require('../../common/errorHandler');
+const marketDataProvider = require('../../data/marketDataProvider');
 const { 
   savePositionRedis, 
   getPositionRedis, 
@@ -703,7 +704,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     } else {
       // フォールバック：現在の市場価格を取得
       try {
-        const ticker = await exchange.fetchTicker(symbol);
+        const ticker = await marketDataProvider.fetchTicker(symbol);
         executionPrice = ticker.last || ticker.close;
         console.log(`[DEBUG] Using fallback price from ticker: ${executionPrice}`);
       } catch (tickerError) {
@@ -1095,7 +1096,7 @@ async function getCurrentBalance(exchange) {
       if (balance.total[currency] && balance.total[currency] > 0) {
         try {
           const symbol = `${currency}/JPY`;
-          const ticker = await exchange.fetchTicker(symbol);
+          const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
           const jpyValue = balance.total[currency] * (ticker.last || ticker.close);
           totalJPY += jpyValue;
         } catch (error) {

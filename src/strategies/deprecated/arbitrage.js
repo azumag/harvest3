@@ -2,6 +2,7 @@
  * アービトラージ戦略
  */
 const { formattedAvailableAmount, addOrder } = require('../../database/manager');
+const marketDataProvider = require('../../data/marketDataProvider');
 
 /**
  * 価格差取引（取引所間アービトラージ）
@@ -35,31 +36,8 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
     for (const exchange of exchanges) {
       try {
         // リトライロジックを追加
-        let retryCount = 0;
-        const maxRetries = 3;
-        let success = false;
-        let ticker, market;
-        
-        while (!success && retryCount < maxRetries) {
-          try {
-            // 取引所の情報を取得
-            ticker = await exchange.fetchTicker(symbol);
-            market = exchange.markets[symbol];
-            success = true;
-          } catch (error) {
-            retryCount++;
-            if (error.message.includes('throttle queue is over maxCapacity')) {
-              console.log(`${exchange.id}のスロットル制限に達しました。${retryCount}回目のリトライ...`);
-              // スロットル制限に達した場合は、より長く待機
-              await new Promise(resolve => setTimeout(resolve, 5000 * retryCount));
-            } else if (retryCount < maxRetries) {
-              console.log(`${exchange.id}の価格取得に失敗しました。${retryCount}回目のリトライ...`);
-              await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
-            } else {
-              throw error; // 最大リトライ回数に達したら、エラーを投げる
-            }
-          }
-        }
+        const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
+        const market = exchange.markets[symbol];
         
         // 手数料を取得
         let takerFee = 0.002; // デフォルト値

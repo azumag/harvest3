@@ -1,4 +1,5 @@
 const ccxt = require('ccxt'); // ccxtが必要な場合はインポート
+const marketDataProvider = require('../../data/marketDataProvider');
 
 // const { getOrderPairs, saveOrderPairs, getCurrentOrderPair, setCurrentOrderPair } = require('../src/redisDatabase.js');
 const { updateFilledTrades, getRealizedPnL, getCurrentOrderPair, setCurrentOrderPair} = require('../../database/manager');
@@ -173,7 +174,7 @@ class MarketMakingStrategy {
     const now = Date.now();
     if (now - this.lastPriceHistoryUpdate >= this.options.priceHistoryUpdateInterval) {
       try {
-        const ticker = await this.exchange.fetchTicker(this.symbol);
+        const ticker = await marketDataProvider.fetchTicker(this.exchange, this.symbol);
         if (ticker && ticker.last) {
           this.priceHistory.push({ time: now, price: ticker.last });
           // 古い履歴を削除
@@ -224,7 +225,7 @@ class MarketMakingStrategy {
       try {
         const openOrders = await this.exchange.fetchOpenOrders(this.symbol);
         const activeOrderIds = openOrders.map(order => order.id);
-        const ticker = await this.exchange.fetchTicker(this.symbol);
+        const ticker = await marketDataProvider.fetchTicker(this.exchange, this.symbol);
         const currentPrice = ticker.last;
 
         console.log(`${this.symbol}: 注文状態チェック - アクティブな注文数: ${openOrders.length}, 現在価格: ${currentPrice}`);

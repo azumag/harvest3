@@ -1,4 +1,5 @@
 const ccxt = require('ccxt');
+const marketDataProvider = require('../data/marketDataProvider');
 
 class MarketPriceTracker {
     constructor(exchangeInstance, redisClient) {
@@ -13,7 +14,7 @@ class MarketPriceTracker {
     // 市場価格の取得と記録
     async recordMarketPrice(symbol) {
         try {
-            const ticker = await this.exchange.fetchTicker(symbol);
+            const ticker = await marketDataProvider.fetchTicker(this.exchange, symbol);
             const currentPrice = ticker.last;
             const timestamp = Date.now();
             
