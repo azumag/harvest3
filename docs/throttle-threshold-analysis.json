@@ -1,0 +1,44 @@
+{
+  "warningThreshold": 0.4,
+  "criticalThreshold": 0.6499999999999999,
+  "reasoning": {
+    "warning": "エラー率5.0%超過の10%前で警告",
+    "critical": "エラー率15.0%超過の5%前で緊急対処",
+    "responseTime": "レスポンス時間1秒超過点: 95.0%"
+  },
+  "confidence": null,
+  "metadata": {
+    "dataPoints": 21,
+    "analysisDate": "2025-07-04T14:50:39.924Z",
+    "dataType": "theoretical",
+    "timespan": {
+      "start": 1751640539923,
+      "end": 1751640639923,
+      "duration": "理論値のため該当なし"
+    },
+    "thresholds": {
+      "warningThreshold": 0.4,
+      "criticalThreshold": 0.6499999999999999,
+      "gap": 0.2499999999999999,
+      "gapIsAppropriate": true
+    },
+    "validation": {
+      "errorRateAtWarning": 0.03200000000000001,
+      "errorRateAtCritical": 0.10799999999999998,
+      "responseTimeAtWarning": 260,
+      "responseTimeAtCritical": 460
+    },
+    "limitations": [
+      "データは理論モデルに基づく",
+      "実環境での検証が必要",
+      "負荷パターンによって結果が変動する可能性",
+      "最低30日間の実データ収集を強く推奨"
+    ],
+    "nextSteps": [
+      "実環境でのデータ収集開始",
+      "週次での閾値見直し",
+      "A/Bテストによる最適化",
+      "異常時の自動調整ログ分析"
+    ]
+  }
+}

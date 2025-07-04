@@ -75,7 +75,7 @@
           },
           {
             "type": "command",
-            "command": "CONTENT=$(jq -r '.transcript_path' | xargs cat | jq -r 'select(.type == \"assistant\")' | jq -sr '.[-1].message.content[-1].text' | tr '\\n' ' ' | sed 's/\"/\\\\\"/g'); tmux send-keys -t 'gemini' \"Claude 曰く： $CONTENT . 現状の変更ファイルを確認し、厳正なレビューを行なえ。レビュー内容を tmux sendkey で送信せよ: 例：tmux send-keys -t \\\"claude\\\" \\\"/orchestrator review-detail think\\\" Enter && sleep 5 && tmux send-keys -t \\\"claude\\\" \\\"\\\" Enter\" && sleep 5 && tmux send-keys -t \"gemini\" \"\" Enter"
+            "command": "/Users/azumag/work/cc-gen-review/hook-handler.sh --yolo --git-diff"
           }
         ]
       }

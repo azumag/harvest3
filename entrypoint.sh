@@ -176,7 +176,7 @@ main() {
 
 # エラーハンドリング付きメイン実行
 if ! main; then
-    local exit_code=$?
+    exit_code=$?
     log "FATAL: Container startup failed with exit code $exit_code"
     send_startup_error_to_discord "Container startup failed" "Exit code: $exit_code"
     exit $exit_code

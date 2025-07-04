@@ -1,0 +1,1056 @@
+{
+  "metadata": {
+    "version": "2.0.0",
+    "collectionStarted": false,
+    "totalMeasurements": 10,
+    "dataRetentionDays": 30,
+    "lastUpdated": "2025-07-04T16:11:56.323Z"
+  },
+  "statistics": {
+    "totalAttempts": 44,
+    "successfulAttempts": 24,
+    "failedAttempts": 19,
+    "errorTypes": {
+      "rate_limit": 10,
+      "network": 9
+    },
+    "responseTimes": [
+      51,
+      101,
+      202,
+      50,
+      102,
+      201,
+      51,
+      100,
+      51,
+      100,
+      49,
+      102,
+      52,
+      102,
+      51,
+      100,
+      51,
+      102,
+      50,
+      100,
+      51,
+      101,
+      51,
+      100
+    ],
+    "memoryUsage": [
+      47817896,
+      34157776,
+      34462232,
+      35011464,
+      35461504,
+      35911368,
+      36438048,
+      37116176,
+      37789696,
+      38536160,
+      39703968
+    ],
+    "cpuUsage": [
+      499968,
+      538975,
+      540983,
+      543180,
+      544981,
+      546471,
+      548399,
+      550483,
+      553063,
+      555941,
+      560888
+    ]
+  },
+  "measurements": [
+    {
+      "timestamp": 1751645497657,
+      "systemMetrics": {
+        "timestamp": 1751645497657,
+        "memory": {
+          "rss": 142147584,
+          "heapUsed": 47817896,
+          "heapTotal": 77365248,
+          "external": 4608619,
+          "arrayBuffers": 1152755
+        },
+        "cpu": {
+          "user": 402595,
+          "system": 97373,
+          "percent": 74.04508132042434
+        },
+        "uptime": 0.675225625,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.67822265625,
+          4.404296875,
+          4.41064453125
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645497708,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645497809,
+          "api": {
+            "responseTime": 101,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 101
+        },
+        "unreliable-exchange": {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645498011,
+          "api": {
+            "responseTime": 202,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 202
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645497657
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645497657,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645498157,
+      "systemMetrics": {
+        "timestamp": 1751645498158,
+        "memory": {
+          "rss": 142786560,
+          "heapUsed": 34157776,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 437376,
+          "system": 101599,
+          "percent": 45.82943432035581
+        },
+        "uptime": 1.176049833,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.67822265625,
+          4.404296875,
+          4.41064453125
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645498208,
+          "api": {
+            "responseTime": 50,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 50
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645498310,
+          "api": {
+            "responseTime": 102,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 102
+        },
+        "unreliable-exchange": {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645498511,
+          "api": {
+            "responseTime": 201,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 201
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645498157
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645498157,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645498659,
+      "systemMetrics": {
+        "timestamp": 1751645498659,
+        "memory": {
+          "rss": 142786560,
+          "heapUsed": 34462232,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 439202,
+          "system": 101781,
+          "percent": 32.25607958260156
+        },
+        "uptime": 1.677154166,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.67822265625,
+          4.404296875,
+          4.41064453125
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645498710,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645498810,
+          "api": {
+            "responseTime": 100,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 100
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645498659
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645498659
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645498659,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645498659,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645499159,
+      "systemMetrics": {
+        "timestamp": 1751645499159,
+        "memory": {
+          "rss": 142802944,
+          "heapUsed": 35011464,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 441151,
+          "system": 102029,
+          "percent": 24.9478487745072
+        },
+        "uptime": 2.177265041,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.67822265625,
+          4.404296875,
+          4.41064453125
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645499210,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645499310,
+          "api": {
+            "responseTime": 100,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 100
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645499159
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645499159
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645499159,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645499159,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645499659,
+      "systemMetrics": {
+        "timestamp": 1751645499659,
+        "memory": {
+          "rss": 142802944,
+          "heapUsed": 35461504,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 442758,
+          "system": 102223,
+          "percent": 20.356947234867548
+        },
+        "uptime": 2.677128208,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645499708,
+          "api": {
+            "responseTime": 49,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 49
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645499810,
+          "api": {
+            "responseTime": 102,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 102
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645499659
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645499659
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645499659,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645499659,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645500159,
+      "systemMetrics": {
+        "timestamp": 1751645500159,
+        "memory": {
+          "rss": 142802944,
+          "heapUsed": 35911368,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 444094,
+          "system": 102377,
+          "percent": 17.196470901806872
+        },
+        "uptime": 3.177813,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645500211,
+          "api": {
+            "responseTime": 52,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 52
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645500313,
+          "api": {
+            "responseTime": 102,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 102
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645500159
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645500159
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645500159,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645500159,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645500660,
+      "systemMetrics": {
+        "timestamp": 1751645500661,
+        "memory": {
+          "rss": 142868480,
+          "heapUsed": 36438048,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 445755,
+          "system": 102644,
+          "percent": 14.906196157188617
+        },
+        "uptime": 3.679003541,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645500712,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645500812,
+          "api": {
+            "responseTime": 100,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 100
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645500660
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645500660
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645500660,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645500660,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645501162,
+      "systemMetrics": {
+        "timestamp": 1751645501162,
+        "memory": {
+          "rss": 142868480,
+          "heapUsed": 37116176,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 447580,
+          "system": 102903,
+          "percent": 13.167264668944057
+        },
+        "uptime": 4.1806985,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645501213,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645501315,
+          "api": {
+            "responseTime": 102,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 102
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645501162
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645501162
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645501162,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645501162,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645501663,
+      "systemMetrics": {
+        "timestamp": 1751645501663,
+        "memory": {
+          "rss": 140476416,
+          "heapUsed": 37789696,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 449774,
+          "system": 103289,
+          "percent": 11.81470427016
+        },
+        "uptime": 4.681146541,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645501713,
+          "api": {
+            "responseTime": 50,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 50
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645501813,
+          "api": {
+            "responseTime": 100,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 100
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645501663
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645501663
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645501663,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645501663,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "timestamp": 1751645502164,
+      "systemMetrics": {
+        "timestamp": 1751645502164,
+        "memory": {
+          "rss": 140541952,
+          "heapUsed": 38536160,
+          "heapTotal": 77889536,
+          "external": 4681547,
+          "arrayBuffers": 1152736
+        },
+        "cpu": {
+          "user": 451952,
+          "system": 103989,
+          "percent": 10.727343738773595
+        },
+        "uptime": 5.18247,
+        "pid": 33692,
+        "nodeVersion": "v23.10.0",
+        "platform": "darwin",
+        "loadAverage": [
+          4.54345703125,
+          4.380859375,
+          4.40234375
+        ]
+      },
+      "exchanges": {
+        "stable-exchange": {
+          "exchangeId": "stable-exchange",
+          "timestamp": 1751645502215,
+          "api": {
+            "responseTime": 51,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 51
+        },
+        "slow-exchange": {
+          "exchangeId": "slow-exchange",
+          "timestamp": 1751645502316,
+          "api": {
+            "responseTime": 101,
+            "success": true,
+            "error": null,
+            "callType": "fetchStatus"
+          },
+          "throttle": {
+            "queueSize": 0,
+            "rateLimit": 1000,
+            "last": null
+          },
+          "config": {
+            "enableRateLimit": true,
+            "timeout": 10000
+          },
+          "totalTime": 101
+        },
+        "unreliable-exchange": {
+          "error": true,
+          "errorType": "network",
+          "errorMessage": "ENOTFOUND: Network error",
+          "timestamp": 1751645502164
+        },
+        "problematic-exchange": {
+          "error": true,
+          "errorType": "rate_limit",
+          "errorMessage": "Rate limit exceeded",
+          "timestamp": 1751645502164
+        }
+      },
+      "errors": [
+        {
+          "exchangeId": "unreliable-exchange",
+          "timestamp": 1751645502164,
+          "type": "network",
+          "message": "ENOTFOUND: Network error",
+          "severity": "critical"
+        },
+        {
+          "exchangeId": "problematic-exchange",
+          "timestamp": 1751645502164,
+          "type": "rate_limit",
+          "message": "Rate limit exceeded",
+          "severity": "medium"
+        }
+      ]
+    }
+  ]
+}

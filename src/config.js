@@ -31,6 +31,16 @@ const exchangeBB = new ccxt.bitbank({
     }
 });
 
+// CCXTライブラリのthrottle設定を安全に上書き
+// 注意: ccxtのコンストラクタオプションでは反映されないため、インスタンス作成後に直接設定
+// 将来のccxtバージョンアップ時は、この設定方法の有効性を再確認すること
+if (exchangeBB.throttle && typeof exchangeBB.throttle === 'object') {
+    exchangeBB.throttle.maxCapacity = EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
+} else {
+    // throttleオブジェクトが存在しない場合は、プロパティとして直接設定
+    exchangeBB.maxThrottleQueueSize = EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
+}
+
 const exchangeBF = new ccxt.bitflyer({
     apiKey: BFApiKey,
     secret: BFApiSecret,

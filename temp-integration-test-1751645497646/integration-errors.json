@@ -1,0 +1,211 @@
+[
+  {
+    "timestamp": "2025-07-04T16:11:45.016Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 35,
+      "currentErrorRate": 0.02857142857142857
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:45.514Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 35,
+      "currentErrorRate": 0.05714285714285714
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:45.815Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 35,
+      "currentErrorRate": 0.08571428571428572
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:46.314Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 36,
+      "currentErrorRate": 0.1111111111111111
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:46.814Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 37,
+      "currentErrorRate": 0.13513513513513514
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:47.317Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 38,
+      "currentErrorRate": 0.15789473684210525
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:47.814Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 39,
+      "currentErrorRate": 0.1794871794871795
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:48.316Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 40,
+      "currentErrorRate": 0.2
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:48.816Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 41,
+      "currentErrorRate": 0.21951219512195122
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:49.319Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 42,
+      "currentErrorRate": 0.23809523809523808
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:49.817Z",
+    "exchangeId": "unreliable-exchange",
+    "type": "network",
+    "message": "ENOTFOUND: Network error",
+    "severity": "critical",
+    "context": {
+      "totalAttempts": 43,
+      "currentErrorRate": 0.2558139534883721
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:52.818Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.2727272727272727
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:53.318Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.29545454545454547
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:53.816Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.3181818181818182
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:54.321Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.3409090909090909
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:54.817Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.36363636363636365
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:55.319Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.38636363636363635
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:55.818Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.4090909090909091
+    }
+  },
+  {
+    "timestamp": "2025-07-04T16:11:56.321Z",
+    "exchangeId": "problematic-exchange",
+    "type": "rate_limit",
+    "message": "Rate limit exceeded",
+    "severity": "medium",
+    "context": {
+      "totalAttempts": 44,
+      "currentErrorRate": 0.4318181818181818
+    }
+  }
+]

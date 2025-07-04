@@ -5,19 +5,25 @@ const OHLCVTimeFrames = ['1m', '5m', '15m', '30m', '1h'];
 // const OHLCVTimeFrames = ["1d"]; // 古い設定（使用不可）
 
 // API/Exchange設定定数 - 改善されたスロットリング制御
+// bitbank API制限: 取得系 10回/秒、更新系 6回/秒
+// 実測値: 5秒間隔で安定、8秒間隔で確実に問題回避
+// TODO: 実データ分析システムを活用し、安定性を保ちつつパフォーマンス最適化を継続検討（目標: 5-6秒）
 const EXCHANGE_SETTINGS = {
-  RATE_LIMIT: 1000, // 1秒間隔に戻す（適切な負荷制御）
+  RATE_LIMIT: 8000, // 緊急対応: 8秒間隔（実測データ基準、throttle queue maxCapacity 1000エラー解決のため）
   TIMEOUT: 60000, // 60秒タイムアウト（適切な応答時間）
-  MAX_THROTTLE_QUEUE_SIZE: 500, // キューサイズを適切に拡大（安定性確保）
+  MAX_THROTTLE_QUEUE_SIZE: 2000, // 緊急対応: 2000に拡大（ccxt デフォルト1000の2倍で安全マージン確保）
   RECV_WINDOW: 60000,
   // 新しい設定: 段階的バックオフ
   BACKOFF_ENABLED: true,
-  BACKOFF_INITIAL_DELAY: 1000, // 初期遅延 1秒
-  BACKOFF_MAX_DELAY: 30000, // 最大遅延 30秒
+  BACKOFF_INITIAL_DELAY: 2000, // 初期遅延 2秒に拡大
+  BACKOFF_MAX_DELAY: 60000, // 最大遅延 60秒に拡大
   BACKOFF_MULTIPLIER: 2, // 遅延倍数
   // 新しい設定: 接続監視
   HEALTH_CHECK_INTERVAL: 60000, // 1分間隔でヘルスチェック
-  MAX_CONSECUTIVE_FAILURES: 5 // 連続失敗回数の閾値
+  MAX_CONSECUTIVE_FAILURES: 3, // 連続失敗回数の閾値を3に削減（早期発見）
+  // 新しい設定: 並列実行制限（API負荷軽減）
+  MAX_CONCURRENT_PAIRS: 2, // 同時処理を2に削減（更なる負荷軽減）
+  EXECUTION_DELAY_MS: 2000 // 各ペア処理間の遅延を2秒に拡大
 };
 
 // 取引設定定数

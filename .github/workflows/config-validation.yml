@@ -1,0 +1,86 @@
+name: Configuration Validation
+
+on:
+  push:
+    branches: [ develop, main ]
+    paths:
+      - 'src/common/const.js'
+      - 'src/config.js'
+      - 'README.md'
+      - 'scripts/validate-config.sh'
+  pull_request:
+    branches: [ develop, main ]
+    paths:
+      - 'src/common/const.js'
+      - 'src/config.js'
+      - 'README.md'
+      - 'scripts/validate-config.sh'
+
+jobs:
+  validate-config:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Make validation script executable
+      run: chmod +x scripts/validate-config.sh
+    
+    - name: Run basic configuration validation
+      run: ./scripts/validate-config.sh
+    
+    - name: Run README consistency check
+      run: ./scripts/validate-config.sh --check-readme-consistency
+      continue-on-error: false
+      
+    - name: Generate config documentation
+      run: npm run generate-config-docs
+      continue-on-error: true
+      
+    - name: Check for documentation updates
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "Documentation updates detected"
+          git diff --name-only
+          echo "::warning::Documentation may need updating. Consider running 'npm run generate-config-docs' locally."
+        else
+          echo "Documentation is up to date"
+        fi
+      
+    - name: Comment on PR if validation fails
+      if: failure() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚨 **設定値検証エラー**\n\n設定ファイルとREADMEの間に乖離が検出されました。\n\n詳細は[アクションログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})を確認し、以下のいずれかを実行してください：\n\n1. 設定値を正しく修正\n2. READMEの参考値を更新\n3. `scripts/generate-config-docs.sh`（準備中）で自動更新\n\n**注意**: この乖離はシステム障害の原因となる可能性があります。'
+          })
+          
+  validate-firewall:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Check firewall configuration consistency
+      run: |
+        if [ -f .github/firewall.yml ]; then
+          echo "Firewall configuration found"
+          # 将来的にfirewall設定の検証を追加予定
+        else
+          echo "No firewall configuration found - OK"
+        fi

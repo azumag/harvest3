@@ -513,7 +513,17 @@ async function addOhlcvMongoDB(ohlcvData) {
     // console.log('OHLCV added:', result.insertedId);
     return result;
   } catch (error) {
-    // 重複エラー (E11000 duplicate key error) の場合はログを出力しないなど、より詳細なエラーハンドリングが必要になる可能性がある
+    // 重複エラー (E11000 duplicate key error) の場合は既存データを返す
+    if (error.code === 11000) {
+      console.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      const existingData = await module.exports.ohlcvCollection.findOne({
+        exchange: ohlcvData.exchange,
+        symbol: ohlcvData.symbol,
+        timeframe: ohlcvData.timeframe,
+        timestamp: ohlcvData.timestamp
+      });
+      return existingData;
+    }
     console.error('Error adding OHLCV:', error);
     throw error;
   }
