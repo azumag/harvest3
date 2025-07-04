@@ -1890,11 +1890,12 @@ async function getMarketParameters(exchange, symbol) {
           console.log(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
         } else {
           console.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
-        return {
-          error: 'INVALID_TICKER_PRICE',
-          message: `ティッカーの価格が無効です: ${lastPrice}`,
-          ticker: ticker
-        };
+          return {
+            error: 'INVALID_TICKER_PRICE',
+            message: `ティッカーの価格が無効です: ${lastPrice}`,
+            ticker: ticker
+          };
+        }
       }
     } catch (tickerError) {
       // ティッカー取得エラーの詳細分類
