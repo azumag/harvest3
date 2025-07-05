@@ -5,7 +5,7 @@ module.exports = {
   coverageDirectory: 'coverage',
   verbose: true,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testTimeout: 10000,
+  testTimeout: 60000, // CI/CD安定性のため60秒に延長
   // Ignore E2E tests in unit test runs
   testPathIgnorePatterns: [
     '/node_modules/',

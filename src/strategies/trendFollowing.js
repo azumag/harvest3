@@ -34,7 +34,8 @@ const {
   executeStrategyTemplate,
 } = require('./utils/common');
 
-const { addSignal, fetchTicker } = require('../database/manager');
+const { addSignal } = require('../database/manager');
+const marketDataProvider = require('../data/marketDataProvider');
 const { postErrorToDiscord } = require('../common/notifications');
 
 /**
@@ -623,13 +624,12 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
     // 価格変化を計算
     indicators.priceChange = closes[closes.length - 1] - closes[closes.length - 2];
 
-    // 現在の価格を取得
-    const ticker = await fetchTicker(exchange, symbol, options);
-    if (!ticker || !ticker.last) {
-      console.warn(`[multiIndicatorStrategy] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+    // 現在の価格を取得（MarketDataProvider使用でAPI負荷削減）
+    const currentPrice = await getCurrentPrice(exchange, symbol, options);
+    if (!currentPrice) {
+      console.warn(`[multiIndicatorStrategy] ${symbol} - 現在価格が取得できませんでした`);
       return null;
     }
-    const currentPrice = ticker.last;
 
     // 市場環境を識別
     const marketEnvironment = identifyMarketEnvironment(indicators.adx, {

@@ -10,6 +10,7 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   fetchTicker
 } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
+const { BITBANK_ERRORS, isBitbankError } = require('../../common/exchangeErrors');
 const { 
   checkStopLoss, 
   executeStopLoss, 
@@ -1039,7 +1040,10 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
       openOrders = await exchange.fetchOpenOrders(symbol);
     } catch (fetchError) {
       // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
-      if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
+      if (fetchError.name === 'AuthenticationError' || 
+          fetchError.message.includes('authentication') || 
+          fetchError.message.includes('Invalid symbol') ||
+          isBitbankError(fetchError, BITBANK_ERRORS.SYSTEM_ERROR)) {  // bitbankのシステムエラー（堅牢な判定）
         console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
         return { success: false, reason: 'unsupported symbol for private API' };
       }

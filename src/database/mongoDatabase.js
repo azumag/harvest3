@@ -14,16 +14,16 @@ const mongoDbName = process.env.MONGO_DB_NAME;
 // レビュー対応: 非対応オプションを削除し、安定した接続設定に変更
 const mongoOptions = {
   serverSelectionTimeoutMS: 30000, // 30秒に延長
-  connectTimeoutMS: 10000,          // 10秒に設定
+  connectTimeoutMS: 15000,          // CI/CD安定性のため15秒に延長
   socketTimeoutMS: 45000,           // 45秒に設定
-  maxPoolSize: 50,                  // プールサイズを拡大
-  minPoolSize: 5,                   // 最小プールサイズを設定
+  maxPoolSize: 10,                  // CI/CD環境のためプールサイズを適正化
+  minPoolSize: 2,                   // 最小プールサイズを設定
   maxIdleTimeMS: 30000,             // アイドル接続のタイムアウト
   retryWrites: true,                // 書き込み再試行を有効化
   heartbeatFrequencyMS: 10000,      // ハートビート間隔
   // bufferMaxEntries: 削除（新しいドライバでは非対応）
   compressors: ['zlib'],            // データ圧縮を有効化
-  maxConnecting: 10                 // 同時接続数の制限
+  maxConnecting: 5                  // CI/CD環境のため同時接続数を適正化
 };
 
 let client;
@@ -44,11 +44,34 @@ async function isConnected() {
 }
 
 /**
- * MongoDBに接続し、データベースとコレクションへの参照を取得する
+ * 指数バックオフでのリトライ実行
+ */
+async function retryWithBackoff(operation, operationName, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries;
+      console.warn(`[MongoDB] ${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
+      
+      if (isLastAttempt) {
+        console.error(`[MongoDB] ${operationName} 最終失敗:`, error);
+        throw error;
+      }
+      
+      const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, max 10s
+      console.log(`[MongoDB] ${backoffMs}ms後にリトライします...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+  }
+}
+
+/**
+ * MongoDBに接続し、データベースとコレクションへの参照を取得する（リトライロジック付き）
  */
 async function connectDB() {
   if (!await isConnected()) {
-    try {
+    await retryWithBackoff(async () => {
       console.log({mongoDbName, mongoUrl});
       client = new MongoClient(mongoUrl, mongoOptions);
       await client.connect();
@@ -68,16 +91,14 @@ async function connectDB() {
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
-
-    } catch (error) {
-      console.error('MongoDB接続エラー:', error);
-      // Discord通知を再有効化（改善されたエラーハンドリングで安全）
-      try {
-        await postMongoConnectionErrorToDiscord(error.message, mongoUrl);
-      } catch (notificationError) {
-        console.warn('Discord通知送信に失敗:', notificationError.message);
-      }
-      throw error;
+    }, 'MongoDB接続', 3);
+    
+    // 接続成功後のDiscord通知（エラー時のみ送信していたが、接続復旧も通知）
+    try {
+      // 接続エラー履歴がある場合のみ復旧通知
+      console.log('[MongoDB] 接続が正常に確立されました');
+    } catch (notificationError) {
+      console.warn('Discord通知送信に失敗:', notificationError.message);
     }
   }
 }

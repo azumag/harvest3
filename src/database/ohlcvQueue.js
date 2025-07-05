@@ -150,42 +150,65 @@ class OHLCVRequestQueue extends EventEmitter {
    * 既存リクエストの完了を待機
    */
   async waitForExistingRequest(requestId) {
-    // アクティブリクエストの場合
-    if (this.activeRequests.has(requestId)) {
-      return new Promise((resolve, reject) => {
-        const handler = (id, result, error) => {
-          if (id === requestId) {
-            this.removeListener('requestComplete', handler); // 適切にリスナー削除
-            if (error) reject(error);
-            else resolve(result);
-          }
-        };
-        
-        // タイムアウト付きリスナー
-        const timeoutId = setTimeout(() => {
-          this.removeListener('requestComplete', handler);
-          reject(new Error(`Waiting for existing request timeout: ${requestId}`));
-        }, this.config.queueTimeout);
-        
-        this.on('requestComplete', handler);
-        
-        // 完了時にタイムアウトをクリア
-        const originalHandler = handler;
-        handler = (id, result, error) => {
-          clearTimeout(timeoutId);
-          originalHandler(id, result, error);
-        };
-      });
+    try {
+      // アクティブリクエストの場合
+      if (this.activeRequests.has(requestId)) {
+        return new Promise((resolve, reject) => {
+          // タイムアウト付きリスナー
+          const timeoutId = setTimeout(() => {
+            try {
+              if (this.removeListener && typeof this.removeListener === 'function') {
+                this.removeListener('requestComplete', wrappedHandler);
+              }
+            } catch (cleanupError) {
+              console.error('[OHLCVQueue] リスナー削除エラー:', cleanupError);
+            }
+            reject(new Error(`Waiting for existing request timeout: ${requestId}`));
+          }, this.config.queueTimeout);
+          
+          const wrappedHandler = (id, result, error) => {
+            if (id === requestId) {
+              clearTimeout(timeoutId);
+              try {
+                if (this.removeListener && typeof this.removeListener === 'function') {
+                  this.removeListener('requestComplete', wrappedHandler); // 適切にリスナー削除
+                }
+              } catch (cleanupError) {
+                console.error('[OHLCVQueue] リスナー削除エラー:', cleanupError);
+              }
+              if (error) reject(error);
+              else resolve(result);
+            }
+          };
+          
+          this.on('requestComplete', wrappedHandler);
+        });
+      }
+      
+      // 履歴にある場合（キャッシュされたデータを返す）
+      const historyItem = this.requestHistory.get(requestId);
+      if (historyItem && historyItem.result) {
+        this.stats.cacheHits++;
+        return historyItem.result;
+      }
+      
+      throw new Error(`No existing request found: ${requestId}`);
+    } catch (error) {
+      // waitForExistingRequestでのエラーをDiscordに通知
+      const errorMessage = `OHLCV Queue waitForExistingRequest Error: ${requestId} - ${error.message}`;
+      console.error(`[OHLCVQueue] waitForExistingRequest エラー: ${requestId}`, error);
+      
+      // エラーをDiscordに通知
+      try {
+        await postErrorToDiscord(errorMessage);
+        recordError('ohlcv_queue_wait', errorMessage, error.stack);
+      } catch (notificationError) {
+        console.error('[OHLCVQueue] Discord通知エラー:', notificationError);
+      }
+      
+      // 元のエラーを再スロー
+      throw error;
     }
-    
-    // 履歴にある場合（キャッシュされたデータを返す）
-    const historyItem = this.requestHistory.get(requestId);
-    if (historyItem && historyItem.result) {
-      this.stats.cacheHits++;
-      return historyItem.result;
-    }
-    
-    throw new Error(`No existing request found: ${requestId}`);
   }
   
   /**

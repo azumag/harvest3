@@ -2,7 +2,7 @@
 const LRUCache = require('lru-cache');
 
 class MarketDataProvider {
-    constructor(ttl = 1000) { // Time-to-live for cache in milliseconds (default: 1 second)
+    constructor(ttl = 5000) { // Time-to-live for cache in milliseconds (default: 5 seconds, throttle queue対応)
         this.cache = new LRUCache({
             max: 500, // Max number of items in cache
             ttl: ttl, // Time to live for cache entries

@@ -67,15 +67,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.transcript_path' | xargs cat | jq -r 'select(.type == \"assistant\")' | jq -sr '.[-1].message.content[-1].text' | say"
-          },
-          {
-            "type": "command",
             "command": "docker compose down && docker compose up bot backtest -d"
           },
           {
             "type": "command",
-            "command": "/Users/azumag/work/cc-gen-review/hook-handler.sh --yolo --git-diff"
+            "command": "afplay /System/Library/Sounds/Funk.aiff"
+          },
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-gc-review/hook-handler.sh --yolo --git-diff"
           }
         ]
       }

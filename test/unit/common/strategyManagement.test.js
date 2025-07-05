@@ -13,23 +13,24 @@ describe('統一戦略管理', () => {
       // 型ベースフィルタリングによる残高チェック対象戦略の取得
       const strategies = getBalanceCheckEligibleStrategies(config);
 
-      // 期待される戦略が含まれていることを確認
+      // 緊急対応中: すべての戦略が無効化されているため、空配列が期待される
+      expect(Array.isArray(strategies)).toBe(true);
+      
+      // 期待される戦略（緊急対応解除後は有効化される）
       const expectedStrategies = [
         'MACD', 'BOLLINGER_BANDS', 'MA', 'OSCILLATOR', 
         'RSI', 'MULTI_INDICATOR', 'MUTUAL_INFO', 'MEAN_REVERSION'
       ];
 
       expectedStrategies.forEach(expectedStrategy => {
-        // 環境変数依存の戦略は、無効化されている場合は含まれない
+        // 戦略が存在し、type が定義されていることを確認
         const strategy = config.strategies[expectedStrategy];
-        const isEnabled = expectedStrategy === 'OSCILLATOR' ? process.env.STRATEGY_OSCILLATOR_ENABLED === 'true' :
-                         expectedStrategy === 'RSI' ? process.env.STRATEGY_RSI_ENABLED === 'true' :
-                         expectedStrategy === 'MULTI_INDICATOR' ? process.env.STRATEGY_MULTI_INDICATOR_ENABLED === 'true' :
-                         strategy.enabled;
+        expect(strategy).toBeDefined();
+        expect(strategy.type).toBeDefined();
+        expect(strategy.type).not.toBe('high_frequency');
         
-        if (isEnabled) {
-          expect(strategies).toContain(expectedStrategy);
-        }
+        // 緊急対応中はすべて無効化されていることを確認
+        expect(strategy.enabled).toBe(false);
       });
 
       // HFT戦略は含まれていないことを確認

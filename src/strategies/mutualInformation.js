@@ -29,9 +29,11 @@ const {
 const { 
   fetchAndValidateOHLCVData, 
   handleStrategySignals, 
+  getCurrentPrice
 } = require('./utils/common');
 
-const { addSignal, fetchTicker } = require('../database/manager');
+const { addSignal } = require('../database/manager');
+const marketDataProvider = require('../data/marketDataProvider');
 const { postErrorToDiscord } = require('../common/notifications');
 const { isBacktestMode } = require('../common/utils');
 
@@ -557,13 +559,12 @@ async function calculateMutualInformationSignals(
   // 平均相互情報量を計算
   const avgMutualInfo = mutualInfoScores.reduce((sum, score) => sum + score.mutualInfo, 0) / mutualInfoScores.length;
   
-  // 現在の価格を取得
-  const ticker = await fetchTicker(exchange, symbol, options);
-  if (!ticker || !ticker.last) {
-    console.warn(`[mutualInformationStrategy] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+  // 現在の価格を取得（MarketDataProvider使用でAPI負荷削減）
+  const currentPrice = await getCurrentPrice(exchange, symbol, options);
+  if (!currentPrice) {
+    console.warn(`[mutualInformationStrategy] ${symbol} - 現在価格が取得できませんでした`);
     return null;
   }
-  const currentPrice = ticker.last;
 
   // 最近の価格トレンドを分析（短期移動平均を使用）
   const shortMA = calculateSMA(recentMainCloses, Math.min(5, recentMainCloses.length - 1));
@@ -702,22 +703,7 @@ function formatMutualInformationLogInfo(signalResult) {
   }
 }
 
-/**
- * 現在の価格を取得するヘルパー関数
- */
-async function getCurrentPrice(exchange, symbol, options) {
-  try {
-    const ticker = await fetchTicker(exchange, symbol, options);
-    if (!ticker || !ticker.last) {
-      console.warn(`[getCurrentPrice] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
-      return null;
-    }
-    return ticker.last;
-  } catch (error) {
-    console.warn(`価格取得に失敗: ${symbol}`, error.message);
-    return null;
-  }
-}
+// getCurrentPrice関数はcommon.jsから使用（重複削除によりAPI負荷削減）
 
 module.exports = {
   mutualInformationStrategy,

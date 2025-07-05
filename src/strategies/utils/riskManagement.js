@@ -704,7 +704,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     } else {
       // フォールバック：現在の市場価格を取得
       try {
-        const ticker = await marketDataProvider.fetchTicker(symbol);
+        const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
         executionPrice = ticker.last || ticker.close;
         console.log(`[DEBUG] Using fallback price from ticker: ${executionPrice}`);
       } catch (tickerError) {

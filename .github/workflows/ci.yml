@@ -58,11 +58,37 @@ jobs:
     - name: Run unit tests
       run: npm run test:unit
       
-    - name: Run integration tests
-      run: npm run test:integration
+    - name: Run integration tests with Redis/MongoDB connection logging
+      run: |
+        echo "=== CI Environment Debug Info ==="
+        echo "Redis connection test:"
+        timeout 10s redis-cli -h 127.0.0.1 -p 6379 ping || echo "Redis connection failed: $?"
+        echo "MongoDB connection test:"
+        timeout 10s mongosh --host 127.0.0.1:27017 --eval "db.adminCommand('ping')" || echo "MongoDB connection failed: $?"
+        echo "Network status:"
+        netstat -tulpn | grep -E ':(6379|27017)'
+        echo "=== Starting integration tests ==="
+        npm run test:integration
       
-    - name: Run full test suite with coverage
-      run: npm run test:ci
+    - name: Run full test suite with coverage and connection monitoring
+      run: |
+        # Connection monitoring in background
+        (
+          while true; do
+            echo "[$(date)] Redis: $(redis-cli ping 2>&1), MongoDB: $(mongosh --quiet --host 127.0.0.1:27017 --eval 'db.adminCommand({ping:1}).ok' 2>&1)"
+            sleep 30
+          done
+        ) &
+        MONITOR_PID=$!
+        
+        # Run tests
+        npm run test:ci
+        TEST_RESULT=$?
+        
+        # Stop monitoring
+        kill $MONITOR_PID 2>/dev/null || true
+        
+        exit $TEST_RESULT
       
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

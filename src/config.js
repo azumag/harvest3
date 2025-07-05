@@ -17,6 +17,7 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
+// 緊急対応: CCXTインスタンス作成と強制throttle設定
 const exchangeBB = new ccxt.bitbank({
     apiKey: BBApiKey,
     secret: BBApiSecret,
@@ -31,15 +32,38 @@ const exchangeBB = new ccxt.bitbank({
     }
 });
 
-// CCXTライブラリのthrottle設定を安全に上書き
-// 注意: ccxtのコンストラクタオプションでは反映されないため、インスタンス作成後に直接設定
-// 将来のccxtバージョンアップ時は、この設定方法の有効性を再確認すること
-if (exchangeBB.throttle && typeof exchangeBB.throttle === 'object') {
-    exchangeBB.throttle.maxCapacity = EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
-} else {
-    // throttleオブジェクトが存在しない場合は、プロパティとして直接設定
-    exchangeBB.maxThrottleQueueSize = EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
-}
+// 緊急対応: throttle機能を完全に無効化してAPI制限を回避
+// CCXTのthrottle機能が正常に動作しないため、独自制御に切り替え
+console.log('[緊急対応] CCXTのthrottle機能を無効化');
+exchangeBB.enableRateLimit = false;
+exchangeBB.rateLimit = 0;
+
+// 独自のAPI制限機能を実装
+// TODO: 項目15対応 - CCXT標準機能への移行が完了するまでの一時的な実装
+let lastApiCall = 0;
+const originalThrottle = exchangeBB.throttle.bind(exchangeBB);
+exchangeBB.throttle = async function(cost = 1) {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCall;
+    // cost引数を考慮: コストが高いほど長く待機（緊急対応中は保守的に設定）
+    const baseDelay = EXCHANGE_SETTINGS.RATE_LIMIT;
+    const requiredDelay = baseDelay * Math.max(1, cost * 0.5); // costに比例して調整
+    
+    if (timeSinceLastCall < requiredDelay) {
+        const sleepTime = requiredDelay - timeSinceLastCall;
+        console.log(`[独自throttle] cost=${cost}, ${sleepTime}ms待機中...`);
+        await new Promise(resolve => setTimeout(resolve, sleepTime));
+    }
+    
+    lastApiCall = Date.now();
+    return Promise.resolve();
+};
+
+// 設定確認ログ（シンプル化）
+console.log('[緊急対応] 独自throttle制御実装完了');
+console.log('  - enableRateLimit: false (CCXT throttle無効化)');
+console.log('  - 独自制御間隔: ' + EXCHANGE_SETTINGS.RATE_LIMIT + 'ms');
+console.log('  - timeout: ' + EXCHANGE_SETTINGS.TIMEOUT + 'ms');
 
 const exchangeBF = new ccxt.bitflyer({
     apiKey: BFApiKey,
@@ -307,7 +331,7 @@ const config = {
 
     MUTUAL_INFO: {
       type: 'statistical',
-      enabled: true,
+      enabled: false, // 緊急停止: throttle queue危機対応
       threshold: 0.5,
       ohlcvInterval: '5m',
       deviationThreshold: 3,
@@ -334,7 +358,7 @@ const config = {
     // 逆張り戦略
     MEAN_REVERSION: {
       type: 'mean_reversion',
-      enabled: true,
+      enabled: false, // 緊急停止: throttle queue危機対応
       period: 20,
       ohlcvInterval: '15m',
       deviationThreshold: 3,
@@ -358,7 +382,7 @@ const config = {
 
     MACD: {
       type: 'trend_following',
-      enabled: true,
+      enabled: false, // 緊急停止: throttle queue危機対応
       fastPeriod: 12,
       slowPeriod: 26,
       signalPeriod: 9,
@@ -383,7 +407,7 @@ const config = {
 
     BOLLINGER_BANDS: {
       type: 'mean_reversion',
-      enabled: true,
+      enabled: false, // 緊急停止: throttle queue危機対応
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
@@ -408,7 +432,7 @@ const config = {
     // トレンドフォロー戦略
     MA: {
       type: 'trend_following',
-      enabled: true,
+      enabled: false, // 緊急停止: throttle queue危機対応
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
@@ -432,7 +456,7 @@ const config = {
 
     OSCILLATOR: {
       type: 'mean_reversion',
-      enabled: process.env.STRATEGY_OSCILLATOR_ENABLED === 'true', // 環境変数から動的設定
+      enabled: false, // 緊急停止: throttle queue危機対応
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -457,7 +481,7 @@ const config = {
 
     RSI: {
       type: 'mean_reversion',
-      enabled: process.env.STRATEGY_RSI_ENABLED === 'true', // 環境変数から動的設定
+      enabled: false, // 緊急停止: throttle queue危機対応
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
@@ -483,7 +507,7 @@ const config = {
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
       type: 'composite',
-      enabled: process.env.STRATEGY_MULTI_INDICATOR_ENABLED === 'true', // 環境変数から動的設定
+      enabled: false, // 緊急停止: throttle queue危機対応
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],
