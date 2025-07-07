@@ -486,9 +486,9 @@ async function executeStrategyCycle() {
           for (const strategyKey of Object.keys(config.strategies)) {
             const strategy = config.strategies[strategyKey];
             
-            // 戦略自体か、個別設定で戦略が無効の場合はスキップ
+            // 戦略設定を取得し、統一化された有効性をチェック
             const strategyConfig = await getStrategyConfig(exchangeInstance, symbol, strategyKey, config);
-            if (!strategy.enabled || !strategyConfig.enabled) {
+            if (!strategyConfig || !strategyConfig.enabled) {
               console.log(`戦略 ${strategyKey} が無効です`);
               continue;
             }
@@ -1022,8 +1022,8 @@ async function runStrategy(strategy, exchange, symbol, strategyKey, marketParame
     // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
     const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
 
-    if (strategyConfig.enabled === false) {
-      console.log(`戦略 ${strategyKey}:${symbol} は個別に無効化されています`);
+    if (!strategyConfig || strategyConfig.enabled === false) {
+      console.log(`戦略 ${strategyKey}:${symbol} は無効化されています`);
       return null;
     }
 

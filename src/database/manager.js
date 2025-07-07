@@ -1694,35 +1694,10 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
 }
 
 async function getStrategyConfig(exchange, symbol, strategyKey, config) {
-  // configからデフォルトの戦略設定を取得
-  const defaultConfig = config.strategies[strategyKey];
-    
-  if (!defaultConfig || !defaultConfig.enabled) {
-    return null;
-  }
-
-  // データベースから戦略パラメータを取得
-  const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
-
-  const strategyConfig = (() => {
-    if (dbParams) {
-      // デフォルト設定とデータベースのパラメータをマージ（データベース優先）
-      return { ...(config.global), ...defaultConfig, ...dbParams };
-    } else {
-      // DBにパラメータがない場合はデフォルト設定を使用
-      // デフォルト設定をDBに保存
-      // Create a clean config without functions and exchanges property
-      const configToSave = Object.fromEntries(
-        Object.entries(defaultConfig).filter(([key, value]) => 
-          typeof value !== 'function' && key !== 'exchanges'
-        )
-      );
-      saveStrategyParameters(exchange.id, symbol, strategyKey, configToSave);
-      return { ...(config.global), ...defaultConfig };
-    }
-  })();
-
-  return strategyConfig;
+  // 統一化された戦略管理モジュールを使用
+  const { getUnifiedStrategyConfig } = require('../config/strategyManager');
+  
+  return await getUnifiedStrategyConfig(config, exchange.id, symbol, strategyKey);
 }
 
 /**

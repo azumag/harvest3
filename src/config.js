@@ -9,6 +9,11 @@ const { meanReversionStrategy, oscillatorStrategy } = require('./strategies/mean
 const { mutualInformationStrategy } = require('./strategies/mutualInformation');
 // const { highFrequencyTrading } = require('./strategies/highFrequencyTrading');
 
+// Additional configurations
+const { getValidatedConfig: getBalanceCheckerConfig } = require('./common/balanceCheckerConfig');
+const { getInstance: getCollectorConfig } = require('./config/collectorConfig');
+const { WS_CONFIG, STRATEGY_PARAMS } = require('./hft/config');
+
 // APIキーとシークレットを設定
 // TODO: move to const.js
 const BBApiKey = process.env.BB_API_KEY;
@@ -623,5 +628,10 @@ module.exports = {
   exchangeBB,
   exchangeBF,
   bitflyerMinTradeAmounts,
-  config
+  config,
+  // Additional configurations
+  getBalanceCheckerConfig,
+  getCollectorConfig,
+  WS_CONFIG,
+  STRATEGY_PARAMS
 };

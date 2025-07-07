@@ -138,12 +138,18 @@ services:
     volumes:
       - ./src:/usr/src/app/src:cached
     command: npm run start-hft
-    # env_fileで.envから読み込み
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
     networks:
       - harvest-network
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -154,8 +160,6 @@ services:
     image: harvest3-bot-image
     container_name: backtest
     restart: always
-    env_file:
-      - .env
     volumes:
       - ./src:/usr/src/app/src:cached
       - ./data:/usr/src/app/data:cached
@@ -163,11 +167,30 @@ services:
     # command: sh -c "npm run backtest"
     environment:
       - BACKTEST_MODE=true
+      - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
+      - STRATEGY_BOLLINGER_BANDS_ENABLED=true
+      - STRATEGY_MARKET_MAKING_ENABLED=true
+      - STRATEGY_MA_ENABLED=true
+      - STRATEGY_MEAN_REVERSION_ENABLED=true
+      - STRATEGY_HIGH_FREQUENCY_ENABLED=true
+      - STRATEGY_SCALPING_ENABLED=true
+      - STRATEGY_RSI_ENABLED=true
+      - STRATEGY_ARBITRAGE_ENABLED=true
+      - STRATEGY_MULTI_INDICATOR_ENABLED=true
+      - STRATEGY_MACD_ENABLED=true
+      - STRATEGY_TREND_FOLLOWING_ENABLED=true
+      - STRATEGY_INYO_ENABLED=true
+      - STRATEGY_OSCILLATOR_ENABLED=true
     networks:
       - harvest-network
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -210,12 +233,18 @@ services:
       - ./src:/usr/src/app/src:cached
       - ./data:/usr/src/app/data:cached
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3000
       - ENABLE_REALTIME=true
+      - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
     networks:
       - harvest-network
     command: npm run start-web

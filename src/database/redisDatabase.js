@@ -13,25 +13,53 @@ const {
 
 // 初期化関数
 async function initialize() {
-  await initRedisClient();
-  console.log('Redisデータベースモジュールが初期化されました');
+  try {
+    const redisClient = await initRedisClient();
+    if (redisClient) {
+      console.log('Redisデータベースモジュールが初期化されました');
+    } else {
+      console.warn('Redis接続に失敗しましたが、アプリケーションを続行します');
+    }
+  } catch (error) {
+    console.error('Redis初期化エラー:', error.message);
+    // Redis接続に失敗してもアプリケーションを続行
+  }
 }
 
 async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
-  const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
-
-  return await client.set(key, JSON.stringify({ pair }));
+  try {
+    if (!client || !client.isReady) {
+      console.warn('Redis接続が利用できません - setCurrentOrderPairRedis をスキップ');
+      return false;
+    }
+    
+    const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+    return await client.set(key, JSON.stringify({ pair }));
+  } catch (error) {
+    console.error('setCurrentOrderPairRedis エラー:', error.message);
+    return false;
+  }
 }
 
 async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
-  const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
-  const data = await client.get(key);
+  try {
+    if (!client || !client.isReady) {
+      console.warn('Redis接続が利用できません - getCurrentOrderPairRedis をスキップ');
+      return null;
+    }
+    
+    const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
+    const data = await client.get(key);
 
-  if (data) {
-    return JSON.parse(data).pair;
+    if (data) {
+      return JSON.parse(data).pair;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('getCurrentOrderPairRedis エラー:', error.message);
+    return null;
   }
-
-  return null;
 }
 
 async function updateTradeSummaryTimestamp(exchange, symbol) {
@@ -308,9 +336,9 @@ async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
 
 async function getAllTradeSummaries() {
   try {
-    // Redisが無効化されている場合は空の配列を返す
-    if (!client || process.env.DISABLE_REDIS === 'true') {
-      console.log('Redis接続が無効化されているため、空のサマリーを返します');
+    // Redis接続が利用できない場合は空の配列を返す
+    if (!client || !client.isReady || process.env.DISABLE_REDIS === 'true') {
+      console.log('Redis接続が利用できないため、空のサマリーを返します');
       return [];
     }
     
