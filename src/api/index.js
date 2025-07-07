@@ -59,56 +59,53 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
     // localtunnelは削除されたため、この機能は無効です
     if (false) {
-        try {
-          const tunnel = await localtunnel({ port: PORT });
-          console.log(`Localtunnel URL: ${tunnel.url}`);
+      try {
+        const tunnel = await localtunnel({ port: PORT });
+        console.log(`Localtunnel URL: ${tunnel.url}`);
 
-          // エラーイベントのハンドリングを追加
-          tunnel.on('error', (err) => {
-            console.error('Localtunnelエラー:', err.message);
-            console.log('Localtunnelエラーが発生しましたが、サーバーは引き続き実行されます');
-          });
+        // エラーイベントのハンドリングを追加
+        tunnel.on('error', (err) => {
+          console.error('Localtunnelエラー:', err.message);
+          console.log('Localtunnelエラーが発生しましたが、サーバーは引き続き実行されます');
+        });
 
-          // 接続が閉じられたときのハンドリング
-          tunnel.on('close', () => {
-            console.log('Localtunnel が閉じられました');
-          });
+        // 接続が閉じられたときのハンドリング
+        tunnel.on('close', () => {
+          console.log('Localtunnel が閉じられました');
+        });
 
-          // Discord への投稿処理
-          const discordWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL;
-          if (discordWebhookUrl) {
-            try {
-              const message = `Localtunnel URL: ${tunnel.url}`;
-              const response = await fetch(discordWebhookUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  content: message,
-                }),
-              });
-              
-              if (response.ok) {
-                console.log('Discord に投稿しました');
-              } else {
-                console.error('Discord への投稿に失敗しました:', await response.text());
-              }
-            } catch (fetchError) {
-              console.error('Discord への投稿エラー:', fetchError.message);
+        // Discord への投稿処理
+        const discordWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL;
+        if (discordWebhookUrl) {
+          try {
+            const message = `Localtunnel URL: ${tunnel.url}`;
+            const response = await fetch(discordWebhookUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                content: message,
+              }),
+            });
+            
+            if (response.ok) {
+              console.log('Discord に投稿しました');
+            } else {
+              console.error('Discord への投稿に失敗しました:', await response.text());
             }
-          } else {
-            console.warn('DISCORD_RESULT_WEBHOOK_URL が設定されていません');
+          } catch (fetchError) {
+            console.error('Discord への投稿エラー:', fetchError.message);
           }
-        } catch (tunnelError) {
-          console.error('Localtunnelの作成に失敗しました:', tunnelError.message);
-          console.log('Localtunnelは使用できませんが、サーバーは引き続き実行されます');
+        } else {
+          console.warn('DISCORD_RESULT_WEBHOOK_URL が設定されていません');
         }
-      } else {
-        console.error('localtunnelモジュールが正しく読み込まれていません');
+      } catch (tunnelError) {
+        console.error('Localtunnelの作成に失敗しました:', tunnelError.message);
+        console.log('Localtunnelは使用できませんが、サーバーは引き続き実行されます');
       }
-    } catch (error) {
-      console.error('localtunnel機能の実行中にエラーが発生しました:', error.message);
+    } else {
+      console.log('localtunnel機能は無効になっています');
     }
   } else {
     console.log('localtunnel機能は無効になっています');

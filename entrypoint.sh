@@ -125,7 +125,31 @@ check_database_connections() {
 start_application() {
     log "Starting strategy-runner application..."
     
-    # バックグラウンドでアプリケーション起動
+    # APIサーバーをバックグラウンドで起動
+    log "Starting API server..."
+    npm run start-web &
+    local api_pid=$!
+    
+    # APIサーバーの起動を待つ
+    local api_startup_time=0
+    while [ $api_startup_time -lt 30 ]; do
+        if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+            log "API server is ready on port 3000"
+            break
+        fi
+        sleep 2
+        api_startup_time=$((api_startup_time + 2))
+    done
+    
+    if [ $api_startup_time -ge 30 ]; then
+        local error_msg="API server failed to start within 30 seconds"
+        log "ERROR: $error_msg"
+        send_startup_error_to_discord "$error_msg" "API server startup timeout"
+        exit 1
+    fi
+    
+    # バックグラウンドでボットアプリケーション起動
+    log "Starting bot application..."
     npm run start &
     local app_pid=$!
     
@@ -133,9 +157,16 @@ start_application() {
     local startup_time=0
     while [ $startup_time -lt $MAX_STARTUP_TIME ]; do
         if ! kill -0 $app_pid 2>/dev/null; then
-            local error_msg="Application process died during startup"
+            local error_msg="Bot application process died during startup"
             log "ERROR: $error_msg"
             send_startup_error_to_discord "$error_msg" "Process died after ${startup_time} seconds"
+            exit 1
+        fi
+        
+        if ! kill -0 $api_pid 2>/dev/null; then
+            local error_msg="API server process died during startup"
+            log "ERROR: $error_msg"
+            send_startup_error_to_discord "$error_msg" "API server died after ${startup_time} seconds"
             exit 1
         fi
         
@@ -149,10 +180,22 @@ start_application() {
         startup_time=$((startup_time + HEALTH_CHECK_INTERVAL))
     done
     
-    log "Application started successfully (PID: $app_pid)"
+    log "Application started successfully (Bot PID: $app_pid, API PID: $api_pid)"
     
-    # メインプロセスとして実行を継続
-    wait $app_pid
+    # 両方のプロセスを監視
+    while true; do
+        if ! kill -0 $app_pid 2>/dev/null; then
+            log "Bot process died, exiting..."
+            kill $api_pid 2>/dev/null
+            exit 1
+        fi
+        if ! kill -0 $api_pid 2>/dev/null; then
+            log "API process died, exiting..."
+            kill $app_pid 2>/dev/null
+            exit 1
+        fi
+        sleep 5
+    done
 }
 
 # シグナルハンドラー

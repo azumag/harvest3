@@ -75,7 +75,26 @@
           },
           {
             "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hook-handler.sh --yolo --git-diff"
+            "command": "/Users/azumag/work/cc-gc-review/hooks/gemini-review-hook.sh --debug",
+            "timeout": 450
+          },
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-gc-review/hooks/push-review-complete.sh"
+          },
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-gc-review/hooks/notification.sh",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-gc-review/hooks/ci-monitor-hook.sh",
+            "timeout": 365
+          },
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-gc-review/hooks/self-review.sh"
           }
         ]
       }

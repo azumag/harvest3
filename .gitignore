@@ -8,3 +8,4 @@ bin/
 tools/
 .env.bu
 .ccc.env
+settings.local.json

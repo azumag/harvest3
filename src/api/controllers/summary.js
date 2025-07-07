@@ -2,7 +2,7 @@
  *取引の集計サマリーを取得するコントローラー
  */
 const { getAllTradeSummaries, getAvailableFund, getMarketParameters } = require('../../database/manager');
-const marketDataProvider = require('../../src/data/marketDataProvider');
+const marketDataProvider = require('../../data/marketDataProvider');
 const { config } = require('../../config');
 
 /**

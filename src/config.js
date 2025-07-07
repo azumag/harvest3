@@ -481,7 +481,7 @@ const config = {
 
     RSI: {
       type: 'mean_reversion',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // RSI戦略を有効化
       period: 14,
       oversoldThreshold: 30,
       overboughtThreshold: 70,
