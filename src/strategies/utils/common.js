@@ -28,6 +28,239 @@ const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
 const { DynamicUrgencyCalculator } = require('./dynamicUrgencyCalculator');
+
+// ==================== 共通ユーティリティ関数 ====================
+
+/**
+ * リスク管理処理の共通関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @param {number} currentPrice - 現在価格
+ * @param {Object} config - 設定オブジェクト
+ * @param {Object} marketParameters - マーケットパラメータ
+ * @param {string} strategyName - 戦略名
+ * @param {string} strategyId - 戦略ID
+ * @param {Object} logInfo - ログ情報
+ * @param {Object} options - オプション
+ * @returns {Promise<Object|null>} 早期リターンが必要な場合はオブジェクト、継続する場合はnull
+ */
+async function performRiskManagement(exchange, symbol, strategyKey, currentPrice, config, marketParameters, strategyName, strategyId, logInfo, options) {
+  if (options.backtest || config.enableRiskManagement === false) {
+    return null; // リスク管理をスキップ
+  }
+
+  // 約定情報を更新
+  console.log(`[リスク管理] ${symbol} の約定情報を更新中...`);
+  const tradeUpdateStart = Date.now();
+  const updatedCount = await updateFilledTrades(exchange, symbol);
+  const tradeUpdateTime = Date.now() - tradeUpdateStart;
+  console.log(`[リスク管理] ${symbol} 約定情報更新完了: ${updatedCount}件 (${tradeUpdateTime}ms)`);
+  
+  // ストップロスチェック
+  const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
+  
+  // ストップロスが必要なポジションを処理
+  for (const position of stopLossPositions) {
+    const safeMarketParameters = marketParameters || {
+      amountPrecision: 4,
+      pricePrecision: 2,
+      minTradeAmount: 0.0001,
+      maxTradeAmount: 1000000
+    };
+    await executeStopLoss(exchange, symbol, strategyKey, position, safeMarketParameters);
+  }
+  
+  // ドローダウンチェック
+  const drawdownStatus = await checkDrawdown(exchange, strategyKey, config.riskSettings);
+  if (drawdownStatus.daily.exceeded) {
+    const message = `🚨 [リスク管理] 日次最大損失制限到達 🚨\n` +
+                   `取引所: ${exchange.id}\n` +
+                   `戦略: ${strategyName}\n` +
+                   `本日の損失: ${drawdownStatus.daily.pnl.toLocaleString()}円\n` +
+                   `損失率: ${drawdownStatus.daily.loss !== null && drawdownStatus.daily.loss !== undefined ? (drawdownStatus.daily.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                   `制限値: ${drawdownStatus.daily.limit !== null && drawdownStatus.daily.limit !== undefined ? (drawdownStatus.daily.limit * 100).toFixed(2) : 'N/A'}%\n` +
+                   `⚠️ 新規取引を停止しました`;
+    
+    console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
+    
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(message);
+    }
+    
+    return {
+      strategy: strategyId,
+      symbol,
+      ...logInfo.result,
+      signal: 'none',
+      reason: 'daily drawdown limit exceeded'
+    };
+  }
+  
+  // 週次・月次ドローダウンの警告通知
+  if (drawdownStatus.weekly.exceeded) {
+    const message = `🔥 [リスク管理] 週次最大損失制限到達 🔥\n` +
+                   `取引所: ${exchange.id}\n` +
+                   `戦略: ${strategyName}\n` +
+                   `今週の損失: ${drawdownStatus.weekly.pnl.toLocaleString()}円\n` +
+                   `損失率: ${drawdownStatus.weekly.loss !== null && drawdownStatus.weekly.loss !== undefined ? (drawdownStatus.weekly.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                   `制限値: ${drawdownStatus.weekly.limit !== null && drawdownStatus.weekly.limit !== undefined ? (drawdownStatus.weekly.limit * 100).toFixed(2) : 'N/A'}%\n` +
+                   `⚠️ 戦略を一時停止することを検討してください`;
+    
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(message);
+    }
+  }
+  
+  if (drawdownStatus.monthly.exceeded) {
+    const message = `💀 [リスク管理] 月次最大損失制限到達 💀\n` +
+                   `取引所: ${exchange.id}\n` +
+                   `戦略: ${strategyName}\n` +
+                   `今月の損失: ${drawdownStatus.monthly.pnl.toLocaleString()}円\n` +
+                   `損失率: ${drawdownStatus.monthly.loss !== null && drawdownStatus.monthly.loss !== undefined ? (drawdownStatus.monthly.loss * 100).toFixed(2) : 'N/A'}%\n` +
+                   `制限値: ${drawdownStatus.monthly.limit !== null && drawdownStatus.monthly.limit !== undefined ? (drawdownStatus.monthly.limit * 100).toFixed(2) : 'N/A'}%\n` +
+                   `🚨 戦略の見直しが必要です`;
+    
+    if (postOrderToDiscord) {
+      await postOrderToDiscord(message);
+    }
+  }
+  
+  return null; // 継続
+}
+
+/**
+ * 注文オプション設定の共通関数
+ * @param {Object} config - 設定オブジェクト
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyName - 戦略名
+ * @param {number} currentPrice - 現在価格
+ * @param {Object} marketParameters - マーケットパラメータ
+ * @param {number} formattedAmount - 注文量
+ * @returns {Promise<Object>} 注文オプション
+ */
+async function setupOrderOptions(config, exchange, symbol, strategyName, currentPrice, marketParameters, formattedAmount) {
+  const appConfig = require('../../config');
+  const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
+  const defaultUrgency = orderConfig.defaultUrgency || 'medium';
+  const { orderType } = config;
+  let baseUrgency = URGENCY_LEVELS.MEDIUM;
+  
+  // 注文タイプに基づいてベース緊急度を決定
+  if (orderType === 'market') {
+    baseUrgency = URGENCY_LEVELS.HIGH;
+  } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
+    baseUrgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
+  } else {
+    baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
+  }
+  
+  // 統合動的urgency調整を適用
+  const urgencyResult = await calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyName, {
+    currentPrice,
+    marketParameters,
+    amount: formattedAmount,
+    side: orderType === 'market' ? 'market' : 'limit'
+  });
+  
+  return {
+    urgency: urgencyResult.urgency,
+    urgencyResult,
+    orderConfig,
+    orderOptions: {
+      urgency: urgencyResult.urgency,
+      strategy: strategyName,
+      backtest: false,
+      maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
+      enableRetry: orderConfig.maxRetries > 0,
+      testId: urgencyResult.testId,
+      urgencyMethod: urgencyResult.method,
+      urgencyConfidence: urgencyResult.confidence
+    }
+  };
+}
+
+/**
+ * 残高検証の共通関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyName - 戦略名
+ * @param {number} formattedAmount - 必要な量
+ * @param {number} currentPrice - 現在価格
+ * @param {Object} options - オプション
+ * @returns {Promise<Object>} 検証結果
+ */
+async function validateBalance(exchange, symbol, strategyName, formattedAmount, currentPrice, options) {
+  console.log(`[${strategyName}] 📊 VALIDATION START: ${symbol}`);
+  console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
+  console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
+  console.log(`[${strategyName}] └─ 戦略キー: ${strategyName}`);
+  
+  const exchangeBalance = await exchange.fetchBalance();
+  const baseCurrency = symbol.split('/')[0];
+  const exchangeAmount = exchangeBalance.free[baseCurrency] || 0;
+  const exchangeLockedAmount = exchangeBalance.used[baseCurrency] || 0;
+  const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
+  
+  // 詳細な残高ログ
+  console.log(`[${strategyName}] 💰 BALANCE DETAILS: ${symbol}`);
+  console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
+  console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
+  console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
+  console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
+  
+  if (exchangeAmount < formattedAmount) {
+    const shortage = formattedAmount - exchangeAmount;
+    const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
+    
+    console.error(`[${strategyName}] ❌ VALIDATION FAILED: ${symbol}`);
+    console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
+    console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
+    console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
+    console.error(`[${strategyName}] └─ 必要量: ${formattedAmount}`);
+    
+    if (postErrorToDiscord && !options.backtest) {
+      await postErrorToDiscord(`🚨 **残高検証失敗** ${symbol}\n` +
+                              `戦略: ${strategyName}\n` +
+                              `Exchange Free残高: ${exchangeAmount}\n` +
+                              `Exchange Used残高: ${exchangeLockedAmount}\n` +
+                              `Exchange Total残高: ${exchangeTotalAmount}\n` +
+                              `必要量: ${formattedAmount}\n` +
+                              `不足量: ${shortage} (${shortagePercent}%)\n` +
+                              `現在価格: ¥${currentPrice?.toLocaleString()}\n` +
+                              `⚠️ 残高不足により注文を停止\n` +
+                              `⏰ ${new Date().toLocaleString('ja-JP')}`);
+    }
+    
+    return {
+      success: false,
+      reason: 'Insufficient balance',
+      validationDetails: {
+        exchangeAmount,
+        exchangeLockedAmount,
+        exchangeTotalAmount,
+        attemptedAmount: formattedAmount,
+        shortage,
+        shortagePercent: parseFloat(shortagePercent)
+      }
+    };
+  }
+  
+  console.log(`[${strategyName}] ✅ VALIDATION PASSED: ${symbol}`);
+  console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
+  console.log(`[${strategyName}] └─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
+  
+  return {
+    success: true,
+    balanceDetails: {
+      exchangeAmount,
+      exchangeLockedAmount,
+      exchangeTotalAmount,
+      availableAmount: exchangeAmount - formattedAmount
+    }
+  };
+}
 const { UnifiedUrgencySystem } = require('./unifiedUrgencySystem');
 
 // 動的ポジションサイジングのインスタンス（設定注入用）
@@ -195,87 +428,17 @@ async function handleStrategySignals(
   }
   
   const { currentPrice, signalType, buySignal, sellSignal } = signalResult;
-  // console.log(っっHANDLE SIGNALS] ${symbol}: About to call formatLogInfo with signalResult:`, JSON.stringify(signalResult));
   const logInfo = formatLogInfo(signalResult);
-  // console.log(`[HANDLE SIGNALS] ${symbol}: formatLogInfo completed successfully`);
   
-  // リスク管理: ストップロスチェック（バックテストモードではスキップ）
-  if (!options.backtest && config.enableRiskManagement !== false) {
-    // リスク管理前に約定情報を更新
-    console.log(`[リスク管理] ${symbol} の約定情報を更新中...`);
-    const tradeUpdateStart = Date.now();
-    const updatedCount = await updateFilledTrades(exchange, symbol);
-    const tradeUpdateTime = Date.now() - tradeUpdateStart;
-    console.log(`[リスク管理] ${symbol} 約定情報更新完了: ${updatedCount}件 (${tradeUpdateTime}ms)`);
-    
-    const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
-    
-    // ストップロスが必要なポジションを処理
-    for (const position of stopLossPositions) {
-      // marketParametersが未定義の場合の安全処理
-      const safeMarketParameters = marketParameters || {
-        amountPrecision: 4,
-        pricePrecision: 2,
-        minTradeAmount: 0.0001,
-        maxTradeAmount: 1000000
-      };
-      await executeStopLoss(exchange, symbol, strategyKey, position, safeMarketParameters);
-    }
-    
-    // ドローダウンチェック
-    const drawdownStatus = await checkDrawdown(exchange, strategyKey, config.riskSettings);
-    if (drawdownStatus.daily.exceeded) {
-      const message = `🚨 [リスク管理] 日次最大損失制限到達 🚨\n` +
-                     `取引所: ${exchange.id}\n` +
-                     `戦略: ${strategyName}\n` +
-                     `本日の損失: ${drawdownStatus.daily.pnl.toLocaleString()}円\n` +
-                     `損失率: ${drawdownStatus.daily.loss !== null && drawdownStatus.daily.loss !== undefined ? (drawdownStatus.daily.loss * 100).toFixed(2) : 'N/A'}%\n` +
-                     `制限値: ${drawdownStatus.daily.limit !== null && drawdownStatus.daily.limit !== undefined ? (drawdownStatus.daily.limit * 100).toFixed(2) : 'N/A'}%\n` +
-                     `⚠️ 新規取引を停止しました`;
-      
-      console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
-      
-      if (postOrderToDiscord) {
-        await postOrderToDiscord(message);
-      }
-      
-      return {
-        strategy: strategyId,
-        symbol,
-        ...logInfo.result,
-        signal: 'none',
-        reason: 'daily drawdown limit exceeded'
-      };
-    }
-    
-    // 週次・月次ドローダウンの警告通知
-    if (drawdownStatus.weekly.exceeded) {
-      const message = `🔥 [リスク管理] 週次最大損失制限到達 🔥\n` +
-                     `取引所: ${exchange.id}\n` +
-                     `戦略: ${strategyName}\n` +
-                     `今週の損失: ${drawdownStatus.weekly.pnl.toLocaleString()}円\n` +
-                     `損失率: ${drawdownStatus.weekly.loss !== null && drawdownStatus.weekly.loss !== undefined ? (drawdownStatus.weekly.loss * 100).toFixed(2) : 'N/A'}%\n` +
-                     `制限値: ${drawdownStatus.weekly.limit !== null && drawdownStatus.weekly.limit !== undefined ? (drawdownStatus.weekly.limit * 100).toFixed(2) : 'N/A'}%\n` +
-                     `⚠️ 戦略を一時停止することを検討してください`;
-      
-      if (postOrderToDiscord) {
-        await postOrderToDiscord(message);
-      }
-    }
-    
-    if (drawdownStatus.monthly.exceeded) {
-      const message = `💀 [リスク管理] 月次最大損失制限到達 💀\n` +
-                     `取引所: ${exchange.id}\n` +
-                     `戦略: ${strategyName}\n` +
-                     `今月の損失: ${drawdownStatus.monthly.pnl.toLocaleString()}円\n` +
-                     `損失率: ${drawdownStatus.monthly.loss !== null && drawdownStatus.monthly.loss !== undefined ? (drawdownStatus.monthly.loss * 100).toFixed(2) : 'N/A'}%\n` +
-                     `制限値: ${drawdownStatus.monthly.limit !== null && drawdownStatus.monthly.limit !== undefined ? (drawdownStatus.monthly.limit * 100).toFixed(2) : 'N/A'}%\n` +
-                     `🚨 戦略の見直しが必要です`;
-      
-      if (postOrderToDiscord) {
-        await postOrderToDiscord(message);
-      }
-    }
+  // リスク管理処理（共通関数を使用）
+  const riskManagementResult = await performRiskManagement(
+    exchange, symbol, strategyKey, currentPrice, config, marketParameters, 
+    strategyName, strategyId, logInfo, options
+  );
+  
+  // リスク管理で早期リターンが必要な場合
+  if (riskManagementResult) {
+    return riskManagementResult;
   }
   
   // 注文を作成
@@ -749,103 +912,24 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
       // リアルタイムモードの場合、高度注文管理システムを使用
       const orderManager = getOrderManager(exchange);
       
-      // 注文オプションを設定（グローバル設定から取得）
-      const appConfig = require('../../config');
-      const orderConfig = appConfig?.config?.global?.advancedOrderManagement || {};
-      const defaultUrgency = orderConfig.defaultUrgency || 'medium';
-      let baseUrgency = URGENCY_LEVELS.MEDIUM;
-      
-      // 注文タイプに基づいてベース緊急度を決定
-      if (orderType === 'market') {
-        baseUrgency = URGENCY_LEVELS.HIGH;
-      } else if (orderConfig.orderTypes?.[orderType]?.urgencyLevel) {
-        baseUrgency = URGENCY_LEVELS[orderConfig.orderTypes[orderType].urgencyLevel.toUpperCase()];
-      } else {
-        baseUrgency = URGENCY_LEVELS[defaultUrgency.toUpperCase()];
-      }
-      
-      // 統合動的urgency調整を適用
-      const urgencyResult = await calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyName, {
-        currentPrice,
-        marketParameters,
-        amount: formattedAmount,
-        side: orderType === 'market' ? 'market' : 'limit'
-      });
-      const urgency = urgencyResult.urgency;
-      
-      const orderOptions = {
-        urgency,
-        strategy: strategyName,
-        backtest: false,
-        maxSlippage: config.maxSlippage || orderConfig.maxSlippage || 0.005,
-        enableRetry: orderConfig.maxRetries > 0,
-        testId: urgencyResult.testId, // A/Bテスト用
-        urgencyMethod: urgencyResult.method,
-        urgencyConfidence: urgencyResult.confidence
-      };
+      // 注文オプション設定（共通関数を使用）
+      const { urgency, urgencyResult, orderConfig, orderOptions } = await setupOrderOptions(
+        config, exchange, symbol, strategyName, currentPrice, marketParameters, formattedAmount
+      );
       
       // 高度注文管理が有効かチェック
       if (orderConfig.enabled) {
-        // 🔍 COMPREHENSIVE VALIDATION: Check position existence with detailed logging
-        console.log(`[${strategyName}] 📊 VALIDATION START (高度注文前): ${symbol}`);
-        console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
-        console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
-        console.log(`[${strategyName}] ├─ 戦略キー: ${strategyKey}`);
-        console.log(`[${strategyName}] └─ urgency: ${urgency} (${urgencyResult.method})`);
+        // 残高検証（共通関数を使用）
+        const validationResult = await validateBalance(exchange, symbol, strategyName, formattedAmount, currentPrice, options);
         
-        const exchangeBalance = await exchange.fetchBalance();
-        const baseCurrency = symbol.split('/')[0];
-        const exchangeAmount = exchangeBalance.free[baseCurrency] || 0;
-        const exchangeLockedAmount = exchangeBalance.used[baseCurrency] || 0;
-        const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
-        
-        // Detailed balance logging
-        console.log(`[${strategyName}] 💰 BALANCE DETAILS: ${symbol}`);
-        console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
-        console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
-        console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
-        console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
-        
-        if (exchangeAmount < formattedAmount) {
-          const shortage = formattedAmount - exchangeAmount;
-          const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
-          
-          console.error(`[${strategyName}] ❌ VALIDATION FAILED (高度注文前): ${symbol}`);
-          console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
-          console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
-          console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
-          console.error(`[${strategyName}] └─ 必要量: ${formattedAmount}`);
-          
-          if (postErrorToDiscord && !options.backtest) {
-            await postErrorToDiscord(`🚨 **高度注文前ポジション検証失敗** ${symbol}\n` +
-                                    `戦略: ${strategyName}\n` +
-                                    `Exchange Free残高: ${exchangeAmount}\n` +
-                                    `Exchange Used残高: ${exchangeLockedAmount}\n` +
-                                    `Exchange Total残高: ${exchangeTotalAmount}\n` +
-                                    `売却予定: ${formattedAmount}\n` +
-                                    `不足量: ${shortage} (${shortagePercent}%)\n` +
-                                    `現在価格: ¥${currentPrice?.toLocaleString()}\n` +
-                                    `⚠️ 高度注文実行前にポジション不足を検出\n` +
-                                    `⏰ ${new Date().toLocaleString('ja-JP')}`);
-          }
-          
+        if (!validationResult.success) {
           return { 
             success: false, 
             reason: 'Position validation failed before advanced order - insufficient balance on exchange',
-            validationDetails: {
-              exchangeAmount,
-              exchangeLockedAmount,
-              exchangeTotalAmount,
-              attemptedAmount: formattedAmount,
-              shortage,
-              shortagePercent: parseFloat(shortagePercent)
-            }
+            validationDetails: validationResult.validationDetails
           };
         }
         
-        console.log(`[${strategyName}] ✅ VALIDATION PASSED (高度注文前): ${symbol}`);
-        console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
-        console.log(`[${strategyName}] └─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
         console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(

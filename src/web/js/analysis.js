@@ -454,77 +454,52 @@ async function saveAnalysisParameters() {
 
     const updatedParams = {};
     let isValid = true;
+    let validationError = '';
 
-    // フォームから現在の値を取得
+    // フォームから現在の値を取得（共通関数を使用）
     document.querySelectorAll('#parameter-settings-container .parameter-input').forEach(input => {
         const key = input.dataset.paramKey;
-        let value = input.value;
-        const type = currentParameterSet.params && currentParameterSet.params.hasOwnProperty(key) ? typeof currentParameterSet.params[key] : 'string'; // 元の型を取得
+        const value = input.value;
+        const type = currentParameterSet.params && currentParameterSet.params.hasOwnProperty(key) ? typeof currentParameterSet.params[key] : 'string';
 
-        // 型に応じた変換とバリデーション（簡易的）
-        if (type === 'number') {
-            const numValue = parseFloat(value);
-            if (isNaN(numValue)) {
-                isValid = false;
-                showError(`パラメータ "${key}" の値が無効です。数値を入力してください。`);
-                return; // forEachから抜ける
-            }
-            value = numValue;
-        } else if (type === 'boolean') {
-             // booleanの簡易的な処理
-             if (value.toLowerCase() === 'true') {
-                 value = true;
-             } else if (value.toLowerCase() === 'false') {
-                 value = false;
-             } else {
-                 isValid = false;
-                 showError(`パラメータ "${key}" の値が無効です。"true" または "false" を入力してください。`);
-                 return; // forEachから抜ける
-             }
+        const validation = CommonUtils.validateAndConvertParameter(key, value, type);
+        if (!validation.isValid) {
+            isValid = false;
+            validationError = validation.error;
+            showError(validation.error);
+            return; // forEachから抜ける
         }
-        // TODO: 他の型（例: 配列、オブジェクト）の対応
 
-        updatedParams[key] = value;
+        updatedParams[key] = validation.convertedValue;
     });
 
     if (!isValid) {
-        // バリデーションエラーがあれば保存しない
         return;
     }
 
-    // 保存ボタンを無効化し、ローディング表示
-    document.getElementById('save-analysis-params').disabled = true;
-    showLoading();
+    // ローディング状態管理（共通関数を使用）
+    CommonUtils.setLoadingState(true, 'save-analysis-params');
 
     try {
-        const response = await fetch('/api/parameters', {
+        // API通信（共通関数を使用）
+        await CommonUtils.makeApiRequest('/api/parameters', {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify({
                 exchangeId: currentParameterSet.exchangeId,
                 symbol: currentParameterSet.symbol,
                 strategyKey: currentParameterSet.strategyKey,
                 params: updatedParams
             })
-        });
+        }, 'パラメータの保存');
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `パラメータの保存に失敗しました (HTTP ${response.status})`);
-        }
-
-        // 保存成功のフィードバック
-        showFeedback('パラメータが正常に保存されました。', 'success');
+        // 成功フィードバック（共通関数を使用）
+        CommonUtils.showUnifiedFeedback('パラメータが正常に保存されました。', 'success');
 
     } catch (error) {
         console.error('パラメータの保存に失敗しました:', error);
-        showFeedback(`パラメータの保存に失敗しました: ${error.message}`, 'danger');
-        // エラー時は保存ボタンを再度有効化
-        document.getElementById('save-analysis-params').disabled = false;
+        CommonUtils.showUnifiedFeedback(`パラメータの保存に失敗しました: ${error.message}`, 'danger');
     } finally {
-        hideLoading(); // ローディング非表示
+        CommonUtils.setLoadingState(false, 'save-analysis-params');
     }
 }
 
@@ -729,136 +704,112 @@ function renderChart(ohlcvData, signalData) {
     console.log('renderChart - ohlcDataset type:', ohlcDataset.type);
 }
 
-function addBollingerToChart(chart, ohlcvData) {
+/**
+ * チャートにテクニカル指標を追加する共通関数
+ * @param {Object} chart - Chart.js インスタンス
+ * @param {Array} ohlcvData - OHLCV データ
+ * @param {string} labelPrefix - データセットのラベルプレフィックス
+ * @param {Array} datasets - 追加するデータセット配列
+ */
+function addTechnicalIndicatorToChart(chart, ohlcvData, labelPrefix, datasets) {
+    // 既存の同種データセットを削除
+    chart.data.datasets = chart.data.datasets.filter(dataset =>
+        !dataset.label?.startsWith(labelPrefix)
+    );
 
+    // 新しいデータセットを追加
+    datasets.forEach(dataset => {
+        const chartData = ohlcvData.map((candle, index) => ({
+            x: candle[0], // タイムスタンプ
+            y: dataset.data[index]
+        }));
+
+        chart.data.datasets.push({
+            label: dataset.label,
+            data: chartData,
+            borderColor: dataset.borderColor,
+            borderWidth: dataset.borderWidth || 1,
+            borderDash: dataset.borderDash || undefined,
+            fill: false,
+            type: 'line',
+            pointRadius: 0,
+            tension: 0.1,
+            spanGaps: true,
+            ...dataset.extraOptions // 追加オプション
+        });
+    });
+
+    // チャートを更新
+    chart.update();
+}
+
+/**
+ * ボリンジャーバンドをチャートに追加
+ */
+function addBollingerToChart(chart, ohlcvData) {
     const paramKey = `params:${filterExchangeSelect.value}:${filterSymbolSelect.value}:${filterStrategySelect.value}`;
     const params = currentAnalysisParams[paramKey] || {};
     const period = Number(params.period) || 20;
     const stdDev = Number(params.stdDev) || 2;
 
-    // 終値の配列を作成
+    // 終値を取得してボリンジャーバンドを計算
     const closes = ohlcvData.map(candle => candle[4]);
-    // console.log(closes.length); // デバッグ用
-
-    // ボリンジャーバンド計算
     const rawBands = TechnicalIndicators.calculateBollingerBands(closes, period, stdDev);
 
-    // タイムスタンプとバンド値を組み合わせたデータを作成
-    // null 値はそのまま保持する
-    const upperBandData = ohlcvData.map((candle, index) => ({
-        x: candle[0], // タイムスタンプ
-        y: rawBands.upper[index] // 対応するバンド値 (null の可能性あり)
-    }));
-    const middleBandData = ohlcvData.map((candle, index) => ({
-        x: candle[0],
-        y: rawBands.middle[index]
-    }));
-    const lowerBandData = ohlcvData.map((candle, index) => ({
-        x: candle[0],
-        y: rawBands.lower[index]
-    }));
+    // データセット定義
+    const datasets = [
+        {
+            label: 'ボリンジャーバンド上限',
+            data: rawBands.upper,
+            borderColor: 'rgba(75, 192, 192, 0.8)'
+        },
+        {
+            label: 'ボリンジャーバンド中央',
+            data: rawBands.middle,
+            borderColor: 'rgba(255, 159, 64, 0.8)',
+            borderDash: [5, 5]
+        },
+        {
+            label: 'ボリンジャーバンド下限',
+            data: rawBands.lower,
+            borderColor: 'rgba(255, 99, 132, 0.8)'
+        }
+    ];
 
-    // console.log('Bollinger Bands Data:', { upper: upperBandData, middle: middleBandData, lower: lowerBandData }); // デバッグ用
-
-    // 既存のボリンジャーバンドデータセットを削除（更新の場合）
-    chart.data.datasets = chart.data.datasets.filter(dataset =>
-        !dataset.label?.startsWith('ボリンジャーバンド')
-    );
-
-    // 新しいデータセットを追加 (type: 'line' と spanGaps: true を追加)
-    chart.data.datasets.push({
-        label: 'ボリンジャーバンド上限',
-        data: upperBandData,
-        borderColor: 'rgba(75, 192, 192, 0.8)',
-        borderWidth: 1,
-        fill: false,
-        type: 'line', // 線グラフとして明示
-        pointRadius: 0, // 点は表示しない
-        tension: 0.1, // 少し滑らかに
-        spanGaps: true // null値を線でつなぐ
-    });
-    // 中央線も追加
-    chart.data.datasets.push({
-        label: 'ボリンジャーバンド中央',
-        data: middleBandData,
-        borderColor: 'rgba(255, 159, 64, 0.8)',
-        borderWidth: 1,
-        borderDash: [5, 5], // 破線
-        fill: false,
-        type: 'line',
-        pointRadius: 0,
-        tension: 0.1,
-        spanGaps: true
-    });
-    chart.data.datasets.push({
-        label: 'ボリンジャーバンド下限',
-        data: lowerBandData,
-        borderColor: 'rgba(255, 99, 132, 0.8)',
-        borderWidth: 1,
-        fill: false,
-        type: 'line',
-        pointRadius: 0,
-        tension: 0.1,
-        spanGaps: true
-    });
-
-    // データを追加した後にチャートを更新
-    chart.update();
-
+    // 共通関数を使用してチャートに追加
+    addTechnicalIndicatorToChart(chart, ohlcvData, 'ボリンジャーバンド', datasets);
 }
 
+/**
+ * 移動平均線をチャートに追加
+ */
 function addMAToChart(chart, ohlcvData) {
     const paramKey = `params:${filterExchangeSelect.value}:${filterSymbolSelect.value}:${filterStrategySelect.value}`;
     const params = currentAnalysisParams[paramKey] || {};
     const shortP = Number(params.shortPeriod) || 20;
     const longP = Number(params.longPeriod) || 9;
 
-    // 終値の配列を作成
+    // 終値を取得してSMAを計算
     const closes = ohlcvData.map(candle => candle[4]);
-    // console.log(closes.length); // デバッグ用
-
     const shortSMA = TechnicalIndicators.calculateSMA(closes, shortP);
     const longSMA = TechnicalIndicators.calculateSMA(closes, longP);
 
-    const longMA = ohlcvData.map((candle, index) => ({
-        x: candle[0], // タイムスタンプ
-        y: longSMA[index] 
-    }));
-    const shortMA = ohlcvData.map((candle, index) => ({
-        x: candle[0],
-        y: shortSMA[index]
-    }));
+    // データセット定義
+    const datasets = [
+        {
+            label: 'Long MA',
+            data: longSMA,
+            borderColor: 'rgba(226, 114, 9, 0.8)'
+        },
+        {
+            label: 'Short MA',
+            data: shortSMA,
+            borderColor: 'rgba(37, 241, 10, 0.94)'
+        }
+    ];
 
-    chart.data.datasets = chart.data.datasets.filter(dataset =>
-        !dataset.label?.startsWith('MA')
-    );
-
-    // 新しいデータセットを追加 (type: 'line' と spanGaps: true を追加)
-    chart.data.datasets.push({
-        label: 'Long MA',
-        data: longMA,
-        borderColor: 'rgba(226, 114, 9, 0.8)',
-        borderWidth: 1,
-        fill: false,
-        type: 'line', // 線グラフとして明示
-        pointRadius: 0, // 点は表示しない
-        tension: 0.1, // 少し滑らかに
-        spanGaps: true // null値を線でつなぐ
-    });
-    chart.data.datasets.push({
-        label: 'Short MA',
-        data: shortMA,
-        borderColor: 'rgba(37, 241, 10, 0.94)',
-        borderWidth: 1,
-        fill: false,
-        type: 'line',
-        pointRadius: 0,
-        tension: 0.1,
-        spanGaps: true
-    });
-
-    // データを追加した後にチャートを更新
-    chart.update();
+    // 共通関数を使用してチャートに追加
+    addTechnicalIndicatorToChart(chart, ohlcvData, 'MA', datasets);
 }
 
 /**

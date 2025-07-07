@@ -449,7 +449,15 @@ async function setCurrentOrderPair(exchange, symbol, strategyKey, orderPair) {
   return await setCurrentOrderPairRedis(exchange.id, symbol, strategyKey, orderPair);
 }
 
-async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
+/**
+ * 指定された戦略キーの未約定注文のポジション量を取得する共通関数
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @param {string} side - 注文の種類 ('buy' または 'sell')
+ * @returns {Promise<number>} 未約定注文の合計量
+ */
+async function getCurrentOrderPositionBySide(exchange, symbol, strategyKey, side) {
   // 取引所がシンボルをサポートしているか確認
   if (!exchange.markets) {
     await exchange.loadMarkets();
@@ -457,7 +465,7 @@ async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
   
   // シンボルが取引所でサポートされているか確認
   if (!(symbol in exchange.markets)) {
-    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。注文ポジション計算をスキップします。`);
+    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。${side === 'buy' ? '買い' : '売り'}注文ポジション計算をスキップします。`);
     return 0; // サポートされていない場合は0を返す
   }
 
@@ -475,17 +483,27 @@ async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
     throw fetchError;
   }
 
-  // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
-  const buyOrderAmounts = await Promise.all(
+  // 指定されたサイドの未約定注文のうち、注文を戦略キーでフィルタリングして合計量を計算
+  const orderAmounts = await Promise.all(
     openOrders.map(async (order) => {
       const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-      // buy only
-      return (strategyKey === _strategyKey && order.side === 'buy') ? order.amount : 0;
+      return (strategyKey === _strategyKey && order.side === side) ? order.amount : 0;
     })
   );
-  const totalAmount = buyOrderAmounts.reduce((sum, amount) => sum + amount, 0);
+  const totalAmount = orderAmounts.reduce((sum, amount) => sum + amount, 0);
 
   return totalAmount;
+}
+
+/**
+ * 指定された戦略キーの未約定買い注文のポジション量を取得
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @returns {Promise<number>} 未約定買い注文の合計量
+ */
+async function getCurrentOrderPosition(exchange, symbol, strategyKey) {
+  return await getCurrentOrderPositionBySide(exchange, symbol, strategyKey, 'buy');
 };
 
 async function getRealizedPnL(exchange, symbol, strategyKey, options = {}) { // options を追加
@@ -2005,43 +2023,15 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   return { allowed: true };
 }
 
+/**
+ * 指定された戦略キーの未約定売り注文のポジション量を取得
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @returns {Promise<number>} 未約定売り注文の合計量
+ */
 async function getCurrentSellOrderPosition(exchange, symbol, strategyKey) {
-  // 取引所がシンボルをサポートしているか確認
-  if (!exchange.markets) {
-    await exchange.loadMarkets();
-  }
-  
-  // シンボルが取引所でサポートされているか確認
-  if (!(symbol in exchange.markets)) {
-    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。売り注文ポジション計算をスキップします。`);
-    return 0; // サポートされていない場合は0を返す
-  }
-
-  // 未約定の注文を取得
-  let openOrders;
-  try {
-    openOrders = await exchange.fetchOpenOrders(symbol);
-  } catch (fetchError) {
-    // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
-    if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
-      console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
-      return 0; // エラーの場合は0を返す
-    }
-    // その他のエラーは再スロー
-    throw fetchError;
-  }
-
-  // 未約定の売り注文のうち、注文を戦略キーでフィルタリングして合計量を計算
-  const sellOrderAmounts = await Promise.all(
-    openOrders.map(async (order) => {
-      const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-      // sell only
-      return (strategyKey === _strategyKey && order.side === 'sell') ? order.amount : 0;
-    })
-  );
-  const totalAmount = sellOrderAmounts.reduce((sum, amount) => sum + amount, 0);
-
-  return totalAmount;
+  return await getCurrentOrderPositionBySide(exchange, symbol, strategyKey, 'sell');
 };
 
 /**

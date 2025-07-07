@@ -419,10 +419,10 @@ function processSummaryData(data) {
     orderPairs: [] // 注文ペアデータを保持
   };
 
-  // 配列データであることを確認
-  if (!Array.isArray(data)) {
-    console.error('APIレスポンスが期待される配列形式ではありません:', data);
-    // エラー処理または空のデータを返すなどの対応
+  // 配列データの検証（共通関数を使用）
+  const validation = CommonUtils.validateArrayData(data, 'APIレスポンス');
+  if (!validation.isValid) {
+    console.error(validation.error + ':', data);
     return result;
   }
 
@@ -430,26 +430,26 @@ function processSummaryData(data) {
   result.orderPairs = data;
   currentOrderPairs = data; // グローバル変数に保存
 
-  // 各エントリを処理して集計
+  // 各エントリを処理して集計（共通関数を使用）
   data.forEach(entry => {
     const { exchangeId, symbol, strategyKey, totalBuyCost, totalSellValue, totalFee, realizedPnL } = entry;
 
-    // 取引所データの集計と内訳の保持
-    if (!result.byExchange[exchangeId]) {
-      result.byExchange[exchangeId] = {
-        totalBuyCost: 0,
-        totalSellValue: 0,
-        totalFee: 0,
-        realizedPnL: 0,
-        netPnL: 0,
-        bySymbol: {}, // 銘柄別の内訳
-        byStrategy: {} // 戦略別の内訳
-      };
-    }
-    result.byExchange[exchangeId].totalBuyCost += totalBuyCost || 0;
-    result.byExchange[exchangeId].totalSellValue += totalSellValue || 0;
-    result.byExchange[exchangeId].totalFee += totalFee || 0;
-    result.byExchange[exchangeId].realizedPnL += realizedPnL || 0;
+    // 取引所データの集計（共通関数を使用して安全な加算）
+    CommonUtils.ensureNestedObject(result, `byExchange.${exchangeId}`, {
+      totalBuyCost: 0,
+      totalSellValue: 0,
+      totalFee: 0,
+      realizedPnL: 0,
+      netPnL: 0,
+      bySymbol: {},
+      byStrategy: {}
+    });
+    
+    const exchangeData = result.byExchange[exchangeId];
+    exchangeData.totalBuyCost = CommonUtils.safeAdd(exchangeData.totalBuyCost, totalBuyCost);
+    exchangeData.totalSellValue = CommonUtils.safeAdd(exchangeData.totalSellValue, totalSellValue);
+    exchangeData.totalFee = CommonUtils.safeAdd(exchangeData.totalFee, totalFee);
+    exchangeData.realizedPnL = CommonUtils.safeAdd(exchangeData.realizedPnL, realizedPnL);
 
     // 取引所内の銘柄別内訳の集計
     if (!result.byExchange[exchangeId].bySymbol[symbol]) {

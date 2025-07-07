@@ -3,6 +3,19 @@
  */
 
 /**
+ * True Range計算の共通関数
+ * @param {Object} current - 現在のOHLCデータ
+ * @param {Object} previous - 前回のOHLCデータ
+ * @returns {number} True Range値
+ */
+function calculateTrueRange(current, previous) {
+    const highLow = current.high - current.low;
+    const highClosePrev = Math.abs(current.high - previous.close);
+    const lowClosePrev = Math.abs(current.low - previous.close);
+    return Math.max(highLow, highClosePrev, lowClosePrev);
+}
+
+/**
  * 単純移動平均（SMA）を計算
  * @param {Array} prices - 価格データの配列
  * @param {Number} period - 期間
@@ -384,12 +397,7 @@ function calculateATR(ohlcData, period = 14) {
     const current = ohlcData[i];
     const previous = ohlcData[i - 1];
     
-    // True Range = max(H-L, H-C_prev, C_prev-L)
-    const highLow = current.high - current.low;
-    const highClosePrev = Math.abs(current.high - previous.close);
-    const lowClosePrev = Math.abs(current.low - previous.close);
-    
-    const trueRange = Math.max(highLow, highClosePrev, lowClosePrev);
+    const trueRange = calculateTrueRange(current, previous);
     trueRanges.push(trueRange);
   }
   
@@ -485,11 +493,7 @@ function calculateADX(ohlcData, period = 14) {
     plusDMs.push(plusDM);
     minusDMs.push(minusDM);
 
-    // True Range = max(H-L, H-C_prev, C_prev-L)
-    const highLow = current.high - current.low;
-    const highClosePrev = Math.abs(current.high - previous.close);
-    const lowClosePrev = Math.abs(current.low - previous.close);
-    const trueRange = Math.max(highLow, highClosePrev, lowClosePrev);
+    const trueRange = calculateTrueRange(current, previous);
     trueRanges.push(trueRange);
   }
 
