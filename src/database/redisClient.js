@@ -7,6 +7,9 @@ const redis = require('redis');
 // 環境変数からRedis接続URLを取得、または既定値を使用
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
+// Redis接続の無効化フラグ
+const DISABLE_REDIS = process.env.DISABLE_REDIS === 'true';
+
 // Redisクライアントの作成
 const client = redis.createClient({
   url: REDIS_URL,
@@ -18,7 +21,9 @@ const client = redis.createClient({
 
 // イベントリスナーを追加
 client.on('error', (err) => {
-  console.error('Redisエラー:', err);
+  if (!DISABLE_REDIS) {
+    console.error('Redisエラー:', err);
+  }
 });
 
 client.on('connect', () => {
@@ -46,10 +51,20 @@ async function reconnect() {
  * @returns {Promise} 接続完了時に解決されるPromise
  */
 async function initRedisClient() {
-  if (!client.isOpen) {
-    await client.connect();
+  if (DISABLE_REDIS) {
+    console.log('Redis接続が無効化されています');
+    return null;
   }
-  return client;
+  
+  try {
+    if (!client.isOpen) {
+      await client.connect();
+    }
+    return client;
+  } catch (error) {
+    console.error('Redis接続に失敗しました:', error.message);
+    return null;
+  }
 }
 
 /**

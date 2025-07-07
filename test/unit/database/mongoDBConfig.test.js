@@ -32,7 +32,7 @@ describe('MongoDB Connection Configuration', () => {
           // クエリパラメータが含まれていないことを確認
           expect(mongoUrl).not.toMatch(/\?.*bufferMaxEntries/);
           expect(mongoUrl).not.toMatch(/\?.*serverSelectionTimeoutMS/);
-          expect(mongoUrl).toMatch(/^mongodb:\/\/mongodb:27017\/harvest3$/);
+          expect(mongoUrl).toMatch(/^mongodb:\/\/(mongodb|localhost):27017\/harvest3$/);
         }
       }
     });

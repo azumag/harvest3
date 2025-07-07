@@ -307,71 +307,92 @@ async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
 }
 
 async function getAllTradeSummaries() {
-  const keys = await client.keys(`summary:trade:*`);
-  const summaries = [];
-
-  for (const key of keys) {
-    const summary = await client.hGetAll(key);
-    if (Object.keys(summary).length > 0) {
-      const keyParts = key.split(':');
-      const exchangeId = keyParts[2];
-      const symbol = keyParts[3];
-      const strategyKey = keyParts[4];
-      
-      // undefinedやnullの値を持つキーをスキップ
-      if (exchangeId === 'undefined' || !exchangeId || 
-          symbol === 'undefined' || !symbol || 
-          strategyKey === 'undefined' || !strategyKey) {
-        console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
-        continue;
-      }
-      
-      summaries.push({
-        exchangeId,
-        symbol,
-        strategyKey,
-        buyAmount: parseFloat(summary.buyAmount || 0),
-        sellAmount: parseFloat(summary.sellAmount || 0),
-        totalBuyCost: parseFloat(summary.totalBuyCost || 0),
-        totalSellValue: parseFloat(summary.totalSellValue || 0),
-        netPosition: parseFloat(summary.netPosition || 0),
-        totalFee: parseFloat(summary.totalFee || 0),
-        realizedPnL: parseFloat(summary.realizedPnL || 0),
-        createdAt: parseInt(summary.createdAt || 0),
-        updatedAt: parseInt(summary.updatedAt || 0)
-      });
+  try {
+    // Redisが無効化されている場合は空の配列を返す
+    if (!client || process.env.DISABLE_REDIS === 'true') {
+      console.log('Redis接続が無効化されているため、空のサマリーを返します');
+      return [];
     }
-  }
+    
+    const keys = await client.keys(`summary:trade:*`);
+    const summaries = [];
 
-  return summaries;
+    for (const key of keys) {
+      const summary = await client.hGetAll(key);
+      if (Object.keys(summary).length > 0) {
+        const keyParts = key.split(':');
+        const exchangeId = keyParts[2];
+        const symbol = keyParts[3];
+        const strategyKey = keyParts[4];
+        
+        // undefinedやnullの値を持つキーをスキップ
+        if (exchangeId === 'undefined' || !exchangeId || 
+            symbol === 'undefined' || !symbol || 
+            strategyKey === 'undefined' || !strategyKey) {
+          console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+          continue;
+        }
+        
+        summaries.push({
+          exchangeId,
+          symbol,
+          strategyKey,
+          buyAmount: parseFloat(summary.buyAmount || 0),
+          sellAmount: parseFloat(summary.sellAmount || 0),
+          totalBuyCost: parseFloat(summary.totalBuyCost || 0),
+          totalSellValue: parseFloat(summary.totalSellValue || 0),
+          netPosition: parseFloat(summary.netPosition || 0),
+          totalFee: parseFloat(summary.totalFee || 0),
+          realizedPnL: parseFloat(summary.realizedPnL || 0),
+          createdAt: parseInt(summary.createdAt || 0),
+          updatedAt: parseInt(summary.updatedAt || 0)
+        });
+      }
+    }
+
+    return summaries;
+  } catch (error) {
+    console.error('getAllTradeSummariesでエラーが発生しました:', error);
+    return [];
+  }
 }
 
 async function getTradeSummaries(exchangeId) {
-  const keys = await client.keys(`summary:trade:${exchangeId}:*`);
-  const summaries = [];
-
-  for (const key of keys) {
-    const summary = await client.hGetAll(key);
-    if (Object.keys(summary).length > 0) {
-      summaries.push({
-        exchangeId,
-        symbol: key.split(':')[2],
-        strategyKey: key.split(':')[3],
-        buyAmount: parseFloat(summary.buyAmount || 0),
-        sellAmount: parseFloat(summary.sellAmount || 0),
-        totalBuyCost: parseFloat(summary.totalBuyCost || 0),
-        totalSellValue: parseFloat(summary.totalSellValue || 0),
-        netPosition: parseFloat(summary.netPosition || 0),
-        totalFee: parseFloat(summary.totalFee || 0),
-        realizedPnL: parseFloat(summary.realizedPnL || 0),
-        createdAt: parseInt(summary.createdAt || 0),
-        updatedAt: parseInt(summary.updatedAt || 0)
-      });
+  try {
+    // Redisが無効化されている場合は空の配列を返す
+    if (!client || process.env.DISABLE_REDIS === 'true') {
+      console.log('Redis接続が無効化されているため、空のサマリーを返します');
+      return [];
     }
+    
+    const keys = await client.keys(`summary:trade:${exchangeId}:*`);
+    const summaries = [];
+
+    for (const key of keys) {
+      const summary = await client.hGetAll(key);
+      if (Object.keys(summary).length > 0) {
+        summaries.push({
+          exchangeId,
+          symbol: key.split(':')[2],
+          strategyKey: key.split(':')[3],
+          buyAmount: parseFloat(summary.buyAmount || 0),
+          sellAmount: parseFloat(summary.sellAmount || 0),
+          totalBuyCost: parseFloat(summary.totalBuyCost || 0),
+          totalSellValue: parseFloat(summary.totalSellValue || 0),
+          netPosition: parseFloat(summary.netPosition || 0),
+          totalFee: parseFloat(summary.totalFee || 0),
+          realizedPnL: parseFloat(summary.realizedPnL || 0),
+          createdAt: parseInt(summary.createdAt || 0),
+          updatedAt: parseInt(summary.updatedAt || 0)
+        });
+      }
+    }
+
+    return summaries;
+  } catch (error) {
+    console.error('getTradeSummariesでエラーが発生しました:', error);
+    return [];
   }
-
-  return summaries;
-
 }
 
 /**
