@@ -1,6 +1,6 @@
 # 現在の設定値 (自動生成)
 
-**生成日時**: 2025年07月04日  
+**生成日時**: 2025年07月08日  
 **生成元**: `src/common/const.js`  
 **生成コマンド**: `./scripts/generate-config-docs.sh`
 
@@ -14,7 +14,7 @@
 [0;34m[INFO][0m 設定値を抽出しています...
 #### 設定値の参照
 
-> ⚠️ **重要な警告**: 以下は自動生成された参考値です（生成日時: 2025年07月04日）。
+> ⚠️ **重要な警告**: 以下は自動生成された参考値です（生成日時: 2025年07月08日）。
 > 
 > 実際のエラーログとの乖離が発生する可能性があります。詳細なトラブルシューティングは[🚨 緊急対応・トラブルシューティング](#-緊急対応トラブルシューティング)を参照してください。
 > 
@@ -25,23 +25,23 @@
 - **取引設定**: `src/common/const.js` の `TRADING_SETTINGS`
 - **注文管理設定**: `src/common/const.js` の `ORDER_MANAGEMENT_SETTINGS`
 
-**自動抽出された設定値（2025年07月04日時点）**
+**自動抽出された設定値（2025年07月08日時点）**
 
 ```javascript
 // src/common/const.js - EXCHANGE_SETTINGS（自動生成）
 const EXCHANGE_SETTINGS = {
-  "RATE_LIMIT": 5000,
+  "RATE_LIMIT": 15000,
   "TIMEOUT": 60000,
-  "MAX_THROTTLE_QUEUE_SIZE": 1500,
+  "MAX_THROTTLE_QUEUE_SIZE": 5000,
   "RECV_WINDOW": 60000,
   "BACKOFF_ENABLED": true,
-  "BACKOFF_INITIAL_DELAY": 1000,
-  "BACKOFF_MAX_DELAY": 30000,
-  "BACKOFF_MULTIPLIER": 2,
+  "BACKOFF_INITIAL_DELAY": 5000,
+  "BACKOFF_MAX_DELAY": 120000,
+  "BACKOFF_MULTIPLIER": 3,
   "HEALTH_CHECK_INTERVAL": 60000,
-  "MAX_CONSECUTIVE_FAILURES": 5,
-  "MAX_CONCURRENT_PAIRS": 3,
-  "EXECUTION_DELAY_MS": 1000
+  "MAX_CONSECUTIVE_FAILURES": 2,
+  "MAX_CONCURRENT_PAIRS": 1,
+  "EXECUTION_DELAY_MS": 5000
 };
 
 // src/common/const.js - TRADING_SETTINGS（自動生成）
@@ -52,7 +52,8 @@ const TRADING_SETTINGS = {
     "ELF/",
     "MATIC/",
     "RNDR/",
-    "BCH/"
+    "BCH/",
+    "ASTR/"
   ]
 };
 

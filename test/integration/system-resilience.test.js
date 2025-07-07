@@ -94,7 +94,7 @@ describe('System Resilience Tests', () => {
             try {
                 // READMEの設定値を意図的に変更
                 let readmeContent = fs.readFileSync(readmePath, 'utf8');
-                readmeContent = readmeContent.replace(/RATE_LIMIT: 5000/g, 'RATE_LIMIT: 9999');
+                readmeContent = readmeContent.replace(/RATE_LIMIT: 15000/g, 'RATE_LIMIT: 9999');
                 fs.writeFileSync(readmePath, readmeContent);
                 
                 // 検証スクリプト実行

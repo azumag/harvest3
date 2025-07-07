@@ -21,13 +21,28 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 # 設定値抽出関数
 extract_const_value() {
     local key="$1"
-    # より柔軟な正規表現で値を抽出
-    grep "${key}:" src/common/const.js | head -1 | sed 's/.*: *//' | sed 's/[,;].*$//' | sed 's|//.*$||' | sed 's/[ \t]*$//'
+    # parseEnvInt関数からデフォルト値を抽出
+    local line=$(grep "${key}:" src/common/const.js | head -1)
+    
+    if [[ $line =~ parseEnvInt\([^,]+,\ *([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        # parseEnvIntでない場合は通常の値抽出
+        echo "$line" | sed 's/.*: *//' | sed 's/[,;].*$//' | sed 's|//.*$||' | sed 's/[ \t]*$//'
+    fi
 }
 
 extract_readme_value() {
     local key="$1"
-    grep -A 20 "EXCHANGE_SETTINGS" README.md | grep "${key}:" | sed 's/.*: *//' | sed 's/ *\/\/.*//' | head -1
+    # README.mdから数値設定値を抽出
+    local line=$(grep -A 30 "EXCHANGE_SETTINGS.*参考値" README.md | grep "${key}:" | head -1)
+    
+    if [[ $line =~ ${key}:\ *([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        # フォールバック: 従来の方法
+        echo "$line" | sed 's/.*: *//' | sed 's/[,;].*$//' | sed 's|//.*$||' | sed 's/[ \t]*$//'
+    fi
 }
 
 # メイン検証
@@ -98,10 +113,10 @@ main() {
         echo "  MAX_CONCURRENT_PAIRS: ${readme_concurrent}"
         
         # 乖離チェック
-        check_consistency "RATE_LIMIT" "$rate_limit" "$readme_rate"
-        check_consistency "TIMEOUT" "$timeout" "$readme_timeout"
-        check_consistency "MAX_THROTTLE_QUEUE_SIZE" "$max_throttle" "$readme_throttle"
-        check_consistency "MAX_CONCURRENT_PAIRS" "$max_concurrent" "$readme_concurrent"
+        check_consistency "RATE_LIMIT" "$rate_limit" "$readme_rate" || exit_code=1
+        check_consistency "TIMEOUT" "$timeout" "$readme_timeout" || exit_code=1
+        check_consistency "MAX_THROTTLE_QUEUE_SIZE" "$max_throttle" "$readme_throttle" || exit_code=1
+        check_consistency "MAX_CONCURRENT_PAIRS" "$max_concurrent" "$readme_concurrent" || exit_code=1
     fi
     
     # 5. ランタイム設定チェック（Node.jsが利用可能な場合）
@@ -109,7 +124,8 @@ main() {
         log_info "5. ランタイム設定チェック"
         
         # 設定値を実際に読み込んでチェック
-        local runtime_check=$(node -e "
+        local runtime_check
+        runtime_check=$(timeout 10s node -e "
             try {
                 const { EXCHANGE_SETTINGS } = require('./src/common/const.js');
                 console.log('MAX_THROTTLE_QUEUE_SIZE=' + EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE);
@@ -137,20 +153,37 @@ main() {
     
     # 6. 環境変数チェック
     log_info "6. 環境変数チェック"
-    local env_vars=("EXCHANGE_RATE_LIMIT" "EXCHANGE_MAX_CONCURRENT_PAIRS" "EXCHANGE_EXECUTION_DELAY_MS")
     local env_unset_count=0
-    for var in "${env_vars[@]}"; do
-        if [[ -n "${!var}" ]]; then
-            log_info "  ${var}=${!var} (設定済み)"
-        else
-            echo "  ${var}=未設定"
-            ((env_unset_count++))
-        fi
-    done
     
-    # CI環境では環境変数未設定は警告のみ
-    if [[ $env_unset_count -gt 0 ]] && [[ "${CI:-}" == "true" ]]; then
-        log_warn "CI環境: ${env_unset_count}個の環境変数が未設定ですが、これは正常です"
+    # 各環境変数を個別にチェック
+    if [[ -n "${EXCHANGE_RATE_LIMIT:-}" ]]; then
+        log_info "  EXCHANGE_RATE_LIMIT=${EXCHANGE_RATE_LIMIT} (設定済み)"
+    else
+        echo "  EXCHANGE_RATE_LIMIT=未設定"
+        env_unset_count=$((env_unset_count + 1))
+    fi
+    
+    if [[ -n "${EXCHANGE_MAX_CONCURRENT_PAIRS:-}" ]]; then
+        log_info "  EXCHANGE_MAX_CONCURRENT_PAIRS=${EXCHANGE_MAX_CONCURRENT_PAIRS} (設定済み)"
+    else
+        echo "  EXCHANGE_MAX_CONCURRENT_PAIRS=未設定"
+        env_unset_count=$((env_unset_count + 1))
+    fi
+    
+    if [[ -n "${EXCHANGE_EXECUTION_DELAY_MS:-}" ]]; then
+        log_info "  EXCHANGE_EXECUTION_DELAY_MS=${EXCHANGE_EXECUTION_DELAY_MS} (設定済み)"
+    else
+        echo "  EXCHANGE_EXECUTION_DELAY_MS=未設定"
+        env_unset_count=$((env_unset_count + 1))
+    fi
+    
+    # CI環境や開発環境では環境変数未設定は警告のみ
+    if [[ $env_unset_count -gt 0 ]]; then
+        if [[ "${CI:-}" == "true" ]]; then
+            log_warn "CI環境: ${env_unset_count}個の環境変数が未設定ですが、これは正常です"
+        else
+            log_warn "開発環境: ${env_unset_count}個の環境変数が未設定ですが、これは正常です"
+        fi
     fi
     
     # 7. 最終結果
@@ -173,13 +206,15 @@ check_consistency() {
         log_error "設定値乖離検出: ${key}"
         echo "  const.js: ${const_val}"
         echo "  README.md: ${readme_val}"
-        exit_code=1
+        return 1
     else
         log_success "✓ ${key}: 整合性OK"
+        return 0
     fi
 }
 
 # 実行権限チェック
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
+    exit $?
 fi
