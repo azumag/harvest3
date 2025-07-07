@@ -5,7 +5,7 @@
 ただし、正しいことについてはきちんと評価すること。
 
 # promise
-- docker compose logs を確認し、エラーが出ていないか確認せよ
-- Perform quality assurance (QA) on all reports and deliverables.
-- 同じような内容のファイルをたくさん作らず、似た内容のものは一つにまとめ、既存のものを改修する
-- ファイルが大きくなったら適宜良いサイズになるようにリファクタリングを指示する
+- YAGNI（You Aren't Gonna Need It）：今必要じゃない機能は作らない
+- DRY（Don't Repeat Yourself）：同じコードを繰り返さない
+- KISS（Keep It Simple Stupid）：シンプルに保つ
+- t-wada TDD: テスト駆動開発
