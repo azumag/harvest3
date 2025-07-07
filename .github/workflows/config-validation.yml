@@ -16,6 +16,11 @@ on:
       - 'README.md'
       - 'scripts/validate-config.sh'
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   validate-config:
     runs-on: ubuntu-latest
@@ -44,7 +49,12 @@ jobs:
       continue-on-error: false
       
     - name: Generate config documentation
-      run: npm run generate-config-docs
+      run: |
+        if npm run generate-config-docs; then
+          echo "Documentation generation successful"
+        else
+          echo "Documentation generation failed - this is expected if script is not yet implemented"
+        fi
       continue-on-error: true
       
     - name: Check for documentation updates
@@ -61,13 +71,18 @@ jobs:
       if: failure() && github.event_name == 'pull_request'
       uses: actions/github-script@v7
       with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '🚨 **設定値検証エラー**\n\n設定ファイルとREADMEの間に乖離が検出されました。\n\n詳細は[アクションログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})を確認し、以下のいずれかを実行してください：\n\n1. 設定値を正しく修正\n2. READMEの参考値を更新\n3. `scripts/generate-config-docs.sh`（準備中）で自動更新\n\n**注意**: この乖離はシステム障害の原因となる可能性があります。'
-          })
+          try {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **設定値検証エラー**\n\n設定ファイルとREADMEの間に乖離が検出されました。\n\n詳細は[アクションログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})を確認し、以下のいずれかを実行してください：\n\n1. 設定値を正しく修正\n2. READMEの参考値を更新\n3. `scripts/generate-config-docs.sh`（準備中）で自動更新\n\n**注意**: この乖離はシステム障害の原因となる可能性があります。'
+            });
+          } catch (error) {
+            console.log('Failed to comment on PR:', error.message);
+          }
           
   validate-firewall:
     runs-on: ubuntu-latest

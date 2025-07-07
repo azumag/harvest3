@@ -29,9 +29,9 @@
     "collect-real-data": "node scripts/start-real-data-collection.js",
     "collect-real-data-enhanced": "node -r dotenv/config scripts/start-real-data-collection.js dotenv_config_path=.env.collector",
     "analyze-real-data": "node scripts/analyze-real-data.js",
-    "validate-config": "node scripts/validate-config.sh",
+    "validate-config": "bash scripts/validate-config.sh",
     "validate-config-structural": "node scripts/structural-config-validator.js",
-    "generate-config-docs": "node scripts/generate-config-docs.sh",
+    "generate-config-docs": "bash scripts/generate-config-docs.sh",
     "sync-docs": "npm run generate-config-docs && npm run validate-config",
     "load-test": "node scripts/load-test-data-collection.js",
     "test-enhanced": "jest test/monitoring/realDataCollectorEnhanced.test.js"

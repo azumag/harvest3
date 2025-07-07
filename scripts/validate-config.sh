@@ -21,7 +21,8 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 # 設定値抽出関数
 extract_const_value() {
     local key="$1"
-    grep -o "${key}:.*" src/common/const.js | sed 's/.*: *//' | sed 's/[,;].*//' | head -1
+    # より柔軟な正規表現で値を抽出
+    grep "${key}:" src/common/const.js | head -1 | sed 's/.*: *//' | sed 's/[,;].*$//' | sed 's|//.*$||' | sed 's/[ \t]*$//'
 }
 
 extract_readme_value() {
