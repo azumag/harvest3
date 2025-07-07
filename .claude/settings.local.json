@@ -94,7 +94,8 @@
           },
           {
             "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/self-review.sh"
+            "command": "/Users/azumag/work/cc-gc-review/hooks/self-review.sh",
+            "timeout": 365
           },
           {
             "type": "command",
