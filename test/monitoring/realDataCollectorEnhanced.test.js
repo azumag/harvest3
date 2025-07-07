@@ -7,6 +7,22 @@ const RealDataCollectorEnhanced = require('../../src/monitoring/realDataCollecto
 const fs = require('fs');
 const path = require('path');
 
+// テスト後の強制クリーンアップ（異常終了時の保険）
+process.on('beforeExit', () => {
+    try {
+        const tempDirs = fs.readdirSync(__dirname + '/../../').filter(name => name.startsWith('temp-integration-test-'));
+        tempDirs.forEach(dir => {
+            const fullPath = path.join(__dirname, '../../', dir);
+            if (fs.existsSync(fullPath)) {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+                console.log(`[CLEANUP] Removed temp directory: ${dir}`);
+            }
+        });
+    } catch (error) {
+        console.warn(`[CLEANUP] Warning: Could not clean up temp directories: ${error.message}`);
+    }
+});
+
 // テスト用のモック取引所クラス
 class MockExchange {
     constructor(id, options = {}) {

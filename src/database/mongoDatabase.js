@@ -29,6 +29,87 @@ const mongoOptions = {
 let client;
 let db;
 
+// 接続プール監視用の変数
+let connectionMonitoringInterval;
+const connectionStats = {
+  totalConnections: 0,
+  activeConnections: 0,
+  availableConnections: 0,
+  maxConnections: mongoOptions.maxPoolSize,
+  lastChecked: null
+};
+
+/**
+ * 接続プールの統計情報を更新
+ */
+function updateConnectionStats() {
+  if (!client) {
+    connectionStats.totalConnections = 0;
+    connectionStats.activeConnections = 0;
+    connectionStats.availableConnections = 0;
+  } else {
+    try {
+      // MongoDB Node.js Driverでの接続プール情報の取得
+      const topology = client.topology;
+      if (topology && topology.s && topology.s.servers) {
+        let totalActive = 0;
+        let totalAvailable = 0;
+        topology.s.servers.forEach(server => {
+          if (server.s && server.s.pool) {
+            totalActive += server.s.pool.totalConnectionCount || 0;
+            totalAvailable += server.s.pool.availableConnectionCount || 0;
+          }
+        });
+        connectionStats.totalConnections = totalActive;
+        connectionStats.activeConnections = totalActive - totalAvailable;
+        connectionStats.availableConnections = totalAvailable;
+      }
+    } catch (error) {
+      console.warn('[MongoDB] 接続プール統計の取得に失敗:', error.message);
+    }
+  }
+  connectionStats.lastChecked = new Date().toISOString();
+}
+
+/**
+ * 接続プール監視の開始
+ */
+function startConnectionMonitoring() {
+  if (connectionMonitoringInterval) {
+    clearInterval(connectionMonitoringInterval);
+  }
+  
+  connectionMonitoringInterval = setInterval(() => {
+    updateConnectionStats();
+    
+    // 警告レベルのチェック（接続プールの80%を超えた場合）
+    const usageRatio = connectionStats.totalConnections / connectionStats.maxConnections;
+    if (usageRatio > 0.8) {
+      console.warn(`[MongoDB] 接続プール使用率が高いです: ${Math.round(usageRatio * 100)}% (${connectionStats.totalConnections}/${connectionStats.maxConnections})`);
+      
+      // Discord通知を送信（循環参照回避のため条件付き読み込み）
+      try {
+        const { postErrorToDiscord } = require('../common/notifications');
+        postErrorToDiscord(`⚠️ **MongoDB接続プール警告**\n使用率: ${Math.round(usageRatio * 100)}%\n接続数: ${connectionStats.totalConnections}/${connectionStats.maxConnections}`, {
+          deduplicationKey: `mongo_pool_warning_${Math.floor(usageRatio * 10)}`,
+          priority: 2, // WARNING
+          deduplicationWindow: 1800000 // 30分間の重複防止
+        });
+      } catch (error) {
+        console.warn('[MongoDB] Discord通知の送信に失敗:', error.message);
+      }
+    }
+  }, 30000); // 30秒ごとに監視
+}
+
+/**
+ * 接続プール統計の取得
+ */
+function getConnectionStats() {
+  updateConnectionStats();
+  return { ...connectionStats };
+}
+
 /**
  * MongoDB接続状態を確認する (非推奨APIに依存しない)
  */
@@ -88,6 +169,9 @@ async function connectDB() {
       module.exports.ohlcvCollection = db.collection('ohlcv'); // ohlcvCollection の参照を追加
       module.exports.tickersCollection = db.collection('tickers');
       module.exports.positionsCollection = db.collection('positions');
+
+      // 接続プール監視の開始
+      startConnectionMonitoring();
 
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
@@ -844,6 +928,7 @@ module.exports = {
   connectWithRetry,
   startHealthCheck,
   stopHealthCheck,
+  getConnectionStats,
   addOrderMongoDB,
   addOrdersBulk,
   addTradeMongoDB,
