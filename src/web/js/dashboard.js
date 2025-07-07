@@ -1367,6 +1367,41 @@ document.addEventListener('DOMContentLoaded', function() {
  * 購入可能額を表示
  * @param {Object} availableAmounts - 購入可能額データ（戦略別）
  */
+// 共通のカードレンダリング関数
+function renderCardContainer(containerId, title, icon, items, itemRenderer, emptyMessage) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  let html = '';
+  
+  if (items && Object.keys(items).length > 0) {
+    html += `
+      <div class="col-12 mb-4">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+              <i class="${icon}"></i> ${title}
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+    `;
+    
+    html += itemRenderer(items);
+    
+    html += `
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    html = `<div class="col-12"><p class="text-center text-muted">${emptyMessage}</p></div>`;
+  }
+  
+  container.innerHTML = html;
+}
+
 function renderAvailableAmounts(availableAmounts) {
   const container = document.getElementById('available-amounts-container');
   if (!container) return;
@@ -1390,95 +1425,11 @@ function renderAvailableAmounts(availableAmounts) {
     // 各通貨ペアの購入可能額を表示
     Object.entries(symbols).forEach(([symbol, data]) => {
       if (data.error) {
-        html += `
-          <div class="col-md-6 col-lg-4 mb-3">
-            <div class="card h-100 border-danger">
-              <div class="card-header bg-danger text-white">
-                <h6 class="mb-0">${symbol}</h6>
-              </div>
-              <div class="card-body">
-                <p class="text-danger mb-0">
-                  <i class="bi bi-exclamation-triangle"></i> エラー: ${data.error}
-                </p>
-              </div>
-            </div>
-          </div>
-        `;
+        html += createErrorCard(symbol, data.error);
         return;
       }
       
-      const {
-        baseCurrency,
-        quoteCurrency,
-        availableFunds,
-        currentPrice,
-        realizedPnL,
-        tradePercentage,
-        availableAmount,
-        availableValue,
-        totalAvailableValue,
-        minTradeAmount
-      } = data;
-      
-      // 購入可能かどうかの判定
-      const canBuy = availableAmount > (minTradeAmount || 0) && totalAvailableValue > 0;
-      const cardClass = canBuy ? 'border-success' : 'border-warning';
-      const statusBadge = canBuy 
-        ? '<span class="badge bg-success">購入可能</span>' 
-        : '<span class="badge bg-warning">購入不可</span>';
-      
-      html += `
-        <div class="col-md-6 col-lg-4 mb-3">
-          <div class="card h-100 ${cardClass}">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <h6 class="mb-0">${symbol}</h6>
-              ${statusBadge}
-            </div>
-            <div class="card-body">
-              <div class="mb-2">
-                <small class="text-muted">現在価格</small>
-                <div class="fw-bold">${formatCurrency(currentPrice, baseCurrency)}</div>
-              </div>
-              
-              <div class="mb-2">
-                <small class="text-muted">利用可能資金</small>
-                <div class="fw-bold">${formatCurrency(availableFunds, baseCurrency)}</div>
-              </div>
-              
-              <div class="mb-2">
-                <small class="text-muted">取引割合</small>
-                <div class="fw-bold">${tradePercentage.toFixed(1)}%</div>
-              </div>
-              
-              <div class="mb-2">
-                <small class="text-muted">実現損益</small>
-                <div class="fw-bold ${realizedPnL >= 0 ? 'text-success' : 'text-danger'}">
-                  ${realizedPnL >= 0 ? '+' : ''}${formatCurrency(realizedPnL, baseCurrency)}
-                </div>
-              </div>
-              
-              <hr>
-              
-              <div class="mb-2">
-                <small class="text-muted">購入可能額（実現損益込み）</small>
-                <div class="fw-bold text-primary">${formatCurrency(totalAvailableValue, baseCurrency)}</div>
-              </div>
-              
-              <div class="mb-2">
-                <small class="text-muted">購入可能数量</small>
-                <div class="fw-bold">${availableAmount.toFixed(8)} ${quoteCurrency}</div>
-              </div>
-              
-              ${minTradeAmount ? `
-                <div class="mb-2">
-                  <small class="text-muted">最小取引数量</small>
-                  <div class="fw-bold">${minTradeAmount.toFixed(8)} ${quoteCurrency}</div>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        </div>
-      `;
+      html += createAvailableAmountCard(symbol, data);
     });
     
     html += `
@@ -1494,6 +1445,100 @@ function renderAvailableAmounts(availableAmounts) {
   }
   
   container.innerHTML = html;
+}
+
+// 共通のエラーカード作成関数
+function createErrorCard(symbol, error) {
+  return `
+    <div class="col-md-6 col-lg-4 mb-3">
+      <div class="card h-100 border-danger">
+        <div class="card-header bg-danger text-white">
+          <h6 class="mb-0">${symbol}</h6>
+        </div>
+        <div class="card-body">
+          <p class="text-danger mb-0">
+            <i class="bi bi-exclamation-triangle"></i> エラー: ${error}
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 購入可能額カード作成関数
+function createAvailableAmountCard(symbol, data) {
+  const {
+    baseCurrency,
+    quoteCurrency,
+    availableFunds,
+    currentPrice,
+    realizedPnL,
+    tradePercentage,
+    availableAmount,
+    availableValue,
+    totalAvailableValue,
+    minTradeAmount
+  } = data;
+  
+  // 購入可能かどうかの判定
+  const canBuy = availableAmount > (minTradeAmount || 0) && totalAvailableValue > 0;
+  const cardClass = canBuy ? 'border-success' : 'border-warning';
+  const statusBadge = canBuy 
+    ? '<span class="badge bg-success">購入可能</span>' 
+    : '<span class="badge bg-warning">購入不可</span>';
+  
+  return `
+    <div class="col-md-6 col-lg-4 mb-3">
+      <div class="card h-100 ${cardClass}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h6 class="mb-0">${symbol}</h6>
+          ${statusBadge}
+        </div>
+        <div class="card-body">
+          <div class="mb-2">
+            <small class="text-muted">現在価格</small>
+            <div class="fw-bold">${formatCurrency(currentPrice, baseCurrency)}</div>
+          </div>
+          
+          <div class="mb-2">
+            <small class="text-muted">利用可能資金</small>
+            <div class="fw-bold">${formatCurrency(availableFunds, baseCurrency)}</div>
+          </div>
+          
+          <div class="mb-2">
+            <small class="text-muted">取引割合</small>
+            <div class="fw-bold">${tradePercentage.toFixed(1)}%</div>
+          </div>
+          
+          <div class="mb-2">
+            <small class="text-muted">実現損益</small>
+            <div class="fw-bold ${realizedPnL >= 0 ? 'text-success' : 'text-danger'}">
+              ${realizedPnL >= 0 ? '+' : ''}${formatCurrency(realizedPnL, baseCurrency)}
+            </div>
+          </div>
+          
+          <hr>
+          
+          <div class="mb-2">
+            <small class="text-muted">購入可能額（実現損益込み）</small>
+            <div class="fw-bold text-primary">${formatCurrency(totalAvailableValue, baseCurrency)}</div>
+          </div>
+          
+          <div class="mb-2">
+            <small class="text-muted">購入可能数量</small>
+            <div class="fw-bold">${availableAmount.toFixed(8)} ${quoteCurrency}</div>
+          </div>
+          
+          ${minTradeAmount ? `
+            <div class="mb-2">
+              <small class="text-muted">最小取引数量</small>
+              <div class="fw-bold">${minTradeAmount.toFixed(8)} ${quoteCurrency}</div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -1730,81 +1775,76 @@ function renderRiskStats(data) {
 
   const { exchangeStats = {}, totalPositions = 0, filledPositions = 0, pendingOrders = 0, periodPnL = 0 } = data;
 
-  let html = `
+  let html = createStatsRow([
+    { title: '期間損益', value: `${periodPnL >= 0 ? '+' : ''}${periodPnL.toLocaleString()}円`, class: periodPnL >= 0 ? 'text-success' : 'text-danger', borderClass: 'border-info' },
+    { title: '総リスク管理ポジション数', value: totalPositions, class: 'text-primary', borderClass: 'border-primary', subtitle: `約定済: ${filledPositions} / 未約定: ${pendingOrders}` },
+    { title: '未売却ポジション数', value: filledPositions, class: 'text-success', borderClass: 'border-success', subtitle: '約定済みのみ' }
+  ]);
+
+  if (Object.keys(exchangeStats).length > 0) {
+    html += createExchangeStatsTable(exchangeStats);
+  }
+
+  container.innerHTML = html;
+}
+
+// 統計カード行作成関数
+function createStatsRow(statsData) {
+  return `
     <div class="row">
-      <div class="col-md-4">
-        <div class="card border-info">
-          <div class="card-body">
-            <h6 class="card-title">期間損益</h6>
-            <h4 class="${periodPnL >= 0 ? 'text-success' : 'text-danger'}">
-              ${periodPnL >= 0 ? '+' : ''}${periodPnL.toLocaleString()}円
-            </h4>
+      ${statsData.map(stat => `
+        <div class="col-md-4">
+          <div class="card ${stat.borderClass}">
+            <div class="card-body">
+              <h6 class="card-title">${stat.title}</h6>
+              <h4 class="${stat.class}">${stat.value}</h4>
+              ${stat.subtitle ? `<small class="text-muted">${stat.subtitle}</small>` : ''}
+            </div>
           </div>
         </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card border-primary">
-          <div class="card-body">
-            <h6 class="card-title">総リスク管理ポジション数</h6>
-            <h4 class="text-primary">${totalPositions}</h4>
-            <small class="text-muted">約定済: ${filledPositions} / 未約定: ${pendingOrders}</small>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card border-success">
-          <div class="card-body">
-            <h6 class="card-title">未売却ポジション数</h6>
-            <h4 class="text-success">${filledPositions}</h4>
-            <small class="text-muted">約定済みのみ</small>
-          </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// 取引所別統計テーブル作成関数
+function createExchangeStatsTable(exchangeStats) {
+  const tableRows = Object.entries(exchangeStats).map(([exchange, stats]) => {
+    const pnlClass = (stats.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
+    const pnlPrefix = (stats.unrealizedPnL || 0) >= 0 ? '+' : '';
+
+    return `
+      <tr>
+        <td><strong>${exchange}</strong></td>
+        <td>${stats.positions || 0}</td>
+        <td>${formatAmount(stats.totalAmount || 0, 4)}</td>
+        <td class="${pnlClass}">${pnlPrefix}${(stats.unrealizedPnL || 0).toLocaleString()}円</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="row mt-3">
+      <div class="col-12">
+        <h6>取引所別統計</h6>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>取引所</th>
+                <th>ポジション数</th>
+                <th>総数量</th>
+                <th>未実現損益</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   `;
-
-  if (Object.keys(exchangeStats).length > 0) {
-    html += `
-      <div class="row mt-3">
-        <div class="col-12">
-          <h6>取引所別統計</h6>
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead>
-                <tr>
-                  <th>取引所</th>
-                  <th>ポジション数</th>
-                  <th>総数量</th>
-                  <th>未実現損益</th>
-                </tr>
-              </thead>
-              <tbody>
-    `;
-
-    Object.entries(exchangeStats).forEach(([exchange, stats]) => {
-      const pnlClass = (stats.unrealizedPnL || 0) >= 0 ? 'text-success' : 'text-danger';
-      const pnlPrefix = (stats.unrealizedPnL || 0) >= 0 ? '+' : '';
-
-      html += `
-        <tr>
-          <td><strong>${exchange}</strong></td>
-          <td>${stats.positions || 0}</td>
-          <td>${formatAmount(stats.totalAmount || 0, 4)}</td>
-          <td class="${pnlClass}">${pnlPrefix}${(stats.unrealizedPnL || 0).toLocaleString()}円</td>
-        </tr>
-      `;
-    });
-
-    html += `
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  container.innerHTML = html;
 }
 
 /**

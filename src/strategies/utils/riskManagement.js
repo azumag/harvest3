@@ -1238,18 +1238,14 @@ async function recordBuyPosition(exchange, symbol, strategyKey, order, entryPric
   await savePosition(positionKey, positionData);
   
   // ポジション開始通知
-  const message = `🎯 [リスク管理] 新規ポジション開始 🎯\n` +
-                 `取引所: ${exchange.id}\n` +
-                 `通貨ペア: ${symbol}\n` +
-                 `戦略: ${strategyKey}\n` +
-                 `注文ID: ${order.id}\n` +
-                 `エントリー価格: ${entryPrice.toLocaleString()}円\n` +
-                 `数量: ${order.amount}\n` +
-                 `💰 ポジション管理を開始しました`;
-  
-  if (postOrderToDiscord) {
-    await postOrderToDiscord(message);
-  }
+  await sendRiskManagementNotification('🎯 新規ポジション開始', {
+    取引所: exchange.id,
+    通貨ペア: symbol,
+    戦略: strategyKey,
+    注文ID: order.id,
+    エントリー価格: `${entryPrice.toLocaleString()}円`,
+    数量: order.amount
+  }, '💰 ポジション管理を開始しました');
 }
 
 /**
@@ -1347,24 +1343,64 @@ async function sendRiskManagementReport(exchange, strategyKey, riskSettings = DE
     symbolPositions += `  ${symbol}: ${count}ポジション\n`;
   }
   
-  const message = `📊 [リスク管理] 定期レポート 📊\n` +
-                 `取引所: ${report.exchange}\n` +
-                 `戦略: ${report.strategy}\n` +
-                 `レポート時刻: ${new Date().toLocaleString('ja-JP')}\n\n` +
-                 
-                 `📈 ポジション状況:\n` +
-                 `  合計: ${report.positions.total}/${report.positions.maxAllowed}\n` +
-                 `${symbolPositions || '  (オープンポジションなし)\n'}\n` +
-                 
-                 `💰 損益状況:\n` +
-                 `  本日: ${report.pnl.daily.toLocaleString()}円\n` +
-                 `  今週: ${report.pnl.weekly.toLocaleString()}円\n` +
-                 `  今月: ${report.pnl.monthly.toLocaleString()}円\n\n` +
-                 
-                 `⚠️ ドローダウン監視:\n` +
-                 `  日次: ${report.drawdown.daily.current}%/${report.drawdown.daily.limit}% ${report.drawdown.daily.status}\n` +
-                 `  週次: ${report.drawdown.weekly.current}%/${report.drawdown.weekly.limit}% ${report.drawdown.weekly.status}\n` +
-                 `  月次: ${report.drawdown.monthly.current}%/${report.drawdown.monthly.limit}% ${report.drawdown.monthly.status}`;
+  const reportDetails = {
+    '取引所': report.exchange,
+    '戦略': report.strategy,
+    'レポート時刻': new Date().toLocaleString('ja-JP')
+  };
+  
+  const sections = [
+    {
+      title: '📈 ポジション状況',
+      content: `合計: ${report.positions.total}/${report.positions.maxAllowed}\n${symbolPositions || '(オープンポジションなし)\n'}`
+    },
+    {
+      title: '💰 損益状況',
+      content: `本日: ${report.pnl.daily.toLocaleString()}円\n今週: ${report.pnl.weekly.toLocaleString()}円\n今月: ${report.pnl.monthly.toLocaleString()}円`
+    },
+    {
+      title: '⚠️ ドローダウン監視',
+      content: `日次: ${report.drawdown.daily.current}%/${report.drawdown.daily.limit}% ${report.drawdown.daily.status}\n週次: ${report.drawdown.weekly.current}%/${report.drawdown.weekly.limit}% ${report.drawdown.weekly.status}\n月次: ${report.drawdown.monthly.current}%/${report.drawdown.monthly.limit}% ${report.drawdown.monthly.status}`
+    }
+  ];
+  
+  await sendRiskManagementNotification('📊 定期レポート', reportDetails, null, sections);
+}
+
+/**
+ * 共通のリスク管理通知送信関数
+ * @param {string} title - 通知タイトル
+ * @param {Object} details - 詳細情報
+ * @param {string} footer - フッターメッセージ
+ * @param {Array} sections - セクション情報
+ */
+async function sendRiskManagementNotification(title, details, footer = null, sections = []) {
+  let message = `${title} ${title.includes('[リスク管理]') ? '' : '[リスク管理]'}\n`;
+  
+  // 詳細情報の追加
+  for (const [key, value] of Object.entries(details)) {
+    message += `${key}: ${value}\n`;
+  }
+  
+  // セクションの追加
+  if (sections.length > 0) {
+    message += '\n';
+    sections.forEach(section => {
+      message += `${section.title}:\n`;
+      const lines = section.content.split('\n');
+      lines.forEach(line => {
+        if (line.trim()) {
+          message += `  ${line}\n`;
+        }
+      });
+      message += '\n';
+    });
+  }
+  
+  // フッターの追加
+  if (footer) {
+    message += footer;
+  }
   
   if (postOrderToDiscord) {
     await postOrderToDiscord(message);

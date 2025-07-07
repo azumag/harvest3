@@ -171,36 +171,22 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
   // 最新のRSI値を取得
   const currentRSI = rsiValues[rsiValues.length - 1];
 
-  // 共通化された価格取得
-  const currentPrice = await getCurrentPrice(exchange, symbol, options);
-
   // 買いシグナル: RSIが極端に低い（売られすぎ）
   const buySignal = currentRSI <= oversoldThreshold;
 
   // 売りシグナル: RSIが極端に高い（買われすぎ）
   const sellSignal = currentRSI >= overboughtThreshold;
 
-  // シグナルタイプを決定
-  const signalType = determineSignalType(buySignal, sellSignal);
-  
   // 戦略固有の計算結果
-  const strategyResults = createStrategyResults({
+  const strategyResults = {
     rsi: currentRSI,
     oversoldThreshold,
     overboughtThreshold
-  });
-  
-  // 共通化されたシグナル保存
-  await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
-  
-  return {
-    currentPrice,
-    currentRSI,
-    signalType,
-    buySignal,
-    sellSignal,
-    strategyResults
   };
+  
+  return await processSignalCalculation(
+    buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
+  );
 }
 
 /**
@@ -276,30 +262,51 @@ async function calculateMeanReversionSignals(closes, period, deviationThreshold,
   // 売りシグナル: 価格が移動平均線から上に大きく乖離
   const sellSignal = deviation >= deviationThreshold;
 
+  // 戦略固有の計算結果
+  const strategyResults = {
+    sma: currentSMA,
+    deviation,
+    currentPrice
+  };
+  
+  return await processSignalCalculation(
+    buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
+  );
+}
+
+/**
+ * 共通のシグナル計算処理
+ * @param {boolean} buySignal 買いシグナル
+ * @param {boolean} sellSignal 売りシグナル  
+ * @param {Object} strategyResults 戦略固有の計算結果
+ * @param {Object} exchange 取引所インスタンス
+ * @param {string} symbol 通貨ペア
+ * @param {string} strategyKey 戦略キー
+ * @param {Object} options オプション
+ * @returns {Object} 処理結果
+ */
+async function processSignalCalculation(buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options = {}) {
+  // 共通化された価格取得
+  const currentPrice = await getCurrentPrice(exchange, symbol, options);
+
   // シグナルタイプを決定
   const signalType = determineSignalType(buySignal, sellSignal);
   
-  // 戦略固有の計算結果
-  const strategyResults = createStrategyResults({
-    sma: currentSMA,
-    deviation
-  });
+  // 戦略固有の計算結果を含む最終結果オブジェクト
+  const finalStrategyResults = createStrategyResults(strategyResults);
   
   // 共通化されたシグナル保存
-  await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
+  await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, finalStrategyResults, options);
   
   return {
     currentPrice,
-    currentSMA,
-    deviation,
     signalType,
     buySignal,
     sellSignal,
-    strategyResults
+    strategyResults: finalStrategyResults,
+    ...strategyResults
   };
 }
-
-
 
 module.exports = {
   meanReversionStrategy,
