@@ -131,7 +131,7 @@ describe('System Resilience Tests', () => {
       });
 
       // デフォルトではエラーにならないことを期待
-      expect(result.error).toBeFalsy(); 
+      expect(result.error).toBeFalsy();
       // ソースコード検証モードの確認
       expect(result.stdout).toContain('ソースコード検証モード');
       expect(result.stdout).toContain('設定値検証完了: 問題は検出されませんでした');

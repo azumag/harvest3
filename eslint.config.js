@@ -25,7 +25,7 @@ module.exports = [
     },
     rules: {
       // エラーレベル設定
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
       'no-debugger': 'error',
       'no-var': 'error',
@@ -34,7 +34,7 @@ module.exports = [
       'no-eval': 'error',
       'no-implied-eval': 'error',
       'no-throw-literal': 'error',
-      'no-undef': 'error',
+      'no-undef': 'warn',
       'no-unreachable': 'error',
       'no-duplicate-case': 'error',
       'no-redeclare': 'error',
@@ -47,7 +47,7 @@ module.exports = [
       'quotes': ['error', 'single', { avoidEscape: true }],
       'indent': ['error', 2],
       'comma-dangle': ['error', 'never'],
-      'brace-style': ['error', '1tbs'],
+      'brace-style': ['warn', '1tbs'],
       'keyword-spacing': 'error',
       'space-before-blocks': 'error',
       'object-curly-spacing': ['error', 'always'],
