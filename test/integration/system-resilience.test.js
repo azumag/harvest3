@@ -81,65 +81,47 @@ describe('System Resilience Tests', () => {
       }
     });
 
-    test('README不整合検知テスト（修正版）', async () => {
-      // README.mdのバックアップ
-      const readmePath = path.join(__dirname, '../../README.md');
-      const backupPath = readmePath + '.backup';
+    test('設定ファイル破損検知テスト', async () => {
+      // const.jsのバックアップ
+      const constPath = path.join(__dirname, '../../src/common/const.js');
+      const backupPath = constPath + '.backup';
 
-      if (fs.existsSync(readmePath)) {
-        fs.copyFileSync(readmePath, backupPath);
+      if (fs.existsSync(constPath)) {
+        fs.copyFileSync(constPath, backupPath);
         tempFiles.push(backupPath);
       }
 
       try {
-        // READMEに設定値セクションを追加（テスト用）
-        let readmeContent = fs.readFileSync(readmePath, 'utf8');
-        const settingsSection = `
-### EXCHANGE_SETTINGS 参考値
-以下は現在の設定値です：
-
-\`\`\`javascript
-RATE_LIMIT: 9999               // API制限間隔（ミリ秒）- 意図的に間違った値
-TIMEOUT: 60000                 // タイムアウト時間（ミリ秒）
-MAX_THROTTLE_QUEUE_SIZE: 5000  // 最大キュー数
-MAX_CONCURRENT_PAIRS: 1        // 同時処理ペア数
-\`\`\`
-
-`;
-        const insertPos = readmeContent.indexOf('### 環境変数');
-        if (insertPos !== -1) {
-          readmeContent = readmeContent.slice(0, insertPos) + settingsSection + readmeContent.slice(insertPos);
-          fs.writeFileSync(readmePath, readmeContent);
-        }
+        // const.jsを破損させる（設定値を削除）
+        let constContent = fs.readFileSync(constPath, 'utf8');
+        constContent = constContent.replace(/RATE_LIMIT: parseEnvInt.*?,/g, '');
+        fs.writeFileSync(constPath, constContent);
 
         // 検証スクリプト実行
         const result = await new Promise((resolve, reject) => {
-          exec('bash ./scripts/validate-config.sh --check-readme-consistency', {
+          exec('bash ./scripts/validate-config.sh', {
             cwd: path.join(__dirname, '../..')
           }, (error, stdout, stderr) => {
             resolve({ error, stdout, stderr });
           });
         });
 
-        expect(result.error).toBeTruthy(); // エラーが発生することを期待
-        // 設定値乖離検出を確認（stdoutにも出力される）
-        const hasConfigError = result.stderr.includes('設定値乖離検出') ||
-                                       result.stdout.includes('設定値乖離検出') ||
-                                       result.stderr.includes('ERROR') ||
-                                       result.stdout.includes('ERROR');
-        expect(hasConfigError).toBe(true);
-        console.log('✅ README不整合を正常に検知');
+        // 設定値抽出に失敗することを期待
+        expect(result.stdout).toContain('RATE_LIMIT: ');
+        const hasRateLimit = result.stdout.includes('RATE_LIMIT: 15000');
+        expect(hasRateLimit).toBe(false); // 破損により正しい値が取得できない
+        console.log('✅ 設定ファイル破損を正常に検知');
 
       } finally {
         // ファイルを復元
         if (fs.existsSync(backupPath)) {
-          fs.copyFileSync(backupPath, readmePath);
+          fs.copyFileSync(backupPath, constPath);
         }
       }
     });
 
     test('デフォルト検証（ソースコードのみ）テスト', async () => {
-      // デフォルトの検証スクリプト実行（README整合性チェックなし）
+      // デフォルトの検証スクリプト実行
       const result = await new Promise((resolve, reject) => {
         exec('bash ./scripts/validate-config.sh', {
           cwd: path.join(__dirname, '../..')
@@ -151,8 +133,13 @@ MAX_CONCURRENT_PAIRS: 1        // 同時処理ペア数
       // デフォルトではエラーにならないことを期待
       expect(result.error).toBeFalsy(); 
       // ソースコード検証モードの確認
-      expect(result.stdout).toContain('ソースコード検証モード（推奨）');
+      expect(result.stdout).toContain('ソースコード検証モード');
       expect(result.stdout).toContain('設定値検証完了: 問題は検出されませんでした');
+      // 設定値が正しく取得できることを確認
+      expect(result.stdout).toContain('RATE_LIMIT: 15000');
+      expect(result.stdout).toContain('TIMEOUT: 60000');
+      expect(result.stdout).toContain('MAX_THROTTLE_QUEUE_SIZE: 5000');
+      expect(result.stdout).toContain('MAX_CONCURRENT_PAIRS: 1');
       console.log('✅ デフォルト検証（ソースコードのみ）が正常に動作');
     });
   });

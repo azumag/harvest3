@@ -122,3 +122,4 @@ module.exports = {
   NOTIFICATION_SETTINGS,
   STRATEGY_SETTINGS
 };
+
