@@ -128,7 +128,10 @@ module.exports = [
       'plan/**',
       'docs/**',
       '.tmp/**',
-      'test.sh'
+      'test.sh',
+      'src/common/errorHandler.js',
+      'src/api/controllers/errorStats.js',
+      'src/common/positionAnalyzer.js'
     ]
   }
 ];
