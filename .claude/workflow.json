@@ -2,7 +2,7 @@
   "hooks": [
     {
       "launch": null,
-      "path": "test.sh",
+      "path": "/Users/azumag/work/harvest3/.claude/hooks/test.sh",
       "next": "WORKFLOW_TESTED",
       "handling": "block"
     },
@@ -26,7 +26,7 @@
     },
     {
       "launch": "WORKFLOW_CI_CHECKED",
-      "path": "restart-docker-compose.sh",
+      "path": "/Users/azumag/work/harvest3/.claude/hooks/restart_docker.sh",
       "handling": "pass",
       "next": "WORKFLOW_DOCKER_RESTARTED"
     },
