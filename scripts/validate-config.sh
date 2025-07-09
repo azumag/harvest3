@@ -97,14 +97,17 @@ main() {
     local env_unset_count=0
     
     # 環境変数配列を使用してDRY原則に準拠
-    declare -A ENV_VARS=(
-        ["EXCHANGE_RATE_LIMIT"]="${EXCHANGE_RATE_LIMIT:-}"
-        ["EXCHANGE_MAX_CONCURRENT_PAIRS"]="${EXCHANGE_MAX_CONCURRENT_PAIRS:-}"
-        ["EXCHANGE_EXECUTION_DELAY_MS"]="${EXCHANGE_EXECUTION_DELAY_MS:-}"
-    )
+    declare -a ENV_VAR_NAMES=("EXCHANGE_RATE_LIMIT" "EXCHANGE_MAX_CONCURRENT_PAIRS" "EXCHANGE_EXECUTION_DELAY_MS")
     
-    for var_name in "${!ENV_VARS[@]}"; do
-        if ! check_env_var "$var_name" "${ENV_VARS[$var_name]}"; then
+    for var_name in "${ENV_VAR_NAMES[@]}"; do
+        local var_value
+        case "$var_name" in
+            "EXCHANGE_RATE_LIMIT") var_value="${EXCHANGE_RATE_LIMIT:-}" ;;
+            "EXCHANGE_MAX_CONCURRENT_PAIRS") var_value="${EXCHANGE_MAX_CONCURRENT_PAIRS:-}" ;;
+            "EXCHANGE_EXECUTION_DELAY_MS") var_value="${EXCHANGE_EXECUTION_DELAY_MS:-}" ;;
+        esac
+        
+        if ! check_env_var "$var_name" "$var_value"; then
             env_unset_count=$((env_unset_count + 1))
         fi
     done
