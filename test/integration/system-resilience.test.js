@@ -81,7 +81,7 @@ describe('System Resilience Tests', () => {
       }
     });
 
-    test('README不整合検知テスト', async () => {
+    test('README不整合検知テスト（修正版）', async () => {
       // README.mdのバックアップ
       const readmePath = path.join(__dirname, '../../README.md');
       const backupPath = readmePath + '.backup';
@@ -92,10 +92,25 @@ describe('System Resilience Tests', () => {
       }
 
       try {
-        // READMEの設定値を意図的に変更
+        // READMEに設定値セクションを追加（テスト用）
         let readmeContent = fs.readFileSync(readmePath, 'utf8');
-        readmeContent = readmeContent.replace(/RATE_LIMIT: 15000/g, 'RATE_LIMIT: 9999');
-        fs.writeFileSync(readmePath, readmeContent);
+        const settingsSection = `
+### EXCHANGE_SETTINGS 参考値
+以下は現在の設定値です：
+
+\`\`\`javascript
+RATE_LIMIT: 9999               // API制限間隔（ミリ秒）- 意図的に間違った値
+TIMEOUT: 60000                 // タイムアウト時間（ミリ秒）
+MAX_THROTTLE_QUEUE_SIZE: 5000  // 最大キュー数
+MAX_CONCURRENT_PAIRS: 1        // 同時処理ペア数
+\`\`\`
+
+`;
+        const insertPos = readmeContent.indexOf('### 環境変数');
+        if (insertPos !== -1) {
+          readmeContent = readmeContent.slice(0, insertPos) + settingsSection + readmeContent.slice(insertPos);
+          fs.writeFileSync(readmePath, readmeContent);
+        }
 
         // 検証スクリプト実行
         const result = await new Promise((resolve, reject) => {
@@ -121,6 +136,24 @@ describe('System Resilience Tests', () => {
           fs.copyFileSync(backupPath, readmePath);
         }
       }
+    });
+
+    test('デフォルト検証（ソースコードのみ）テスト', async () => {
+      // デフォルトの検証スクリプト実行（README整合性チェックなし）
+      const result = await new Promise((resolve, reject) => {
+        exec('bash ./scripts/validate-config.sh', {
+          cwd: path.join(__dirname, '../..')
+        }, (error, stdout, stderr) => {
+          resolve({ error, stdout, stderr });
+        });
+      });
+
+      // デフォルトではエラーにならないことを期待
+      expect(result.error).toBeFalsy(); 
+      // ソースコード検証モードの確認
+      expect(result.stdout).toContain('ソースコード検証モード（推奨）');
+      expect(result.stdout).toContain('設定値検証完了: 問題は検出されませんでした');
+      console.log('✅ デフォルト検証（ソースコードのみ）が正常に動作');
     });
   });
 

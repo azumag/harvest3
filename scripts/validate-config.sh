@@ -55,7 +55,9 @@ main() {
     # 引数チェック
     if [[ "$1" == "--check-readme-consistency" ]]; then
         check_readme=true
-        log_info "README整合性チェックモード"
+        log_info "README整合性チェックモード（オプション）"
+    else
+        log_info "ソースコード検証モード（推奨）"
     fi
     
     # 1. 基本ファイル存在チェック
@@ -101,22 +103,27 @@ main() {
     if [[ "$check_readme" == "true" ]]; then
         log_info "4. README整合性チェック"
         
-        local readme_rate=$(extract_readme_value "RATE_LIMIT")
-        local readme_timeout=$(extract_readme_value "TIMEOUT")
-        local readme_throttle=$(extract_readme_value "MAX_THROTTLE_QUEUE_SIZE")
-        local readme_concurrent=$(extract_readme_value "MAX_CONCURRENT_PAIRS")
-        
-        echo "README値:"
-        echo "  RATE_LIMIT: ${readme_rate}"
-        echo "  TIMEOUT: ${readme_timeout}"
-        echo "  MAX_THROTTLE_QUEUE_SIZE: ${readme_throttle}"
-        echo "  MAX_CONCURRENT_PAIRS: ${readme_concurrent}"
-        
-        # 乖離チェック
-        check_consistency "RATE_LIMIT" "$rate_limit" "$readme_rate" || exit_code=1
-        check_consistency "TIMEOUT" "$timeout" "$readme_timeout" || exit_code=1
-        check_consistency "MAX_THROTTLE_QUEUE_SIZE" "$max_throttle" "$readme_throttle" || exit_code=1
-        check_consistency "MAX_CONCURRENT_PAIRS" "$max_concurrent" "$readme_concurrent" || exit_code=1
+        # README参考値セクションの存在確認
+        if grep -q "EXCHANGE_SETTINGS.*参考値" README.md; then
+            local readme_rate=$(extract_readme_value "RATE_LIMIT")
+            local readme_timeout=$(extract_readme_value "TIMEOUT")
+            local readme_throttle=$(extract_readme_value "MAX_THROTTLE_QUEUE_SIZE")
+            local readme_concurrent=$(extract_readme_value "MAX_CONCURRENT_PAIRS")
+            
+            echo "README値:"
+            echo "  RATE_LIMIT: ${readme_rate}"
+            echo "  TIMEOUT: ${readme_timeout}"
+            echo "  MAX_THROTTLE_QUEUE_SIZE: ${readme_throttle}"
+            echo "  MAX_CONCURRENT_PAIRS: ${readme_concurrent}"
+            
+            # 乖離チェック
+            check_consistency "RATE_LIMIT" "$rate_limit" "$readme_rate" || exit_code=1
+            check_consistency "TIMEOUT" "$timeout" "$readme_timeout" || exit_code=1
+            check_consistency "MAX_THROTTLE_QUEUE_SIZE" "$max_throttle" "$readme_throttle" || exit_code=1
+            check_consistency "MAX_CONCURRENT_PAIRS" "$max_concurrent" "$readme_concurrent" || exit_code=1
+        else
+            log_info "README参考値セクションが存在しないため、整合性チェックをスキップ"
+        fi
     fi
     
     # 5. ランタイム設定チェック（Node.jsが利用可能な場合）
