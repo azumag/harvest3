@@ -7,6 +7,10 @@ const { throttleMonitor } = require('../common/throttleMonitor');
 // Bitbank API関連の定数
 const BITBANK_PUBLIC_API_URL = 'https://public.bitbank.cc';
 
+// 連続失敗カウンターと制限値
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 // ccxtのtimeframeとbitbankのcandle-typeのマッピング
 // 実際にサポートされているタイムフレームのみ
 const TIMEFRAME_TO_CANDLE_TYPE = {

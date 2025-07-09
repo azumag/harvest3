@@ -86,8 +86,7 @@ module.exports = [
         afterEach: 'readonly',
         beforeAll: 'readonly',
         afterAll: 'readonly',
-        jest: 'readonly',
-        performance: 'readonly'
+        jest: 'readonly'
       }
     },
     rules: {
@@ -131,20 +130,13 @@ module.exports = [
       'docs/**',
       '.tmp/**',
       'test.sh',
-      // 一時的にCI通過のため除外
+      // 一時的にCI通過のため除外 - レガシーファイルのみ
       'src/web/**/*.js',
       'src/strategies/deprecated/**/*.js',
       'scripts/**/*.js',
       'test/checkOrderStatus.js',
       'test/e2e-data-integrity.js',
-      'src/backtestRunner_refactored.js',
-      'src/database/exchangeAPI.js',
-      'src/database/manager.js',
-      'src/common/maintenanceScheduler.js',
-      'src/common/schedulingManager.js',
-      'src/bot.js',
-      'src/strategies/utils/common.js',
-      'src/strategies/utils/orderManager.js'
+      'src/backtestRunner_refactored.js'
     ]
   }
 ];

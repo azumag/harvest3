@@ -9,6 +9,7 @@ const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notific
 const { sleep } = require('../../common/utils');
 const OrderValidation = require('../../common/orderValidation');
 const TransactionalOrderManager = require('../../common/transactionalOrderManager');
+const { addOrderMongoDB } = require('../../database/mongoDatabase');
 const redis = require('redis');
 
 /**

@@ -65,6 +65,7 @@ class ErrorHandler {
       }
 
       try {
+        const { postErrorToDiscord } = require('./notifications');
         await postErrorToDiscord(discordMessage);
         this.errorQueue.set(errorHash, now);
         console.error(`[ErrorHandler] エラーをDiscordに通知: ${message}`);

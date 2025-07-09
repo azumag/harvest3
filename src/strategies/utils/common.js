@@ -640,7 +640,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
           const adjustedPositionSize = positionResult.positionSize * performanceAdjustment;
           formattedAmount = adjustedPositionSize !== null && adjustedPositionSize !== undefined
             ? parseFloat(adjustedPositionSize.toFixed(amountPrecision))
-            : parseFloat((tradeAmount).toFixed(amountPrecision));
+            : parseFloat(minTradeAmount.toFixed(amountPrecision));
           isPositionSized = true;
 
           // Discord通知

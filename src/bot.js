@@ -820,6 +820,15 @@ async function executeRiskManagementCheck() {
 
                           console.log(`[リスク管理] 未約定注文クリーンアップ完了: ${cleanupResult.deleted}件削除`);
 
+                          // マーケット設定を取得してamountPrecisionを取得
+                          const marketParams = await getMarketParametersByExchangeSymbol(
+                            { [exchangeInstance.id]: [symbol] },
+                            config,
+                            {}
+                          );
+                          const marketData = marketParams[exchangeInstance.id]?.[symbol];
+                          const amountPrecision = marketData?.amountPrecision || 8;
+
                           // クリーンアップ後に再度利用可能量を計算
                           const newAvailableAmount = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
 
@@ -957,7 +966,7 @@ async function executeRiskManagementCheck() {
                     config,
                     {}
                   );
-                  const marketParameters = marketParams[exchangeId][symbol];
+                  const marketParameters = marketParams[exchangeId]?.[symbol];
 
                   console.log(`[リスク管理] ストップロス実行: ${position.strategyKey} ${symbol} (理由: ${position.reason})`);
 
@@ -985,8 +994,7 @@ async function executeRiskManagementCheck() {
                   console.error('[DEBUG] エラー発生時のパラメータ:', {
                     symbol,
                     strategyKey: position.strategyKey,
-                    positionAmount: position.amount,
-                    marketParametersExists: !!marketParameters
+                    positionAmount: position.amount
                   });
                 }
               }
