@@ -4,17 +4,17 @@
  */
 
 const EventEmitter = require('events');
-const { EXCHANGE_SETTINGS } = require('../common/const');
+const { EXCHANGE_SETTINGS, MONITORING_SETTINGS } = require('../common/const');
 
 class ThrottleMonitor extends EventEmitter {
     constructor(options = {}) {
         super();
         
         this.options = {
-            maxQueueSize: options.maxQueueSize || EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE || 1500,
+            maxQueueSize: options.maxQueueSize || EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
             warningThreshold: options.warningThreshold || 0.8, // 80%で警告
             criticalThreshold: options.criticalThreshold || 0.95, // 95%で緊急
-            checkInterval: options.checkInterval || 5000, // 5秒間隔
+            checkInterval: options.checkInterval || MONITORING_SETTINGS.THROTTLE_MONITOR_INTERVAL,
             autoAdjust: options.autoAdjust !== false, // デフォルトで自動調整有効
             ...options
         };
@@ -25,7 +25,7 @@ class ThrottleMonitor extends EventEmitter {
         
         // 内部状態
         this.lastAlertTime = new Map();
-        this.alertCooldown = 60000; // 1分間のクールダウン
+        this.alertCooldown = MONITORING_SETTINGS.ALERT_COOLDOWN_MS;
         
         this.setupEventHandlers();
     }

@@ -4,6 +4,7 @@
  */
 
 const { postErrorToDiscord } = require('./notifications');
+const { MONITORING_SETTINGS, NOTIFICATION_SETTINGS } = require('./const');
 
 class ThrottleMonitor {
   constructor() {
@@ -19,7 +20,7 @@ class ThrottleMonitor {
       criticalErrorRate: 0.3, // 30% エラー率で危険レベル
       maxConsecutiveErrors: 10,
       recoveryDelay: 60000, // 1分間の回復待機時間
-      alertCooldown: 300000 // 5分間のアラート抑制時間
+      alertCooldown: NOTIFICATION_SETTINGS.RATE_LIMIT_WINDOW_MS // 設定ファイルから取得
     };
     
     this.lastAlertTime = 0;

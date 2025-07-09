@@ -3,6 +3,7 @@
  * SQLiteからRedisへの移行の一部として実装
  */
 const redis = require('redis');
+const { MONITORING_SETTINGS } = require('../common/const');
 
 // 環境変数からRedis接続URLを取得、または既定値を使用
 // Docker環境では適切なサービス名を使用
@@ -15,8 +16,8 @@ const DISABLE_REDIS = process.env.DISABLE_REDIS === 'true';
 const client = redis.createClient({
   url: REDIS_URL,
   socket: {
-    connectTimeout: 10000,
-    commandTimeout: 10000,
+    connectTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
+    commandTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
     // 再接続の設定
     reconnectDelay: 1000,
     lazyConnect: true
@@ -104,7 +105,7 @@ async function initRedisClient() {
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Redis接続タイムアウト'));
-        }, 15000);
+        }, MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT + 5000); // タイムアウト値 + 5秒のマージン
         
         if (client.isReady) {
           clearTimeout(timeout);
