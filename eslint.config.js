@@ -24,20 +24,20 @@ module.exports = [
       }
     },
     rules: {
-      // エラーレベル設定
+      // エラーレベル設定 - 重要なルールはerror、スタイルルールはwarn
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
-      'no-debugger': 'warn',
-      'no-var': 'warn',
-      'prefer-const': 'warn',
+      'no-debugger': 'error',
+      'no-var': 'error',
+      'prefer-const': 'error',
       'eqeqeq': 'warn',
-      'no-eval': 'warn',
-      'no-implied-eval': 'warn',
-      'no-throw-literal': 'warn',
-      'no-undef': 'warn',
-      'no-unreachable': 'warn',
-      'no-duplicate-case': 'warn',
-      'no-redeclare': 'warn',
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-throw-literal': 'error',
+      'no-undef': 'error',
+      'no-unreachable': 'error',
+      'no-duplicate-case': 'error',
+      'no-redeclare': 'error',
       'curly': 'warn',
       'dot-notation': 'warn',
       'no-empty': 'warn',
@@ -128,10 +128,7 @@ module.exports = [
       'plan/**',
       'docs/**',
       '.tmp/**',
-      'test.sh',
-      'src/common/errorHandler.js',
-      'src/api/controllers/errorStats.js',
-      'src/common/positionAnalyzer.js'
+      'test.sh'
     ]
   }
 ];

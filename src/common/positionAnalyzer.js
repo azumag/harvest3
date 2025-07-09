@@ -23,7 +23,7 @@ class PositionAnalyzer {
   log(level, message, ...args) {
     const levels = { error: 0, warn: 1, info: 2, debug: 3 };
     const currentLevel = levels[this.options.logLevel] || 2;
-    
+
     if (levels[level] <= currentLevel) {
       const prefix = { error: '❌', warn: '⚠️', info: 'ℹ️', debug: '🔍' }[level] || '';
       console.log(`${prefix} ${message}`, ...args);
@@ -51,32 +51,36 @@ class PositionAnalyzer {
     try {
       const tradeSummaries = await getAllTradeSummaries();
       const positionsBySymbol = {};
-      
+
       for (const [key, summary] of Object.entries(tradeSummaries)) {
-        if (!key.startsWith(`summary:trade:${exchangeId}:`)) continue;
-        
+        if (!key.startsWith(`summary:trade:${exchangeId}:`)) {
+          continue;
+        }
+
         const parts = key.split(':');
-        if (parts.length !== 4) continue;
-        
-        const symbol = parts[2];
-        const strategy = parts[3];
+        if (parts.length !== 5) {
+          continue;
+        }
+
+        const symbol = parts[3];
+        const strategy = parts[4];
         const netPosition = parseFloat(summary.netPosition || 0);
-        
+
         if (!this.options.includeZeroPositions && Math.abs(netPosition) < this.options.toleranceThreshold) {
           continue;
         }
-        
+
         if (!positionsBySymbol[symbol]) {
           positionsBySymbol[symbol] = {
             totalNetPosition: 0,
             strategies: {}
           };
         }
-        
+
         positionsBySymbol[symbol].totalNetPosition += netPosition;
         positionsBySymbol[symbol].strategies[strategy] = netPosition;
       }
-      
+
       this.log('info', `✓ ${exchangeId}のポジション集計完了: ${Object.keys(positionsBySymbol).length}銘柄`);
       return positionsBySymbol;
     } catch (error) {
@@ -90,21 +94,21 @@ class PositionAnalyzer {
    */
   async analyzeInconsistencies(exchanges) {
     this.log('info', '🔍 ポジション整合性分析を開始...');
-    
+
     const results = {};
-    
+
     for (const [exchangeId, exchangeConfig] of Object.entries(exchanges)) {
       this.log('info', `\n🏦 ${exchangeId} の分析中...`);
-      
+
       const exchange = exchangeConfig.instance;
       const positionsBySymbol = await this.aggregateNetPositionsBySymbol(exchangeId);
       const exchangeBalances = await this.getExchangeBalances(exchange);
-      
+
       if (!exchangeBalances) {
         this.log('warn', `${exchangeId}の残高取得失敗のため分析をスキップ`);
         continue;
       }
-      
+
       const exchangeResults = {
         totalSymbols: Object.keys(positionsBySymbol).length,
         inconsistencies: [],
@@ -116,14 +120,14 @@ class PositionAnalyzer {
           totalDifference: 0
         }
       };
-      
+
       // 銘柄ごとの整合性チェック
       for (const [symbol, positionData] of Object.entries(positionsBySymbol)) {
         const baseAsset = symbol.split('/')[0];
         const totalExchangeBalance = (exchangeBalances.total[baseAsset] || 0);
         const netPosition = positionData.totalNetPosition;
         const difference = Math.abs(netPosition - totalExchangeBalance);
-        
+
         const inconsistency = {
           symbol,
           baseAsset,
@@ -133,34 +137,34 @@ class PositionAnalyzer {
           strategies: positionData.strategies,
           severity: this.categorizeInconsistency(difference, Math.max(netPosition, totalExchangeBalance))
         };
-        
+
         if (difference > this.options.toleranceThreshold) {
           exchangeResults.inconsistencies.push(inconsistency);
           this.inconsistencies.push({ exchangeId, ...inconsistency });
-          
+
           if (inconsistency.severity === 'critical') {
             exchangeResults.summary.criticalInconsistencies++;
           } else {
             exchangeResults.summary.minorInconsistencies++;
           }
-          
+
           this.log('warn', `不整合検出: ${symbol} - Net: ${netPosition}, Exchange: ${totalExchangeBalance}, 差分: ${difference}`);
         } else {
           exchangeResults.consistent.push(inconsistency);
           exchangeResults.summary.consistentSymbols++;
         }
-        
+
         exchangeResults.summary.totalDifference += difference;
       }
-      
+
       results[exchangeId] = exchangeResults;
-      
+
       this.log('info', `${exchangeId} 分析完了:`);
       this.log('info', `  - 重大な不整合: ${exchangeResults.summary.criticalInconsistencies}件`);
       this.log('info', `  - 軽微な不整合: ${exchangeResults.summary.minorInconsistencies}件`);
       this.log('info', `  - 整合性OK: ${exchangeResults.summary.consistentSymbols}件`);
     }
-    
+
     this.analysisResults = results;
     return results;
   }
@@ -170,7 +174,7 @@ class PositionAnalyzer {
    */
   categorizeInconsistency(difference, maxAmount) {
     const relativeError = maxAmount > 0 ? (difference / maxAmount) : 0;
-    
+
     if (difference > 0.1 || relativeError > 0.1) {
       return 'critical';
     } else if (difference > 0.01 || relativeError > 0.01) {
@@ -186,14 +190,14 @@ class PositionAnalyzer {
   generateFixProposals(analysisResults = null) {
     const results = analysisResults || this.analysisResults;
     const proposals = [];
-    
+
     for (const [exchangeId, exchangeData] of Object.entries(results)) {
       for (const inconsistency of exchangeData.inconsistencies) {
         const proposal = this.createFixProposal(exchangeId, inconsistency);
         proposals.push(proposal);
       }
     }
-    
+
     return proposals;
   }
 
@@ -202,7 +206,7 @@ class PositionAnalyzer {
    */
   createFixProposal(exchangeId, inconsistency) {
     const { symbol, netPosition, exchangeBalance, difference, severity } = inconsistency;
-    
+
     const proposal = {
       exchangeId,
       symbol,
@@ -214,7 +218,7 @@ class PositionAnalyzer {
       },
       actions: []
     };
-    
+
     // 修復アクションの提案
     if (netPosition > exchangeBalance) {
       // Redisのポジションが実際より多い場合
@@ -232,7 +236,7 @@ class PositionAnalyzer {
         targetValue: netPosition,
         risk: 'medium'
       });
-      
+
       if (severity === 'critical') {
         proposal.actions.push({
           type: 'manual_position_sync',
@@ -242,7 +246,7 @@ class PositionAnalyzer {
         });
       }
     }
-    
+
     // バックアップ推奨
     if (severity === 'critical') {
       proposal.actions.unshift({
@@ -251,7 +255,7 @@ class PositionAnalyzer {
         risk: 'low'
       });
     }
-    
+
     return proposal;
   }
 
@@ -261,7 +265,7 @@ class PositionAnalyzer {
   generateDetailedReport(analysisResults = null, proposals = null) {
     const results = analysisResults || this.analysisResults;
     const fixProposals = proposals || this.generateFixProposals(results);
-    
+
     const report = {
       timestamp: new Date().toISOString(),
       summary: {
@@ -275,7 +279,7 @@ class PositionAnalyzer {
       fixProposals,
       recommendations: this.generateRecommendations()
     };
-    
+
     return report;
   }
 
@@ -285,9 +289,9 @@ class PositionAnalyzer {
   generateRecommendations() {
     const critical = this.inconsistencies.filter(i => i.severity === 'critical').length;
     const total = this.inconsistencies.length;
-    
+
     const recommendations = [];
-    
+
     if (critical > 0) {
       recommendations.push({
         priority: 'high',
@@ -295,7 +299,7 @@ class PositionAnalyzer {
         description: `${critical}件の重大な不整合が検出されました。取引停止を検討してください。`
       });
     }
-    
+
     if (total > 10) {
       recommendations.push({
         priority: 'medium',
@@ -303,13 +307,13 @@ class PositionAnalyzer {
         description: '多数の不整合が検出されました。システム全体の見直しが必要です。'
       });
     }
-    
+
     recommendations.push({
       priority: 'low',
       action: '定期的な整合性チェック',
       description: '予防のため定期的な整合性チェックを実装してください。'
     });
-    
+
     return recommendations;
   }
 
@@ -318,16 +322,16 @@ class PositionAnalyzer {
    */
   printFormattedReport(analysisResults = null) {
     const results = analysisResults || this.analysisResults;
-    
+
     console.log('\n📊 ポジション整合性分析レポート');
-    console.log('=''.repeat(50));
-    
+    console.log('='.repeat(50));
+
     for (const [exchangeId, data] of Object.entries(results)) {
       console.log(`\n🏦 ${exchangeId.toUpperCase()}`);
       console.log(`   整合: ${data.summary.consistentSymbols}件`);
       console.log(`   不整合: ${data.summary.criticalInconsistencies + data.summary.minorInconsistencies}件`);
       console.log(`   うち重大: ${data.summary.criticalInconsistencies}件`);
-      
+
       if (data.inconsistencies.length > 0) {
         console.log('\n   不整合詳細:');
         data.inconsistencies.forEach(inc => {
@@ -336,7 +340,7 @@ class PositionAnalyzer {
         });
       }
     }
-    
+
     const recommendations = this.generateRecommendations();
     if (recommendations.length > 0) {
       console.log('\n💡 推奨事項:');
