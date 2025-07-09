@@ -1,7 +1,7 @@
 /**
  * Common Test Helpers
  * 共通テストヘルパー関数
- * 
+ *
  * Geminiレビュー対応：テスト可読性向上のためのヘルパー関数集
  */
 
@@ -31,7 +31,7 @@ const mockHelpers = {
       del: jest.fn().mockResolvedValue(1),
       exists: jest.fn().mockResolvedValue(1)
     };
-    
+
     const mockClient = { ...defaultResponses, ...responses };
     require('../../src/database/redisDatabase').getClient.mockReturnValue(mockClient);
     return mockClient;
@@ -49,7 +49,7 @@ const mockHelpers = {
       OSCILLATOR: { enabled: true, type: 'mean_reversion' },
       MUTUAL_INFO: { enabled: true, type: 'statistical' }
     };
-    
+
     const { config } = require('../../src/config');
     config.strategies = { ...defaultStrategies, ...strategies };
   },
@@ -61,15 +61,15 @@ const mockHelpers = {
   mockDatabaseFunctions: (overrides = {}) => {
     const { getAllPositionsRedis, getAllTradeSummaries } = require('../../src/database/redisDatabase');
     const { getTradeCurrentPosition } = require('../../src/database/manager');
-    
+
     const defaults = {
       getAllPositionsRedis: [],
       getAllTradeSummaries: [],
       getTradeCurrentPosition: 0
     };
-    
+
     const mocks = { ...defaults, ...overrides };
-    
+
     getAllPositionsRedis.mockResolvedValue(mocks.getAllPositionsRedis);
     getAllTradeSummaries.mockResolvedValue(mocks.getAllTradeSummaries);
     getTradeCurrentPosition.mockResolvedValue(mocks.getTradeCurrentPosition);
@@ -167,7 +167,7 @@ const assertions = {
     expect(result).toHaveProperty('exchangeBalance');
     expect(result).toHaveProperty('botBalance');
     expect(result).toHaveProperty('timestamp');
-    
+
     if (hasDiscrepancies) {
       expect(result).toHaveProperty('discrepancies');
       expect(typeof result.discrepancies).toBe('object');
@@ -229,7 +229,7 @@ const scenarios = {
     if (!error) {
       throw new Error(`Unknown error type: ${errorType}`);
     }
-    
+
     mockHelpers.mockExchangeBalance(Promise.reject(error));
   },
 
@@ -262,7 +262,9 @@ const cleanup = {
   clearTimers: () => {
     if (global.balanceCheckTimers) {
       Object.values(global.balanceCheckTimers).forEach(timer => {
-        if (timer) clearInterval(timer);
+        if (timer) {
+          clearInterval(timer);
+        }
       });
       global.balanceCheckTimers = {};
     }

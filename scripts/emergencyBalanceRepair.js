@@ -18,7 +18,7 @@ async function initializeRedis() {
     const redisHost = process.env.REDIS_HOST || 'redis';
     const redisPort = process.env.REDIS_PORT || 6379;
     const redisUrl = `redis://${redisHost}:${redisPort}`;
-    
+
     console.log(`Redis接続試行: ${redisUrl}`);
     redisClient = Redis.createClient({
       url: redisUrl,
@@ -45,7 +45,7 @@ async function initializeRedis() {
  */
 async function removeClosedPositions() {
   console.log('\n=== Phase 1: Closedポジションの完全削除 ===');
-  
+
   try {
     const positionKeys = await redisClient.keys('position:*');
     let removedCount = 0;
@@ -63,7 +63,7 @@ async function removeClosedPositions() {
           closePrice: positionData.closePrice,
           closedAt: positionData.closedAt
         });
-        
+
         await redisClient.del(key);
         removedCount++;
         console.log(`🗑️  削除: ${key}`);
@@ -71,11 +71,11 @@ async function removeClosedPositions() {
     }
 
     console.log(`✅ Phase 1 完了: ${removedCount}件のClosedポジションを削除`);
-    
+
     if (removedCount > 0) {
-      const message = `🔧 **緊急修復 Phase 1 完了**\n` +
+      const message = '🔧 **緊急修復 Phase 1 完了**\n' +
         `削除したClosedポジション: ${removedCount}件\n\n` +
-        removedPositions.map(p => 
+        removedPositions.map(p =>
           `・${p.symbol} ${p.strategy}: ${p.amount} (¥${p.closePrice})`
         ).join('\n');
       await postOrderToDiscord(message);
@@ -94,7 +94,7 @@ async function removeClosedPositions() {
  */
 async function removeUndefinedStrategies() {
   console.log('\n=== Phase 2: Undefined戦略データの削除 ===');
-  
+
   try {
     const summaryKeys = await redisClient.keys('summary:trade:*');
     let removedCount = 0;
@@ -108,7 +108,7 @@ async function removeUndefinedStrategies() {
           netPosition: summaryData.netPosition || 0,
           totalBuyCost: summaryData.totalBuyCost || 0
         });
-        
+
         await redisClient.del(key);
         removedCount++;
         console.log(`🗑️  削除: ${key}`);
@@ -116,11 +116,11 @@ async function removeUndefinedStrategies() {
     }
 
     console.log(`✅ Phase 2 完了: ${removedCount}件のUndefined戦略データを削除`);
-    
+
     if (removedCount > 0) {
-      const message = `🔧 **緊急修復 Phase 2 完了**\n` +
+      const message = '🔧 **緊急修復 Phase 2 完了**\n' +
         `削除したUndefined戦略: ${removedCount}件\n\n` +
-        removedSummaries.map(s => 
+        removedSummaries.map(s =>
           `・${s.key.split(':').slice(1, 3).join('/')}: ポジション ${s.netPosition}`
         ).join('\n');
       await postOrderToDiscord(message);
@@ -139,7 +139,7 @@ async function removeUndefinedStrategies() {
  */
 async function removeOldPendingOrders() {
   console.log('\n=== Phase 3: 古い未約定注文の削除 ===');
-  
+
   try {
     const pendingKeys = await redisClient.keys('pending_order:*');
     let removedCount = 0;
@@ -150,7 +150,7 @@ async function removeOldPendingOrders() {
     for (const key of pendingKeys) {
       const orderData = await redisClient.hGetAll(key);
       const timestamp = parseInt(orderData.timestamp);
-      
+
       if (now - timestamp > threshold) {
         removedOrders.push({
           key,
@@ -160,7 +160,7 @@ async function removeOldPendingOrders() {
           price: orderData.price,
           age: Math.round((now - timestamp) / (60 * 60 * 1000))
         });
-        
+
         await redisClient.del(key);
         removedCount++;
         console.log(`🗑️  削除: ${key} (${Math.round((now - timestamp) / (60 * 60 * 1000))}時間経過)`);
@@ -168,11 +168,11 @@ async function removeOldPendingOrders() {
     }
 
     console.log(`✅ Phase 3 完了: ${removedCount}件の古い未約定注文を削除`);
-    
+
     if (removedCount > 0) {
-      const message = `🔧 **緊急修復 Phase 3 完了**\n` +
+      const message = '🔧 **緊急修復 Phase 3 完了**\n' +
         `削除した古い未約定注文: ${removedCount}件\n\n` +
-        removedOrders.map(o => 
+        removedOrders.map(o =>
           `・${o.symbol} ${o.side}: ${o.amount} @ ¥${o.price} (${o.age}時間前)`
         ).join('\n');
       await postOrderToDiscord(message);
@@ -191,15 +191,15 @@ async function removeOldPendingOrders() {
  */
 async function verifyBalanceConsistency() {
   console.log('\n=== Phase 4: 残高整合性の最終確認 ===');
-  
+
   try {
     const { exec } = require('child_process');
     const { promisify } = require('util');
     const execAsync = promisify(exec);
-    
+
     // 残高整合性チェッカーを実行
     const { stdout, stderr } = await execAsync('node scripts/balanceConsistencyChecker.js');
-    
+
     console.log('✅ Phase 4 完了: 残高整合性チェック実行');
     return { success: true, output: stdout };
   } catch (error) {
@@ -214,7 +214,7 @@ async function verifyBalanceConsistency() {
 async function main() {
   console.log('🚨 緊急残高修復スクリプト開始');
   console.log('実行時刻:', new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }));
-  
+
   // Redis接続初期化
   const connected = await initializeRedis();
   if (!connected) {
@@ -232,33 +232,33 @@ async function main() {
   try {
     // Phase 1: Closedポジションの削除
     results.phase1 = await removeClosedPositions();
-    
-    // Phase 2: Undefined戦略データの削除  
+
+    // Phase 2: Undefined戦略データの削除
     results.phase2 = await removeUndefinedStrategies();
-    
+
     // Phase 3: 古い未約定注文の削除
     results.phase3 = await removeOldPendingOrders();
-    
+
     // Phase 4: 最終確認
     results.phase4 = await verifyBalanceConsistency();
 
     // 総合結果レポート
-    const totalRemoved = 
-      (results.phase1?.removedCount || 0) + 
-      (results.phase2?.removedCount || 0) + 
+    const totalRemoved =
+      (results.phase1?.removedCount || 0) +
+      (results.phase2?.removedCount || 0) +
       (results.phase3?.removedCount || 0);
 
-    const summaryMessage = `🎯 **緊急残高修復 完了報告**\n\n` +
-      `**修復統計:**\n` +
+    const summaryMessage = '🎯 **緊急残高修復 完了報告**\n\n' +
+      '**修復統計:**\n' +
       `・Closedポジション削除: ${results.phase1?.removedCount || 0}件\n` +
       `・Undefined戦略削除: ${results.phase2?.removedCount || 0}件\n` +
       `・古い未約定注文削除: ${results.phase3?.removedCount || 0}件\n` +
       `・**総修復件数: ${totalRemoved}件**\n\n` +
       `**実行時刻:** ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n` +
-      `**システム状態:** 大幅改善`;
+      '**システム状態:** 大幅改善';
 
     await postOrderToDiscord(summaryMessage);
-    
+
     console.log('\n✅ 緊急残高修復スクリプト完了');
     console.log(`総修復件数: ${totalRemoved}件`);
 

@@ -21,7 +21,7 @@ class TestRunner {
     const bannerWidth = 72;
     const padding = '██';
     const border = '█'.repeat(bannerWidth);
-    
+
     console.log(`
 ${border}
 ${padding}${' '.repeat(bannerWidth - 4)}${padding}
@@ -53,7 +53,7 @@ ${border}
    */
   async runPhase(phaseNumber, phaseName, testFunction) {
     console.log(`\n🔬 Phase ${phaseNumber}: ${phaseName}`);
-    
+
     const phaseResults = {};
     this.testResults[`phase${phaseNumber}`] = phaseResults;
 
@@ -72,29 +72,37 @@ ${border}
    */
   async runTest(testName, testFunction, phaseResults = null) {
     console.log(`\n📝 ${testName}`);
-    
+
     try {
       const result = await testFunction();
-      
+
       if (result === true || (result && result.success)) {
         console.log(`✅ ${testName} - PASS`);
-        if (phaseResults) phaseResults[testName] = 'PASS';
+        if (phaseResults) {
+          phaseResults[testName] = 'PASS';
+        }
         this.testResults.summary.passed++;
         return true;
       } else if (result === false || (result && result.success === false)) {
         console.log(`❌ ${testName} - FAIL`);
-        if (phaseResults) phaseResults[testName] = 'FAIL';
+        if (phaseResults) {
+          phaseResults[testName] = 'FAIL';
+        }
         this.testResults.summary.failed++;
         return false;
       } else {
         console.log(`⚠️ ${testName} - SKIP`);
-        if (phaseResults) phaseResults[testName] = 'SKIP';
+        if (phaseResults) {
+          phaseResults[testName] = 'SKIP';
+        }
         this.testResults.summary.skipped++;
         return null;
       }
     } catch (error) {
       console.error(`❌ ${testName} - ERROR: ${error.message}`);
-      if (phaseResults) phaseResults[testName] = `ERROR: ${error.message}`;
+      if (phaseResults) {
+        phaseResults[testName] = `ERROR: ${error.message}`;
+      }
       this.testResults.summary.failed++;
       return false;
     }
@@ -107,7 +115,9 @@ ${border}
     console.log(`⚠️ WARNING: ${message}`);
     this.testResults.summary.warnings++;
     if (phaseResults) {
-      if (!phaseResults.warnings) phaseResults.warnings = [];
+      if (!phaseResults.warnings) {
+        phaseResults.warnings = [];
+      }
       phaseResults.warnings.push(message);
     }
   }
@@ -117,14 +127,14 @@ ${border}
    */
   async runIntegrationTest(testName, testFunction) {
     console.log(`\n🔄 Integration Test: ${testName}`);
-    
+
     if (!this.testResults.integration) {
       this.testResults.integration = {};
     }
 
     try {
       const result = await testFunction();
-      
+
       if (result === true || (result && result.success)) {
         console.log(`✅ Integration Test: ${testName} - PASS`);
         this.testResults.integration[testName] = 'PASS';
@@ -149,7 +159,7 @@ ${border}
    */
   async runLoadTest(testName, testFunction, iterations = 10) {
     console.log(`\n⚡ Load Test: ${testName} (${iterations} iterations)`);
-    
+
     if (!this.testResults.loadTest) {
       this.testResults.loadTest = {};
     }
@@ -176,7 +186,7 @@ ${border}
     const successRate = (passed / iterations) * 100;
 
     console.log(`📊 Load Test Results: ${passed}/${iterations} passed (${successRate.toFixed(1)}%) in ${duration}ms`);
-    
+
     this.testResults.loadTest[testName] = {
       passed,
       failed,

@@ -9,7 +9,7 @@ describe('Enhanced fetchTicker functionality', () => {
   describe('fetchTickerFromMongoDB', () => {
     it('should return null when no ticker data is found', async () => {
       fetchTickerFromMongoDB.mockResolvedValue(null);
-      
+
       const result = await fetchTickerFromMongoDB('bitbank', 'BTC/JPY', Date.now());
       expect(result).toBeNull();
     });
@@ -25,9 +25,9 @@ describe('Enhanced fetchTicker functionality', () => {
         close: 50000,
         baseVolume: 100
       };
-      
+
       fetchTickerFromMongoDB.mockResolvedValue(mockTicker);
-      
+
       const result = await fetchTickerFromMongoDB('bitbank', 'BTC/JPY', 1640995200000);
       expect(result).toEqual(mockTicker);
       expect(result.exchange).toBe('bitbank');
@@ -59,7 +59,7 @@ describe('Enhanced fetchTicker functionality', () => {
   describe('Execution accuracy and slippage calculations', () => {
     // Import the functions for testing - these are internal functions now
     // We'll test them indirectly through the fetchTicker behavior
-    
+
     it('should calculate realistic execution probability based on volume', () => {
       // High volume should result in higher execution probability
       // This is tested indirectly through the fetchTicker function

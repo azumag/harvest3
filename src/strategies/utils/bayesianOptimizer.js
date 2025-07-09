@@ -76,18 +76,18 @@ class KernelFunctions {
     } = params;
 
     switch (kernelType) {
-      case 'rbf':
-        return this.rbf(x1, x2, lengthScale, variance);
-      case 'matern32':
-        return this.matern32(x1, x2, lengthScale, variance);
-      case 'matern52':
-        return this.matern52(x1, x2, lengthScale, variance);
-      case 'linear':
-        return this.linear(x1, x2, variance);
-      case 'polynomial':
-        return this.polynomial(x1, x2, degree, gamma, coef0);
-      default:
-        throw new Error(`Unsupported kernel type: ${kernelType}`);
+    case 'rbf':
+      return this.rbf(x1, x2, lengthScale, variance);
+    case 'matern32':
+      return this.matern32(x1, x2, lengthScale, variance);
+    case 'matern52':
+      return this.matern52(x1, x2, lengthScale, variance);
+    case 'linear':
+      return this.linear(x1, x2, variance);
+    case 'polynomial':
+      return this.polynomial(x1, x2, degree, gamma, coef0);
+    default:
+      throw new Error(`Unsupported kernel type: ${kernelType}`);
     }
   }
 
@@ -102,12 +102,12 @@ class KernelFunctions {
       const row = [];
       for (let j = 0; j < X2.length; j++) {
         let kij = this.kernel(X1[i], X2[j], kernelType, params);
-        
+
         // 対角要素にノイズ分散を追加（数値安定性）
         if (i === j && X1 === X2) {
           kij += noiseVariance;
         }
-        
+
         row.push(kij);
       }
       K.push(row);
@@ -146,7 +146,7 @@ class GaussianProcessRegression {
     this.variance = options.variance || 1.0;
     this.noiseVariance = options.noiseVariance || 0.01;
     this.kernelFunctions = new KernelFunctions();
-    
+
     // 学習データ
     this.X = null;
     this.y = null;
@@ -163,9 +163,9 @@ class GaussianProcessRegression {
 
     // カーネル行列の計算
     const K = this.kernelFunctions.kernelMatrix(
-      this.X, 
-      this.X, 
-      this.kernelType, 
+      this.X,
+      this.X,
+      this.kernelType,
       {
         lengthScale: this.lengthScale,
         variance: this.variance,
@@ -175,7 +175,7 @@ class GaussianProcessRegression {
 
     // コレスキー分解
     this.L = this.choleskyDecomposition(K);
-    
+
     // α = K^(-1) * y の計算
     // まず L * v = y を解く
     const v = this.solveTriangular(this.L, this.y, false);
@@ -199,7 +199,7 @@ class GaussianProcessRegression {
 
     for (let i = 0; i < n; i++) {
       // k* = K(X*, X)
-      const kStar = this.X.map(x => 
+      const kStar = this.X.map(x =>
         this.kernelFunctions.kernel(XStar[i], x, this.kernelType, {
           lengthScale: this.lengthScale,
           variance: this.variance
@@ -217,7 +217,7 @@ class GaussianProcessRegression {
 
       // v = L^(-1) * k*
       const v = this.solveTriangular(this.L, kStar);
-      
+
       // 予測分散: σ²* = k** - vᵀv
       const vTv = v.reduce((sum, val) => sum + val * val, 0);
       variance[i] = Math.max(kStarStar - vTv, 1e-10); // 数値安定性
@@ -235,7 +235,7 @@ class GaussianProcessRegression {
    */
   optimizeHyperparameters(X, y, options = {}) {
     const { maxIterations = 50, learningRate = 0.01 } = options;
-    
+
     let bestParams = {
       lengthScale: this.lengthScale,
       variance: this.variance,
@@ -259,7 +259,7 @@ class GaussianProcessRegression {
 
       // 簡易勾配ベース更新（実装簡略化）
       const gradients = this.approximateGradients(X, y);
-      
+
       this.lengthScale = Math.max(0.01, this.lengthScale + learningRate * gradients.lengthScale);
       this.variance = Math.max(0.01, this.variance + learningRate * gradients.variance);
       this.noiseVariance = Math.max(1e-6, this.noiseVariance + learningRate * gradients.noiseVariance);
@@ -282,16 +282,16 @@ class GaussianProcessRegression {
     }
 
     const n = this.y.length;
-    
+
     // -0.5 * y^T * K^(-1) * y
     const dataFit = -0.5 * this.y.reduce((sum, yi, i) => sum + yi * this.alpha[i], 0);
-    
+
     // -0.5 * log|K|
     const complexity = -0.5 * this.logDeterminant(this.L);
-    
+
     // -0.5 * n * log(2π)
     const normalization = -0.5 * n * Math.log(2 * Math.PI);
-    
+
     return dataFit + complexity + normalization;
   }
 
@@ -310,7 +310,7 @@ class GaussianProcessRegression {
           for (let k = 0; k < j; k++) {
             sum += L[i][k] * L[i][k];
           }
-          
+
           const value = matrix[i][i] - sum;
           if (value <= 0) {
             // 数値安定性のために小さな正の値を追加
@@ -446,14 +446,14 @@ class AcquisitionFunctions {
 
     return mean.map((mu, i) => {
       const sigma = std[i];
-      
+
       if (sigma < 1e-10) {
         return 0; // 分散が0に近い場合
       }
 
       const improvement = mu - fBest - xi;
       const Z = improvement / sigma;
-      
+
       const ei = improvement * this.normalCDF(Z) + sigma * this.normalPDF(Z);
       return Math.max(0, ei);
     });
@@ -480,7 +480,7 @@ class AcquisitionFunctions {
 
     return mean.map((mu, i) => {
       const sigma = std[i];
-      
+
       if (sigma < 1e-10) {
         return mu > fBest ? 1.0 : 0.0;
       }
@@ -530,17 +530,17 @@ class AcquisitionFunctions {
    */
   numericalGradient(func, x, h = 1e-8) {
     const gradient = new Array(x.length);
-    
+
     for (let i = 0; i < x.length; i++) {
       const xPlus = [...x];
       const xMinus = [...x];
-      
+
       xPlus[i] += h;
       xMinus[i] -= h;
-      
+
       gradient[i] = (func(xPlus) - func(xMinus)) / (2 * h);
     }
-    
+
     return gradient;
   }
 }
@@ -572,28 +572,28 @@ class ConstraintHandler {
    */
   satisfiesConstraint(point, constraint) {
     switch (constraint.type) {
-      case 'range':
-        const value = point[constraint.parameter];
-        return value >= constraint.min && value <= constraint.max;
-        
-      case 'sum_equals':
-        const sum = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
-        const tolerance = constraint.tolerance || 1e-6;
-        return Math.abs(sum - constraint.value) <= tolerance;
-        
-      case 'sum_leq':
-        const sumLeq = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
-        return sumLeq <= constraint.value + (constraint.tolerance || 0);
-        
-      case 'linear':
-        const linearSum = constraint.coefficients.reduce((s, coef, i) => {
-          const param = constraint.parameters[i];
-          return s + coef * (point[param] || 0);
-        }, 0);
-        return linearSum <= constraint.rhs;
-        
-      default:
-        return true;
+    case 'range':
+      const value = point[constraint.parameter];
+      return value >= constraint.min && value <= constraint.max;
+
+    case 'sum_equals':
+      const sum = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
+      const tolerance = constraint.tolerance || 1e-6;
+      return Math.abs(sum - constraint.value) <= tolerance;
+
+    case 'sum_leq':
+      const sumLeq = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
+      return sumLeq <= constraint.value + (constraint.tolerance || 0);
+
+    case 'linear':
+      const linearSum = constraint.coefficients.reduce((s, coef, i) => {
+        const param = constraint.parameters[i];
+        return s + coef * (point[param] || 0);
+      }, 0);
+      return linearSum <= constraint.rhs;
+
+    default:
+      return true;
     }
   }
 
@@ -617,21 +617,21 @@ class ConstraintHandler {
    */
   constraintViolation(point, constraint) {
     switch (constraint.type) {
-      case 'range':
-        const value = point[constraint.parameter];
-        if (value < constraint.min) {
-          return Math.pow(constraint.min - value, 2);
-        } else if (value > constraint.max) {
-          return Math.pow(value - constraint.max, 2);
-        }
-        return 0;
-        
-      case 'sum_equals':
-        const sum = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
-        return Math.pow(sum - constraint.value, 2);
-        
-      default:
-        return 0;
+    case 'range':
+      const value = point[constraint.parameter];
+      if (value < constraint.min) {
+        return Math.pow(constraint.min - value, 2);
+      } else if (value > constraint.max) {
+        return Math.pow(value - constraint.max, 2);
+      }
+      return 0;
+
+    case 'sum_equals':
+      const sum = constraint.parameters.reduce((s, param) => s + (point[param] || 0), 0);
+      return Math.pow(sum - constraint.value, 2);
+
+    default:
+      return 0;
     }
   }
 
@@ -688,7 +688,7 @@ class ConvergenceDetector {
     this.maxIterations = options.maxIterations || 100;
     this.improvementThreshold = options.improvementThreshold || 0.01;
     this.patienceLimit = options.patienceLimit || 3; // より少ない試行で判定
-    
+
     this.values = [];
     this.bestValue = -Infinity;
     this.bestIteration = 0;
@@ -744,7 +744,7 @@ class ConvergenceDetector {
     if (this.values.length >= 3) {
       const recent = this.values.slice(-3);
       const variance = this.calculateVariance(recent);
-      
+
       if (variance < this.tolerance && this.values.length >= this.minIterations) {
         this.converged = true;
         this.convergenceReason = 'tolerance_reached';
@@ -791,18 +791,20 @@ class ConvergenceDetector {
    * 分散の計算
    */
   calculateVariance(values) {
-    if (values.length < 2) return Infinity;
-    
+    if (values.length < 2) {
+      return Infinity;
+    }
+
     // 値の範囲確認
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = max - min;
-    
+
     // 範囲が非常に小さい場合は0に近い分散とみなす
     if (range < this.tolerance * 10) {
       return Math.min(this.tolerance / 10, range);
     }
-    
+
     const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
     const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
     return variance;
@@ -812,8 +814,10 @@ class ConvergenceDetector {
    * 改善率の計算
    */
   calculateImprovementRate() {
-    if (this.values.length < 2) return 0;
-    
+    if (this.values.length < 2) {
+      return 0;
+    }
+
     const initial = this.values[0];
     const current = this.bestValue;
     return (current - initial) / Math.abs(initial);
@@ -823,7 +827,9 @@ class ConvergenceDetector {
    * 収束速度の計算
    */
   calculateConvergenceSpeed() {
-    if (this.bestIteration === 0) return 0;
+    if (this.bestIteration === 0) {
+      return 0;
+    }
     return this.bestIteration / this.values.length;
   }
 }
@@ -895,10 +901,10 @@ class BayesianOptimizer {
     const paramNames = Object.keys(this.bounds);
     let attempts = 0;
     const maxAttempts = this.options.initialSamples * 10; // 制約で失敗する場合のため
-    
+
     while (this.X.length < this.options.initialSamples && attempts < maxAttempts) {
       const sample = {};
-      
+
       paramNames.forEach(param => {
         const [min, max] = this.bounds[param];
         sample[param] = min + Math.random() * (max - min);
@@ -908,13 +914,13 @@ class BayesianOptimizer {
       if (this.constraintHandler.isFeasible(sample)) {
         const X_sample = this.parametersToArray(sample);
         const y_sample = this.objectiveFunction(sample);
-        
+
         this.X.push(X_sample);
         this.y.push(y_sample);
       }
       attempts++;
     }
-    
+
     // 最低限のサンプルが得られない場合はエラー
     if (this.X.length === 0) {
       throw new Error('Failed to generate any feasible initial samples');
@@ -939,11 +945,11 @@ class BayesianOptimizer {
 
       // 次の候補点の選択
       const nextPoint = this.selectNextPoint();
-      
+
       if (nextPoint) {
         // 目的関数の評価
         const y_next = this.objectiveFunction(nextPoint);
-        
+
         // データセットの更新
         const X_next = this.parametersToArray(nextPoint);
         this.X.push(X_next);
@@ -960,7 +966,7 @@ class BayesianOptimizer {
     if (this.y.length === 0) {
       throw new Error('No evaluations completed during optimization');
     }
-    
+
     const bestIndex = this.y.indexOf(Math.max(...this.y));
     const bestX = this.X[bestIndex];
     if (!bestX || bestIndex === -1) {
@@ -990,7 +996,7 @@ class BayesianOptimizer {
   selectNextPoint() {
     const candidates = this.generateCandidates(1000);
     const feasibleCandidates = candidates.filter(c => this.constraintHandler.isFeasible(c));
-    
+
     if (feasibleCandidates.length === 0) {
       return null;
     }
@@ -1001,23 +1007,23 @@ class BayesianOptimizer {
     const fBest = Math.max(...this.y);
 
     switch (this.acquisitionFunction) {
-      case 'ei':
-        acquisitionValues = this.acquisition.expectedImprovement(
-          candidateArrays, fBest, this.options.explorationWeight
-        );
-        break;
-      case 'ucb':
-        acquisitionValues = this.acquisition.upperConfidenceBound(
-          candidateArrays, 2.576
-        );
-        break;
-      case 'pi':
-        acquisitionValues = this.acquisition.probabilityOfImprovement(
-          candidateArrays, fBest, this.options.explorationWeight
-        );
-        break;
-      default:
-        throw new Error(`Unknown acquisition function: ${this.acquisitionFunction}`);
+    case 'ei':
+      acquisitionValues = this.acquisition.expectedImprovement(
+        candidateArrays, fBest, this.options.explorationWeight
+      );
+      break;
+    case 'ucb':
+      acquisitionValues = this.acquisition.upperConfidenceBound(
+        candidateArrays, 2.576
+      );
+      break;
+    case 'pi':
+      acquisitionValues = this.acquisition.probabilityOfImprovement(
+        candidateArrays, fBest, this.options.explorationWeight
+      );
+      break;
+    default:
+      throw new Error(`Unknown acquisition function: ${this.acquisitionFunction}`);
     }
 
     const bestCandidateIndex = acquisitionValues.indexOf(Math.max(...acquisitionValues));
@@ -1033,7 +1039,7 @@ class BayesianOptimizer {
 
     for (let i = 0; i < numCandidates; i++) {
       const candidate = {};
-      
+
       paramNames.forEach(param => {
         const [min, max] = this.bounds[param];
         candidate[param] = min + Math.random() * (max - min);
@@ -1059,14 +1065,14 @@ class BayesianOptimizer {
     if (!array || !Array.isArray(array)) {
       throw new Error('Array parameter is required and must be an array');
     }
-    
+
     const parameters = {};
     const paramNames = Object.keys(this.bounds);
-    
+
     if (array.length !== paramNames.length) {
       throw new Error(`Array length ${array.length} does not match parameter count ${paramNames.length}`);
     }
-    
+
     paramNames.forEach((param, i) => {
       parameters[param] = array[i];
     });
@@ -1107,7 +1113,7 @@ class RiskParameterOptimizer {
    */
   setMarketContext(marketContext) {
     this.marketContext = marketContext;
-    
+
     // 目的関数の設定
     this.objectiveFunction = (params) => this.evaluateRiskParameters(params);
     this.bayesianOptimizer.setObjective(this.objectiveFunction, this.riskBounds);
@@ -1145,19 +1151,19 @@ class RiskParameterOptimizer {
 
     // リスク調整済みリターンの計算
     const riskAdjustedReturn = this.calculateRiskAdjustedReturn(params);
-    
+
     // ドローダウンペナルティ
     const drawdownPenalty = this.calculateDrawdownPenalty(params);
-    
+
     // ポジション効率性
     const positionEfficiency = this.calculatePositionEfficiency(params);
-    
+
     // 取引コスト調整
     const costAdjustment = this.tradingCosts ? this.calculateCostAdjustment(params) : 0;
 
     // 総合スコア
     const score = riskAdjustedReturn - drawdownPenalty + positionEfficiency - costAdjustment;
-    
+
     return score;
   }
 
@@ -1170,13 +1176,13 @@ class RiskParameterOptimizer {
 
     // ストップロスの効果的な最大損失
     const effectiveMaxLoss = Math.min(stopLoss, trailingStop * 2);
-    
+
     // ボラティリティ調整
     const volatilityAdjustment = 1 / (1 + volatility);
-    
+
     // リスク調整済みシャープレシオ
     const adjustedSharpe = sharpeRatio * volatilityAdjustment * (0.05 / effectiveMaxLoss);
-    
+
     return adjustedSharpe;
   }
 
@@ -1189,12 +1195,12 @@ class RiskParameterOptimizer {
 
     // 日次損失限度がドローダウンに対して適切か
     const ddRatio = maxDailyLoss / Math.max(maxDrawdown, 0.01);
-    
+
     // 過度に制限的または緩い設定にペナルティ
     if (ddRatio < 0.1 || ddRatio > 0.5) {
       return Math.abs(ddRatio - 0.25) * 2;
     }
-    
+
     return 0;
   }
 
@@ -1208,10 +1214,10 @@ class RiskParameterOptimizer {
     // 取引頻度とポジション数のバランス
     const turnoverRate = 1 / Math.max(avgTradeDuration, 0.1);
     const optimalPositions = Math.sqrt(turnoverRate * winRate * 10);
-    
+
     // 最適ポジション数からの乖離にペナルティ
     const deviation = Math.abs(maxPositions - optimalPositions) / optimalPositions;
-    
+
     return Math.max(0, 1 - deviation);
   }
 
@@ -1219,14 +1225,16 @@ class RiskParameterOptimizer {
    * 取引コスト調整の計算
    */
   calculateCostAdjustment(params) {
-    if (!this.tradingCosts) return 0;
+    if (!this.tradingCosts) {
+      return 0;
+    }
 
     const { commission, spread, slippage } = this.tradingCosts;
     const { maxPositions } = params;
-    
+
     // ポジション数に比例する取引コスト
     const totalCost = (commission + spread + slippage) * maxPositions;
-    
+
     return totalCost * 100; // スケール調整
   }
 
@@ -1235,13 +1243,13 @@ class RiskParameterOptimizer {
    */
   async optimizeRiskParameters(marketContext) {
     this.setMarketContext(marketContext);
-    
+
     const result = await this.bayesianOptimizer.optimize();
-    
+
     // 結果の後処理
     const optimizedParams = result.bestParameters;
     const expectedPerformance = this.evaluateRiskParameters(optimizedParams);
-    
+
     return {
       optimalParameters: optimizedParams,
       expectedPerformance,
@@ -1256,7 +1264,7 @@ class RiskParameterOptimizer {
    */
   calculateRiskMetrics(params) {
     const { stopLoss, trailingStop, maxPositions, maxDailyLoss } = params;
-    
+
     return {
       maxSingleLoss: stopLoss,
       maxPortfolioRisk: maxPositions * stopLoss,
@@ -1270,8 +1278,8 @@ class RiskParameterOptimizer {
    * 量子最適化との統合
    */
   integrateWithQuantumOptimizer(quantumResult) {
-    const bayesianParams = this.bayesianOptimizer.X.length > 0 ? 
-      this.bayesianOptimizer.arrayToParameters(this.bayesianOptimizer.X[this.bayesianOptimizer.y.indexOf(Math.max(...this.bayesianOptimizer.y))]) : 
+    const bayesianParams = this.bayesianOptimizer.X.length > 0 ?
+      this.bayesianOptimizer.arrayToParameters(this.bayesianOptimizer.X[this.bayesianOptimizer.y.indexOf(Math.max(...this.bayesianOptimizer.y))]) :
       null;
 
     // デフォルト市場コンテキストを設定（テスト用）
@@ -1347,7 +1355,7 @@ class RiskParameterOptimizer {
     const combined = {};
     Object.keys(bayesianParams).forEach(param => {
       if (riskParamsFromQuantum[param] !== undefined) {
-        combined[param] = weights.quantum * riskParamsFromQuantum[param] + 
+        combined[param] = weights.quantum * riskParamsFromQuantum[param] +
                          weights.bayesian * bayesianParams[param];
       } else {
         combined[param] = bayesianParams[param];
@@ -1368,7 +1376,7 @@ class RiskParameterOptimizer {
     };
 
     const best = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
-    
+
     return best;
   }
 
@@ -1395,10 +1403,10 @@ class RiskParameterOptimizer {
     // グロスシャープレシオからネットシャープレシオを計算
     const grossSharpe = this.marketContext.sharpeRatio || 1.0;
     const totalCosts = this.tradingCosts.commission + this.tradingCosts.spread + this.tradingCosts.slippage;
-    
+
     // 簡易的なコスト調整（実際にはより複雑な計算が必要）
     const netSharpe = grossSharpe * (1 - totalCosts * 252); // 年間取引回数を252と仮定
-    
+
     // 損益分岐点の計算
     const breakEvenVolume = totalCosts / (this.marketContext.avgReturn || 0.001);
 

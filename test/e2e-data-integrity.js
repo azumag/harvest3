@@ -3,11 +3,11 @@
  * TransactionalOrderManager完全フローとシステム間整合性検証
  */
 
-const { 
-  addOrderMongoDB, 
-  updateOrderByOrderId, 
+const {
+  addOrderMongoDB,
+  updateOrderByOrderId,
   deleteOrderByOrderId,
-  listOrders, 
+  listOrders,
   connectDB,
   closeDB
 } = require('../src/database/mongoDatabase');
@@ -85,25 +85,25 @@ class E2EDataIntegrityTester {
 
   async runComprehensiveTest() {
     console.log('🚀 包括的E2Eデータ整合性テスト開始');
-    
+
     try {
       await connectDB();
-      
+
       // Phase 1-3 完全フローテスト
       await this.testPhase1To3Flow();
-      
+
       // 複数取引ペアテスト
       await this.testMultipleTradingPairs();
-      
+
       // 複数戦略テスト
       await this.testMultipleStrategies();
-      
+
       // データ整合性検証
       await this.testDataIntegrity();
-      
+
       // 結果レポート生成
       await this.generateReport();
-      
+
     } catch (error) {
       this.testResults.errors.push({
         type: 'CRITICAL_ERROR',
@@ -118,12 +118,12 @@ class E2EDataIntegrityTester {
 
   async testPhase1To3Flow() {
     console.log('\n📋 Phase1-3完全フローテスト実行中...');
-    
+
     for (const symbol of TEST_CONFIG.pairs) {
       for (const strategy of TEST_CONFIG.strategies) {
         try {
           const transactionId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
+
           // Phase 1: 事前保存テスト
           console.log(`  Phase1テスト: ${symbol} - ${strategy}`);
           const preOrder = await this.tom.saveOrderBeforeExecution(
@@ -134,7 +134,7 @@ class E2EDataIntegrityTester {
             5000000,
             { strategy, type: 'limit' }
           );
-          
+
           this.testResults.phase1Tests.push({
             symbol,
             strategy,
@@ -148,7 +148,7 @@ class E2EDataIntegrityTester {
               hasStrategy: !!preOrder.strategy
             }
           });
-          
+
           // Phase 2: 取引所注文テスト
           console.log(`  Phase2テスト: ${symbol} - ${strategy}`);
           const exchangeOrder = await this.tom.executeOrderOnExchange(
@@ -158,7 +158,7 @@ class E2EDataIntegrityTester {
             5000000,
             transactionId
           );
-          
+
           this.testResults.phase2Tests.push({
             symbol,
             strategy,
@@ -171,15 +171,15 @@ class E2EDataIntegrityTester {
               hasOrderType: !!exchangeOrder.type
             }
           });
-          
+
           // Phase 3: 更新テスト
           console.log(`  Phase3テスト: ${symbol} - ${strategy}`);
           await this.tom.updateOrderAfterExecution(preOrder, exchangeOrder, transactionId);
-          
+
           // データベースから更新されたデータを確認
           const updatedOrders = await listOrders({ orderId: exchangeOrder.id });
           const updatedOrder = updatedOrders[0];
-          
+
           this.testResults.phase3Tests.push({
             symbol,
             strategy,
@@ -194,7 +194,7 @@ class E2EDataIntegrityTester {
               noInternalId: !updatedOrder?.orderId?.startsWith('pre_')
             }
           });
-          
+
         } catch (error) {
           this.testResults.errors.push({
             type: 'PHASE_FLOW_ERROR',
@@ -209,12 +209,12 @@ class E2EDataIntegrityTester {
 
   async testMultipleTradingPairs() {
     console.log('\n💱 複数取引ペアテスト実行中...');
-    
+
     // 並行して複数ペアの注文をテスト
     const promises = TEST_CONFIG.pairs.map(async (symbol) => {
       try {
         const transactionId = `pair_test_${Date.now()}_${symbol.replace('/', '_')}`;
-        
+
         const result = await this.tom.executeFullTransaction(
           transactionId,
           symbol,
@@ -223,7 +223,7 @@ class E2EDataIntegrityTester {
           5000000,
           { strategy: 'BOLLINGER_BANDS', type: 'limit' }
         );
-        
+
         return {
           symbol,
           success: result.success,
@@ -238,7 +238,7 @@ class E2EDataIntegrityTester {
         };
       }
     });
-    
+
     const results = await Promise.all(promises);
     this.testResults.integrityTests.push({
       test: 'MULTIPLE_TRADING_PAIRS',
@@ -248,11 +248,11 @@ class E2EDataIntegrityTester {
 
   async testMultipleStrategies() {
     console.log('\n📈 複数戦略テスト実行中...');
-    
+
     for (const strategy of TEST_CONFIG.strategies) {
       try {
         const transactionId = `strategy_test_${Date.now()}_${strategy}`;
-        
+
         const result = await this.tom.executeFullTransaction(
           transactionId,
           'BTC/JPY',
@@ -261,14 +261,14 @@ class E2EDataIntegrityTester {
           5000000,
           { strategy, type: 'limit' }
         );
-        
+
         this.testResults.strategyTests.push({
           strategy,
           success: result.success,
           orderId: result.exchangeOrderId,
           error: result.error?.message
         });
-        
+
       } catch (error) {
         this.testResults.strategyTests.push({
           strategy,
@@ -281,22 +281,22 @@ class E2EDataIntegrityTester {
 
   async testDataIntegrity() {
     console.log('\n🔍 データ整合性検証実行中...');
-    
+
     try {
       // API経由でのデータ取得テスト
       const apiResponse = await fetch('http://localhost:3000/api/orders');
       const apiOrders = await apiResponse.json();
-      
+
       // データベース直接取得
       const dbOrders = await listOrders({});
-      
+
       this.testResults.integrityTests.push({
         test: 'API_DB_CONSISTENCY',
         apiCount: apiOrders.length,
         dbCount: dbOrders.length,
         consistent: apiOrders.length === dbOrders.length
       });
-      
+
       // フィールド整合性チェック
       const fieldIntegrityResults = {
         validOrderIds: 0,
@@ -304,7 +304,7 @@ class E2EDataIntegrityTester {
         validOrderTypes: 0,
         invalidRecords: []
       };
-      
+
       for (const order of dbOrders) {
         if (order.orderId && !order.orderId.startsWith('pre_')) {
           fieldIntegrityResults.validOrderIds++;
@@ -315,8 +315,8 @@ class E2EDataIntegrityTester {
         if (order.orderType && order.orderType !== 'Unknown') {
           fieldIntegrityResults.validOrderTypes++;
         }
-        
-        if (!order.orderId || order.orderId.startsWith('pre_') || 
+
+        if (!order.orderId || order.orderId.startsWith('pre_') ||
             order.exchange === 'Unknown' || order.orderType === 'Unknown') {
           fieldIntegrityResults.invalidRecords.push({
             orderId: order.orderId,
@@ -325,13 +325,13 @@ class E2EDataIntegrityTester {
           });
         }
       }
-      
+
       this.testResults.integrityTests.push({
         test: 'FIELD_INTEGRITY',
         totalRecords: dbOrders.length,
         ...fieldIntegrityResults
       });
-      
+
     } catch (error) {
       this.testResults.errors.push({
         type: 'INTEGRITY_TEST_ERROR',
@@ -342,7 +342,7 @@ class E2EDataIntegrityTester {
 
   async generateReport() {
     console.log('\n📊 包括的テストレポート生成中...');
-    
+
     const report = {
       timestamp: new Date().toISOString(),
       summary: {
@@ -358,25 +358,25 @@ class E2EDataIntegrityTester {
       strategyResults: this.testResults.strategyTests,
       errors: this.testResults.errors
     };
-    
+
     // レポートをファイルに保存
     const fs = require('fs');
     const reportPath = '/tmp/e2e-test-report.json';
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-    
+
     console.log(`📝 詳細レポートを保存しました: ${reportPath}`);
-    
+
     // コンソールサマリー
     this.printSummary(report);
-    
+
     return report;
   }
 
   calculateTotalTests() {
-    return this.testResults.phase1Tests.length + 
-           this.testResults.phase2Tests.length + 
-           this.testResults.phase3Tests.length + 
-           this.testResults.integrityTests.length + 
+    return this.testResults.phase1Tests.length +
+           this.testResults.phase2Tests.length +
+           this.testResults.phase3Tests.length +
+           this.testResults.integrityTests.length +
            this.testResults.strategyTests.length;
   }
 
@@ -399,7 +399,7 @@ class E2EDataIntegrityTester {
     console.log(`❌ 失敗: ${report.summary.failedTests}`);
     console.log(`🚨 エラー: ${report.summary.errorCount}`);
     console.log(`📊 総テスト数: ${report.summary.totalTests}`);
-    
+
     if (report.summary.errorCount > 0) {
       console.log('\n❌ エラー詳細:');
       report.errors.forEach((error, i) => {

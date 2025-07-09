@@ -29,22 +29,22 @@ class DebugValidator {
       // Redis接続を初期化
       await initRedisClient();
       const redisClient = getClient();
-      
+
       console.log('Step 1: Redis キー整合性チェック...');
       await this.validateRedisKeyIntegrity(redisClient);
-      
+
       console.log('\nStep 2: OUTSIDE戦略の孤立取引検証...');
       await this.validateOrphanedTrades();
-      
+
       console.log('\nStep 3: 修正されたシステムコンポーネント検証...');
       await this.validateSystemFixes();
-      
+
       console.log('\nStep 4: トランザクショナル注文システム検証...');
       await this.validateTransactionalOrderSystem();
-      
+
       console.log('\nStep 5: 最終診断レポート生成...');
       this.generateDiagnosticReport();
-      
+
     } catch (error) {
       console.error('検証エラー:', error);
       throw error;
@@ -67,11 +67,11 @@ class DebugValidator {
 
       for (const key of summaryKeys) {
         const keyParts = key.split(':');
-        
+
         if (keyParts.length === 5 && keyParts[0] === 'summary' && keyParts[1] === 'trade') {
           const [, exchange, symbol, strategy] = keyParts;
-          
-          if (exchange && symbol && strategy && 
+
+          if (exchange && symbol && strategy &&
               exchange !== 'undefined' && symbol !== 'undefined' && strategy !== 'undefined') {
             validKeys++;
           } else {
@@ -183,14 +183,14 @@ class DebugValidator {
       // 1. getOrderStrategyKeyByOrderId関数の検証
       console.log('  📝 getOrderStrategyKeyByOrderId関数の修正確認...');
       const { getOrderStrategyKeyByOrderId } = require('../src/database/manager');
-      
+
       // テスト用の存在しない注文IDで検証
       const testOrderId = 'non_existent_order_' + Date.now();
-      
+
       try {
         const strategy = await getOrderStrategyKeyByOrderId(testOrderId);
         console.log(`    ✅ 修正確認: 存在しない注文ID → ${strategy} (OUTSIDE デフォルト)`);
-        
+
         this.results.fixValidation.getOrderStrategyKeyByOrderId = {
           tested: true,
           result: strategy,
@@ -210,7 +210,7 @@ class DebugValidator {
       try {
         const UltimateAssetSyncRecovery = require('./ultimateAssetSyncRecovery');
         const recovery = new UltimateAssetSyncRecovery();
-        
+
         // 安全性制限の確認
         if (recovery.safetyLimits && recovery.safetyLimits.maxRepairs) {
           console.log(`    ✅ 安全性制限実装: 最大修復 ${recovery.safetyLimits.maxRepairs}件`);
@@ -284,11 +284,11 @@ class DebugValidator {
 
       // 基本機能テスト
       console.log('  📝 基本機能テスト実行中...');
-      
+
       try {
         const transactionId = transactionalManager.generateTransactionId();
         console.log(`    ✅ トランザクションID生成: ${transactionId}`);
-        
+
         // 統計情報取得テスト
         const stats = transactionalManager.getStatistics();
         console.log(`    ✅ 統計情報取得: ${JSON.stringify(stats)}`);
@@ -341,7 +341,7 @@ class DebugValidator {
       const status = result.status || 'unknown';
       const statusIcon = status === 'functional' || status === 'operational' || status === 'hardened' || status === 'compatible' ? '✅' : '❌';
       console.log(`  ${statusIcon} ${component}: ${status}`);
-      
+
       if (result.error) {
         console.log(`      エラー: ${result.error}`);
       }
@@ -349,33 +349,33 @@ class DebugValidator {
 
     // 推奨事項
     console.log('\n💡 推奨事項:');
-    
+
     if (this.results.redisKeyIssues.length > 0) {
       console.log('  📝 Redis キークリーンアップの実行を推奨');
     }
-    
+
     if (this.results.orphanedTrades.length > 0) {
       console.log('  📝 孤立取引の修復実行を推奨');
     }
-    
+
     if (this.results.systemHealth.redisKeyHealth?.healthPercentage < 95) {
       console.log('  📝 Redis キー健全性の改善が必要');
     }
-    
+
     // 実行準備状況
     console.log('\n🚀 システム実行準備状況:');
-    
+
     const criticalFixes = [
       this.results.fixValidation.getOrderStrategyKeyByOrderId?.status === 'functional',
       this.results.fixValidation.redisHSet?.status === 'compatible',
       this.results.fixValidation.transactionalOrderSystem?.status === 'operational'
     ];
-    
+
     const readyCount = criticalFixes.filter(Boolean).length;
     const totalCritical = criticalFixes.length;
-    
+
     console.log(`  準備完了: ${readyCount}/${totalCritical} 重要コンポーネント`);
-    
+
     if (readyCount === totalCritical) {
       console.log('  ✅ 【準備完了】ultimateAssetSyncRecovery.js の実行が可能です');
     } else {
@@ -400,7 +400,7 @@ async function main() {
     console.log('データベース接続完了\n');
 
     await validator.runComprehensiveValidation();
-    
+
   } catch (error) {
     console.error('検証実行エラー:', error);
     process.exit(1);

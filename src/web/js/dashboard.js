@@ -33,7 +33,7 @@ function initDashboard() {
         loadAndDisplayRiskPositions();
         loadAndDisplayRiskStats();
       }
-      
+
       // 未売却ポジションタブが表示された場合はデータを読み込み
       if (activeTabId === 'filled-positions-tab') {
         loadAndDisplayFilledPositions();
@@ -91,15 +91,19 @@ async function loadAndDisplaySummary() {
     renderStrategySummary(processedData.byStrategy);
     renderOrderPairsSummary(processedData.orderPairs); // 注文ペアサマリーのレンダリングを再度追加
     renderOverallSummary(processedData.orderPairs); // 全体統合サマリーのレンダリングを追加
-    
+
     // 購入可能額の表示
     if (data.availableAmounts) {
       renderAvailableAmounts(data.availableAmounts);
     }
 
     // ローディング表示を非表示にしてコンテンツを表示
-    if (loadingElement) loadingElement.classList.add('d-none');
-    if (containerElement) containerElement.classList.remove('d-none');
+    if (loadingElement) {
+      loadingElement.classList.add('d-none');
+    }
+    if (containerElement) {
+      containerElement.classList.remove('d-none');
+    }
 
   } catch (error) {
     console.error('サマリーデータの取得と表示中にエラーが発生しました:', error);
@@ -122,8 +126,12 @@ async function loadAndDisplayDailyPnL() {
   const containerElement = document.getElementById('daily-pnl-container');
 
   // 初期表示はローディングスピナー
-  if (loadingElement) loadingElement.classList.remove('d-none');
-  if (containerElement) containerElement.classList.add('d-none');
+  if (loadingElement) {
+    loadingElement.classList.remove('d-none');
+  }
+  if (containerElement) {
+    containerElement.classList.add('d-none');
+  }
 
   try {
     // 過去24時間の約定履歴を取得
@@ -308,16 +316,20 @@ async function loadAndDisplayDailyPnL() {
       </div>
     </div>
   `;
-} else {
-  console.error('日次損益を表示するためのコンテナが見つかりません');
-}
+    } else {
+      console.error('日次損益を表示するためのコンテナが見つかりません');
+    }
 
-// ポジション詳細を表示（続く部分はそのまま）
-renderPositionDetails(symbolSummaries);
+    // ポジション詳細を表示（続く部分はそのまま）
+    renderPositionDetails(symbolSummaries);
 
     // ローディング表示を非表示にしてコンテンツを表示
-    if (loadingElement) loadingElement.classList.add('d-none');
-    if (containerElement) containerElement.classList.remove('d-none');
+    if (loadingElement) {
+      loadingElement.classList.add('d-none');
+    }
+    if (containerElement) {
+      containerElement.classList.remove('d-none');
+    }
 
   } catch (error) {
     console.error('日次損益データの取得と表示中にエラーが発生しました:', error);
@@ -331,7 +343,9 @@ renderPositionDetails(symbolSummaries);
       `;
     }
     // コンテナは非表示のまま
-    if (containerElement) containerElement.classList.add('d-none');
+    if (containerElement) {
+      containerElement.classList.add('d-none');
+    }
   }
 }
 
@@ -341,7 +355,7 @@ renderPositionDetails(symbolSummaries);
  */
 function renderPositionDetails(symbolSummaries) {
   const container = document.getElementById('position-details-container');
-  
+
   if (!container) {
     // コンテナがなければ作成
     const dailyPnlContainer = document.getElementById('daily-pnl-container');
@@ -349,11 +363,11 @@ function renderPositionDetails(symbolSummaries) {
       const detailsContainer = document.createElement('div');
       detailsContainer.id = 'position-details-container';
       detailsContainer.className = 'mt-4';
-      
+
       const detailsTitle = document.createElement('h5');
       detailsTitle.innerText = '銘柄別ポジション詳細';
       detailsContainer.appendChild(detailsTitle);
-      
+
       const tableContainer = document.createElement('div');
       tableContainer.className = 'table-responsive';
       tableContainer.innerHTML = `
@@ -371,24 +385,24 @@ function renderPositionDetails(symbolSummaries) {
           <tbody id="symbol-positions-body"></tbody>
         </table>
       `;
-      
+
       detailsContainer.appendChild(tableContainer);
       dailyPnlContainer.appendChild(detailsContainer);
     }
   }
-  
+
   // 銘柄別ポジション詳細の表示
   const symbolPositionsBody = document.getElementById('symbol-positions-body');
   if (symbolPositionsBody) {
     let html = '';
-    
+
     Object.entries(symbolSummaries)
       .filter(([_, data]) => data.netPosition !== 0 || data.realizedPnL !== 0)
       .sort(([_, a], [__, b]) => b.realizedPnL - a.realizedPnL)
       .forEach(([symbol, data]) => {
         const avgBuyPrice = data.buyAmount > 0 ? data.totalBuyCost / data.buyAmount : 0;
         const pnlClass = data.realizedPnL >= 0 ? 'text-success' : 'text-danger';
-        
+
         html += `
           <tr>
             <td>${symbol}</td>
@@ -400,7 +414,7 @@ function renderPositionDetails(symbolSummaries) {
           </tr>
         `;
       });
-    
+
     symbolPositionsBody.innerHTML = html || '<tr><td colspan="6" class="text-center">表示するポジションがありません</td></tr>';
   }
 }
@@ -444,7 +458,7 @@ function processSummaryData(data) {
       bySymbol: {},
       byStrategy: {}
     });
-    
+
     const exchangeData = result.byExchange[exchangeId];
     exchangeData.totalBuyCost = CommonUtils.safeAdd(exchangeData.totalBuyCost, totalBuyCost);
     exchangeData.totalSellValue = CommonUtils.safeAdd(exchangeData.totalSellValue, totalSellValue);
@@ -453,13 +467,13 @@ function processSummaryData(data) {
 
     // 取引所内の銘柄別内訳の集計
     if (!result.byExchange[exchangeId].bySymbol[symbol]) {
-        result.byExchange[exchangeId].bySymbol[symbol] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.byExchange[exchangeId].bySymbol[symbol] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.byExchange[exchangeId].bySymbol[symbol].totalBuyCost += totalBuyCost || 0;
     result.byExchange[exchangeId].bySymbol[symbol].totalSellValue += totalSellValue || 0;
@@ -469,13 +483,13 @@ function processSummaryData(data) {
     // 取引所内の戦略別内訳の集計
     const strategyIdForExchange = strategyKey || 'unknown';
     if (!result.byExchange[exchangeId].byStrategy[strategyIdForExchange]) {
-        result.byExchange[exchangeId].byStrategy[strategyIdForExchange] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.byExchange[exchangeId].byStrategy[strategyIdForExchange] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.byExchange[exchangeId].byStrategy[strategyIdForExchange].totalBuyCost += totalBuyCost || 0;
     result.byExchange[exchangeId].byStrategy[strategyIdForExchange].totalSellValue += totalSellValue || 0;
@@ -503,13 +517,13 @@ function processSummaryData(data) {
 
     // 銘柄内の取引所別内訳の集計
     if (!result.bySymbol[symbol].byExchange[exchangeId]) {
-        result.bySymbol[symbol].byExchange[exchangeId] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.bySymbol[symbol].byExchange[exchangeId] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.bySymbol[symbol].byExchange[exchangeId].totalBuyCost += totalBuyCost || 0;
     result.bySymbol[symbol].byExchange[exchangeId].totalSellValue += totalSellValue || 0;
@@ -519,13 +533,13 @@ function processSummaryData(data) {
     // 銘柄内の戦略別内訳の集計
     const strategyIdForSymbol = strategyKey || 'unknown';
     if (!result.bySymbol[symbol].byStrategy[strategyIdForSymbol]) {
-        result.bySymbol[symbol].byStrategy[strategyIdForSymbol] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.bySymbol[symbol].byStrategy[strategyIdForSymbol] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.bySymbol[symbol].byStrategy[strategyIdForSymbol].totalBuyCost += totalBuyCost || 0;
     result.bySymbol[symbol].byStrategy[strategyIdForSymbol].totalSellValue += totalSellValue || 0;
@@ -552,13 +566,13 @@ function processSummaryData(data) {
 
     // 戦略内の取引所別内訳の集計
     if (!result.byStrategy[strategyId].byExchange[exchangeId]) {
-        result.byStrategy[strategyId].byExchange[exchangeId] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.byStrategy[strategyId].byExchange[exchangeId] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.byStrategy[strategyId].byExchange[exchangeId].totalBuyCost += totalBuyCost || 0;
     result.byStrategy[strategyId].byExchange[exchangeId].totalSellValue += totalSellValue || 0;
@@ -567,13 +581,13 @@ function processSummaryData(data) {
 
     // 戦略内の銘柄別内訳の集計
     if (!result.byStrategy[strategyId].bySymbol[symbol]) {
-        result.byStrategy[strategyId].bySymbol[symbol] = {
-            totalBuyCost: 0,
-            totalSellValue: 0,
-            totalFee: 0,
-            realizedPnL: 0,
-            netPnL: 0
-        };
+      result.byStrategy[strategyId].bySymbol[symbol] = {
+        totalBuyCost: 0,
+        totalSellValue: 0,
+        totalFee: 0,
+        realizedPnL: 0,
+        netPnL: 0
+      };
     }
     result.byStrategy[strategyId].bySymbol[symbol].totalBuyCost += totalBuyCost || 0;
     result.byStrategy[strategyId].bySymbol[symbol].totalSellValue += totalSellValue || 0;
@@ -586,10 +600,10 @@ function processSummaryData(data) {
     result.byExchange[key].netPnL = result.byExchange[key].realizedPnL - result.byExchange[key].totalFee;
     // 内訳の純損益も計算
     Object.keys(result.byExchange[key].bySymbol).forEach(subKey => {
-        result.byExchange[key].bySymbol[subKey].netPnL = result.byExchange[key].bySymbol[subKey].realizedPnL - result.byExchange[key].bySymbol[subKey].totalFee;
+      result.byExchange[key].bySymbol[subKey].netPnL = result.byExchange[key].bySymbol[subKey].realizedPnL - result.byExchange[key].bySymbol[subKey].totalFee;
     });
     Object.keys(result.byExchange[key].byStrategy).forEach(subKey => {
-        result.byExchange[key].byStrategy[subKey].netPnL = result.byExchange[key].byStrategy[subKey].realizedPnL - result.byExchange[key].byStrategy[subKey].totalFee;
+      result.byExchange[key].byStrategy[subKey].netPnL = result.byExchange[key].byStrategy[subKey].realizedPnL - result.byExchange[key].byStrategy[subKey].totalFee;
     });
   });
 
@@ -597,10 +611,10 @@ function processSummaryData(data) {
     result.bySymbol[key].netPnL = result.bySymbol[key].realizedPnL - result.bySymbol[key].totalFee;
     // 内訳の純損益も計算
     Object.keys(result.bySymbol[key].byExchange).forEach(subKey => {
-        result.bySymbol[key].byExchange[subKey].netPnL = result.bySymbol[key].byExchange[subKey].realizedPnL - result.bySymbol[key].byExchange[subKey].totalFee;
+      result.bySymbol[key].byExchange[subKey].netPnL = result.bySymbol[key].byExchange[subKey].realizedPnL - result.bySymbol[key].byExchange[subKey].totalFee;
     });
     Object.keys(result.bySymbol[key].byStrategy).forEach(subKey => {
-        result.bySymbol[key].byStrategy[subKey].netPnL = result.bySymbol[key].byStrategy[subKey].realizedPnL - result.bySymbol[key].byStrategy[subKey].totalFee;
+      result.bySymbol[key].byStrategy[subKey].netPnL = result.bySymbol[key].byStrategy[subKey].realizedPnL - result.bySymbol[key].byStrategy[subKey].totalFee;
     });
   });
 
@@ -608,10 +622,10 @@ function processSummaryData(data) {
     result.byStrategy[key].netPnL = result.byStrategy[key].realizedPnL - result.byStrategy[key].totalFee;
     // 内訳の純損益も計算
     Object.keys(result.byStrategy[key].byExchange).forEach(subKey => {
-        result.byStrategy[key].byExchange[subKey].netPnL = result.byStrategy[key].byExchange[subKey].realizedPnL - result.byStrategy[key].byExchange[subKey].totalFee;
+      result.byStrategy[key].byExchange[subKey].netPnL = result.byStrategy[key].byExchange[subKey].realizedPnL - result.byStrategy[key].byExchange[subKey].totalFee;
     });
     Object.keys(result.byStrategy[key].bySymbol).forEach(subKey => {
-        result.byStrategy[key].bySymbol[subKey].netPnL = result.byStrategy[key].bySymbol[subKey].realizedPnL - result.byStrategy[key].bySymbol[subKey].totalFee;
+      result.byStrategy[key].bySymbol[subKey].netPnL = result.byStrategy[key].bySymbol[subKey].realizedPnL - result.byStrategy[key].bySymbol[subKey].totalFee;
     });
   });
 
@@ -625,15 +639,15 @@ function processSummaryData(data) {
  * @param {string} parentId - グラフと表を描画する親要素のID
  */
 function renderBreakdownGraphAndTable(breakdownData, title, parentId) {
-    const parentContainer = document.getElementById(parentId);
-    if (!parentContainer || !breakdownData || Object.keys(breakdownData).length === 0) {
-        return; // データがない場合や親要素がない場合は何もしない
-    }
+  const parentContainer = document.getElementById(parentId);
+  if (!parentContainer || !breakdownData || Object.keys(breakdownData).length === 0) {
+    return; // データがない場合や親要素がない場合は何もしない
+  }
 
-    // 既存の内訳表示をクリア
-    parentContainer.innerHTML = '';
+  // 既存の内訳表示をクリア
+  parentContainer.innerHTML = '';
 
-    let html = `
+  let html = `
         <div class="breakdown-section mt-3">
             <h6>${title}</h6>
             <div class="breakdown-chart-container">
@@ -652,12 +666,12 @@ function renderBreakdownGraphAndTable(breakdownData, title, parentId) {
                     <tbody>
     `;
 
-    Object.keys(breakdownData).forEach(key => {
-        const data = breakdownData[key];
-        const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
-        const realizedPnlClass = data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : '';
+  Object.keys(breakdownData).forEach(key => {
+    const data = breakdownData[key];
+    const netPnlClass = data.netPnL > 0 ? 'text-success' : data.netPnL < 0 ? 'text-danger' : '';
+    const realizedPnlClass = data.realizedPnL > 0 ? 'text-success' : data.realizedPnL < 0 ? 'text-danger' : '';
 
-        html += `
+    html += `
             <tr>
                 <td>${key}</td>
                 <td class="text-end">${formatNumber(data.totalFee)} 円</td>
@@ -665,59 +679,59 @@ function renderBreakdownGraphAndTable(breakdownData, title, parentId) {
                 <td class="text-end ${netPnlClass} fw-bold">${formatNumber(data.netPnL)} 円</td>
             </tr>
         `;
-    });
+  });
 
-    html += `
+  html += `
                     </tbody>
                 </table>
             </div>
         </div>
     `;
 
-    // 新しいHTMLを挿入
-    parentContainer.innerHTML = html;
+  // 新しいHTMLを挿入
+  parentContainer.innerHTML = html;
 
-    // グラフデータの準備
-    const labels = Object.keys(breakdownData);
-    const netPnLData = Object.values(breakdownData).map(item => item.netPnL);
+  // グラフデータの準備
+  const labels = Object.keys(breakdownData);
+  const netPnLData = Object.values(breakdownData).map(item => item.netPnL);
 
-    // グラフの描画
-    const ctx = document.getElementById(`${parentId}-${title.replace(/\s+/g, '-')}-chart`).getContext('2d');
-    new Chart(ctx, {
-        type: 'bar', // 棒グラフ
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '純損益 (円)',
-                data: netPnLData,
-                backgroundColor: netPnLData.map(pnl => pnl > 0 ? 'rgba(25, 135, 84, 0.6)' : 'rgba(220, 53, 69, 0.6)'), // プラスは緑、マイナスは赤
-                borderColor: netPnLData.map(pnl => pnl > 0 ? 'rgba(25, 135, 84, 1)' : 'rgba(220, 53, 69, 1)'),
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: '金額 (円)'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false // 凡例は非表示
-                },
-                title: {
-                    display: true,
-                    text: title + ' 純損益' // グラフタイトル
-                }
-            }
+  // グラフの描画
+  const ctx = document.getElementById(`${parentId}-${title.replace(/\s+/g, '-')}-chart`).getContext('2d');
+  new Chart(ctx, {
+    type: 'bar', // 棒グラフ
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '純損益 (円)',
+        data: netPnLData,
+        backgroundColor: netPnLData.map(pnl => pnl > 0 ? 'rgba(25, 135, 84, 0.6)' : 'rgba(220, 53, 69, 0.6)'), // プラスは緑、マイナスは赤
+        borderColor: netPnLData.map(pnl => pnl > 0 ? 'rgba(25, 135, 84, 1)' : 'rgba(220, 53, 69, 1)'),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: '金額 (円)'
+          }
         }
-    });
+      },
+      plugins: {
+        legend: {
+          display: false // 凡例は非表示
+        },
+        title: {
+          display: true,
+          text: title + ' 純損益' // グラフタイトル
+        }
+      }
+    }
+  });
 }
 
 /**
@@ -731,7 +745,9 @@ function renderBreakdownGraphAndTable(breakdownData, title, parentId) {
  */
 function renderDataSummary(inputData, containerId, keyName, breakdownPrefix, breakdownCallback) {
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   // データがない場合
   if (!inputData || Object.keys(inputData).length === 0) {
@@ -768,7 +784,7 @@ function renderDataSummary(inputData, containerId, keyName, breakdownPrefix, bre
                 <td>売った額</td>
                 <td class="text-end">${formatNumber(data.totalSellValue)} 円</td>
               </tr>`;
-              
+
     // 銘柄の場合のみ保有量を表示
     if (keyName === 'symbol') {
       html += `
@@ -779,7 +795,7 @@ function renderDataSummary(inputData, containerId, keyName, breakdownPrefix, bre
                 </td>
               </tr>`;
     }
-    
+
     html += `
               <tr>
                 <td>手数料</td>
@@ -815,26 +831,26 @@ function renderDataSummary(inputData, containerId, keyName, breakdownPrefix, bre
 
   // クリックイベントリスナーを設定し、グラフを描画
   container.querySelectorAll('.summary-card-clickable').forEach(card => {
-      card.addEventListener('click', function() {
-          const breakdownContainer = this.querySelector('.breakdown-container');
-          const displayKey = this.querySelector('.card-header h6').innerText;
-          const data = inputData[displayKey];
+    card.addEventListener('click', function() {
+      const breakdownContainer = this.querySelector('.breakdown-container');
+      const displayKey = this.querySelector('.card-header h6').innerText;
+      const data = inputData[displayKey];
 
-          if (breakdownContainer) {
-              // 表示/非表示をトグル
-              if (breakdownContainer.style.display === 'none') {
-                  breakdownContainer.style.display = 'block';
-                  // コールバック関数でカスタムな内訳表示を実行
-                  if (breakdownCallback) {
-                    breakdownCallback(data, breakdownContainer.id);
-                  }
-              } else {
-                  breakdownContainer.style.display = 'none';
-                  // コンテンツをクリア
-                  breakdownContainer.innerHTML = '';
-              }
+      if (breakdownContainer) {
+        // 表示/非表示をトグル
+        if (breakdownContainer.style.display === 'none') {
+          breakdownContainer.style.display = 'block';
+          // コールバック関数でカスタムな内訳表示を実行
+          if (breakdownCallback) {
+            breakdownCallback(data, breakdownContainer.id);
           }
-      });
+        } else {
+          breakdownContainer.style.display = 'none';
+          // コンテンツをクリア
+          breakdownContainer.innerHTML = '';
+        }
+      }
+    });
   });
 }
 
@@ -848,7 +864,7 @@ function renderExchangeSummary(exchangeData) {
     renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', containerId);
     renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', containerId);
   };
-  
+
   // 汎用テンプレート関数を使用
   renderDataSummary(exchangeData, 'exchange-summary-container', 'exchangeId', 'exchange', exchangeBreakdownCallback);
 }
@@ -863,7 +879,7 @@ function renderSymbolSummary(symbolData) {
     renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', containerId);
     renderBreakdownGraphAndTable(data.byStrategy, '戦略別内訳', containerId);
   };
-  
+
   // 汎用テンプレート関数を使用
   renderDataSummary(symbolData, 'symbol-summary-container', 'symbol', 'symbol', symbolBreakdownCallback);
 }
@@ -878,7 +894,7 @@ function renderStrategySummary(strategyData) {
     renderBreakdownGraphAndTable(data.byExchange, '取引所別内訳', containerId);
     renderBreakdownGraphAndTable(data.bySymbol, '銘柄別内訳', containerId);
   };
-  
+
   // 汎用テンプレート関数を使用
   renderDataSummary(strategyData, 'strategy-summary-container', 'strategyKey', 'strategy', strategyBreakdownCallback);
 }
@@ -889,7 +905,9 @@ function renderStrategySummary(strategyData) {
  */
 function renderOrderPairsSummary(orderPairs) {
   const container = document.getElementById('order-pairs-summary-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   // 銘柄ドロップダウンの更新
   updateOrderPairSymbolDropdown(orderPairs);
@@ -921,7 +939,9 @@ function renderOrderPairsSummary(orderPairs) {
 
     // 日時フォーマット
     const formatDate = timestamp => {
-      if (!timestamp) return '-';
+      if (!timestamp) {
+        return '-';
+      }
       const date = new Date(timestamp);
       return date.toLocaleString('ja-JP', {
         month: '2-digit',
@@ -933,13 +953,13 @@ function renderOrderPairsSummary(orderPairs) {
 
     // ステータスに対応するバッジクラス
     const getStatusBadgeClass = status => {
-      switch(status) {
-        case 'open': return 'bg-primary';
-        case 'closed': return 'bg-success';
-        case 'canceled': return 'bg-warning';
-        case 'expired': return 'bg-secondary';
-        case 'rejected': return 'bg-danger';
-        default: return 'bg-secondary';
+      switch (status) {
+      case 'open': return 'bg-primary';
+      case 'closed': return 'bg-success';
+      case 'canceled': return 'bg-warning';
+      case 'expired': return 'bg-secondary';
+      case 'rejected': return 'bg-danger';
+      default: return 'bg-secondary';
       }
     };
 
@@ -1039,7 +1059,9 @@ function renderOrderPairsSummary(orderPairs) {
  */
 function renderOverallSummary(orderPairs) {
   const container = document.getElementById('overall-summary-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   // データがない場合
   if (!orderPairs || orderPairs.length === 0) {
@@ -1257,7 +1279,9 @@ function renderOverallSummary(orderPairs) {
  */
 function updateOrderPairSymbolDropdown(orderPairs) {
   const dropdown = document.getElementById('order-pair-symbol-filter');
-  if (!dropdown || !orderPairs || orderPairs.length === 0) return;
+  if (!dropdown || !orderPairs || orderPairs.length === 0) {
+    return;
+  }
 
   // 現在の選択値を保存
   const currentValue = dropdown.value;
@@ -1289,7 +1313,9 @@ function updateOrderPairSymbolDropdown(orderPairs) {
  * @returns {string} - フォーマットされた数値文字列
  */
 function formatNumber(num, maxDigits = 4) {
-  if (num === null || num === undefined) return '0';
+  if (num === null || num === undefined) {
+    return '0';
+  }
 
   // 大きな数値の場合は小数点以下を省略
   if (Math.abs(num) >= 1000) {
@@ -1307,12 +1333,14 @@ function formatNumber(num, maxDigits = 4) {
  * @returns {string} フォーマットされた通貨文字列
  */
 function formatCurrency(num, currency = 'JPY') {
-  if (num === null || num === undefined) return '0';
-  
+  if (num === null || num === undefined) {
+    return '0';
+  }
+
   // 通貨に応じて小数点以下の桁数を決定
   const minimumFractionDigits = currency === 'JPY' ? 0 : 2;
   const maximumFractionDigits = currency === 'JPY' ? 0 : 8;
-  
+
   return num.toLocaleString('ja-JP', {
     style: 'currency',
     currency: currency,
@@ -1330,13 +1358,13 @@ function applyHeaderTooltips() {
   tableHeaders.forEach(header => {
     // クラス適用
     header.classList.add('truncate-header');
-    
+
     // ツールチップ属性を設定
     header.setAttribute('data-bs-toggle', 'tooltip');
     header.setAttribute('data-bs-placement', 'top');
     header.setAttribute('title', header.textContent);
   });
-  
+
   // Bootstrapツールチップを初期化
   const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
   tooltipTriggerList.map(function (tooltipTriggerEl) {
@@ -1348,7 +1376,7 @@ function applyHeaderTooltips() {
 document.addEventListener('DOMContentLoaded', function() {
   // すでに存在するテーブルヘッダーに適用
   applyHeaderTooltips();
-  
+
   // タブ切り替え時にも適用（動的に生成される場合）
   const tabElements = document.querySelectorAll('button[data-bs-toggle="tab"]');
   tabElements.forEach(tab => {
@@ -1370,10 +1398,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // 共通のカードレンダリング関数
 function renderCardContainer(containerId, title, icon, items, itemRenderer, emptyMessage) {
   const container = document.getElementById(containerId);
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   let html = '';
-  
+
   if (items && Object.keys(items).length > 0) {
     html += `
       <div class="col-12 mb-4">
@@ -1386,9 +1416,9 @@ function renderCardContainer(containerId, title, icon, items, itemRenderer, empt
           <div class="card-body">
             <div class="row">
     `;
-    
+
     html += itemRenderer(items);
-    
+
     html += `
             </div>
           </div>
@@ -1398,16 +1428,18 @@ function renderCardContainer(containerId, title, icon, items, itemRenderer, empt
   } else {
     html = `<div class="col-12"><p class="text-center text-muted">${emptyMessage}</p></div>`;
   }
-  
+
   container.innerHTML = html;
 }
 
 function renderAvailableAmounts(availableAmounts) {
   const container = document.getElementById('available-amounts-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   let html = '';
-  
+
   // 戦略別にグループ化して表示
   Object.entries(availableAmounts).forEach(([strategyName, symbols]) => {
     html += `
@@ -1421,17 +1453,17 @@ function renderAvailableAmounts(availableAmounts) {
           <div class="card-body">
             <div class="row">
     `;
-    
+
     // 各通貨ペアの購入可能額を表示
     Object.entries(symbols).forEach(([symbol, data]) => {
       if (data.error) {
         html += createErrorCard(symbol, data.error);
         return;
       }
-      
+
       html += createAvailableAmountCard(symbol, data);
     });
-    
+
     html += `
             </div>
           </div>
@@ -1439,11 +1471,11 @@ function renderAvailableAmounts(availableAmounts) {
       </div>
     `;
   });
-  
+
   if (html === '') {
     html = '<div class="col-12"><p class="text-center text-muted">購入可能額データがありません</p></div>';
   }
-  
+
   container.innerHTML = html;
 }
 
@@ -1479,14 +1511,14 @@ function createAvailableAmountCard(symbol, data) {
     totalAvailableValue,
     minTradeAmount
   } = data;
-  
+
   // 購入可能かどうかの判定
   const canBuy = availableAmount > (minTradeAmount || 0) && totalAvailableValue > 0;
   const cardClass = canBuy ? 'border-success' : 'border-warning';
-  const statusBadge = canBuy 
-    ? '<span class="badge bg-success">購入可能</span>' 
+  const statusBadge = canBuy
+    ? '<span class="badge bg-success">購入可能</span>'
     : '<span class="badge bg-warning">購入不可</span>';
-  
+
   return `
     <div class="col-md-6 col-lg-4 mb-3">
       <div class="card h-100 ${cardClass}">
@@ -1548,13 +1580,15 @@ function createAvailableAmountCard(symbol, data) {
  * @returns {string} フォーマットされた数量文字列
  */
 function formatAmount(amount, precision = 8) {
-  if (amount === null || amount === undefined || amount === 0) return '0';
-  
+  if (amount === null || amount === undefined || amount === 0) {
+    return '0';
+  }
+
   // 非常に小さい値の場合は科学的記数法を使用
   if (Math.abs(amount) < 0.000001 && amount !== 0) {
     return amount.toExponential(2);
   }
-  
+
   // 通常の場合は指定された精度でフォーマット
   return parseFloat(amount.toFixed(precision)).toString();
 }
@@ -1565,8 +1599,10 @@ function formatAmount(amount, precision = 8) {
  * @returns {string} ベースアセット（例：BTC）
  */
 function extractBaseAsset(symbol) {
-  if (!symbol || typeof symbol !== 'string') return '';
-  
+  if (!symbol || typeof symbol !== 'string') {
+    return '';
+  }
+
   const parts = symbol.split('/');
   return parts.length > 0 ? parts[0] : symbol;
 }
@@ -1580,7 +1616,7 @@ async function loadAndDisplayRiskPositions() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
     renderRiskPositions(data);
   } catch (error) {
@@ -1598,7 +1634,7 @@ async function loadAndDisplayRiskStats() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
     renderRiskStats(data);
   } catch (error) {
@@ -1613,7 +1649,9 @@ async function loadAndDisplayRiskStats() {
  */
 function renderRiskPositions(data) {
   const container = document.getElementById('risk-positions-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const { positions = [], stats = {} } = data;
 
@@ -1699,7 +1737,7 @@ function renderRiskPositions(data) {
   `;
 
   container.innerHTML = html;
-  
+
   // テーブルにデータを挿入（data-sort属性付き）
   const tbody = document.getElementById('risk-positions-tbody');
   if (tbody) {
@@ -1732,7 +1770,7 @@ function renderRiskPositions(data) {
         </tr>
       `;
     }).join('');
-    
+
     // DataTableを初期化
     initializeRiskPositionsDataTable();
   }
@@ -1745,7 +1783,7 @@ function initializeRiskPositionsDataTable() {
     riskPositionsDataTable.destroy();
     riskPositionsDataTable = null;
   }
-  
+
   riskPositionsDataTable = $('#risk-positions-table').DataTable({
     language: {
       url: '//cdn.datatables.net/plug-ins/1.13.1/i18n/ja.json'
@@ -1771,7 +1809,9 @@ function initializeRiskPositionsDataTable() {
  */
 function renderRiskStats(data) {
   const container = document.getElementById('risk-stats-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   const { exchangeStats = {}, totalPositions = 0, filledPositions = 0, pendingOrders = 0, periodPnL = 0 } = data;
 
@@ -1853,7 +1893,9 @@ function createExchangeStatsTable(exchangeStats) {
  */
 function showRiskPositionsError(errorMessage) {
   const container = document.getElementById('risk-positions-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   container.innerHTML = `
     <div class="alert alert-danger" role="alert">
@@ -1870,7 +1912,9 @@ function showRiskPositionsError(errorMessage) {
  */
 function showRiskStatsError(errorMessage) {
   const container = document.getElementById('risk-stats-container');
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   container.innerHTML = `
     <div class="alert alert-danger" role="alert">
@@ -1921,7 +1965,7 @@ async function loadAndDisplayFilledPositions() {
   try {
     const response = await fetch('/api/filled-positions');
     const data = await response.json();
-    
+
     if (response.ok) {
       displayFilledPositionsStats(data.stats);
       displayFilledPositionsTable(data.positions);
@@ -1943,22 +1987,22 @@ function displayFilledPositionsStats(stats) {
   const totalPnLElement = document.getElementById('filled-total-pnl');
   const avgTimeElement = document.getElementById('filled-avg-time');
   const lastUpdatedElement = document.getElementById('filled-last-updated');
-  
+
   if (totalPositionsElement) {
     totalPositionsElement.textContent = stats.totalFilledPositions || 0;
   }
-  
+
   if (totalPnLElement) {
     const totalPnL = stats.totalUnrealizedPnL || 0;
     totalPnLElement.textContent = formatCurrency(totalPnL);
     totalPnLElement.className = totalPnL >= 0 ? 'text-success' : 'text-danger';
   }
-  
+
   if (avgTimeElement) {
     const avgTime = stats.averageHoldingTime || 0;
     avgTimeElement.textContent = CommonUI.formatHours(avgTime);
   }
-  
+
   if (lastUpdatedElement) {
     lastUpdatedElement.textContent = formatDateTime(Date.now());
   }
@@ -1973,11 +2017,13 @@ function displayFilledPositionsTable(positions) {
     filledPositionsDataTable.destroy();
     filledPositionsDataTable = null;
   }
-  
+
   const tbody = document.getElementById('filled-positions-tbody');
-  
-  if (!tbody) return;
-  
+
+  if (!tbody) {
+    return;
+  }
+
   if (!positions || positions.length === 0) {
     tbody.innerHTML = `
       <tr>
@@ -1988,19 +2034,19 @@ function displayFilledPositionsTable(positions) {
     `;
     return;
   }
-  
+
   // テーブルにデータを挿入（data-sort属性付き）
   tbody.innerHTML = positions.map(position => {
     const pnl = position.unrealizedPnL || 0;
     const pnlPercent = position.unrealizedPnLPercent || 0;
     const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
-    
+
     // 約定済みポジションの場合は保有時間を使用、そうでなければ経過時間を計算
-    const elapsedHours = position.holdingTimeHours || 
-                        (position.createdAt && position.closedAt ? 
-                         (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) : 
-                         (Date.now() - position.timestamp) / (1000 * 60 * 60));
-    
+    const elapsedHours = position.holdingTimeHours ||
+                        (position.createdAt && position.closedAt ?
+                          (new Date(position.closedAt) - new Date(position.createdAt)) / (1000 * 60 * 60) :
+                          (Date.now() - position.timestamp) / (1000 * 60 * 60));
+
     return `
       <tr>
         <td><small>${position.exchange}</small></td>
@@ -2016,7 +2062,7 @@ function displayFilledPositionsTable(positions) {
       </tr>
     `;
   }).join('');
-  
+
   // DataTableを初期化
   initializeFilledPositionsDataTable();
 }
@@ -2069,7 +2115,9 @@ function formatCurrency(value) {
  * パーセント フォーマット
  */
 function formatPercent(value) {
-  if (typeof value !== 'number') return '-';
+  if (typeof value !== 'number') {
+    return '-';
+  }
   return value.toFixed(2);
 }
 
@@ -2082,7 +2130,9 @@ function formatPercent(value) {
  * 日時フォーマット
  */
 function formatDateTime(timestamp) {
-  if (!timestamp) return '-';
+  if (!timestamp) {
+    return '-';
+  }
   const date = new Date(timestamp);
   return date.toLocaleString('ja-JP', {
     year: 'numeric',

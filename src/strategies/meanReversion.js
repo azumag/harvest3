@@ -11,11 +11,11 @@ const {
 
 const {
   calculateSMA,
-  calculateRSI,
+  calculateRSI
 } = require('./utils/indicators');
 
-const { 
-  fetchAndValidateOHLCVData, 
+const {
+  fetchAndValidateOHLCVData,
   handleStrategySignals,
   handleStrategyError,
   getCurrentPrice,
@@ -45,22 +45,26 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
       exchange, symbol, ohlcvInterval, period, '平均回帰戦略', options
     );
-    if (!validatedData) return;
+    if (!validatedData) {
+      return;
+    }
     const { ohlcv, closes } = validatedData;
 
     // シグナル計算
     const signalResult = await calculateMeanReversionSignals(
-      closes, 
-      period, 
-      deviationThreshold, 
-      exchange, 
-      symbol, 
+      closes,
+      period,
+      deviationThreshold,
+      exchange,
+      symbol,
       strategyKey,
       options
     );
 
-    if (!signalResult) return;
-    
+    if (!signalResult) {
+      return;
+    }
+
     // シグナルによって売買
     return await handleStrategySignals(
       exchange,
@@ -101,11 +105,15 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
       exchange, symbol, ohlcvInterval, period, 'オシレーター戦略', options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
 
-    if(!closes) return;
+    if (!closes) {
+      return;
+    }
 
     // RSIシグナル計算
     const signalResult = await calculateOscillatorSignals(
@@ -120,7 +128,9 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
     );
 
     // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
-    if (!signalResult) return;
+    if (!signalResult) {
+      return;
+    }
 
     // シグナル処理
     return await handleStrategySignals(
@@ -158,7 +168,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
 async function calculateOscillatorSignals(closes, period, oversoldThreshold, overboughtThreshold, exchange, symbol, strategyKey, options = {}) {
   // RSIを計算
   const rsiValues = calculateRSI(closes, period);
-  
+
   // RSI値の検証
   if (!rsiValues || rsiValues.length === 0 || rsiValues[rsiValues.length - 1] === undefined) {
     console.log(`オシレーター戦略: ${symbol} - RSI計算結果が無効です`);
@@ -167,7 +177,7 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
     }
     return null;
   }
-  
+
   // 最新のRSI値を取得
   const currentRSI = rsiValues[rsiValues.length - 1];
 
@@ -183,7 +193,7 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
     oversoldThreshold,
     overboughtThreshold
   };
-  
+
   return await processSignalCalculation(
     buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
   );
@@ -268,7 +278,7 @@ async function calculateMeanReversionSignals(closes, period, deviationThreshold,
     deviation,
     currentPrice
   };
-  
+
   return await processSignalCalculation(
     buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
   );
@@ -277,7 +287,7 @@ async function calculateMeanReversionSignals(closes, period, deviationThreshold,
 /**
  * 共通のシグナル計算処理
  * @param {boolean} buySignal 買いシグナル
- * @param {boolean} sellSignal 売りシグナル  
+ * @param {boolean} sellSignal 売りシグナル
  * @param {Object} strategyResults 戦略固有の計算結果
  * @param {Object} exchange 取引所インスタンス
  * @param {string} symbol 通貨ペア
@@ -291,13 +301,13 @@ async function processSignalCalculation(buySignal, sellSignal, strategyResults, 
 
   // シグナルタイプを決定
   const signalType = determineSignalType(buySignal, sellSignal);
-  
+
   // 戦略固有の計算結果を含む最終結果オブジェクト
   const finalStrategyResults = createStrategyResults(strategyResults);
-  
+
   // 共通化されたシグナル保存
   await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, finalStrategyResults, options);
-  
+
   return {
     currentPrice,
     signalType,

@@ -69,14 +69,14 @@ class PrivateStreamClient {
     // TODO: 受信したプライベートデータ（注文、ポジションなど）を処理するロジックを実装
     // データベースの更新や、戦略への通知など
     switch (room) {
-      // case 'my_orders':
-      //   this._handleMyOrders(data);
-      //   break;
-      // case 'my_positions':
-      //   this._handleMyPositions(data);
-      //   break;
-      default:
-        this.logger.debug(`Received message from unhandled private room: ${room}`);
+    // case 'my_orders':
+    //   this._handleMyOrders(data);
+    //   break;
+    // case 'my_positions':
+    //   this._handleMyPositions(data);
+    //   break;
+    default:
+      this.logger.debug(`Received message from unhandled private room: ${room}`);
     }
   }
 

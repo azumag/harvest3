@@ -22,23 +22,23 @@ class ExternalTradesReconciler {
    */
   async executeReconciliation() {
     console.log('🔍 【Phase 2-2】外部取引監査・統合を開始します...\n');
-    
+
     try {
       console.log('Step 1: MongoDB接続とBot管理オーダー取得...');
       await this.initializeDatabases();
-      
+
       console.log('\nStep 2: 取引所約定履歴の取得...');
       await this.fetchExchangeTrades();
-      
+
       console.log('\nStep 3: 外部取引の検出...');
       await this.detectExternalTrades();
-      
+
       console.log('\nStep 4: 外部取引の統合処理...');
       await this.integrateExternalTrades();
-      
+
       console.log('\nStep 5: 結果レポート生成...');
       await this.generateReconciliationReport();
-      
+
     } catch (error) {
       const errorMsg = `外部取引監査エラー: ${error.message}`;
       console.error(errorMsg);
@@ -53,11 +53,11 @@ class ExternalTradesReconciler {
   async initializeDatabases() {
     await connectDB();
     await initRedisClient();
-    
+
     // Bot管理オーダーをMongoDBから取得
     this.botOrders = await listOrders({}, { orderId: 1 }, 5000);
     this.botOrderIds = new Set(this.botOrders.map(order => order.orderId));
-    
+
     console.log(`Bot管理オーダー数: ${this.botOrderIds.size}件`);
   }
 
@@ -66,28 +66,30 @@ class ExternalTradesReconciler {
    */
   async fetchExchangeTrades() {
     const exchanges = Object.keys(config.exchanges);
-    
+
     for (const exchangeId of exchanges) {
       try {
         const exchange = config.exchanges[exchangeId]?.instance;
-        if (!exchange) continue;
+        if (!exchange) {
+          continue;
+        }
 
         console.log(`📊 ${exchangeId} の約定履歴を取得中...`);
-        
+
         // 主要通貨ペアの約定履歴を取得
-        const symbols = ['BTC/JPY', 'ETH/JPY', 'XRP/JPY', 'LTC/JPY', 'BCH/JPY', 
-                        'SOL/JPY', 'DOT/JPY', 'XLM/JPY', 'LINK/JPY', 'GALA/JPY',
-                        'APE/JPY', 'MANA/JPY', 'SAND/JPY', 'CHZ/JPY', 'OAS/JPY'];
-        
+        const symbols = ['BTC/JPY', 'ETH/JPY', 'XRP/JPY', 'LTC/JPY', 'BCH/JPY',
+          'SOL/JPY', 'DOT/JPY', 'XLM/JPY', 'LINK/JPY', 'GALA/JPY',
+          'APE/JPY', 'MANA/JPY', 'SAND/JPY', 'CHZ/JPY', 'OAS/JPY'];
+
         for (const symbol of symbols) {
           try {
             // 過去24時間の約定履歴を取得
             const since = Date.now() - (this.lookbackHours * 60 * 60 * 1000);
             const trades = await exchange.fetchMyTrades(symbol, since, 100);
-            
+
             if (trades.length > 0) {
               console.log(`  ${symbol}: ${trades.length}件の約定を取得`);
-              
+
               // 各約定について外部取引チェック
               for (const trade of trades) {
                 if (!this.botOrderIds.has(trade.order)) {
@@ -100,25 +102,25 @@ class ExternalTradesReconciler {
                 }
               }
             }
-            
+
             // API制限回避
             await new Promise(resolve => setTimeout(resolve, 200));
-            
+
           } catch (symbolError) {
             console.warn(`  ${symbol} 約定履歴取得エラー: ${symbolError.message}`);
           }
         }
-        
+
         // 取引所間での待機
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
       } catch (error) {
         const errorMsg = `${exchangeId} 約定履歴取得エラー: ${error.message}`;
         console.error(errorMsg);
         this.errors.push(errorMsg);
       }
     }
-    
+
     console.log(`\n外部取引検出: ${this.externalTrades.length}件`);
   }
 
@@ -128,12 +130,12 @@ class ExternalTradesReconciler {
   async detectExternalTrades() {
     for (const externalTrade of this.externalTrades) {
       const { trade, exchangeId, symbol } = externalTrade;
-      
+
       try {
         // 取引の詳細分析
         const tradeAge = (Date.now() - trade.timestamp) / (1000 * 60 * 60);
         const tradeValue = trade.amount * trade.price;
-        
+
         // 分類ロジック
         if (tradeValue > 50000) {
           externalTrade.classification = 'large_external_trade';
@@ -145,7 +147,7 @@ class ExternalTradesReconciler {
           externalTrade.classification = 'historical_external_trade';
           externalTrade.priority = 'low';
         }
-        
+
         // 取引戦略の推定
         if (trade.side === 'buy' && trade.amount < 1) {
           externalTrade.estimatedStrategy = 'MANUAL_BUY';
@@ -154,10 +156,10 @@ class ExternalTradesReconciler {
         } else {
           externalTrade.estimatedStrategy = 'OUTSIDE';
         }
-        
+
         console.log(`📋 外部取引検出: ${symbol} ${trade.side} ${trade.amount} (${externalTrade.classification})`);
         console.log(`   オーダーID: ${trade.order}, 価値: ¥${tradeValue.toFixed(0)}, 経過: ${tradeAge.toFixed(1)}h`);
-        
+
       } catch (error) {
         console.warn(`外部取引分析エラー: ${trade.order} - ${error.message}`);
       }
@@ -171,7 +173,7 @@ class ExternalTradesReconciler {
     for (const externalTrade of this.externalTrades) {
       try {
         const { trade, exchangeId, symbol, estimatedStrategy } = externalTrade;
-        
+
         // MongoDB tradesコレクションに追加
         const tradeRecord = {
           tradeId: `external_${trade.id}_${Date.now()}`,
@@ -188,20 +190,20 @@ class ExternalTradesReconciler {
           isExternal: true,
           detectedAt: Date.now()
         };
-        
+
         await addTradeMongoDB(tradeRecord);
-        
+
         // trade_summary更新
         await updateTradeSummary(tradeRecord);
-        
+
         this.reconciledTrades.push({
           ...externalTrade,
           tradeRecord,
           action: 'integrated_as_external'
         });
-        
+
         console.log(`✅ 統合完了: ${symbol} ${estimatedStrategy} (¥${(trade.amount * trade.price).toFixed(0)})`);
-        
+
       } catch (error) {
         const errorMsg = `外部取引統合エラー: ${externalTrade.trade.order} - ${error.message}`;
         console.error(errorMsg);
@@ -217,7 +219,7 @@ class ExternalTradesReconciler {
     console.log('\n' + '='.repeat(80));
     console.log('📋 【Phase 2-2】外部取引監査・統合 - 結果レポート');
     console.log('='.repeat(80));
-    
+
     console.log(`🔍 外部取引検出: ${this.externalTrades.length}件`);
     console.log(`✅ 統合完了: ${this.reconciledTrades.length}件`);
     console.log(`❌ エラー発生: ${this.errors.length}件\n`);
@@ -229,7 +231,7 @@ class ExternalTradesReconciler {
 
     for (const reconciled of this.reconciledTrades) {
       const { classification, estimatedStrategy, trade } = reconciled;
-      
+
       classifications[classification] = (classifications[classification] || 0) + 1;
       strategies[estimatedStrategy] = (strategies[estimatedStrategy] || 0) + 1;
       totalValue += trade.amount * trade.price;
@@ -266,7 +268,7 @@ class ExternalTradesReconciler {
 
     // Discord通知
     await this.sendReconciliationNotification();
-    
+
     console.log('='.repeat(80));
     console.log('【Phase 2-2】外部取引監査・統合完了');
     console.log('='.repeat(80));
@@ -278,7 +280,7 @@ class ExternalTradesReconciler {
   async sendReconciliationNotification() {
     const severity = this.externalTrades.length > 0 ? '🔍' : '✅';
     const status = this.externalTrades.length > 0 ? '外部取引検出・統合' : '外部取引なし';
-    
+
     let message = `${severity} **【Phase 2-2】外部取引監査完了**\n\n`;
     message += `🔍 外部取引検出: ${this.externalTrades.length}件\n`;
     message += `✅ 統合完了: ${this.reconciledTrades.length}件\n`;
@@ -289,7 +291,7 @@ class ExternalTradesReconciler {
     if (this.reconciledTrades.length > 0) {
       const totalValue = this.reconciledTrades.reduce((sum, r) => sum + (r.trade.amount * r.trade.price), 0);
       message += `\n💰 **統合した取引総価値: ¥${totalValue.toFixed(0)}**\n`;
-      
+
       const highPriorityTrades = this.reconciledTrades.filter(r => r.priority === 'high');
       if (highPriorityTrades.length > 0) {
         message += '\n🚨 **高額外部取引:**\n';
@@ -325,7 +327,7 @@ async function main() {
   try {
     console.log(`外部取引監査範囲: 過去${reconciler.lookbackHours}時間\n`);
     await reconciler.executeReconciliation();
-    
+
   } catch (error) {
     console.error('外部取引監査実行エラー:', error);
     process.exit(1);

@@ -18,7 +18,7 @@ module.exports = {
   }),
   backtestCreateLimitSellOrder: jest.fn().mockResolvedValue({
     id: 'mock-order-id',
-    symbol: 'BTC/JPY', 
+    symbol: 'BTC/JPY',
     side: 'sell',
     amount: 0.001,
     price: 5100000,
@@ -40,7 +40,7 @@ module.exports = {
     ask: 5001000,
     timestamp: Date.now()
   }),
-  
+
   // Add any other functions that might be imported from manager.js
   connectDB: jest.fn().mockResolvedValue(true),
   listOrders: jest.fn().mockResolvedValue([]),
@@ -50,7 +50,7 @@ module.exports = {
   updateOrderByOrderId: jest.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
   deleteOrderByOrderId: jest.fn().mockResolvedValue(true),
   getOrderByOrderId: jest.fn().mockResolvedValue(null),
-  
+
   // Mock Redis-related functions
   getTradeSummary: jest.fn().mockResolvedValue(null),
   updateTradeSummary: jest.fn().mockResolvedValue(true),
@@ -73,7 +73,7 @@ module.exports = {
   updateBacktestOHLCVRedisSortedSet: jest.fn().mockResolvedValue(true),
   getBacktestOHLCVRedisBeforeTimestamp: jest.fn().mockResolvedValue([]),
   deleteKey: jest.fn().mockResolvedValue(true),
-  
+
   // Market parameters function
   getMarketParametersByExchangeSymbol: jest.fn().mockImplementation((symbolByExchange) => {
     const result = {};
@@ -101,14 +101,14 @@ module.exports = {
     }
     return Promise.resolve(result);
   }),
-  
+
   // Add backtest mode functions
   timeframeToTimestamp: jest.fn().mockImplementation((timeframe) => {
     const value = parseInt(timeframe);
     const unit = timeframe.slice(value.toString().length);
-    const ms = unit === 'm' ? value * 60 * 1000 : 
-               unit === 'h' ? value * 60 * 60 * 1000 :
-               unit === 'd' ? value * 24 * 60 * 60 * 1000 : 0;
+    const ms = unit === 'm' ? value * 60 * 1000 :
+      unit === 'h' ? value * 60 * 60 * 1000 :
+        unit === 'd' ? value * 24 * 60 * 60 * 1000 : 0;
     return Date.now() - ms;
   })
 };

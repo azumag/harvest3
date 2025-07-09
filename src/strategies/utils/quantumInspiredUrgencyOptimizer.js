@@ -10,20 +10,20 @@ class QuantumInspiredUrgencyOptimizer {
     this.entanglementDepth = options.entanglementDepth || 8; // もつれ深度
     this.annealingSchedule = options.annealingSchedule || this.createAnnealingSchedule();
     this.coherenceTime = options.coherenceTime || 10000; // コヒーレンス時間（ms）
-    
+
     // 量子レジスタ（urgencyパラメータ状態）
     this.quantumRegister = this.initializeQuantumRegister();
-    
+
     // ハミルトニアン（最適化目的関数）
     this.hamiltonian = this.createHamiltonian();
-    
+
     // 量子回路設計
     this.quantumCircuit = this.designQuantumCircuit();
-    
+
     // 測定結果キャッシュ
     this.measurementCache = new Map();
     this.optimizationHistory = [];
-    
+
     console.log('[QuantumUrgencyOptimizer] 量子インスパイア最適化システム初期化完了');
   }
 
@@ -39,28 +39,28 @@ class QuantumInspiredUrgencyOptimizer {
     }
 
     const startTime = Date.now();
-    
+
     try {
       console.log('[QuantumOptimizer] 量子アニーリング最適化開始');
-      
+
       // 量子状態初期化
       this.initializeQuantumStates(marketContext, currentParameters);
-      
+
       // 量子アニーリング実行
       const annealingResult = await this.performQuantumAnnealing(marketContext);
-      
+
       // 量子もつれ効果適用
       const entangledStates = this.applyQuantumEntanglement(annealingResult);
-      
+
       // 量子測定と状態収束
       const optimalParameters = this.measureAndCollapse(entangledStates, marketContext);
-      
+
       // 最適化結果評価
       const optimization = this.evaluateOptimization(optimalParameters, currentParameters, marketContext);
-      
+
       // 量子コヒーレンス維持チェック
       const coherenceStatus = this.checkQuantumCoherence(Date.now() - startTime);
-      
+
       const result = {
         parameters: optimalParameters,
         optimization: {
@@ -174,9 +174,9 @@ class QuantumInspiredUrgencyOptimizer {
           efficiency: this.measurementCache.size > 0 ? 0.9 : 0.0
         }
       };
-      
+
       this.recordOptimizationHistory(result);
-      
+
       // キャッシュに測定結果を保存
       const cacheKey = JSON.stringify({
         marketContext: marketContext,
@@ -187,14 +187,14 @@ class QuantumInspiredUrgencyOptimizer {
         timestamp: Date.now(),
         coherence: coherenceStatus.coherence
       });
-      
+
       return result;
 
     } catch (error) {
       console.error('[QuantumOptimizer] 量子最適化エラー:', error.message);
-      return { 
-        parameters: currentParameters, 
-        method: 'fallback', 
+      return {
+        parameters: currentParameters,
+        method: 'fallback',
         error: error.message,
         quantum: {
           coherenceMetrics: { stability: 0, decoherenceTime: 0, fidelity: 0 },
@@ -221,7 +221,7 @@ class QuantumInspiredUrgencyOptimizer {
    */
   initializeQuantumRegister() {
     const register = [];
-    
+
     // urgency パラメータを量子ビットで表現
     const parameterMappings = {
       volatilityWeight: { qubits: 6, range: [0, 1] },       // 64状態
@@ -231,7 +231,7 @@ class QuantumInspiredUrgencyOptimizer {
       urgencyThresholds: { qubits: 8, range: [0.1, 0.9] }, // 256状態
       adaptationRate: { qubits: 5, range: [0.01, 0.1] }    // 32状態
     };
-    
+
     for (const [param, config] of Object.entries(parameterMappings)) {
       register.push({
         parameter: param,
@@ -242,7 +242,7 @@ class QuantumInspiredUrgencyOptimizer {
         entanglement: []
       });
     }
-    
+
     return register;
   }
 
@@ -254,10 +254,10 @@ class QuantumInspiredUrgencyOptimizer {
   createSuperposition(qubits) {
     const states = Math.pow(2, qubits);
     const amplitudes = [];
-    
+
     // 均等重ね合わせで初期化
     const amplitude = 1 / Math.sqrt(states);
-    
+
     for (let i = 0; i < states; i++) {
       amplitudes.push({
         state: i,
@@ -265,11 +265,11 @@ class QuantumInspiredUrgencyOptimizer {
         phase: Math.random() * 2 * Math.PI
       });
     }
-    
+
     // 正規化
     const norm = Math.sqrt(amplitudes.reduce((sum, a) => sum + a.amplitude * a.amplitude, 0));
     amplitudes.forEach(a => a.amplitude /= norm);
-    
+
     return amplitudes;
   }
 
@@ -285,14 +285,14 @@ class QuantumInspiredUrgencyOptimizer {
         consistency: { weight: 0.2, type: 'maximize' },    // 一貫性最大化
         adaptability: { weight: 0.1, type: 'maximize' }    // 適応性最大化
       },
-      
+
       // 相互作用項（パラメータ間の相関）
       interactions: [
         { params: ['volatilityWeight', 'riskWeight'], coupling: -0.5 },
         { params: ['riskWeight', 'performanceWeight'], coupling: 0.3 },
         { params: ['timezoneWeight', 'volatilityWeight'], coupling: 0.2 }
       ],
-      
+
       // 制約項
       constraints: [
         { type: 'sum_equals_one', params: ['volatilityWeight', 'riskWeight', 'timezoneWeight', 'performanceWeight'] },
@@ -313,10 +313,10 @@ class QuantumInspiredUrgencyOptimizer {
         { type: 'rotation', axis: 'y', angle: 'adaptive', purpose: 'parameter_exploration' },
         { type: 'controlled_rotation', condition: 'market_volatility', purpose: 'context_adaptation' }
       ],
-      
+
       // 回路深度
       depth: this.entanglementDepth,
-      
+
       // ノイズモデル
       noiseModel: {
         decoherence: 0.001,  // デコヒーレンス率
@@ -332,13 +332,13 @@ class QuantumInspiredUrgencyOptimizer {
   createAnnealingSchedule() {
     const steps = 100;
     const schedule = [];
-    
+
     for (let i = 0; i < steps; i++) {
       const t = i / (steps - 1);
       // 非線形アニーリング関数
       const temperature = Math.exp(-5 * t) * (1 - Math.pow(t, 3));
       const transverseField = Math.cos(Math.PI * t / 2);
-      
+
       schedule.push({
         step: i,
         temperature,
@@ -347,7 +347,7 @@ class QuantumInspiredUrgencyOptimizer {
         convergence: Math.pow(t, 2)
       });
     }
-    
+
     return schedule;
   }
 
@@ -359,25 +359,25 @@ class QuantumInspiredUrgencyOptimizer {
   initializeQuantumStates(marketContext, currentParameters) {
     // 市場コンテキストに基づく初期状態バイアス
     const contextBias = this.calculateContextBias(marketContext);
-    
+
     this.quantumRegister.forEach((register, index) => {
       const paramName = register.parameter;
       const currentValue = currentParameters[paramName] || 0.5;
-      
+
       // 現在値周辺に確率密度を集中
       register.superposition.forEach(state => {
         const stateValue = this.stateToValue(state.state, register.range, register.states);
         const distance = Math.abs(stateValue - currentValue);
-        
+
         // ガウシアン分布で重み付け
         const gaussianWeight = Math.exp(-distance * distance / (2 * 0.1 * 0.1));
-        
+
         // コンテキストバイアス適用
         const bias = contextBias[paramName] || 1.0;
-        
+
         state.amplitude *= gaussianWeight * bias;
       });
-      
+
       // 正規化
       this.normalizeAmplitudes(register.superposition);
     });
@@ -391,27 +391,27 @@ class QuantumInspiredUrgencyOptimizer {
   async performQuantumAnnealing(marketContext) {
     const energyHistory = [];
     let currentEnergy = Infinity;
-    
+
     for (const schedule of this.annealingSchedule) {
       // ハミルトニアン進化
       await this.evolveHamiltonian(schedule, marketContext);
-      
+
       // エネルギー計算
       const energy = this.calculateSystemEnergy(marketContext);
       energyHistory.push({ step: schedule.step, energy, temperature: schedule.temperature });
-      
+
       // 収束判定
       if (Math.abs(energy - currentEnergy) < 1e-6 && schedule.step > 50) {
         console.log(`[QuantumAnnealing] 収束検出: step ${schedule.step}, energy ${energy.toFixed(6)}`);
         break;
       }
-      
+
       currentEnergy = energy;
-      
+
       // デコヒーレンス効果
       this.applyDecoherence(schedule.temperature);
     }
-    
+
     return {
       finalEnergy: currentEnergy,
       energyHistory,
@@ -436,20 +436,20 @@ class QuantumInspiredUrgencyOptimizer {
       register.superposition.forEach(state => {
         // 横磁場項（量子トンネリング）
         const tunneling = schedule.transverseField * Math.sin(state.phase);
-        
+
         // 縦磁場項（古典的エネルギー）
         const classicalEnergy = this.calculateClassicalEnergy(state, register, marketContext);
-        
+
         // 位相進化
         state.phase += (tunneling + classicalEnergy) * 0.01;
-        
+
         // 振幅調整（温度効果）
         if (schedule.temperature > 0) {
           const thermalNoise = (Math.random() - 0.5) * schedule.temperature * 0.1;
           state.amplitude *= (1 + thermalNoise);
         }
       });
-      
+
       // 正規化
       this.normalizeAmplitudes(register.superposition);
     });
@@ -462,23 +462,23 @@ class QuantumInspiredUrgencyOptimizer {
    */
   applyQuantumEntanglement(annealingResult) {
     console.log('[QuantumEntanglement] 量子もつれ効果適用開始');
-    
+
     const entanglements = [];
-    
+
     // パラメータ間もつれ作成
     this.hamiltonian.interactions.forEach(interaction => {
       const param1 = this.quantumRegister.find(r => r.parameter === interaction.params[0]);
       const param2 = this.quantumRegister.find(r => r.parameter === interaction.params[1]);
-      
+
       if (param1 && param2) {
         const entanglement = this.createEntanglement(param1, param2, interaction.coupling);
         entanglements.push(entanglement);
       }
     });
-    
+
     // もつれ強度計算
     const entanglementStrength = entanglements.reduce((sum, e) => sum + Math.abs(e.correlation), 0) / entanglements.length;
-    
+
     return {
       entanglements,
       entanglementStrength,
@@ -497,21 +497,21 @@ class QuantumInspiredUrgencyOptimizer {
   /**
    * もつれ状態作成
    * @param {Object} param1 - パラメータ1
-   * @param {Object} param2 - パラメータ2  
+   * @param {Object} param2 - パラメータ2
    * @param {number} coupling - 結合強度
    * @returns {Object} もつれ状態
    */
   createEntanglement(param1, param2, coupling) {
     const entangledStates = [];
-    
+
     // Bell状態様の相関状態作成
     for (let i = 0; i < Math.min(param1.superposition.length, param2.superposition.length); i++) {
       const state1 = param1.superposition[i];
       const state2 = param2.superposition[i];
-      
+
       // 相関振幅計算
       const correlatedAmplitude = Math.sqrt(state1.amplitude * state2.amplitude) * coupling;
-      
+
       entangledStates.push({
         state1: state1.state,
         state2: state2.state,
@@ -520,7 +520,7 @@ class QuantumInspiredUrgencyOptimizer {
         correlation: coupling
       });
     }
-    
+
     return {
       param1: param1.parameter,
       param2: param2.parameter,
@@ -539,18 +539,18 @@ class QuantumInspiredUrgencyOptimizer {
    */
   measureAndCollapse(entangledStates, marketContext) {
     console.log('[QuantumMeasurement] 量子測定と状態収束開始');
-    
+
     const measuredParameters = {};
-    
+
     // 各パラメータを測定
     this.quantumRegister.forEach(register => {
       const measurement = this.performMeasurement(register, entangledStates, marketContext);
       measuredParameters[register.parameter] = measurement.value;
     });
-    
+
     // 制約満足調整
     const constrainedParameters = this.enforceConstraints(measuredParameters);
-    
+
     return constrainedParameters;
   }
 
@@ -568,26 +568,26 @@ class QuantumInspiredUrgencyOptimizer {
       probability: state.amplitude * state.amplitude,
       value: this.stateToValue(state.state, register.range, register.states)
     }));
-    
+
     // もつれ効果調整
-    const entanglement = entangledStates.entanglements.find(e => 
+    const entanglement = entangledStates.entanglements.find(e =>
       e.param1 === register.parameter || e.param2 === register.parameter
     );
-    
+
     if (entanglement) {
       probabilities.forEach(prob => {
         prob.probability *= (1 + entanglement.correlation * 0.1);
       });
     }
-    
+
     // 確率正規化
     const totalProb = probabilities.reduce((sum, p) => sum + p.probability, 0);
     probabilities.forEach(p => p.probability /= totalProb);
-    
+
     // 確率的測定
     const random = Math.random();
     let cumulative = 0;
-    
+
     for (const prob of probabilities) {
       cumulative += prob.probability;
       if (random <= cumulative) {
@@ -599,7 +599,7 @@ class QuantumInspiredUrgencyOptimizer {
         };
       }
     }
-    
+
     // フォールバック
     return {
       state: probabilities[0].state,
@@ -619,28 +619,28 @@ class QuantumInspiredUrgencyOptimizer {
   evaluateOptimization(optimalParameters, currentParameters, marketContext) {
     const improvements = {};
     let totalImprovement = 0;
-    
+
     for (const [param, optimal] of Object.entries(optimalParameters)) {
       const current = currentParameters[param] || 0.5;
       const improvement = this.calculateParameterImprovement(param, optimal, current, marketContext);
-      
+
       improvements[param] = {
         current,
         optimal,
         improvement,
         confidence: this.calculateOptimizationConfidence(param, optimal, marketContext)
       };
-      
+
       // 特定パラメータ改善値を追加
       if (param === 'volatilityWeight') {
         improvements.volatilityOptimization = improvement;
       } else if (param === 'riskWeight') {
         improvements.riskOptimization = improvement;
       }
-      
+
       totalImprovement += improvement;
     }
-    
+
     return {
       totalImprovement,
       improvements,
@@ -689,7 +689,7 @@ class QuantumInspiredUrgencyOptimizer {
 
   calculateSystemEnergy(marketContext) {
     let energy = 0;
-    
+
     // 各レジスタのエネルギー計算
     this.quantumRegister.forEach(register => {
       const avgEnergy = register.superposition.reduce((sum, state) => {
@@ -697,21 +697,21 @@ class QuantumInspiredUrgencyOptimizer {
       }, 0);
       energy += avgEnergy;
     });
-    
+
     return energy;
   }
 
   calculateClassicalEnergy(state, register, marketContext) {
     const value = this.stateToValue(state.state, register.range, register.states);
-    
+
     // パラメータ固有のエネルギー計算
     switch (register.parameter) {
-      case 'volatilityWeight':
-        return Math.abs(value - marketContext.optimalVolatilityWeight) * 10;
-      case 'riskWeight':
-        return Math.abs(value - marketContext.optimalRiskWeight) * 8;
-      default:
-        return Math.random() * 0.1; // 基本エネルギー
+    case 'volatilityWeight':
+      return Math.abs(value - marketContext.optimalVolatilityWeight) * 10;
+    case 'riskWeight':
+      return Math.abs(value - marketContext.optimalRiskWeight) * 8;
+    default:
+      return Math.random() * 0.1; // 基本エネルギー
     }
   }
 
@@ -721,7 +721,7 @@ class QuantumInspiredUrgencyOptimizer {
         // 熱的デコヒーレンス
         const decoherence = this.quantumCircuit.noiseModel.decoherence * temperature;
         state.amplitude *= (1 - decoherence);
-        
+
         // 位相ノイズ
         state.phase += (Math.random() - 0.5) * decoherence * 0.1;
       });
@@ -730,7 +730,7 @@ class QuantumInspiredUrgencyOptimizer {
 
   checkQuantumCoherence(executionTime) {
     const coherenceRatio = Math.max(0, 1 - executionTime / this.coherenceTime);
-    
+
     return {
       coherent: coherenceRatio > 0.5,
       coherence: coherenceRatio,
@@ -749,29 +749,33 @@ class QuantumInspiredUrgencyOptimizer {
       timezoneWeight: 0.3,
       performanceWeight: Math.abs(marketContext.recentPerformance || 0)
     };
-    
+
     const sensitivity = contextSensitivity[param] || 0.5;
     const change = Math.abs(optimal - current);
-    
+
     return change * sensitivity;
   }
 
   calculateOptimizationConfidence(param, optimal, marketContext) {
     // 量子測定の不確定性に基づく信頼度
     const register = this.quantumRegister.find(r => r.parameter === param);
-    if (!register) return 0.5;
-    
+    if (!register) {
+      return 0.5;
+    }
+
     const maxAmplitude = Math.max(...register.superposition.map(s => s.amplitude));
     return maxAmplitude * maxAmplitude; // Born則確率
   }
 
   assessConvergenceQuality() {
     // エネルギー履歴から収束品質評価
-    if (this.optimizationHistory.length < 2) return 0.5;
-    
+    if (this.optimizationHistory.length < 2) {
+      return 0.5;
+    }
+
     const recent = this.optimizationHistory.slice(-5);
     const energyVariance = this.calculateVariance(recent.map(h => h.annealingEnergy));
-    
+
     return Math.max(0, 1 - energyVariance * 100);
   }
 
@@ -837,17 +841,19 @@ class QuantumInspiredUrgencyOptimizer {
   enforceConstraints(parameters) {
     // 制約満足調整
     const constrained = { ...parameters };
-    
+
     // 重み合計を1に正規化（Weightパラメータのみ）
     const weights = ['volatilityWeight', 'riskWeight', 'timezoneWeight', 'performanceWeight'];
     const weightSum = weights.reduce((sum, w) => sum + (constrained[w] || 0), 0);
-    
+
     if (weightSum > 0) {
       weights.forEach(w => {
-        if (constrained[w]) constrained[w] /= weightSum;
+        if (constrained[w]) {
+          constrained[w] /= weightSum;
+        }
       });
     }
-    
+
     // その他のパラメータは範囲制限のみ
     if (constrained.urgencyThresholds) {
       constrained.urgencyThresholds = Math.max(0.1, Math.min(0.9, constrained.urgencyThresholds));
@@ -855,7 +861,7 @@ class QuantumInspiredUrgencyOptimizer {
     if (constrained.adaptationRate) {
       constrained.adaptationRate = Math.max(0.01, Math.min(0.1, constrained.adaptationRate));
     }
-    
+
     return constrained;
   }
 
@@ -864,7 +870,7 @@ class QuantumInspiredUrgencyOptimizer {
       timestamp: Date.now(),
       ...result
     });
-    
+
     // 履歴サイズ制限
     if (this.optimizationHistory.length > 100) {
       this.optimizationHistory.shift();

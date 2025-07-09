@@ -17,12 +17,12 @@ class UrgencyABTestingSystem {
       mlBased: 0.25,       // 機械学習ベース
       multiTimeframe: 0.2  // マルチタイムフレーム
     };
-    
+
     // テスト状態管理
     this.activeTests = new Map();
     this.testResults = new Map();
     this.userAssignments = new Map(); // ユーザー（通貨ペア）のテスト群割り当て
-    
+
     // パフォーマンス指標
     this.metrics = [
       'executionTime',
@@ -33,10 +33,10 @@ class UrgencyABTestingSystem {
       'sharpeRatio',
       'maxDrawdown'
     ];
-    
+
     // 統計的検定用
     this.statisticalTests = new StatisticalTestSuite();
-    
+
     console.log('[UrgencyABTesting] 初期化完了');
   }
 
@@ -57,13 +57,13 @@ class UrgencyABTestingSystem {
       // ユーザー（通貨ペア）のテスト群決定
       const testGroup = this.assignTestGroup(symbol);
       const testId = this.generateTestId(symbol, testGroup);
-      
+
       // グループ別urgency計算
       const urgencyResult = await this.calculateGroupUrgency(testGroup, baseUrgency, context, strategies);
-      
+
       // テスト記録開始
       this.startTestRecord(testId, symbol, testGroup, baseUrgency, urgencyResult, context);
-      
+
       return {
         group: testGroup,
         urgency: urgencyResult.urgency,
@@ -96,10 +96,10 @@ class UrgencyABTestingSystem {
     // 新規割り当て（決定論的ハッシュベース）
     const hash = crypto.createHash('md5').update(symbol + Date.now().toString()).digest('hex');
     const hashValue = parseInt(hash.substr(0, 8), 16) / 0xffffffff;
-    
+
     let cumulativeProb = 0;
     let assignedGroup = 'control';
-    
+
     for (const [group, prob] of Object.entries(this.trafficAllocation)) {
       cumulativeProb += prob;
       if (hashValue <= cumulativeProb) {
@@ -107,14 +107,14 @@ class UrgencyABTestingSystem {
         break;
       }
     }
-    
+
     // 割り当て記録
     this.userAssignments.set(symbol, {
       group: assignedGroup,
       timestamp: Date.now(),
       hash: hashValue
     });
-    
+
     console.log(`[A/B Test] ${symbol} → ${assignedGroup} (hash: ${hashValue.toFixed(4)})`);
     return assignedGroup;
   }
@@ -129,20 +129,20 @@ class UrgencyABTestingSystem {
    */
   async calculateGroupUrgency(group, baseUrgency, context, strategies) {
     switch (group) {
-      case 'control':
-        return this.calculateControlUrgency(baseUrgency);
-        
-      case 'ruleBasedDynamic':
-        return await this.calculateRuleBasedUrgency(baseUrgency, context, strategies.ruleBasedDynamic);
-        
-      case 'mlBased':
-        return await this.calculateMLBasedUrgency(baseUrgency, context, strategies.mlBased);
-        
-      case 'multiTimeframe':
-        return await this.calculateMultiTimeframeUrgency(baseUrgency, context, strategies.multiTimeframe);
-        
-      default:
-        return this.calculateControlUrgency(baseUrgency);
+    case 'control':
+      return this.calculateControlUrgency(baseUrgency);
+
+    case 'ruleBasedDynamic':
+      return await this.calculateRuleBasedUrgency(baseUrgency, context, strategies.ruleBasedDynamic);
+
+    case 'mlBased':
+      return await this.calculateMLBasedUrgency(baseUrgency, context, strategies.mlBased);
+
+    case 'multiTimeframe':
+      return await this.calculateMultiTimeframeUrgency(baseUrgency, context, strategies.multiTimeframe);
+
+    default:
+      return this.calculateControlUrgency(baseUrgency);
     }
   }
 
@@ -172,7 +172,7 @@ class UrgencyABTestingSystem {
         baseUrgency,
         context
       );
-      
+
       return {
         urgency: result,
         confidence: 0.8,
@@ -195,15 +195,15 @@ class UrgencyABTestingSystem {
 
     try {
       const result = await mlPredictor.predictOptimalUrgency(context, baseUrgency);
-      
+
       return {
         urgency: result.urgency,
         confidence: result.confidence,
         method: 'ml_based',
-        metadata: { 
-          group: 'mlBased', 
+        metadata: {
+          group: 'mlBased',
           mlMethod: result.method,
-          mlConfidence: result.confidence 
+          mlConfidence: result.confidence
         }
       };
     } catch (error) {
@@ -227,12 +227,12 @@ class UrgencyABTestingSystem {
         baseUrgency,
         context
       );
-      
+
       return {
         urgency: result.urgency,
         confidence: result.confidence,
         method: 'multi_timeframe',
-        metadata: { 
+        metadata: {
           group: 'multiTimeframe',
           timeframes: result.validTimeframes,
           trendConsistency: result.trendConsistency
@@ -272,7 +272,7 @@ class UrgencyABTestingSystem {
       completed: false,
       result: null
     };
-    
+
     this.activeTests.set(testId, record);
     console.log(`[A/B Test] 記録開始: ${testId} (${group})`);
   }
@@ -293,7 +293,7 @@ class UrgencyABTestingSystem {
       testRecord.completed = true;
       testRecord.endTime = Date.now();
       testRecord.duration = testRecord.endTime - testRecord.startTime;
-      
+
       // 実行結果を記録
       testRecord.result = {
         success: executionResult.success,
@@ -304,19 +304,19 @@ class UrgencyABTestingSystem {
         orderType: executionResult.orderType,
         errorMessage: executionResult.errorMessage
       };
-      
+
       // パフォーマンス指標計算
       testRecord.metrics = this.calculateTestMetrics(testRecord);
-      
+
       // 完了したテストを結果コレクションに移動
       const groupResults = this.testResults.get(testRecord.group) || [];
       groupResults.push(testRecord);
       this.testResults.set(testRecord.group, groupResults);
-      
+
       this.activeTests.delete(testId);
-      
+
       console.log(`[A/B Test] 結果記録: ${testId} - 成功: ${executionResult.success}`);
-      
+
       // 統計的有意性チェック
       this.checkStatisticalSignificance(testRecord.group);
 
@@ -332,13 +332,13 @@ class UrgencyABTestingSystem {
    */
   calculateTestMetrics(testRecord) {
     const result = testRecord.result;
-    
+
     return {
       executionTime: result.executionTime,
       slippage: Math.abs(result.slippage || 0),
       fillRate: result.fillRate,
       successRate: result.success ? 1 : 0,
-      
+
       // 追加指標（将来的にP&L追跡可能）
       executionEfficiency: this.calculateExecutionEfficiency(result),
       urgencyEffectiveness: this.calculateUrgencyEffectiveness(testRecord),
@@ -352,12 +352,14 @@ class UrgencyABTestingSystem {
    * @returns {number} 効率スコア
    */
   calculateExecutionEfficiency(result) {
-    if (!result.success) return 0;
-    
+    if (!result.success) {
+      return 0;
+    }
+
     const timeScore = Math.max(0, 1 - (result.executionTime / 60000)); // 1分を基準
     const slippageScore = Math.max(0, 1 - Math.abs(result.slippage || 0) * 1000); // 0.1%を基準
     const fillScore = result.fillRate || 0;
-    
+
     return (timeScore * 0.3 + slippageScore * 0.4 + fillScore * 0.3);
   }
 
@@ -370,10 +372,10 @@ class UrgencyABTestingSystem {
     const urgencyLevels = { low: 0, medium: 0.5, high: 1 };
     const baseLevel = urgencyLevels[testRecord.baseUrgency] || 0.5;
     const finalLevel = urgencyLevels[testRecord.finalUrgency] || 0.5;
-    
+
     const urgencyChange = Math.abs(finalLevel - baseLevel);
     const executionSuccess = testRecord.result.success ? 1 : 0;
-    
+
     // urgency変更が適切だったかの評価
     if (urgencyChange > 0 && executionSuccess) {
       return 0.8 + urgencyChange * 0.2; // 変更が成功に寄与
@@ -392,14 +394,20 @@ class UrgencyABTestingSystem {
   calculateConfidenceAlignment(testRecord) {
     const confidence = testRecord.confidence || 0.5;
     const success = testRecord.result.success ? 1 : 0;
-    
+
     // 高信頼度での成功、低信頼度での失敗は良い整合性
-    if (confidence > 0.7 && success) return 1.0;
-    if (confidence < 0.3 && !success) return 0.8;
-    
+    if (confidence > 0.7 && success) {
+      return 1.0;
+    }
+    if (confidence < 0.3 && !success) {
+      return 0.8;
+    }
+
     // 中程度の信頼度は中程度の評価
-    if (confidence >= 0.3 && confidence <= 0.7) return 0.6;
-    
+    if (confidence >= 0.3 && confidence <= 0.7) {
+      return 0.6;
+    }
+
     // 不整合（高信頼度での失敗、低信頼度での成功）
     return 0.2;
   }
@@ -411,7 +419,7 @@ class UrgencyABTestingSystem {
   checkStatisticalSignificance(group) {
     const groupResults = this.testResults.get(group) || [];
     const controlResults = this.testResults.get('control') || [];
-    
+
     if (groupResults.length < this.minSampleSize || controlResults.length < this.minSampleSize) {
       return; // サンプルサイズ不足
     }
@@ -421,14 +429,14 @@ class UrgencyABTestingSystem {
       this.metrics.forEach(metric => {
         const testValues = groupResults.map(r => r.metrics[metric]).filter(v => v !== undefined);
         const controlValues = controlResults.map(r => r.metrics[metric]).filter(v => v !== undefined);
-        
+
         if (testValues.length >= this.minSampleSize && controlValues.length >= this.minSampleSize) {
           const testResult = this.statisticalTests.welchTTest(testValues, controlValues);
-          
+
           if (testResult.pValue < this.significanceLevel) {
             console.log(`[A/B Test] 統計的有意差検出: ${group} vs control (${metric})`);
             console.log(`  p値: ${testResult.pValue.toFixed(4)}, 効果サイズ: ${testResult.effectSize.toFixed(4)}`);
-            
+
             this.reportSignificantResult(group, metric, testResult, {
               testMean: testResult.testMean,
               controlMean: testResult.controlMean,
@@ -453,7 +461,7 @@ class UrgencyABTestingSystem {
   reportSignificantResult(group, metric, testResult, summary) {
     const improvement = ((summary.testMean - summary.controlMean) / summary.controlMean * 100).toFixed(2);
     const direction = improvement > 0 ? '改善' : '悪化';
-    
+
     console.log(`🎯 [A/B Test結果] ${group}戦略が${metric}で統計的有意な${direction}を検出`);
     console.log(`   改善率: ${improvement}%`);
     console.log(`   信頼度: ${((1 - testResult.pValue) * 100).toFixed(1)}%`);
@@ -489,7 +497,7 @@ class UrgencyABTestingSystem {
    */
   generateSummaryStats() {
     const summary = {};
-    
+
     for (const [group, results] of this.testResults) {
       if (results.length > 0) {
         summary[group] = {
@@ -502,7 +510,7 @@ class UrgencyABTestingSystem {
         };
       }
     }
-    
+
     return summary;
   }
 
@@ -512,13 +520,13 @@ class UrgencyABTestingSystem {
   generateGroupComparisons() {
     const comparisons = {};
     const controlResults = this.testResults.get('control') || [];
-    
+
     for (const [group, results] of this.testResults) {
       if (group !== 'control' && results.length >= this.minSampleSize && controlResults.length >= this.minSampleSize) {
         comparisons[group] = this.compareWithControl(results, controlResults);
       }
     }
-    
+
     return comparisons;
   }
 
@@ -530,25 +538,25 @@ class UrgencyABTestingSystem {
    */
   compareWithControl(testResults, controlResults) {
     const comparison = {};
-    
+
     this.metrics.forEach(metric => {
       const testValues = testResults.map(r => r.metrics[metric]).filter(v => v !== undefined);
       const controlValues = controlResults.map(r => r.metrics[metric]).filter(v => v !== undefined);
-      
+
       if (testValues.length > 0 && controlValues.length > 0) {
         const testMean = testValues.reduce((a, b) => a + b) / testValues.length;
         const controlMean = controlValues.reduce((a, b) => a + b) / controlValues.length;
         const improvement = ((testMean - controlMean) / controlMean * 100);
-        
+
         comparison[metric] = {
           testMean: testMean.toFixed(4),
           controlMean: controlMean.toFixed(4),
           improvement: improvement.toFixed(2) + '%',
-          significantlyBetter: improvement > 5, // 5%以上の改善を有意とする
+          significantlyBetter: improvement > 5 // 5%以上の改善を有意とする
         };
       }
     });
-    
+
     return comparison;
   }
 
@@ -558,15 +566,15 @@ class UrgencyABTestingSystem {
   generateStatisticalTestResults() {
     const testResults = {};
     const controlResults = this.testResults.get('control') || [];
-    
+
     for (const [group, results] of this.testResults) {
       if (group !== 'control' && results.length >= this.minSampleSize && controlResults.length >= this.minSampleSize) {
         testResults[group] = {};
-        
+
         this.metrics.forEach(metric => {
           const testValues = results.map(r => r.metrics[metric]).filter(v => v !== undefined);
           const controlValues = controlResults.map(r => r.metrics[metric]).filter(v => v !== undefined);
-          
+
           if (testValues.length >= this.minSampleSize && controlValues.length >= this.minSampleSize) {
             try {
               const result = this.statisticalTests.welchTTest(testValues, controlValues);
@@ -583,7 +591,7 @@ class UrgencyABTestingSystem {
         });
       }
     }
-    
+
     return testResults;
   }
 
@@ -592,11 +600,11 @@ class UrgencyABTestingSystem {
    */
   generateTestRecommendations() {
     const recommendations = [];
-    
+
     // 最高パフォーマンスグループの特定
     let bestGroup = 'control';
     let bestScore = 0;
-    
+
     for (const [group, results] of this.testResults) {
       if (results.length >= this.minSampleSize) {
         const avgEfficiency = this.calculateGroupAverage(results, 'executionEfficiency');
@@ -606,7 +614,7 @@ class UrgencyABTestingSystem {
         }
       }
     }
-    
+
     if (bestGroup !== 'control') {
       recommendations.push({
         type: 'best_performer',
@@ -615,7 +623,7 @@ class UrgencyABTestingSystem {
         action: `${bestGroup}戦略の採用を検討`
       });
     }
-    
+
     // データ不足警告
     for (const [group, results] of this.testResults) {
       if (results.length < this.minSampleSize) {
@@ -627,7 +635,7 @@ class UrgencyABTestingSystem {
         });
       }
     }
-    
+
     return recommendations;
   }
 
@@ -666,7 +674,7 @@ class UrgencyABTestingSystem {
         expiredTests.push(testId);
       }
     }
-    
+
     expiredTests.forEach(testId => {
       this.activeTests.delete(testId);
     });
@@ -686,26 +694,26 @@ class StatisticalTestSuite {
   welchTTest(sample1, sample2) {
     const n1 = sample1.length;
     const n2 = sample2.length;
-    
+
     const mean1 = sample1.reduce((a, b) => a + b) / n1;
     const mean2 = sample2.reduce((a, b) => a + b) / n2;
-    
+
     const var1 = sample1.reduce((sum, x) => sum + Math.pow(x - mean1, 2), 0) / (n1 - 1);
     const var2 = sample2.reduce((sum, x) => sum + Math.pow(x - mean2, 2), 0) / (n2 - 1);
-    
+
     const se = Math.sqrt(var1/n1 + var2/n2);
     const t = (mean1 - mean2) / se;
-    
+
     // 自由度計算（Welch-Satterthwaite equation）
     const df = Math.pow(var1/n1 + var2/n2, 2) / (Math.pow(var1/n1, 2)/(n1-1) + Math.pow(var2/n2, 2)/(n2-1));
-    
+
     // p値計算（簡易近似）
     const pValue = this.tDistributionPValue(Math.abs(t), df);
-    
+
     // 効果サイズ（Cohen's d）
     const pooledSD = Math.sqrt(((n1-1)*var1 + (n2-1)*var2) / (n1+n2-2));
     const effectSize = (mean1 - mean2) / pooledSD;
-    
+
     return {
       t,
       df,
@@ -776,9 +784,13 @@ class StatisticalTestSuite {
    */
   incompleteBeta(a, b, x) {
     // 簡易近似（正確な計算には特殊関数ライブラリが必要）
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    
+    if (x <= 0) {
+      return 0;
+    }
+    if (x >= 1) {
+      return 1;
+    }
+
     // 連分数近似の簡略版
     return x; // プレースホルダー（実際の実装では適切な近似を使用）
   }

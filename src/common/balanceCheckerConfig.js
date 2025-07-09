@@ -50,7 +50,7 @@ const BALANCE_CHECKER_CONFIG = {
     enableMongoDbComparison: true,      // MongoDB履歴との比較
     enableRedisSummaryComparison: true, // Redisサマリーとの比較
     enablePositionComparison: true,     // ポジションデータとの比較
-    
+
     // データソース優先度（エラー時のフォールバック順）
     fallbackPriority: ['exchange', 'mongodb', 'redisSummary', 'redisPositions']
   },
@@ -68,35 +68,35 @@ const BALANCE_CHECKER_CONFIG = {
  */
 function getBalanceCheckerConfig() {
   const config = { ...BALANCE_CHECKER_CONFIG };
-  
+
   // 環境変数による設定のオーバーライド
   if (process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD) {
     config.thresholds.significantBalance = parseFloat(process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD);
   }
-  
+
   if (process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT) {
     config.thresholds.highDiscrepancyPercent = parseInt(process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT);
   }
-  
+
   if (process.env.BALANCE_CHECKER_LOCK_TTL) {
     config.distributedLock.defaultTtl = parseInt(process.env.BALANCE_CHECKER_LOCK_TTL);
   }
-  
+
   if (process.env.BALANCE_CHECKER_LIGHTWEIGHT_INTERVAL) {
     config.intervals.lightweightCheck = parseInt(process.env.BALANCE_CHECKER_LIGHTWEIGHT_INTERVAL);
   }
-  
+
   if (process.env.BALANCE_CHECKER_ROBUST_INTERVAL) {
     config.intervals.robustCheck = parseInt(process.env.BALANCE_CHECKER_ROBUST_INTERVAL);
   }
-  
+
   // デバッグ設定
   if (process.env.BALANCE_CHECKER_DEBUG === 'true') {
     config.debug.enableDetailedLogging = true;
     config.debug.logDataSnapshots = true;
     config.debug.enablePerformanceMetrics = true;
   }
-  
+
   return config;
 }
 
@@ -105,31 +105,31 @@ function getBalanceCheckerConfig() {
  */
 function validateConfig(config) {
   const errors = [];
-  
+
   if (config.thresholds.significantBalance < 0) {
     errors.push('significantBalance must be non-negative');
   }
-  
+
   if (config.thresholds.highDiscrepancyPercent < 0 || config.thresholds.highDiscrepancyPercent > 100) {
     errors.push('highDiscrepancyPercent must be between 0 and 100');
   }
-  
+
   if (config.distributedLock.defaultTtl < 1000) {
     errors.push('defaultTtl must be at least 1000ms');
   }
-  
+
   if (config.intervals.lightweightCheck < 60000) {
     errors.push('lightweightCheck interval must be at least 60 seconds');
   }
-  
+
   if (config.intervals.robustCheck < 300000) {
     errors.push('robustCheck interval must be at least 5 minutes');
   }
-  
+
   if (errors.length > 0) {
     throw new Error(`Balance checker configuration validation failed: ${errors.join(', ')}`);
   }
-  
+
   return true;
 }
 

@@ -70,13 +70,13 @@ async function fetchTotal(exchange, symbol) {
 function timeframeToMs(timeframe) {
   const value = parseInt(timeframe);
   const unit = timeframe.slice(value.toString().length);
-  
+
   switch (unit) {
-    case 'm': return value * 60 * 1000;
-    case 'h': return value * 60 * 60 * 1000;
-    case 'd': return value * 24 * 60 * 60 * 1000;
-    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
-    default: throw new Error(`Unknown timeframe unit: ${unit}`);
+  case 'm': return value * 60 * 1000;
+  case 'h': return value * 60 * 60 * 1000;
+  case 'd': return value * 24 * 60 * 60 * 1000;
+  case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+  default: throw new Error(`Unknown timeframe unit: ${unit}`);
   }
 }
 
@@ -134,9 +134,9 @@ function formatStrategyLogInfo(strategyName, exchange, symbol, data) {
 async function handleStrategyError(error, strategyName, exchange, symbol, shouldThrow = false) {
   const context = `${strategyName} - ${exchange} - ${symbol}`;
   const message = typeof error === 'string' ? error : error.message;
-  
+
   console.error(`[${context}] エラー:`, message);
-  
+
   try {
     await errorHandler.handleError(error, context, shouldThrow);
   } catch (handlerError) {
@@ -156,13 +156,13 @@ function validateStrategyParams(params, requiredKeys, strategyName) {
   if (!params || typeof params !== 'object') {
     throw new Error(`${strategyName}: パラメータが不正です`);
   }
-  
+
   for (const key of requiredKeys) {
     if (!(key in params) || params[key] === undefined || params[key] === null) {
       throw new Error(`${strategyName}: 必須パラメータ '${key}' が不足しています`);
     }
   }
-  
+
   return true;
 }
 
@@ -207,24 +207,24 @@ function validateOHLCVData(ohlcvData, requiredLength, strategyName) {
   if (!Array.isArray(ohlcvData)) {
     throw new Error(`${strategyName}: OHLCVデータが配列ではありません`);
   }
-  
+
   if (ohlcvData.length < requiredLength) {
     throw new Error(`${strategyName}: データが不足しています: ${ohlcvData.length}/${requiredLength}`);
   }
-  
+
   // 各データポイントの基本構造チェック
   for (let i = 0; i < Math.min(ohlcvData.length, 10); i++) {
     const candle = ohlcvData[i];
     if (!Array.isArray(candle) || candle.length < 5) {
       throw new Error(`${strategyName}: 不正なOHLCVデータ形式: index ${i}`);
     }
-    
+
     const [timestamp, open, high, low, close] = candle;
     if (isNaN(timestamp) || isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
       throw new Error(`${strategyName}: 数値以外のデータが含まれています: index ${i}`);
     }
   }
-  
+
   return true;
 }
 
@@ -238,22 +238,22 @@ function validateOHLCVData(ohlcvData, requiredLength, strategyName) {
  */
 async function executeWithRetry(asyncFunction, maxRetries = 3, delayMs = 1000, context = 'unknown') {
   let lastError;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await asyncFunction();
     } catch (error) {
       lastError = error;
-      
+
       if (attempt === maxRetries) {
         throw error; // 最後のリトライでも失敗した場合は例外を投げる
       }
-      
+
       console.warn(`[${context}] 実行失敗 (${attempt}/${maxRetries}): ${error.message}`);
       await sleep(delayMs * attempt); // 指数バックオフ
     }
   }
-  
+
   throw lastError;
 }
 

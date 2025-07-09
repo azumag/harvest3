@@ -21,9 +21,9 @@ async function getParameters(req, res) {
   try {
     // symbolが正しくデコードされていることを確認
     symbol = decodeURIComponent(symbol);
-    
+
     const params = await getStrategyParameters(exchangeId, symbol, strategyKey);
-    
+
     if (params === null) {
       return res.status(404).json({
         error: '指定されたパラメータは見つかりませんでした。',
@@ -71,9 +71,9 @@ async function updateParameters(req, res) {
     } catch (e) {
       // すでにデコードされている場合はエラーになる可能性があるため、無視
     }
-    
+
     const success = await saveStrategyParameters(exchangeId, symbol, strategyKey, params);
-    
+
     if (!success) {
       return res.status(500).json({
         error: 'パラメータの保存に失敗しました。'
@@ -117,5 +117,5 @@ async function getAllParameters(req, res) {
 module.exports = {
   getParameters,
   updateParameters,
-  getAllParameters, // 新しい関数をエクスポート
+  getAllParameters // 新しい関数をエクスポート
 };

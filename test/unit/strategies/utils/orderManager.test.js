@@ -108,7 +108,7 @@ describe('AdvancedOrderManager', () => {
       });
 
       const liquidity = await orderManager.assessLiquidity('BTC/JPY', 0.01);
-      
+
       expect(liquidity).toBeGreaterThan(0.8);
     });
 
@@ -119,7 +119,7 @@ describe('AdvancedOrderManager', () => {
       });
 
       const liquidity = await orderManager.assessLiquidity('BTC/JPY', 0.01);
-      
+
       expect(liquidity).toBeLessThan(0.4); // より厳しい閾値
     });
   });
@@ -185,7 +185,7 @@ describe('AdvancedOrderManager', () => {
       mockExchange.createLimitBuyOrder
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({ id: '12345' });
-      
+
       mockExchange.fetchOrderBook.mockResolvedValue({
         bids: [[100, 1]],
         asks: [[101, 1]]

@@ -20,66 +20,66 @@ console.log(`
 const discoveredIssues = {
   critical: [
     {
-      issue: "ポジション偏り 100%ロング",
-      status: "✅ 根本原因解決済み",
-      rootCause: "trade_summary欠落",
-      solution: "データ再構築完了",
-      impact: "金融リスク極大 → 管理可能"
+      issue: 'ポジション偏り 100%ロング',
+      status: '✅ 根本原因解決済み',
+      rootCause: 'trade_summary欠落',
+      solution: 'データ再構築完了',
+      impact: '金融リスク極大 → 管理可能'
     },
     {
-      issue: "売り注文完全停止",
-      status: "✅ 根本原因解決済み", 
-      rootCause: "formattedAvailableAmount→0",
-      solution: "trade_summary 112件復活",
-      impact: "戦略破綻 → 正常動作復旧"
+      issue: '売り注文完全停止',
+      status: '✅ 根本原因解決済み',
+      rootCause: 'formattedAvailableAmount→0',
+      solution: 'trade_summary 112件復活',
+      impact: '戦略破綻 → 正常動作復旧'
     },
     {
-      issue: "filled_trade完全欠落",
-      status: "🔴 新発見・未解決",
-      rootCause: "updateFilledTrades機能停止",
-      solution: "緊急修復必要",
-      impact: "履歴・分析・税務記録なし"
+      issue: 'filled_trade完全欠落',
+      status: '🔴 新発見・未解決',
+      rootCause: 'updateFilledTrades機能停止',
+      solution: '緊急修復必要',
+      impact: '履歴・分析・税務記録なし'
     }
   ],
-  
+
   high: [
     {
-      issue: "戦略間過度競合",
-      status: "🟡 分析完了・要改善",
-      details: "12通貨で4戦略以上競合",
-      solution: "戦略統合・簡素化",
-      impact: "リソース効率悪化"
+      issue: '戦略間過度競合',
+      status: '🟡 分析完了・要改善',
+      details: '12通貨で4戦略以上競合',
+      solution: '戦略統合・簡素化',
+      impact: 'リソース効率悪化'
     },
     {
-      issue: "監視機能欠如",
-      status: "🔵 設計完了・実装待ち",
-      details: "異常検知・アラート不備",
-      solution: "予防的品質管理システム",
-      impact: "問題の長期間潜伏"
+      issue: '監視機能欠如',
+      status: '🔵 設計完了・実装待ち',
+      details: '異常検知・アラート不備',
+      solution: '予防的品質管理システム',
+      impact: '問題の長期間潜伏'
     },
     {
-      issue: "データ整合性脆弱",
-      status: "🔵 設計完了・実装待ち", 
-      details: "ACID特性・自動修復なし",
-      solution: "Auto-healing Architecture",
-      impact: "段階的システム劣化"
+      issue: 'データ整合性脆弱',
+      status: '🔵 設計完了・実装待ち',
+      details: 'ACID特性・自動修復なし',
+      solution: 'Auto-healing Architecture',
+      impact: '段階的システム劣化'
     }
   ],
 
   systemic: [
     {
-      issue: "アーキテクチャ設計欠陥",
-      status: "🔵 分析完了・長期改善",
-      details: "単一障害点・依存循環",
-      solution: "イベント駆動再設計",
-      impact: "スケーラビリティ限界"
+      issue: 'アーキテクチャ設計欠陥',
+      status: '🔵 分析完了・長期改善',
+      details: '単一障害点・依存循環',
+      solution: 'イベント駆動再設計',
+      impact: 'スケーラビリティ限界'
     },
     {
-      issue: "予防的品質管理なし",
-      status: "🔵 設計完了・実装計画済み",
-      details: "事後対応型システム",
-      solution: "予測的監視・自動修復",
-      impact: "障害コスト高・信頼性低"
+      issue: '予防的品質管理なし',
+      status: '🔵 設計完了・実装計画済み',
+      details: '事後対応型システム',
+      solution: '予測的監視・自動修復',
+      impact: '障害コスト高・信頼性低'
     }
   ]
 };
@@ -122,78 +122,78 @@ console.log(`
 // 3. 緊急実装計画
 const emergencyImplementation = {
   immediate: {
-    title: "緊急実装 (24-48時間)",
-    priority: "🔴 CRITICAL",
+    title: '緊急実装 (24-48時間)',
+    priority: '🔴 CRITICAL',
     tasks: [
       {
-        name: "filled_trade完全修復",
-        effort: "4-6時間",
-        impact: "履歴・分析機能復活",
+        name: 'filled_trade完全修復',
+        effort: '4-6時間',
+        impact: '履歴・分析機能復活',
         steps: [
-          "updateFilledTrades関数診断",
-          "取引所API接続確認", 
-          "過去30日履歴手動取得",
-          "filled_tradeキー再構築",
-          "継続同期プロセス修復"
+          'updateFilledTrades関数診断',
+          '取引所API接続確認',
+          '過去30日履歴手動取得',
+          'filled_tradeキー再構築',
+          '継続同期プロセス修復'
         ]
       },
       {
-        name: "基本異常検知実装",
-        effort: "6-8時間",
-        impact: "再発防止基盤構築",
+        name: '基本異常検知実装',
+        effort: '6-8時間',
+        impact: '再発防止基盤構築',
         steps: [
-          "Position-Summary整合性監視",
-          "ポジション偏りアラート",
-          "基本的自動修復機能",
-          "Discord通知システム強化"
+          'Position-Summary整合性監視',
+          'ポジション偏りアラート',
+          '基本的自動修復機能',
+          'Discord通知システム強化'
         ]
       },
       {
-        name: "緊急リスク制限強化", 
-        effort: "2-4時間",
-        impact: "即座リスク軽減",
+        name: '緊急リスク制限強化',
+        effort: '2-4時間',
+        impact: '即座リスク軽減',
         steps: [
-          "グローバルポジション上限設定",
-          "極端偏り時の買い注文制限",
-          "強制売りルール実装"
+          'グローバルポジション上限設定',
+          '極端偏り時の買い注文制限',
+          '強制売りルール実装'
         ]
       }
     ]
   },
 
   shortTerm: {
-    title: "短期実装 (1-2週間)",
-    priority: "🟡 HIGH",
+    title: '短期実装 (1-2週間)',
+    priority: '🟡 HIGH',
     tasks: [
       {
-        name: "戦略統合・最適化",
-        effort: "20-30時間",
-        impact: "効率+30%, 競合-50%",
-        details: "BOLLINGER_BANDS統合、低効率戦略停止"
+        name: '戦略統合・最適化',
+        effort: '20-30時間',
+        impact: '効率+30%, 競合-50%',
+        details: 'BOLLINGER_BANDS統合、低効率戦略停止'
       },
       {
-        name: "リアルタイム監視強化",
-        effort: "15-20時間", 
-        impact: "異常検出時間 90%短縮",
-        details: "包括的ヘルスダッシュボード"
+        name: 'リアルタイム監視強化',
+        effort: '15-20時間',
+        impact: '異常検出時間 90%短縮',
+        details: '包括的ヘルスダッシュボード'
       },
       {
-        name: "Auto-healing実装",
-        effort: "25-35時間",
-        impact: "自動修復率 80%",
-        details: "データ整合性自動修復システム"
+        name: 'Auto-healing実装',
+        effort: '25-35時間',
+        impact: '自動修復率 80%',
+        details: 'データ整合性自動修復システム'
       }
     ]
   },
 
   mediumTerm: {
-    title: "中期実装 (1-3ヶ月)",
-    priority: "🟢 MEDIUM",
+    title: '中期実装 (1-3ヶ月)',
+    priority: '🟢 MEDIUM',
     focus: [
-      "予測的リスク管理",
-      "AI-based最適化",
-      "マイクロサービス分離",
-      "クラウドネイティブ移行"
+      '予測的リスク管理',
+      'AI-based最適化',
+      'マイクロサービス分離',
+      'クラウドネイティブ移行'
     ]
   }
 };
@@ -379,8 +379,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ════════════════════════════════════════════════════════════════════════
 `);
 
-module.exports = { 
-  discoveredIssues, 
+module.exports = {
+  discoveredIssues,
   emergencyImplementation,
-  comprehensiveImprovementPlan: true 
+  comprehensiveImprovementPlan: true
 };

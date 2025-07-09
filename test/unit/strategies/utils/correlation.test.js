@@ -14,7 +14,7 @@ const {
 } = require('../../../../src/strategies/utils/correlation');
 
 describe('Correlation Utilities', () => {
-  
+
   describe('calculatePearsonCorrelation', () => {
     test('calculates perfect positive correlation', () => {
       const x = [1, 2, 3, 4, 5];
@@ -67,7 +67,7 @@ describe('Correlation Utilities', () => {
       const prices1 = [100, 102, 105];
       const prices2 = [50, 51, 52];
       const spread = calculateSpread(prices1, prices2, true);
-      
+
       expect(spread).toHaveLength(3);
       expect(spread[0]).toBeCloseTo(Math.log(100) - Math.log(50), 5);
     });
@@ -76,7 +76,7 @@ describe('Correlation Utilities', () => {
       const prices1 = [100, 102, 105];
       const prices2 = [50, 51, 52];
       const spread = calculateSpread(prices1, prices2, false);
-      
+
       expect(spread).toHaveLength(3);
       expect(spread[0]).toBe(50);
       expect(spread[1]).toBe(51);
@@ -93,7 +93,7 @@ describe('Correlation Utilities', () => {
     test('calculates z-score correctly', () => {
       const spread = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
       const zScores = calculateZScore(spread, 5);
-      
+
       expect(zScores).toHaveLength(6);
       expect(zScores[zScores.length - 1]).toBeCloseTo(1.414, 2);
     });
@@ -113,7 +113,7 @@ describe('Correlation Utilities', () => {
         spread.push(Math.exp(-0.2 * i) * Math.sin(i)); // 指数的減衰
       }
       const halfLife = calculateHalfLife(spread);
-      
+
       // 半減期が計算される場合のみテスト
       if (halfLife !== null) {
         expect(halfLife).toBeGreaterThan(0);
@@ -151,7 +151,7 @@ describe('Correlation Utilities', () => {
 
     test('records correlation data', () => {
       selector.recordCorrelation('BTC/USDT', 'ETH/USDT', 0.8, 10);
-      
+
       expect(selector.correlationHistory.size).toBe(1);
       const key = 'BTC/USDT_ETH/USDT';
       expect(selector.correlationHistory.has(key)).toBe(true);
@@ -160,7 +160,7 @@ describe('Correlation Utilities', () => {
     test('selects reference pairs with default fallback', () => {
       const availableSymbols = ['BTC/USDT', 'ETH/USDT', 'ADA/USDT'];
       const selected = selector.selectReferencePairs('ADA/USDT', availableSymbols, 3);
-      
+
       expect(selected).toContain('BTC/USDT');
       expect(selected).toContain('ETH/USDT');
       expect(selected.length).toBeLessThanOrEqual(3);
@@ -169,7 +169,7 @@ describe('Correlation Utilities', () => {
     test('provides correlation statistics', () => {
       selector.recordCorrelation('BTC/USDT', 'ETH/USDT', 0.8, 10);
       const stats = selector.getCorrelationStats('BTC/USDT');
-      
+
       // 統計データが正しく返されることを確認
       expect(stats).toBeDefined();
       expect(stats).toHaveProperty('pairCount');
@@ -200,13 +200,13 @@ describe('Correlation Utilities', () => {
 
     test('finds trading pairs with high correlation', async () => {
       const symbolsData = {
-        'BTC/USDT': Array.from({length: 30}, (_, i) => 100 + i),
-        'ETH/USDT': Array.from({length: 30}, (_, i) => 50 + i * 0.5), // 高い相関
-        'ADA/USDT': Array.from({length: 30}, (_, i) => Math.random() * 10) // ランダム
+        'BTC/USDT': Array.from({ length: 30 }, (_, i) => 100 + i),
+        'ETH/USDT': Array.from({ length: 30 }, (_, i) => 50 + i * 0.5), // 高い相関
+        'ADA/USDT': Array.from({ length: 30 }, (_, i) => Math.random() * 10) // ランダム
       };
 
       const pairs = await pairTrading.findTradingPairs(symbolsData);
-      
+
       expect(pairs).toBeInstanceOf(Array);
       if (pairs.length > 0) {
         expect(pairs[0]).toHaveProperty('symbol1');
@@ -216,9 +216,9 @@ describe('Correlation Utilities', () => {
     });
 
     test('generates pair trade signal for mean reversion', () => {
-      const prices1 = Array.from({length: 25}, (_, i) => 100 + Math.sin(i * 0.1) * 2);
-      const prices2 = Array.from({length: 25}, (_, i) => 50 + Math.sin(i * 0.1) * 1);
-      
+      const prices1 = Array.from({ length: 25 }, (_, i) => 100 + Math.sin(i * 0.1) * 2);
+      const prices2 = Array.from({ length: 25 }, (_, i) => 50 + Math.sin(i * 0.1) * 1);
+
       const pair = {
         symbol1: 'BTC/USDT',
         symbol2: 'ETH/USDT',
@@ -226,7 +226,7 @@ describe('Correlation Utilities', () => {
       };
 
       const signal = pairTrading.generatePairTradeSignal(pair, prices1, prices2);
-      
+
       if (signal) {
         expect(signal).toHaveProperty('long');
         expect(signal).toHaveProperty('short');
@@ -237,9 +237,9 @@ describe('Correlation Utilities', () => {
     });
 
     test('generates exit signal correctly', () => {
-      const prices1 = Array.from({length: 25}, (_, i) => 100);
-      const prices2 = Array.from({length: 25}, (_, i) => 50);
-      
+      const prices1 = Array.from({ length: 25 }, (_, i) => 100);
+      const prices2 = Array.from({ length: 25 }, (_, i) => 50);
+
       const pair = { symbol1: 'BTC/USDT', symbol2: 'ETH/USDT' };
       const position = { type: 'long', symbol: 'BTC/USDT' };
 
@@ -250,10 +250,10 @@ describe('Correlation Utilities', () => {
     test('handles insufficient data gracefully', () => {
       const prices1 = [100, 101];
       const prices2 = [50, 51];
-      
+
       const pair = { symbol1: 'BTC/USDT', symbol2: 'ETH/USDT' };
       const signal = pairTrading.generatePairTradeSignal(pair, prices1, prices2);
-      
+
       expect(signal).toBeNull();
     });
   });
@@ -277,7 +277,7 @@ describe('Correlation Utilities', () => {
       // 価格データでペアトレーディング分析
       const symbolsData = {};
       [selectedPairs[0], 'BTC/USDT'].forEach(symbol => {
-        symbolsData[symbol] = Array.from({length: 30}, (_, i) => 100 + i + Math.random() * 5);
+        symbolsData[symbol] = Array.from({ length: 30 }, (_, i) => 100 + i + Math.random() * 5);
       });
 
       const tradingPairs = await pairTrading.findTradingPairs(symbolsData);

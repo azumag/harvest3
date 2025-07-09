@@ -28,7 +28,7 @@ describe('Event-Driven Bot Architecture', () => {
       showNextExecutions: jest.fn(),
       removeTask: jest.fn()
     };
-    
+
     // 設定モック
     mockConfig = {
       exchanges: {
@@ -80,7 +80,7 @@ describe('Event-Driven Bot Architecture', () => {
       // bot.jsが正しく読み込まれることを確認
       const bot = require('../../../src/bot');
       expect(bot).toBeDefined();
-      
+
       // Promise.allSettledが存在することを確認（並列処理の検証）
       expect(Promise.allSettled).toBeDefined();
       expect(typeof Promise.allSettled).toBe('function');
@@ -91,7 +91,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // sleep(1000)が存在しないことを確認
       expect(botSource).not.toMatch(/await\s+sleep\(1000\)/);
       expect(botSource).toMatch(/Promise\.allSettled/); // 並列処理の確認
@@ -102,7 +102,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // while(true)が executeStrategyCycle内に存在しないことを確認
       const executeStrategyCycleMatch = botSource.match(/async function executeStrategyCycle\(\)[^}]*\}/s);
       if (executeStrategyCycleMatch) {
@@ -117,7 +117,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // SchedulingManagerが使用されていることを確認
       expect(botSource).toMatch(/scheduleIntervalTask/);
       expect(botSource).toMatch(/schedulingManager/);
@@ -128,7 +128,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // イベント駆動型の説明コメントが存在することを確認
       expect(botSource).toMatch(/イベント駆動型/);
       expect(botSource).toMatch(/効率的戦略実行エンジン/);
@@ -141,7 +141,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // Promise.allSettledが使用されていることを確認
       expect(botSource).toMatch(/Promise\.allSettled/);
     });
@@ -151,7 +151,7 @@ describe('Event-Driven Bot Architecture', () => {
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
-      
+
       // executeStrategyCycle関数が存在することを確認
       expect(botSource).toMatch(/async function executeStrategyCycle/);
     });

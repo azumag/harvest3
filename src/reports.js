@@ -26,7 +26,7 @@ async function postReport(exchange) {
   const totalAssetReport = await calculateTotalAssets(exchange).then(report => {
     let reportMessage = `# 全体資産計算レポート (${report.exchange})\n`;
     reportMessage += `**合計資産 (JPY):** ${report.totalAssetsJPY.toLocaleString()} JPY\n\n`;
-    reportMessage += `**資産詳細:**\n`;
+    reportMessage += '**資産詳細:**\n';
 
     if (report.assets && report.assets.length > 0) {
       report.assets.forEach(asset => {
@@ -89,15 +89,15 @@ async function calculateTotalAssets(exchange) {
     // 合計資産を計算
     let totalAssets = 0;
     const assetDetails = [];
-    
+
     // 残高オブジェクトの各通貨について処理
     for (const currency in balance) {
       const amount = balance[currency];
-      
+
       // 量が0より大きい場合のみ計算に含める
       if (amount > 0) {
         let value;
-        
+
         // 基準通貨（JPY）の場合はそのまま加算
         if (currency === 'JPY') {
           value = amount;
@@ -115,25 +115,25 @@ async function calculateTotalAssets(exchange) {
             continue;
           }
         }
-        
+
         // 合計に加算
         totalAssets += value;
-        
+
         // 詳細情報を追加
         assetDetails.push({
           currency,
           amount,
-          valueJPY: Math.round(value),
+          valueJPY: Math.round(value)
         });
       }
     }
-    
+
     // 結果を返す
     return {
       timestamp: new Date().toISOString(),
       exchange: exchange.name || '不明な取引所',
       totalAssetsJPY: Math.round(totalAssets),
-      assets: assetDetails,
+      assets: assetDetails
     };
   } catch (error) {
     console.error('資産計算中にエラーが発生しました:', error);
@@ -141,7 +141,7 @@ async function calculateTotalAssets(exchange) {
     return {
       timestamp: new Date().toISOString(),
       exchange: exchange.name || '不明な取引所',
-      error: error.message,
+      error: error.message
     };
   }
 }

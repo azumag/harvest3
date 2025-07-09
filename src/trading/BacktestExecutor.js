@@ -8,19 +8,19 @@ const SellOrderExecutor = require('./SellOrderExecutor');
 const { OHLCVTimeFrames } = require('../common/const');
 const { timeframeToMs } = require('../common/utils');
 const { getStrategyConfig, getStrategyParameters } = require('../database/manager');
-const { 
-  extractNumericParameterKeys, 
-  generateParameterCombinations, 
-  generateRandomParameterCombinations 
+const {
+  extractNumericParameterKeys,
+  generateParameterCombinations,
+  generateRandomParameterCombinations
 } = require('../strategies/utils/common');
 
 class BacktestExecutor extends TradingEngine {
   constructor(exchange, symbol, strategy, strategyKey, marketParametersByExchange, options = {}) {
     const marketParameters = marketParametersByExchange[exchange.id][symbol];
     const config = { strategyName: strategyKey, ...options };
-    
+
     super(exchange, symbol, strategyKey, config, marketParameters, { backtest: true, ...options });
-    
+
     this.strategy = strategy;
     this.marketParametersByExchange = marketParametersByExchange;
     this.startDate = options.startDate;
@@ -36,9 +36,9 @@ class BacktestExecutor extends TradingEngine {
    */
   async runBacktest() {
     console.log(`${this.symbol} のバックテストを開始...`);
-    
+
     let allTimeframeResults = [];
-    
+
     // Process all timeframes in parallel using extracted common logic
     const timeframePromises = OHLCVTimeFrames.map(async (timeframe) => {
       return this.runTimeframeBacktest(timeframe);
@@ -46,7 +46,7 @@ class BacktestExecutor extends TradingEngine {
 
     const allTimeframeResultsArrays = await Promise.all(timeframePromises);
     allTimeframeResults = allTimeframeResultsArrays.flat();
-    
+
     // Rank and return results using extracted common logic
     return this.processBacktestResults(allTimeframeResults);
   }
@@ -56,22 +56,22 @@ class BacktestExecutor extends TradingEngine {
    */
   async runTimeframeBacktest(timeframe) {
     console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
-    
+
     // Get strategy configuration using extracted common logic
     const { strategyConfig, parameterCombinations } = await this.prepareTimeframeConfig(timeframe);
-    
+
     const testResults = [];
-    
+
     // Test each parameter combination
     for (const paramCombination of parameterCombinations) {
       const result = await this.runParameterTest(timeframe, paramCombination, strategyConfig);
       testResults.push(result);
     }
-    
+
     // Rank results and add timeframe info
     const rankedResults = this.rankResults(testResults);
     this.displayTimeframeResults(timeframe, rankedResults);
-    
+
     return rankedResults.map(result => ({ ...result, timeframe }));
   }
 
@@ -82,11 +82,11 @@ class BacktestExecutor extends TradingEngine {
     const globalConfig = require('../config');
     const strategyConfig = await getStrategyConfig(this.exchange, this.symbol, this.strategyKey, globalConfig);
     const dbParams = await getStrategyParameters(this.exchange.id, this.symbol, this.strategyKey);
-    
+
     // Extract numeric parameters using common logic
     const numericParameterKeys = extractNumericParameterKeys(dbParams);
     console.log(`数値パラメータ: ${numericParameterKeys.join(', ')}`);
-    
+
     // Generate parameter combinations using extracted logic
     let parameterCombinations;
     if (this.gridSearch) {
@@ -100,7 +100,7 @@ class BacktestExecutor extends TradingEngine {
     } else {
       console.log(`${timeframe}: 正規乱数を使ったランダムサーチを実行します`);
       parameterCombinations = generateRandomParameterCombinations(
-        dbParams, 
+        dbParams,
         numericParameterKeys,
         10 + (this.retryCount * 10),
         0.1 + (this.retryCount * 0.1)
@@ -109,7 +109,7 @@ class BacktestExecutor extends TradingEngine {
 
     // Remove duplicates using extracted logic
     parameterCombinations = this.removeDuplicateParameters(parameterCombinations);
-    
+
     return { strategyConfig, parameterCombinations };
   }
 
@@ -119,17 +119,17 @@ class BacktestExecutor extends TradingEngine {
   removeDuplicateParameters(parameterCombinations) {
     const originalCount = parameterCombinations.length;
     const uniqueCombinationsMap = new Map();
-    
+
     parameterCombinations.forEach(combo => {
       const key = JSON.stringify(combo);
       if (!uniqueCombinationsMap.has(key)) {
         uniqueCombinationsMap.set(key, combo);
       }
     });
-    
+
     const uniqueCombinations = Array.from(uniqueCombinationsMap.values());
     console.log(`重複排除: ${originalCount} → ${uniqueCombinations.length}`);
-    
+
     return uniqueCombinations;
   }
 
@@ -138,7 +138,7 @@ class BacktestExecutor extends TradingEngine {
    */
   async runParameterTest(timeframe, paramCombination, strategyConfig) {
     const timeframeMs = timeframeToMs('1m'); // Always use 1m intervals for backtest
-    
+
     // Initialize backtest state
     const backtestOptions = {
       ...this.options,
@@ -164,11 +164,11 @@ class BacktestExecutor extends TradingEngine {
 
       try {
         await this.strategy.function(
-          this.exchange, 
-          this.symbol, 
-          this.strategyKey, 
-          { ...strategyConfig, ...paramCombination }, 
-          this.marketParameters, 
+          this.exchange,
+          this.symbol,
+          this.strategyKey,
+          { ...strategyConfig, ...paramCombination },
+          this.marketParameters,
           backtestOptions
         );
       } catch (error) {
@@ -179,14 +179,14 @@ class BacktestExecutor extends TradingEngine {
     // Handle final position
     if (backtestOptions.backtest.lastSignal === 'buy') {
       const sellExecutor = new SellOrderExecutor(
-        this.exchange, 
-        this.symbol, 
-        this.strategyKey, 
-        strategyConfig, 
-        this.marketParameters, 
+        this.exchange,
+        this.symbol,
+        this.strategyKey,
+        strategyConfig,
+        this.marketParameters,
         backtestOptions
       );
-      
+
       await sellExecutor.execute(backtestOptions.backtest.currentPrice, {});
       console.log(`  ${timeframe}: 最後のシグナルが買いでした。売り注文を実行`);
     }
@@ -230,11 +230,11 @@ class BacktestExecutor extends TradingEngine {
   processBacktestResults(allTimeframeResults) {
     // Rank all results across timeframes
     const rankedAllResults = this.rankResults(allTimeframeResults);
-    
+
     // Display final ranking
     const finalTitle = `===== ${this.symbol} ${this.strategyKey} パラメータ最適化結果 =====`;
     console.log(finalTitle);
-    
+
     for (let index = 0; index < Math.min(rankedAllResults.length, 10); index++) {
       const result = rankedAllResults[index];
       console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);

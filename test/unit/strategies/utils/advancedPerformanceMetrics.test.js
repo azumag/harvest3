@@ -13,15 +13,15 @@ const {
 } = require('../../../../src/strategies/utils/advancedPerformanceMetrics');
 
 describe('高度パフォーマンス指標のテスト', () => {
-  
+
   describe('calculateCalmarRatio', () => {
     it('正常な年間リターンとドローダウンでCalmar Ratioを計算する', () => {
       // テストデータ: 年間20%リターン、最大ドローダウン10%
       const annualizedReturn = 0.20;
       const maxDrawdown = 0.10;
-      
+
       const calmarRatio = calculateCalmarRatio(annualizedReturn, maxDrawdown);
-      
+
       // Calmar Ratio = 年間リターン / 最大ドローダウン = 0.20 / 0.10 = 2.0
       expect(calmarRatio).toBe(2.0);
     });
@@ -29,18 +29,18 @@ describe('高度パフォーマンス指標のテスト', () => {
     it('ドローダウンが0の場合は高い値を返す', () => {
       const annualizedReturn = 0.15;
       const maxDrawdown = 0;
-      
+
       const calmarRatio = calculateCalmarRatio(annualizedReturn, maxDrawdown);
-      
+
       expect(calmarRatio).toBe(100); // Infinityの代わりに制限値100を返す
     });
 
     it('年間リターンが負の場合は負のCalmar Ratioを返す', () => {
       const annualizedReturn = -0.05;
       const maxDrawdown = 0.15;
-      
+
       const calmarRatio = calculateCalmarRatio(annualizedReturn, maxDrawdown);
-      
+
       expect(calmarRatio).toBe(-0.05 / 0.15);
     });
 
@@ -56,32 +56,32 @@ describe('高度パフォーマンス指標のテスト', () => {
       // テストデータ: 混合リターン (正負含む)
       const returns = [0.02, -0.01, 0.03, -0.02, 0.01, -0.015, 0.025];
       const targetReturn = 0; // ベンチマーク0%
-      
+
       const downsideDeviation = calculateDownsideDeviation(returns, targetReturn);
-      
+
       // 負のリターンのみ: [-0.01, -0.02, -0.015]
       // 分散 = (0.01² + 0.02² + 0.015²) / 3 = (0.0001 + 0.0004 + 0.000225) / 3
       const expectedVariance = (0.0001 + 0.0004 + 0.000225) / 3;
       const expectedDeviation = Math.sqrt(expectedVariance);
-      
+
       expect(downsideDeviation).toBeCloseTo(expectedDeviation, 6);
     });
 
     it('全て正のリターンの場合は0を返す', () => {
       const returns = [0.01, 0.02, 0.03, 0.015];
       const targetReturn = 0;
-      
+
       const downsideDeviation = calculateDownsideDeviation(returns, targetReturn);
-      
+
       expect(downsideDeviation).toBe(0);
     });
 
     it('空配列の場合は0を返す', () => {
       const returns = [];
       const targetReturn = 0;
-      
+
       const downsideDeviation = calculateDownsideDeviation(returns, targetReturn);
-      
+
       expect(downsideDeviation).toBe(0);
     });
   });
@@ -90,14 +90,14 @@ describe('高度パフォーマンス指標のテスト', () => {
     it('正常なリターン系列でSortino Ratioを計算する', () => {
       const returns = [0.02, -0.01, 0.03, -0.02, 0.01];
       const riskFreeRate = 0.02; // 年率2%
-      
+
       const sortinoRatio = calculateSortinoRatio(returns, riskFreeRate);
-      
+
       // 平均リターン = (0.02 - 0.01 + 0.03 - 0.02 + 0.01) / 5 = 0.006
       // 年換算リターン = 0.006 * 365 = 2.19
       // ダウンサイド偏差計算（ベンチマーク: 年率2%の日次 ≈ 0.000055）
       // Sortino Ratio = (年換算リターン - リスクフリーレート) / ダウンサイド偏差
-      
+
       expect(typeof sortinoRatio).toBe('number');
       expect(sortinoRatio).not.toBeNaN();
     });
@@ -105,9 +105,9 @@ describe('高度パフォーマンス指標のテスト', () => {
     it('全て正のリターンの場合は高い値を返す', () => {
       const returns = [0.01, 0.02, 0.03, 0.015];
       const riskFreeRate = 0.005;
-      
+
       const sortinoRatio = calculateSortinoRatio(returns, riskFreeRate);
-      
+
       expect(sortinoRatio).toBe(100); // Infinityの代わりに制限値100を返す
     });
   });
@@ -119,35 +119,35 @@ describe('高度パフォーマンス指標のテスト', () => {
       for (let i = 0; i < 100; i++) {
         returns.push((Math.random() - 0.5) * 0.1); // -5% to +5%
       }
-      
+
       const var95 = calculateVaR(returns, 0.95);
-      
+
       expect(typeof var95).toBe('number');
       expect(var95).toBeLessThan(0); // VaRは通常負の値
     });
 
     it('99%信頼区間でVaRを計算する', () => {
       const returns = [-0.05, -0.03, -0.01, 0.01, 0.02, 0.03, 0.04, 0.05];
-      
+
       const var99 = calculateVaR(returns, 0.99);
-      
+
       // 99%信頼区間 = 1%パーセンタイル
       expect(var99).toBeCloseTo(-0.05, 2);
     });
 
     it('信頼区間50%（メディアン）のテスト', () => {
       const returns = [-0.04, -0.02, 0, 0.02, 0.04];
-      
+
       const var50 = calculateVaR(returns, 0.5);
-      
+
       expect(var50).toBe(0); // メディアン
     });
 
     it('空配列の場合は0を返す', () => {
       const returns = [];
-      
+
       const var95 = calculateVaR(returns);
-      
+
       expect(var95).toBe(0);
     });
   });
@@ -155,9 +155,9 @@ describe('高度パフォーマンス指標のテスト', () => {
   describe('calculateAnnualizedReturn', () => {
     it('日次リターンから年換算リターンを計算する', () => {
       const returns = [0.001, 0.002, -0.001, 0.0015]; // 0.1%, 0.2%, -0.1%, 0.15%
-      
+
       const annualizedReturn = calculateAnnualizedReturn(returns);
-      
+
       // 平均日次リターン = (0.001 + 0.002 - 0.001 + 0.0015) / 4 = 0.000875
       // 年換算 = 0.000875 * 365 = 0.319375
       expect(annualizedReturn).toBeCloseTo(0.319375, 4);
@@ -165,9 +165,9 @@ describe('高度パフォーマンス指標のテスト', () => {
 
     it('空配列の場合は0を返す', () => {
       const returns = [];
-      
+
       const annualizedReturn = calculateAnnualizedReturn(returns);
-      
+
       expect(annualizedReturn).toBe(0);
     });
   });
@@ -225,7 +225,7 @@ describe('高度パフォーマンス指標のテスト', () => {
 
     it('極端な値を処理する', () => {
       const extremeReturns = [1, -1, 0.5, -0.8, 2];
-      
+
       expect(() => calculateSortinoRatio(extremeReturns)).not.toThrow();
       expect(() => calculateVaR(extremeReturns)).not.toThrow();
     });

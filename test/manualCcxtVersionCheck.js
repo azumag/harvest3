@@ -1,6 +1,6 @@
 /**
  * CCXT バージョン互換性手動チェック
- * 
+ *
  * このスクリプトは、CCXT v3.0.0 から v3.1.60 への更新に伴う
  * API構造の変更を静的に分析します。
  */
@@ -12,15 +12,15 @@ console.log(`CCXT バージョン: ${ccxt.version}`);
 
 // インスタンス作成
 const exchange = new ccxt.bitbank({
-  enableRateLimit: true,
+  enableRateLimit: true
 });
 
 // 利用可能なメソッドを確認
 console.log('\n利用可能なメソッド一覧:');
 const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(exchange))
-  .filter(name => 
-    typeof exchange[name] === 'function' && 
-    !name.startsWith('_') && 
+  .filter(name =>
+    typeof exchange[name] === 'function' &&
+    !name.startsWith('_') &&
     name !== 'constructor'
   )
   .sort();
@@ -52,9 +52,9 @@ criticalMethods.forEach(methodName => {
 // 注文タイプの確認
 console.log('\nサポートされている注文タイプ:');
 if (exchange.has) {
-  console.log(`Market注文: ${exchange.has['createMarketOrder'] ? 'サポート' : '未サポート'}`);
-  console.log(`Limit注文: ${exchange.has['createLimitOrder'] ? 'サポート' : '未サポート'}`);
-  console.log(`Stop注文: ${exchange.has['createStopOrder'] ? 'サポート' : '未サポート'}`);
+  console.log(`Market注文: ${exchange.has.createMarketOrder ? 'サポート' : '未サポート'}`);
+  console.log(`Limit注文: ${exchange.has.createLimitOrder ? 'サポート' : '未サポート'}`);
+  console.log(`Stop注文: ${exchange.has.createStopOrder ? 'サポート' : '未サポート'}`);
 }
 
 // エラーコード処理

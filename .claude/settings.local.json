@@ -67,20 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "docker compose down && docker compose up bot backtest -d"
-          },
-          {
-            "type": "command",
             "command": "afplay /System/Library/Sounds/Funk.aiff"
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/gemini-review-hook.sh --debug",
-            "timeout": 450
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/push-review-complete.sh"
           },
           {
             "type": "command",
@@ -89,21 +76,7 @@
           },
           {
             "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/ci-monitor-hook.sh",
-            "timeout": 365
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/self-review.sh",
-            "timeout": 365
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/refactor.sh"
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/resolve-todo-list.sh"
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
           }
         ]
       }

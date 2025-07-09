@@ -33,10 +33,10 @@ const SIMILARITY_THRESHOLD = 0.7;
  */
 function getJSFiles(dir, files = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  
+
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
-    
+
     if (entry.isDirectory()) {
       // 除外パターンチェック
       if (!EXCLUDE_PATTERNS.some(pattern => entry.name.includes(pattern))) {
@@ -49,7 +49,7 @@ function getJSFiles(dir, files = []) {
       }
     }
   }
-  
+
   return files;
 }
 
@@ -59,20 +59,20 @@ function getJSFiles(dir, files = []) {
 function extractCode(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
-    
+
     // コメント除去（簡易版）
     const lines = content
       .split('\n')
       .map(line => line.trim())
       .filter(line => {
         // 空行、単行コメント、ブロックコメント（簡易）を除去
-        return line.length > 0 && 
-               !line.startsWith('//') && 
-               !line.startsWith('/*') && 
+        return line.length > 0 &&
+               !line.startsWith('//') &&
+               !line.startsWith('/*') &&
                !line.startsWith('*') &&
                !line.startsWith('*/');
       });
-    
+
     return lines.join('\n');
   } catch (error) {
     console.warn(`ファイル読み込みエラー: ${filePath}`, error.message);
@@ -86,14 +86,14 @@ function extractCode(filePath) {
 function extractFunctions(code) {
   const functions = [];
   const lines = code.split('\n');
-  
+
   let currentFunction = null;
   let braceCount = 0;
   let inFunction = false;
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    
+
     // 関数定義の検出（簡易版）
     const functionMatch = line.match(/(?:function\s+(\w+)|(\w+)\s*[:=]\s*(?:function|async\s+function|\([^)]*\)\s*=>))/);
     if (functionMatch && !inFunction) {
@@ -105,29 +105,29 @@ function extractFunctions(code) {
       inFunction = true;
       braceCount = 0;
     }
-    
+
     if (inFunction) {
       currentFunction.code += line + '\n';
-      
+
       // 波括弧カウント
       braceCount += (line.match(/\{/g) || []).length;
       braceCount -= (line.match(/\}/g) || []).length;
-      
+
       // 関数終了の検出
       if (braceCount <= 0 && currentFunction.code.includes('{')) {
         currentFunction.endLine = i + 1;
         currentFunction.code = currentFunction.code.trim();
-        
+
         if (currentFunction.code.length > 50) { // 最小コード長
           functions.push(currentFunction);
         }
-        
+
         inFunction = false;
         currentFunction = null;
       }
     }
   }
-  
+
   return functions;
 }
 
@@ -136,7 +136,7 @@ function extractFunctions(code) {
  */
 async function analyzeSimilarity() {
   console.log('🔍 コード類似度分析を開始します...\n');
-  
+
   // 分析対象ファイルの収集
   const allFiles = [];
   for (const dir of TARGET_DIRS) {
@@ -144,28 +144,32 @@ async function analyzeSimilarity() {
       allFiles.push(...getJSFiles(dir));
     }
   }
-  
+
   console.log(`📂 分析対象ファイル数: ${allFiles.length}`);
   console.log(`🎯 類似度閾値: ${SIMILARITY_THRESHOLD * 100}%\n`);
-  
+
   const similarityResults = [];
   const functionResults = [];
-  
+
   // ファイルレベルの類似度分析
   for (let i = 0; i < allFiles.length; i++) {
     const file1 = allFiles[i];
     const code1 = extractCode(file1);
-    
-    if (code1.length < 50) continue;
-    
+
+    if (code1.length < 50) {
+      continue;
+    }
+
     for (let j = i + 1; j < allFiles.length; j++) {
       const file2 = allFiles[j];
       const code2 = extractCode(file2);
-      
-      if (code2.length < 50) continue;
-      
+
+      if (code2.length < 50) {
+        continue;
+      }
+
       const similarity = stringSimilarity.stringSimilarity(code1, code2);
-      
+
       if (similarity >= SIMILARITY_THRESHOLD) {
         similarityResults.push({
           file1: path.relative(process.cwd(), file1),
@@ -177,15 +181,15 @@ async function analyzeSimilarity() {
       }
     }
   }
-  
+
   // 関数レベルの類似度分析
   console.log('🔧 関数レベルの分析を実行中...');
   const allFunctions = [];
-  
+
   for (const file of allFiles) {
     const code = extractCode(file);
     const functions = extractFunctions(code);
-    
+
     for (const func of functions) {
       allFunctions.push({
         ...func,
@@ -193,19 +197,21 @@ async function analyzeSimilarity() {
       });
     }
   }
-  
+
   // 関数間類似度比較
   for (let i = 0; i < allFunctions.length; i++) {
     const func1 = allFunctions[i];
-    
+
     for (let j = i + 1; j < allFunctions.length; j++) {
       const func2 = allFunctions[j];
-      
+
       // 同じファイル内の関数は除外
-      if (func1.file === func2.file) continue;
-      
+      if (func1.file === func2.file) {
+        continue;
+      }
+
       const similarity = stringSimilarity.stringSimilarity(func1.code, func2.code);
-      
+
       if (similarity >= SIMILARITY_THRESHOLD) {
         functionResults.push({
           function1: `${func1.name} (${func1.file}:${func1.startLine})`,
@@ -217,10 +223,10 @@ async function analyzeSimilarity() {
       }
     }
   }
-  
+
   // 結果の出力
   console.log('\n📊 === 分析結果 ===\n');
-  
+
   if (similarityResults.length > 0) {
     console.log('🔴 高類似度ファイル:');
     similarityResults
@@ -232,7 +238,7 @@ async function analyzeSimilarity() {
   } else {
     console.log('✅ ファイルレベルでの高類似度コードは見つかりませんでした。\n');
   }
-  
+
   if (functionResults.length > 0) {
     console.log('🟡 高類似度関数:');
     functionResults
@@ -242,24 +248,24 @@ async function analyzeSimilarity() {
         console.log(`  ${result.similarity}% - ${result.function1} ↔ ${result.function2}`);
         console.log(`    コード長: ${result.codeLength1} vs ${result.codeLength2} 文字\n`);
       });
-    
+
     if (functionResults.length > 10) {
       console.log(`  ... 他 ${functionResults.length - 10} 件の類似関数があります\n`);
     }
   } else {
     console.log('✅ 関数レベルでの高類似度コードは見つかりませんでした。\n');
   }
-  
+
   // リファクタリング提案
   if (similarityResults.length > 0 || functionResults.length > 0) {
     console.log('💡 === リファクタリング提案 ===\n');
-    
+
     if (similarityResults.length > 0) {
       console.log('📁 ファイルレベル:');
       console.log('  - 類似ファイルの共通部分を抽出してユーティリティモジュール化');
       console.log('  - 設定やテンプレート部分の統一\n');
     }
-    
+
     if (functionResults.length > 0) {
       console.log('⚙️ 関数レベル:');
       console.log('  - 類似関数の共通ロジックを抽出して共通関数化');
@@ -267,9 +273,9 @@ async function analyzeSimilarity() {
       console.log('  - 継承やコンポジションパターンの適用\n');
     }
   }
-  
+
   console.log('🎉 分析完了！');
-  
+
   return {
     fileResults: similarityResults,
     functionResults: functionResults,

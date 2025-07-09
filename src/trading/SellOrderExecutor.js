@@ -32,10 +32,10 @@ class SellOrderExecutor extends TradingEngine {
       // Get formatted available amount for selling
       const { amountPrecision, minTradeAmount } = this.getSafeMarketParameters();
       const formattedAmount = await formattedAvailableAmount(
-        this.exchange, 
-        this.symbol, 
-        this.strategyKey, 
-        amountPrecision, 
+        this.exchange,
+        this.symbol,
+        this.strategyKey,
+        amountPrecision,
         this.options
       );
 
@@ -87,10 +87,10 @@ class SellOrderExecutor extends TradingEngine {
    */
   async executeSellOrder(amount, currentPrice, signalInfo, realizedPnL) {
     const { orderType } = this.config;
-    
+
     try {
       let order;
-      
+
       if (this.isBacktest) {
         // Backtest mode
         order = await backtestCreateLimitSellOrder(
@@ -134,10 +134,10 @@ class SellOrderExecutor extends TradingEngine {
 
     } catch (orderError) {
       console.error(`[${this.strategyName}] Order creation failed:`, orderError);
-      return this.handleValidationFailure('Order creation failed', { 
+      return this.handleValidationFailure('Order creation failed', {
         error: orderError.message,
         amount,
-        currentPrice 
+        currentPrice
       });
     }
   }

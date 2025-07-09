@@ -30,9 +30,9 @@ jest.mock('./src/database/redisDatabase', () => {
   // In-memory storage for test data (inside mock scope)
   const mockTestPositionStore = new Map();
   const mockTestPnLStore = new Map();
-  
+
   const originalModule = jest.requireActual('./src/database/redisDatabase');
-  
+
   return {
     ...originalModule,
     clearAllPositionsRedis: jest.fn().mockImplementation(() => {
@@ -53,8 +53,8 @@ jest.mock('./src/database/redisDatabase', () => {
     getStrategyPositionsRedis: jest.fn().mockImplementation((exchangeId, symbol, strategyKey) => {
       const positions = [];
       for (const [_key, position] of mockTestPositionStore.entries()) {
-        if (position.exchangeId === exchangeId && 
-            position.symbol === symbol && 
+        if (position.exchangeId === exchangeId &&
+            position.symbol === symbol &&
             position.strategyKey === strategyKey) {
           positions.push(position);
         }
@@ -100,21 +100,21 @@ if (process.env.CI) {
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
   const originalConsoleLog = console.log;
-  
+
   console.error = jest.fn().mockImplementation((...args) => {
     // Still log to stderr for debugging if needed
     if (process.env.DEBUG_CI_ERRORS) {
       originalConsoleError.apply(console, args);
     }
   });
-  
+
   console.warn = jest.fn().mockImplementation((...args) => {
     // Still log to stderr for debugging if needed
     if (process.env.DEBUG_CI_ERRORS) {
       originalConsoleWarn.apply(console, args);
     }
   });
-  
+
   console.log = jest.fn().mockImplementation((...args) => {
     // Still log to stdout for debugging if needed
     if (process.env.DEBUG_CI_ERRORS) {

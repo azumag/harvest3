@@ -17,7 +17,7 @@ function getBalanceCheckEligibleStrategies(config = defaultConfig, options = {})
   if (!config || !config.strategies) {
     return [];
   }
-  
+
   const strategies = config.strategies;
   const eligibleStrategies = [];
 
@@ -26,14 +26,20 @@ function getBalanceCheckEligibleStrategies(config = defaultConfig, options = {})
 
   for (const [strategyKey, strategy] of Object.entries(strategies)) {
     // 基本条件のチェック
-    if (!strategy.enabled) continue;
+    if (!strategy.enabled) {
+      continue;
+    }
 
     // 型による除外チェック（pure type-based filtering）
-    if (excludedTypes.includes(strategy.type)) continue;
+    if (excludedTypes.includes(strategy.type)) {
+      continue;
+    }
 
     // オプションで指定された型フィルタリング
     if (options.types && options.types.length > 0) {
-      if (!options.types.includes(strategy.type)) continue;
+      if (!options.types.includes(strategy.type)) {
+        continue;
+      }
     }
 
     eligibleStrategies.push(strategyKey);

@@ -4,7 +4,7 @@
  */
 const { client, initRedisClient } = require('./redisClient');
 const { errorHandler } = require('../common/errorHandler');
-const { 
+const {
   safeValidateTradeSummaryData,
   safeValidatePositionData,
   safeValidatePendingOrderData,
@@ -32,7 +32,7 @@ async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
       console.warn('Redis接続が利用できません - setCurrentOrderPairRedis をスキップ');
       return false;
     }
-    
+
     const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
     return await client.set(key, JSON.stringify({ pair }));
   } catch (error) {
@@ -47,7 +47,7 @@ async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
       console.warn('Redis接続が利用できません - getCurrentOrderPairRedis をスキップ');
       return null;
     }
-    
+
     const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
     const data = await client.get(key);
 
@@ -92,7 +92,7 @@ async function updateTradeSummary(trade) {
   // 戦略名を内部キーに変換（日本語表示名 → 英語キー）
   const { getStrategyKey } = require('./manager');
   const strategyKey = getStrategyKey(validatedTrade.strategy);
-  
+
   const summaryKey = `summary:trade:${validatedTrade.exchange}:${validatedTrade.symbol}:${strategyKey}`;
   const now = Date.now();
 
@@ -126,17 +126,17 @@ async function updateTradeSummary(trade) {
     await client.hIncrByFloat(summaryKey, 'totalSellValue', trade.value);
     await client.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
     await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
-    
+
     // 実現損益を計算（売りの場合のみ更新）- 数値精度安全化
     const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
     const currentBuyCost = parseFloat(await client.hGet(summaryKey, 'totalBuyCost') || 0);
-    
+
     // 異常値ガード: 数値精度とゼロ除算チェック
     if (currentBuyAmount > 0.0000001 && currentBuyCost > 0.01 && trade.amount > 0.0000001 && trade.value > 0.01) {
       const avgBuyPrice = Number((currentBuyCost / currentBuyAmount).toFixed(8));
       const soldCost = Number((trade.amount * avgBuyPrice).toFixed(8));
       const profit = Number((trade.value - soldCost).toFixed(8));
-      
+
       // 異常な実現損益をブロック（絶対値で1000万円超えはNG）
       if (Math.abs(profit) <= 10000000) {
         await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
@@ -147,7 +147,7 @@ async function updateTradeSummary(trade) {
       console.warn(`数値精度不足で実現損益計算をスキップ: ${trade.exchange}:${trade.symbol}:${trade.strategy}`);
     }
   }
-  
+
   // 更新後の整合性チェック（非同期実行、エラーは無視）
   setImmediate(async () => {
     try {
@@ -169,20 +169,20 @@ async function updateTradeSummary(trade) {
  */
 async function validateAndFixTradeSummary(summaryKey, options = {}) {
   const { autoFix = false, logLevel = 'warn' } = options;
-  
+
   try {
     const summary = await client.hGetAll(summaryKey);
     if (!summary || Object.keys(summary).length === 0) {
       return { isValid: true, warnings: [], errors: [], actions: [] };
     }
-    
+
     const validation = {
       isValid: true,
       warnings: [],
       errors: [],
       actions: []
     };
-    
+
     // データを数値に変換
     const buyAmount = parseFloat(summary.buyAmount || 0);
     const sellAmount = parseFloat(summary.sellAmount || 0);
@@ -190,63 +190,63 @@ async function validateAndFixTradeSummary(summaryKey, options = {}) {
     const totalBuyCost = parseFloat(summary.totalBuyCost || 0);
     const totalSellValue = parseFloat(summary.totalSellValue || 0);
     const realizedPnL = parseFloat(summary.realizedPnL || 0);
-    
+
     // 基本的な整合性チェック
     const expectedNetPosition = buyAmount - sellAmount;
     const netPositionDiff = Math.abs(netPosition - expectedNetPosition);
-    
+
     // 1. ネットポジション整合性チェック
     if (netPositionDiff > 0.0001) {
       const error = `ネットポジション不整合: 記録値=${netPosition}, 計算値=${expectedNetPosition}, 差=${netPositionDiff}`;
       validation.errors.push(error);
       validation.isValid = false;
-      
+
       if (autoFix) {
         validation.actions.push(`ネットポジション修正: ${netPosition} → ${expectedNetPosition}`);
       }
     }
-    
+
     // 2. 負のネットポジションチェック
     if (netPosition < -0.0001) {
       const error = `負のネットポジション検出: ${netPosition}`;
       validation.errors.push(error);
       validation.isValid = false;
-      
+
       if (autoFix) {
         validation.actions.push(`負のネットポジション修正: ${netPosition} → 0`);
       }
     }
-    
+
     // 3. 負の累積値チェック
     if (buyAmount < 0 || sellAmount < 0) {
       const error = `負の累積量検出: buyAmount=${buyAmount}, sellAmount=${sellAmount}`;
       validation.errors.push(error);
       validation.isValid = false;
     }
-    
+
     // 4. 極端な値のチェック
     const maxReasonableAmount = 1000000; // 100万単位を上限とする
     if (Math.abs(netPosition) > maxReasonableAmount) {
       const warning = `極端なネットポジション: ${netPosition}`;
       validation.warnings.push(warning);
     }
-    
+
     // 5. 実現損益の妥当性チェック
     if (Math.abs(realizedPnL) > 100000000) { // 1億円を超える損益
       const warning = `極端な実現損益: ${realizedPnL}円`;
       validation.warnings.push(warning);
     }
-    
+
     // 自動修正実行
     if (autoFix && validation.actions.length > 0) {
       try {
         const multi = client.multi();
-        
+
         // ネットポジション修正
         if (netPositionDiff > 0.0001) {
           multi.hSet(summaryKey, 'netPosition', expectedNetPosition.toString());
         }
-        
+
         // 負のネットポジション修正
         if (netPosition < -0.0001) {
           multi.hSet(summaryKey, 'netPosition', '0');
@@ -264,16 +264,16 @@ async function validateAndFixTradeSummary(summaryKey, options = {}) {
             validation.actions.push('サマリー全体をリセット');
           }
         }
-        
+
         multi.hSet(summaryKey, 'lastValidated', Date.now().toString());
         await multi.exec();
-        
+
         validation.fixed = true;
       } catch (fixError) {
         validation.errors.push(`自動修正失敗: ${fixError.message}`);
       }
     }
-    
+
     // ログ出力
     if (logLevel !== 'silent') {
       if (validation.errors.length > 0 && logLevel !== 'warn') {
@@ -286,9 +286,9 @@ async function validateAndFixTradeSummary(summaryKey, options = {}) {
         console.log(`[整合性修正] ${summaryKey}:`, validation.actions);
       }
     }
-    
+
     return validation;
-    
+
   } catch (error) {
     console.error(`[整合性チェック] 検証エラー ${summaryKey}:`, error.message);
     return {
@@ -311,23 +311,23 @@ async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
     // 既存の注文から戦略情報を取得
     const orderKey = `pending_order:${orderId}`;
     const orderData = await client.hGetAll(orderKey);
-    
+
     if (orderData && orderData.strategyKey) {
       return orderData.strategyKey;
     }
-    
+
     // MongoDBから注文履歴を検索
     const { getOrderByOrderId } = require('./mongoDatabase');
     const orderRecord = await getOrderByOrderId(orderId);
-    
+
     if (orderRecord && orderRecord.strategy) {
       const { getStrategyKey } = require('./manager');
       return getStrategyKey(orderRecord.strategy);
     }
-    
+
     console.warn(`[戦略マッピング] 注文ID ${orderId} の戦略情報が見つかりません。フォールバック: ${fallbackStrategy}`);
     return fallbackStrategy;
-    
+
   } catch (error) {
     console.error(`[戦略マッピング] エラー ${orderId}:`, error.message);
     return fallbackStrategy;
@@ -341,8 +341,8 @@ async function getAllTradeSummaries() {
       console.log('Redis接続が利用できないため、空のサマリーを返します');
       return [];
     }
-    
-    const keys = await client.keys(`summary:trade:*`);
+
+    const keys = await client.keys('summary:trade:*');
     const summaries = [];
 
     for (const key of keys) {
@@ -352,15 +352,15 @@ async function getAllTradeSummaries() {
         const exchangeId = keyParts[2];
         const symbol = keyParts[3];
         const strategyKey = keyParts[4];
-        
+
         // undefinedやnullの値を持つキーをスキップ
-        if (exchangeId === 'undefined' || !exchangeId || 
-            symbol === 'undefined' || !symbol || 
+        if (exchangeId === 'undefined' || !exchangeId ||
+            symbol === 'undefined' || !symbol ||
             strategyKey === 'undefined' || !strategyKey) {
           console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
           continue;
         }
-        
+
         summaries.push({
           exchangeId,
           symbol,
@@ -392,7 +392,7 @@ async function getTradeSummaries(exchangeId) {
       console.log('Redis接続が無効化されているため、空のサマリーを返します');
       return [];
     }
-    
+
     const keys = await client.keys(`summary:trade:${exchangeId}:*`);
     const summaries = [];
 
@@ -430,12 +430,12 @@ async function getTradeSummaries(exchangeId) {
  */
 async function getTradeSummary(filters = {}) {
   const { exchangeId, symbol, strategyKey } = filters;
-  
+
   // 全て指定されている場合は特定のサマリーを取得
   if (exchangeId && symbol && strategyKey) {
     const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const summary = await client.hGetAll(summaryKey);
-    
+
     if (Object.keys(summary).length > 0) {
       return {
         buyAmount: parseFloat(summary.buyAmount || 0),
@@ -451,7 +451,7 @@ async function getTradeSummary(filters = {}) {
     }
     return {};
   }
-  
+
   return {};
 }
 
@@ -465,7 +465,7 @@ async function getTradeSummary(filters = {}) {
  */
 async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, params) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
-  
+
   // Create strategy parameters data structure for validation
   const strategyParamsData = {
     exchangeId,
@@ -487,7 +487,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
     for (const [paramKey, value] of Object.entries(validatedStrategyParams.params)) {
       stringifiedParams[paramKey] = String(value); // 値を文字列に変換
     }
-    
+
     await client.hSet(key, stringifiedParams);
     // console.log(`戦略パラメータを保存しました: ${key}`);
     return true;
@@ -504,18 +504,22 @@ function parseParamValue(value) {
   if (value === null || value === undefined || value === 'null') {
     return null;
   }
-  
+
   // 真偽値チェック
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+
   // 数値チェック
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     return Number(value);
   }
-  
+
   // JSON オブジェクト/配列チェック
-  if ((value.startsWith('{') && value.endsWith('}')) || 
+  if ((value.startsWith('{') && value.endsWith('}')) ||
       (value.startsWith('[') && value.endsWith(']'))) {
     try {
       return JSON.parse(value);
@@ -523,7 +527,7 @@ function parseParamValue(value) {
       // パースに失敗した場合は元の文字列を返す
     }
   }
-  
+
   // その他は文字列として扱う
   return value;
 }
@@ -532,7 +536,7 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     const params = await client.hGetAll(key);
-    
+
     if (Object.keys(params).length > 0) {
       const parsedParams = {};
       for (const [paramKey, value] of Object.entries(params)) {
@@ -588,25 +592,25 @@ async function getTradeKeys() {
 
     // 取得キーを分解してJSONに構造化
     const exchanges = {};
-    
+
     for (const key of exchangesKeys) {
       const parts = key.split(':');
       if (parts.length >= 5) {
-      const exchangeId = parts[2];
-      const symbol = parts[3];
-      const strategyKey = parts[4];
-      
-      if (!exchanges[exchangeId]) {
-        exchanges[exchangeId] = {};
-      }
-      
-      if (!exchanges[exchangeId][symbol]) {
-        exchanges[exchangeId][symbol] = [];
-      }
-      
-      if (!exchanges[exchangeId][symbol].includes(strategyKey)) {
-        exchanges[exchangeId][symbol].push(strategyKey);
-      }
+        const exchangeId = parts[2];
+        const symbol = parts[3];
+        const strategyKey = parts[4];
+
+        if (!exchanges[exchangeId]) {
+          exchanges[exchangeId] = {};
+        }
+
+        if (!exchanges[exchangeId][symbol]) {
+          exchanges[exchangeId][symbol] = [];
+        }
+
+        if (!exchanges[exchangeId][symbol].includes(strategyKey)) {
+          exchanges[exchangeId][symbol].push(strategyKey);
+        }
       }
     }
 
@@ -686,27 +690,27 @@ async function updateTickerRedis(exchangeId, symbol, tickerData) {
  */
 async function updateBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe, ohlcvData) {
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
-  
+
   // 既存のデータをクリア
   await client.del(key);
-  
+
   // バルク操作用の配列を準備
   const bulkData = [];
-  
+
   for (const item of ohlcvData) {
     // 配列の最初の要素（通常はタイムスタンプ）をスコアとして使用
     const score = item.timestamp;
     // 残りのデータをJSON文字列として保存
     const value = JSON.stringify(item);
-    
+
     bulkData.push({ score, value });
   }
-  
+
   // バルク操作でデータを追加
   if (bulkData.length > 0) {
     await client.zAdd(key, bulkData);
   }
-  
+
   return Date.now();
 }
 
@@ -715,10 +719,10 @@ async function updateBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe, 
  */
 async function getBacktestOHLCVRedisByTimeRange(exchangeId, symbol, timeframe, startTime, endTime) {
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
-  
+
   // 指定された範囲のスコア（タイムスタンプ）の要素を取得
   const result = await client.zRangeByScore(key, startTime, endTime);
-  
+
   // 結果をJSONとしてパース
   return result.map(item => JSON.parse(item));
 }
@@ -728,10 +732,10 @@ async function getBacktestOHLCVRedisByTimeRange(exchangeId, symbol, timeframe, s
  */
 async function getAllBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe) {
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
-  
+
   // すべての要素を取得
   const result = await client.zRange(key, 0, -1);
-  
+
   // 結果をJSONとしてパース
   return result.map(item => JSON.parse(item));
 }
@@ -747,7 +751,7 @@ async function getAllBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe) 
  */
 async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit = 100) {
   const key = `backtest:ohlcv:zset:${exchangeId}:${symbol}:${timeframe}`;
-  
+
   // timestampより古いデータを降順（新しい順）で取得
   // Redis 7 compatibility: use zRangeByScore instead of zRange with BY: 'SCORE'
   const result = await client.zRangeByScore(
@@ -762,7 +766,7 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
       }
     }
   );
-  
+
   // 結果をJSONとしてパース
   return result.map(item => JSON.parse(item));
 }
@@ -821,11 +825,11 @@ async function getPositionRedis(positionKey) {
   const key = `position:${positionKey}`;
   try {
     const position = await client.hGetAll(key);
-    
+
     if (Object.keys(position).length === 0) {
       return null;
     }
-    
+
     // 数値フィールドを変換
     return {
       exchangeId: position.exchangeId,
@@ -858,7 +862,7 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
     const pattern = `position:${exchangeId}:${symbol}:${strategyKey}:*`;
     const keys = await client.keys(pattern);
     const positions = [];
-    
+
     for (const key of keys) {
       const position = await client.hGetAll(key);
       if (Object.keys(position).length > 0) {
@@ -879,7 +883,7 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
         });
       }
     }
-    
+
     return positions;
   } catch (error) {
     console.error(`戦略ポジションの取得に失敗しました: ${exchangeId}:${symbol}:${strategyKey}`, error);
@@ -893,10 +897,10 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
  */
 async function getAllPositionsRedis() {
   try {
-    const pattern = `position:*`;
+    const pattern = 'position:*';
     const keys = await client.keys(pattern);
     const positions = [];
-    
+
     for (const key of keys) {
       const position = await client.hGetAll(key);
       if (Object.keys(position).length > 0) {
@@ -922,10 +926,10 @@ async function getAllPositionsRedis() {
         });
       }
     }
-    
+
     return positions;
   } catch (error) {
-    console.error(`全ポジションの取得に失敗しました:`, error);
+    console.error('全ポジションの取得に失敗しました:', error);
     return [];
   }
 }
@@ -956,27 +960,27 @@ async function savePositionHistoryToMongoDB(positionData) {
     // MongoDB接続の取得
     const { connectDB } = require('./mongoDatabase');
     await connectDB();
-    
+
     // positions履歴コレクションへの保存
     const { MongoClient } = require('mongodb');
     const mongoUrl = process.env.MONGO_URL;
     const mongoDbName = process.env.MONGO_DB_NAME;
-    
+
     const client = new MongoClient(mongoUrl);
     await client.connect();
     const db = client.db(mongoDbName);
-    
+
     // positionsコレクションが存在しない場合は作成
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
-    
+
     if (!collectionNames.includes('positions')) {
       await db.createCollection('positions');
       console.log('positions コレクションを作成しました');
     }
-    
+
     const positionsCollection = db.collection('positions');
-    
+
     // インデックスを作成（一度だけ）
     try {
       await positionsCollection.createIndex({ positionKey: 1 }, { unique: true });
@@ -986,7 +990,7 @@ async function savePositionHistoryToMongoDB(positionData) {
     } catch (indexError) {
       // インデックスが既に存在する場合は無視
     }
-    
+
     // ポジション履歴データを準備
     const historyData = {
       ...positionData,
@@ -1000,20 +1004,20 @@ async function savePositionHistoryToMongoDB(positionData) {
       updatedAt: new Date(positionData.updatedAt || Date.now()),
       closedAt: positionData.closedAt ? new Date(positionData.closedAt) : null
     };
-    
+
     // 重複チェック用のキーを作成
     const positionKey = `${positionData.exchangeId}:${positionData.symbol}:${positionData.strategyKey}:${positionData.orderId}`;
     historyData.positionKey = positionKey;
-    
+
     // upsert操作で保存（既存データがあれば更新、なければ挿入）
     await positionsCollection.replaceOne(
       { positionKey: positionKey },
       historyData,
       { upsert: true }
     );
-    
+
     await client.close();
-    
+
     console.log(`ポジション履歴をMongoDBに保存しました: ${positionKey}`);
     return true;
   } catch (error) {
@@ -1024,7 +1028,7 @@ async function savePositionHistoryToMongoDB(positionData) {
 
 /**
  * ポジションを完全決済し、履歴保存後にRedisから削除
- * @param {String} positionKey - ポジションキー  
+ * @param {String} positionKey - ポジションキー
  * @param {Object} options - オプション設定
  * @param {Boolean} options.saveHistory - 履歴をMongoDBに保存するか (default: true)
  * @param {Number} options.delayHours - 削除までの遅延時間（時間単位）(default: 0 - 即座に削除)
@@ -1033,7 +1037,7 @@ async function savePositionHistoryToMongoDB(positionData) {
 async function closeAndCleanupPosition(positionKey, options = {}) {
   const { saveHistory = true, delayHours = 0 } = options;
   const key = `position:${positionKey}`;
-  
+
   try {
     // 現在のポジション情報を取得
     const positionData = await getPositionRedis(positionKey);
@@ -1041,7 +1045,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       // ポジションが見つからない場合は既にクローズ済みとして成功扱い（冪等性）
       return { success: true, reason: 'already_closed', action: 'idempotent_success' };
     }
-    
+
     // ポジションを閉じた状態に更新
     const closedPositionData = {
       ...positionData,
@@ -1049,7 +1053,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       closedAt: positionData.closedAt || Date.now(),
       updatedAt: Date.now()
     };
-    
+
     // 履歴を保存（オプションで有効な場合）
     let historyWarning = null;
     if (saveHistory) {
@@ -1065,14 +1069,14 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
         // MongoDB接続エラーでも処理を継続するため、エラーを再throwしない
       }
     }
-    
+
     // 削除処理
     if (delayHours > 0) {
       // 遅延削除: TTLを設定
       const ttlSeconds = delayHours * 60 * 60;
       await client.expire(key, ttlSeconds);
       console.log(`ポジションを${delayHours}時間後に自動削除するよう設定しました: ${positionKey}`);
-      
+
       return {
         success: true,
         action: 'delayed_cleanup',
@@ -1111,26 +1115,26 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
   try {
     const pattern = 'position:*';
     const keys = await client.keys(pattern);
-    
+
     let processed = 0;
     let deleted = 0;
     let historySaved = 0;
     let errors = 0;
-    
+
     const cutoffTime = Date.now() - (olderThanHours * 60 * 60 * 1000);
-    
+
     for (const key of keys) {
       try {
         const position = await client.hGetAll(key);
-        
+
         if (Object.keys(position).length > 0) {
           processed++;
-          
+
           // ポジションがクローズ済みで、指定時間より古い場合
           const closedAt = parseInt(position.closedAt || 0);
           const updatedAt = parseInt(position.updatedAt || 0);
           const isOld = Math.max(closedAt, updatedAt) < cutoffTime;
-          
+
           if (position.status === 'closed' && isOld) {
             // 履歴保存
             if (saveHistory) {
@@ -1149,12 +1153,12 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
                 updatedAt: parseInt(position.updatedAt || 0),
                 closedAt: parseInt(position.closedAt || 0)
               });
-              
+
               if (historyResult) {
                 historySaved++;
               }
             }
-            
+
             // Redis から削除
             const result = await client.del(key);
             if (result > 0) {
@@ -1169,7 +1173,7 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
         console.error(`ポジション処理エラー: ${key}`, error.message);
       }
     }
-    
+
     const result = {
       success: true,
       processed,
@@ -1178,8 +1182,8 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
       errors,
       cutoffTime: new Date(cutoffTime).toISOString()
     };
-    
-    console.log(`古いポジションクリーンアップ完了:`, result);
+
+    console.log('古いポジションクリーンアップ完了:', result);
     return result;
   } catch (error) {
     console.error('古いポジションクリーンアップに失敗しました:', error);
@@ -1200,23 +1204,23 @@ async function recordPnLRedis(exchangeId, strategyKey, pnl) {
   const now = new Date();
   const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
   const key = `pnl:${exchangeId}:${strategyKey}:${dateKey}`;
-  
+
   try {
     // 既存データを取得
     const existingData = await client.hGetAll(key);
     const currentPnL = parseFloat(existingData.pnl || 0);
     const currentTrades = parseInt(existingData.trades || 0);
-    
+
     // データを更新
     await client.hSet(key, {
       pnl: currentPnL + pnl,
       trades: currentTrades + 1,
       lastUpdated: now.toISOString()
     });
-    
+
     // TTLを設定（90日後に自動削除）
     await client.expire(key, 90 * 24 * 60 * 60);
-    
+
     return true;
   } catch (error) {
     console.error(`損益の記録に失敗しました: ${key}`, error);
@@ -1235,19 +1239,19 @@ async function calculatePeriodPnLRedis(exchangeId, strategyKey, days) {
   try {
     const now = new Date();
     let totalPnL = 0;
-    
+
     for (let i = 0; i < days; i++) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       const dateKey = date.toISOString().split('T')[0];
       const key = `pnl:${exchangeId}:${strategyKey}:${dateKey}`;
-      
+
       const dayData = await client.hGetAll(key);
       if (Object.keys(dayData).length > 0) {
         totalPnL += parseFloat(dayData.pnl || 0);
       }
     }
-    
+
     return totalPnL;
   } catch (error) {
     console.error(`期間損益の計算に失敗しました: ${exchangeId}:${strategyKey}:${days}日`, error);
@@ -1284,7 +1288,7 @@ async function clearAllPositionsRedis() {
       console.warn('Redis client is not connected - skipping position clear operation');
       return true; // Return true for test environments where Redis is not available
     }
-    
+
     const keys = await client.keys('position:*');
     if (keys.length > 0) {
       await client.del(keys);
@@ -1312,7 +1316,7 @@ async function clearAllPnLRedis() {
       console.warn('Redis client is not connected - skipping PnL clear operation');
       return true; // Return true for test environments where Redis is not available
     }
-    
+
     const keys = await client.keys('pnl:*');
     if (keys.length > 0) {
       await client.del(keys);
@@ -1357,18 +1361,18 @@ async function deleteStrategyParametersRedis(exchangeId, symbol, strategyKey) {
  */
 async function cleanupStrategyPendingOrders(exchangeId, symbol, strategyKey) {
   const result = { checked: 0, deleted: 0, errors: 0 };
-  
+
   try {
     // 該当戦略の未約定注文を取得
     const pattern = `pending_order:${exchangeId}:${symbol}:${strategyKey}:*`;
     const keys = await client.keys(pattern);
-    
+
     result.checked = keys.length;
-    
+
     for (const key of keys) {
       try {
         const pendingOrder = await client.hGetAll(key);
-        
+
         if (pendingOrder && pendingOrder.orderId) {
           // 実際の取引所で注文状態を確認（オプション）
           // 注文が存在しない場合はRedisから削除
@@ -1381,9 +1385,9 @@ async function cleanupStrategyPendingOrders(exchangeId, symbol, strategyKey) {
         result.errors++;
       }
     }
-    
+
     console.log(`[戦略クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
-    
+
     return result;
   } catch (error) {
     console.error(`[戦略クリーンアップ] 全体エラー: ${error.message}`);
@@ -1453,7 +1457,7 @@ module.exports = {
   cleanupStrategyPendingOrders,
   // 整合性チェック・修正機能
   validateAndFixTradeSummary,
-  getValidatedStrategyKey,
+  getValidatedStrategyKey
 };
 
 /**
@@ -1494,7 +1498,7 @@ async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, o
       price: validatedPendingOrderData.price.toString(),
       timestamp: validatedPendingOrderData.timestamp.toString()
     };
-    
+
     await client.hSet(key, redisData);
     console.log(`未約定注文を保存しました: ${key}`);
     return true;
@@ -1515,11 +1519,11 @@ async function getPendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
   try {
     const key = `pending_order:${exchangeId}:${symbol}:${strategyKey}:${orderId}`;
     const order = await client.hGetAll(key);
-    
+
     if (Object.keys(order).length === 0) {
       return null;
     }
-    
+
     return {
       exchangeId: order.exchangeId,
       symbol: order.symbol,
@@ -1544,10 +1548,10 @@ async function getPendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
  */
 async function getAllPendingOrdersRedis() {
   try {
-    const pattern = `pending_order:*`;
+    const pattern = 'pending_order:*';
     const keys = await client.keys(pattern);
     const orders = [];
-    
+
     for (const key of keys) {
       const order = await client.hGetAll(key);
       if (Object.keys(order).length > 0) {
@@ -1565,11 +1569,11 @@ async function getAllPendingOrdersRedis() {
           orderType: order.orderType,
           timestamp: parseInt(order.timestamp),
           status: order.status,
-          filled: false, // 未約定フラグ
+          filled: false // 未約定フラグ
         });
       }
     }
-    
+
     return orders;
   } catch (error) {
     console.error(`全未約定注文の取得に失敗しました: ${error.message}`);
@@ -1588,7 +1592,7 @@ async function deletePendingOrderRedis(exchangeId, symbol, strategyKey, orderId)
   try {
     const key = `pending_order:${exchangeId}:${symbol}:${strategyKey}:${orderId}`;
     const result = await client.del(key);
-    
+
     if (result === 1) {
       console.log(`未約定注文を削除しました: ${key}`);
       return true;
@@ -1616,35 +1620,35 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
     errors: 0,
     details: []
   };
-  
+
   try {
     // Redisから全ての未約定注文を取得
     const pendingOrders = await getAllPendingOrdersRedis();
-    
+
     if (pendingOrders.length === 0) {
       if (!isBacktest) {
         console.log('[注文クリーンアップ] クリーンアップ対象の未約定注文がありません');
       }
       return result;
     }
-    
+
     if (!isBacktest) {
       console.log(`[注文クリーンアップ] ${pendingOrders.length}件の未約定注文をチェック開始`);
     }
-    
+
     // 取引所インスタンスの準備
     if (!exchangeInstance.markets) {
       await exchangeInstance.loadMarkets();
     }
-    
+
     // 各未約定注文の状態をチェック
     for (const pendingOrder of pendingOrders) {
       result.checked++;
-      
+
       try {
         // 注文状態を確認
         const orderInfo = await exchangeInstance.fetchOrder(pendingOrder.orderId, pendingOrder.symbol);
-        
+
         // 注文が約定済み・キャンセル済み・期限切れの場合は削除
         const invalidStatuses = ['closed', 'canceled', 'cancelled', 'rejected', 'expired'];
         if (invalidStatuses.includes(orderInfo.status) || orderInfo.filled >= orderInfo.amount) {
@@ -1654,7 +1658,7 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
             pendingOrder.strategyKey,
             pendingOrder.orderId
           );
-          
+
           if (deleted) {
             result.deleted++;
             result.details.push({
@@ -1665,7 +1669,7 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
               filled: orderInfo.filled,
               amount: orderInfo.amount
             });
-            
+
             if (!isBacktest) {
               console.log(`[注文クリーンアップ] 削除: ${pendingOrder.orderId} (${orderInfo.status}, filled: ${orderInfo.filled}/${orderInfo.amount})`);
             }
@@ -1673,20 +1677,20 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
         }
       } catch (orderError) {
         result.errors++;
-        
+
         // 注文が見つからない場合（Not Found）はRedisから削除
-        if (orderError.message.includes('not found') || 
-            orderError.message.includes('NotFound') || 
+        if (orderError.message.includes('not found') ||
+            orderError.message.includes('NotFound') ||
             orderError.message.includes('Invalid order') ||
             orderError.message.includes('does not exist')) {
-          
+
           const deleted = await deletePendingOrderRedis(
             pendingOrder.exchangeId,
             pendingOrder.symbol,
             pendingOrder.strategyKey,
             pendingOrder.orderId
           );
-          
+
           if (deleted) {
             result.deleted++;
             result.details.push({
@@ -1696,7 +1700,7 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
               status: 'not_found',
               error: orderError.message
             });
-            
+
             if (!isBacktest) {
               console.log(`[注文クリーンアップ] 削除（注文なし）: ${pendingOrder.orderId} - ${orderError.message}`);
             }
@@ -1708,15 +1712,15 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
           }
         }
       }
-      
+
       // API制限を考慮して少し待機
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
+
     if (!isBacktest) {
       console.log(`[注文クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
     }
-    
+
     return result;
   } catch (error) {
     console.error(`[注文クリーンアップ] 全体エラー: ${error.message}`);

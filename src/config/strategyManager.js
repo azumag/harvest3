@@ -17,7 +17,7 @@ async function getUnifiedStrategyConfig(config, exchangeId, symbol, strategyKey)
   try {
     // config.js からデフォルト設定を取得
     const defaultConfig = config.strategies[strategyKey];
-    
+
     if (!defaultConfig) {
       console.warn(`戦略 ${strategyKey} の設定が config.js に存在しません`);
       return null;
@@ -25,7 +25,7 @@ async function getUnifiedStrategyConfig(config, exchangeId, symbol, strategyKey)
 
     // データベースから個別設定を取得
     const dbParams = await getStrategyParametersRedis(exchangeId, symbol, strategyKey);
-    
+
     // 統一化された設定を作成
     const unifiedConfig = {
       ...config.global,
@@ -62,7 +62,7 @@ async function saveUnifiedStrategyConfig(exchangeId, symbol, strategyKey, params
 
     // 関数やexchangesプロパティを除去
     const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([key, value]) => 
+      Object.entries(params).filter(([key, value]) =>
         typeof value !== 'function' && key !== 'exchanges'
       )
     );
@@ -87,7 +87,7 @@ async function enableStrategy(exchangeId, symbol, strategyKey) {
   try {
     const currentParams = await getStrategyParametersRedis(exchangeId, symbol, strategyKey) || {};
     currentParams.enabled = true;
-    
+
     const success = await saveUnifiedStrategyConfig(exchangeId, symbol, strategyKey, currentParams);
     if (success) {
       console.log(`戦略を有効化しました: ${strategyKey} (${exchangeId}:${symbol})`);
@@ -110,7 +110,7 @@ async function disableStrategy(exchangeId, symbol, strategyKey) {
   try {
     const currentParams = await getStrategyParametersRedis(exchangeId, symbol, strategyKey) || {};
     currentParams.enabled = false;
-    
+
     const success = await saveUnifiedStrategyConfig(exchangeId, symbol, strategyKey, currentParams);
     if (success) {
       console.log(`戦略を無効化しました: ${strategyKey} (${exchangeId}:${symbol})`);

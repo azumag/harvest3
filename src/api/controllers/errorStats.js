@@ -25,25 +25,25 @@ function recordError(type, message, details = '') {
     timestamp: Date.now(),
     datetime: new Date().toISOString()
   };
-  
+
   // エラータイプ別カウント
   switch (type) {
-    case 'bitbank_api':
-      errorStats.bitbankApiErrors++;
-      break;
-    case 'ohlcv_queue':
-      errorStats.ohlcvQueueErrors++;
-      break;
-    default:
-      errorStats.generalErrors++;
+  case 'bitbank_api':
+    errorStats.bitbankApiErrors++;
+    break;
+  case 'ohlcv_queue':
+    errorStats.ohlcvQueueErrors++;
+    break;
+  default:
+    errorStats.generalErrors++;
   }
-  
+
   // 最新エラーリストに追加（最大10件）
   errorStats.lastErrors.unshift(errorRecord);
   if (errorStats.lastErrors.length > 10) {
     errorStats.lastErrors = errorStats.lastErrors.slice(0, 10);
   }
-  
+
   console.log(`[ErrorStats] ${type}エラーを記録: ${message}`);
 }
 
@@ -56,11 +56,11 @@ async function getErrorStats(req, res) {
   try {
     const uptime = Date.now() - errorStats.startTime;
     const uptimeHours = uptime / (1000 * 60 * 60);
-    
+
     // エラー率を計算
     const totalErrors = errorStats.bitbankApiErrors + errorStats.ohlcvQueueErrors + errorStats.generalErrors;
     const errorRatePerHour = uptimeHours > 0 ? totalErrors / uptimeHours : 0;
-    
+
     res.json({
       stats: {
         ...errorStats,
@@ -73,9 +73,9 @@ async function getErrorStats(req, res) {
     });
   } catch (error) {
     console.error('Error fetching error stats:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch error stats',
-      message: error.message 
+      message: error.message
     });
   }
 }
@@ -94,16 +94,16 @@ async function resetErrorStats(req, res) {
       lastErrors: [],
       startTime: Date.now()
     };
-    
+
     res.json({
       message: 'Error stats reset successfully',
       timestamp: Date.now()
     });
   } catch (error) {
     console.error('Error resetting error stats:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to reset error stats',
-      message: error.message 
+      message: error.message
     });
   }
 }

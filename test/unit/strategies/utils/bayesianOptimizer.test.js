@@ -33,7 +33,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       // k(x1, x2) = σ² * exp(-||x1-x2||²/(2l²))
       const distance = Math.sqrt(Math.pow(0.5-0.7, 2) + Math.pow(0.3-0.4, 2));
       const expected = variance * Math.exp(-Math.pow(distance, 2) / (2 * Math.pow(lengthScale, 2)));
-      
+
       expect(result).toBeCloseTo(expected, 8);
     });
 
@@ -62,12 +62,12 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
 
       expect(K).toHaveLength(3);
       expect(K[0]).toHaveLength(3);
-      
+
       // 対角要素は分散と等しい（ノイズなし）
       expect(K[0][0]).toBeCloseTo(variance, 6);
       expect(K[1][1]).toBeCloseTo(variance, 6);
       expect(K[2][2]).toBeCloseTo(variance, 6);
-      
+
       // 対称性確認
       expect(K[0][1]).toBeCloseTo(K[1][0], 8);
       expect(K[0][2]).toBeCloseTo(K[2][0], 8);
@@ -86,7 +86,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       expect(typeof rbfResult).toBe('number');
       expect(typeof maternResult).toBe('number');
       expect(typeof linearResult).toBe('number');
-      
+
       expect(rbfResult).not.toEqual(maternResult);
       expect(maternResult).not.toEqual(linearResult);
     });
@@ -119,19 +119,19 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
     it('予測平均と分散を正確に計算する', () => {
       const X = [[0.0], [0.5], [1.0]];
       const y = [0.0, 1.0, 0.0];
-      
+
       gpr.fit(X, y);
-      
+
       const prediction = gpr.predict([[0.25], [0.75]]);
 
       expect(prediction.mean).toHaveLength(2);
       expect(prediction.variance).toHaveLength(2);
-      
+
       // 分散は正の値である必要がある
       prediction.variance.forEach(v => {
         expect(v).toBeGreaterThan(0);
       });
-      
+
       // 標準偏差も返される
       expect(prediction.std).toBeDefined();
       expect(prediction.std).toHaveLength(2);
@@ -139,10 +139,10 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
 
     it('訓練データポイントで完全適合する（ノイズなし）', () => {
       gpr.noiseVariance = 1e-10; // 数値的安定性のための微小ノイズ
-      
+
       const X = [[0.1], [0.5], [0.9]];
       const y = [0.2, 0.8, 0.1];
-      
+
       gpr.fit(X, y);
       const prediction = gpr.predict(X);
 
@@ -154,11 +154,11 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
     it('ハイパーパラメータ最適化を実行する', () => {
       const X = [[0.1], [0.3], [0.5], [0.7], [0.9]];
       const y = [0.2, 0.9, 0.8, 0.3, 0.1];
-      
+
       const initialLengthScale = gpr.lengthScale;
-      
+
       gpr.optimizeHyperparameters(X, y, { maxIterations: 10 });
-      
+
       // ハイパーパラメータが変更されている
       expect(gpr.lengthScale).toBeDefined();
       expect(gpr.variance).toBeDefined();
@@ -168,7 +168,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
     it('対数尤度を正しく計算する', () => {
       const X = [[0.1], [0.5], [0.9]];
       const y = [0.2, 0.8, 0.1];
-      
+
       gpr.fit(X, y);
       const logLikelihood = gpr.logMarginalLikelihood();
 
@@ -190,7 +190,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
           std: [0.5]
         })
       };
-      
+
       acq = new AcquisitionFunctions(mockGP);
     });
 
@@ -213,7 +213,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       const ucb = acq.upperConfidenceBound(x, kappa);
 
       expect(ucb).toHaveLength(1);
-      
+
       // UCB = mean + kappa * std = 0.5 + 2.576 * 0.5
       const expected = 0.5 + kappa * 0.5;
       expect(ucb[0]).toBeCloseTo(expected, 8);
@@ -274,9 +274,9 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
 
     it('合計制約を正しく処理する', () => {
       const constraints = [
-        { 
-          type: 'sum_equals', 
-          parameters: ['volatilityWeight', 'riskWeight', 'timezoneWeight'], 
+        {
+          type: 'sum_equals',
+          parameters: ['volatilityWeight', 'riskWeight', 'timezoneWeight'],
           value: 1.0,
           tolerance: 0.001
         }
@@ -433,7 +433,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
         // 簡単な最適化問題: f(x) = -(x-0.7)²
         return -Math.pow(params.x - 0.7, 2);
       };
-      
+
       const bounds = { x: [0, 1] };
 
       optimizer.setObjective(objectiveFunction, bounds);
@@ -455,7 +455,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
 
       optimizer.setObjective(objectiveFunction, bounds);
       optimizer.addConstraints(constraints);
-      
+
       const result = await optimizer.optimize();
 
       expect(result.bestParameters.x + result.bestParameters.y).toBeCloseTo(1.0, 0);
@@ -532,7 +532,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       expect(result).toHaveProperty('optimalParameters');
       expect(result).toHaveProperty('expectedPerformance');
       expect(result).toHaveProperty('riskMetrics');
-      
+
       const params = result.optimalParameters;
       expect(params.stopLoss).toBeGreaterThan(0);
       expect(params.stopLoss).toBeLessThan(0.1);
@@ -557,7 +557,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
   describe('数学的精度テスト', () => {
     it('コレスキー分解の数値安定性', () => {
       const gpr = new GaussianProcessRegression();
-      
+
       // 条件数の悪い行列
       const K = [
         [1.0, 0.999, 0.998],
@@ -573,11 +573,11 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
     it('正定値行列の確保', () => {
       const kernels = new KernelFunctions();
       const X = [[0.1], [0.2], [0.3]];
-      
-      const K = kernels.kernelMatrix(X, X, 'rbf', { 
-        lengthScale: 1.0, 
-        variance: 1.0, 
-        noiseVariance: 1e-6 
+
+      const K = kernels.kernelMatrix(X, X, 'rbf', {
+        lengthScale: 1.0,
+        variance: 1.0,
+        noiseVariance: 1e-6
       });
 
       // 全ての固有値が正であることを確認
@@ -593,7 +593,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       const X = [[0.1], [0.5], [0.9]];
       const y = [0.2, 0.8, 0.1];
       gpr.fit(X, y);
-      
+
       const acq = new AcquisitionFunctions(gpr);
       const x = [[0.5]];
       const h = 1e-8;
@@ -609,7 +609,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
   describe('金融工学的検証', () => {
     it('リスク・リターン最適化の現実性', () => {
       const riskOptimizer = new RiskParameterOptimizer();
-      
+
       const marketContext = {
         volatility: 0.25,        // 高ボラティリティ市場
         sharpeRatio: 0.8,        // 低シャープレシオ
@@ -635,7 +635,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
 
     it('取引コスト考慮の最適化', () => {
       const riskOptimizer = new RiskParameterOptimizer();
-      
+
       // まず市場コンテキストを設定
       const marketContext = {
         sharpeRatio: 1.5,
@@ -643,7 +643,7 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
         volatility: 0.1
       };
       riskOptimizer.setMarketContext(marketContext);
-      
+
       const tradingCosts = {
         commission: 0.001,       // 0.1%手数料
         spread: 0.0005,          // 0.05%スプレッド
@@ -651,9 +651,9 @@ describe('ベイジアン最適化アルゴリズムのテスト', () => {
       };
 
       riskOptimizer.setTradingCosts(tradingCosts);
-      
+
       const result = riskOptimizer.optimizeWithTradingCosts();
-      
+
       expect(result.netSharpeRatio).toBeLessThan(result.grossSharpeRatio);
       expect(result.breakEvenVolume).toBeGreaterThan(0);
     });

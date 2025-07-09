@@ -12,7 +12,7 @@ console.log('localtunnelモジュールを読み込む前...');
 
 // localtunnelモジュールをグローバルスコープで宣言
 // Note: localtunnelは削除されました（セキュリティ脆弱性のため）
-let localtunnel = null;
+const localtunnel = null;
 
 // APIサーバーセットアップ
 const app = express();
@@ -45,7 +45,7 @@ app.get('/analysis', (req, res) => {
 // サーバー起動
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`API & Web Server running on port ${PORT}`);
-  
+
   // データベースの初期化
   try {
     await initializeDB();
@@ -82,13 +82,13 @@ app.listen(PORT, '0.0.0.0', async () => {
             const response = await fetch(discordWebhookUrl, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                content: message,
-              }),
+                content: message
+              })
             });
-            
+
             if (response.ok) {
               console.log('Discord に投稿しました');
             } else {

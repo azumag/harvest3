@@ -88,10 +88,10 @@ class MockExchange {
 
 async function testAdvancedOrderManagement() {
   console.log('🚀 高度注文管理システム統合テスト開始');
-  
+
   const mockExchange = new MockExchange();
   const orderManager = new AdvancedOrderManager(mockExchange);
-  
+
   // テストケース1: 低緊急度の買い注文
   console.log('\n📊 テスト1: 低緊急度の買い注文');
   try {
@@ -157,10 +157,10 @@ async function testAdvancedOrderManagement() {
       'BTC/JPY', URGENCY_LEVELS.MEDIUM, 0.01
     );
     console.log('✅ 選択された注文タイプ:', orderType);
-    
+
     const liquidityLevel = await orderManager.assessLiquidity('BTC/JPY', 0.01);
     console.log('✅ 流動性レベル:', liquidityLevel.toFixed(3));
-    
+
     const adjustedPrice = await orderManager.calculateOptimalPrice(
       'BTC/JPY', 'buy', URGENCY_LEVELS.MEDIUM, 100
     );

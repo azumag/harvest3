@@ -35,35 +35,35 @@ class WebSocketClient {
           timeout: this.config.timeout || 20000,
           forceNew: true
         });
-        
+
         this.socket.on('connect', () => {
           this.logger.info(`Socket.IO connected to ${this.endpoint}`);
           this.isConnected = true;
           this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           resolve();
         });
-        
+
         this.socket.on('connect_error', (error) => {
           this.logger.error(`Socket.IO connection error: ${error.message}`);
           reject(error);
         });
-        
+
         this.socket.on('message', (data) => {
           this.logger.debug(`Received message: ${JSON.stringify(data).substring(0, 200)}...`);
           // 登録されたすべてのイベントハンドラーに通知
           this._notifyHandlers('message', data);
         });
-        
+
         this.socket.on('error', (error) => {
           this.logger.error(`Socket.IO error: ${error.message}`, error);
           reject(error);
         });
-        
+
         this.socket.on('disconnect', (reason) => {
           this.logger.info(`Socket.IO disconnected: ${reason}`);
           this.isConnected = false;
           this._notifyHandlers('disconnect', reason);
-          
+
           // Attempt reconnection if not intentionally disconnected
           if (this.shouldReconnect && reason !== 'io client disconnect') {
             this._attemptReconnection();
@@ -81,7 +81,7 @@ class WebSocketClient {
       connected: true,
       emit: (event, data) => {
         this.logger.debug(`Mock emit: ${event} with data: ${JSON.stringify(data)}`);
-        
+
         // Simulate receiving messages after subscription
         if (event === 'join-room') {
           setTimeout(() => {
@@ -102,66 +102,66 @@ class WebSocketClient {
     let mockData;
 
     switch (dataType) {
-      case 'ticker':
-        // 新しいオブジェクト形式に対応
-        mockData = {
-          "room_name": roomName,
-          "message": {
-            "pid": 123456789,
-            "data": {
-              "sell": "896490",
-              "buy": "896489", 
-              "open": "896489",
-              "high": "905002",
-              "low": "881500",
-              "last": "896489",
-              "vol": "650.2026",
-              "timestamp": Date.now()
-            }
+    case 'ticker':
+      // 新しいオブジェクト形式に対応
+      mockData = {
+        'room_name': roomName,
+        'message': {
+          'pid': 123456789,
+          'data': {
+            'sell': '896490',
+            'buy': '896489',
+            'open': '896489',
+            'high': '905002',
+            'low': '881500',
+            'last': '896489',
+            'vol': '650.2026',
+            'timestamp': Date.now()
           }
-        };
-        break;
-      case 'transactions':
-        // 新しいオブジェクト形式に対応
-        mockData = {
-          "room_name": roomName,
-          "message": {
-            "pid": 123456790,
-            "data": {
-              "transactions": [{
-                "transaction_id": 347450047,
-                "side": "sell",
-                "price": "896489",
-                "amount": "0.1000",
-                "executed_at": Date.now()
-              }]
-            }
+        }
+      };
+      break;
+    case 'transactions':
+      // 新しいオブジェクト形式に対応
+      mockData = {
+        'room_name': roomName,
+        'message': {
+          'pid': 123456790,
+          'data': {
+            'transactions': [{
+              'transaction_id': 347450047,
+              'side': 'sell',
+              'price': '896489',
+              'amount': '0.1000',
+              'executed_at': Date.now()
+            }]
           }
-        };
-        break;
-      case 'depth':
-        // 新しいオブジェクト形式に対応
-        mockData = {
-          "room_name": roomName,
-          "message": {
-            "data": {
-              "asks": [
-                ["896500", "1.0000"],
-                ["896510", "2.0000"]
-              ],
-              "bids": [
-                ["896490", "1.5000"],
-                ["896480", "2.5000"]
-              ],
-              "timestamp": Date.now(),
-              "sequenceId": "1234567890"
-            }
+        }
+      };
+      break;
+    case 'depth':
+      // 新しいオブジェクト形式に対応
+      mockData = {
+        'room_name': roomName,
+        'message': {
+          'data': {
+            'asks': [
+              ['896500', '1.0000'],
+              ['896510', '2.0000']
+            ],
+            'bids': [
+              ['896490', '1.5000'],
+              ['896480', '2.5000']
+            ],
+            'timestamp': Date.now(),
+            'sequenceId': '1234567890'
           }
-        };
-        break;
-      default:
-        this.logger.warn(`Unknown room type for simulation: ${dataType}`);
-        return;
+        }
+      };
+      break;
+    default:
+      this.logger.warn(`Unknown room type for simulation: ${dataType}`);
+      return;
     }
 
     this.logger.debug(`Simulating message for ${roomName}`);
@@ -217,15 +217,15 @@ class WebSocketClient {
 
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
-    
+
     this.logger.info(`🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    
+
     setTimeout(() => {
       if (!this.shouldReconnect) {
         this.logger.debug('Reconnection cancelled');
         return;
       }
-      
+
       this.connect()
         .then(() => {
           this.logger.info('✅ Reconnection successful');

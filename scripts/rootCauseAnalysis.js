@@ -28,14 +28,14 @@ async function rootCauseAnalysis() {
 
     // 1. データ生成タイミングの分析
     console.log('\n🔍 Phase 1: データ生成タイミング分析');
-    
+
     // positionとtrade_summaryの作成タイムスタンプ分析
     const positionKeys = await client.keys('position:*');
     const tradeSummaryKeys = await client.keys('summary:trade:*');
-    
+
     console.log(`現在のポジション数: ${positionKeys.length}`);
     console.log(`現在のtrade_summary数: ${tradeSummaryKeys.length}`);
-    
+
     // 最古と最新のポジションタイムスタンプ
     const positionTimestamps = [];
     for (const key of positionKeys.slice(0, 50)) { // サンプリング
@@ -55,25 +55,25 @@ async function rootCauseAnalysis() {
         // エラーはスキップ
       }
     }
-    
+
     positionTimestamps.sort((a, b) => a.timestamp - b.timestamp);
-    
+
     if (positionTimestamps.length > 0) {
       const oldest = positionTimestamps[0];
       const newest = positionTimestamps[positionTimestamps.length - 1];
-      
+
       console.log(`\n最古のポジション: ${new Date(oldest.timestamp).toLocaleString('ja-JP')}`);
       console.log(`  ${oldest.symbol} ${oldest.strategy} ${oldest.amount}`);
       console.log(`最新のポジション: ${new Date(newest.timestamp).toLocaleString('ja-JP')}`);
       console.log(`  ${newest.symbol} ${newest.strategy} ${newest.amount}`);
-      
+
       const timeSpan = newest.timestamp - oldest.timestamp;
       console.log(`ポジション作成期間: ${(timeSpan / (1000 * 60 * 60 * 24)).toFixed(1)}日間`);
     }
 
     // 2. trade_summary生成不備の原因分析
     console.log('\n🔍 Phase 2: trade_summary生成不備原因分析');
-    
+
     // 戦略・通貨ペア組み合わせ分析
     const combinations = new Map();
     for (const pos of positionTimestamps) {
@@ -85,18 +85,18 @@ async function rootCauseAnalysis() {
       combo.positions++;
       combo.totalAmount += pos.amount;
     }
-    
+
     console.log(`\n戦略・通貨ペア組み合わせ: ${combinations.size}種類`);
     console.log(`trade_summary存在数: ${tradeSummaryKeys.length}種類`);
     console.log(`欠落率: ${((combinations.size - tradeSummaryKeys.length) / combinations.size * 100).toFixed(1)}%`);
-    
+
     // 欠落パターン分析
     const missing = [];
     for (const [combo, data] of combinations) {
       const [symbol, strategy] = combo.split(':');
       const summaryKey = `summary:trade:bitbank:${symbol}:${strategy}`;
       const exists = await client.exists(summaryKey);
-      
+
       if (!exists) {
         missing.push({
           symbol,
@@ -107,7 +107,7 @@ async function rootCauseAnalysis() {
         });
       }
     }
-    
+
     if (missing.length > 0) {
       console.log(`\n⚠️ 欠落していた組み合わせ: ${missing.length}種類`);
       missing.sort((a, b) => b.positions - a.positions).slice(0, 10).forEach(item => {
@@ -117,7 +117,7 @@ async function rootCauseAnalysis() {
 
     // 3. システム設計上の問題分析
     console.log('\n🔍 Phase 3: システム設計問題分析');
-    
+
     console.log(`
 【発見された設計問題】
 
@@ -144,7 +144,7 @@ async function rootCauseAnalysis() {
 
     // 4. 具体的な発生シナリオ推定
     console.log('\n🔍 Phase 4: 発生シナリオ推定');
-    
+
     // Redis接続エラーやシステム再起動履歴の調査
     const allKeys = await client.keys('*');
     const keysByType = {};
@@ -152,7 +152,7 @@ async function rootCauseAnalysis() {
       const type = key.split(':')[0];
       keysByType[type] = (keysByType[type] || 0) + 1;
     });
-    
+
     console.log('\nRedis内データ分布:');
     Object.entries(keysByType)
       .sort(([,a], [,b]) => b - a)
@@ -189,7 +189,7 @@ async function rootCauseAnalysis() {
 
     // 6. 類似問題の潜在リスク評価
     console.log('\n🔍 Phase 5: 類似問題の潜在リスク評価');
-    
+
     // 他の重要データの整合性チェック
     const riskAreas = [
       { name: 'pending_order', keys: await client.keys('pending_order:*') },
@@ -198,11 +198,11 @@ async function rootCauseAnalysis() {
       { name: 'ohlcv', keys: await client.keys('ohlcv:*') },
       { name: 'ticker', keys: await client.keys('ticker:*') }
     ];
-    
+
     console.log('\n潜在的リスクエリア:');
     riskAreas.forEach(area => {
-      const risk = area.keys.length === 0 ? '🔴 HIGH' : 
-                  area.keys.length < 10 ? '🟡 MEDIUM' : '🟢 LOW';
+      const risk = area.keys.length === 0 ? '🔴 HIGH' :
+        area.keys.length < 10 ? '🟡 MEDIUM' : '🟢 LOW';
       console.log(`  ${area.name}: ${area.keys.length}件 ${risk}`);
     });
 
@@ -237,7 +237,7 @@ async function rootCauseAnalysis() {
 `);
 
     console.log('\n✅ 根本原因分析完了');
-    
+
   } catch (error) {
     console.error('❌ 分析エラー:', error.message);
   }

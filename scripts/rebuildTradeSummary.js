@@ -2,7 +2,7 @@
 
 /**
  * trade_summaryを再構築するスクリプト
- * 
+ *
  * 残っているpositionキーから戦略別・通貨別のサマリーを再計算し、
  * 正しいtrade_summaryキーを作成する
  */
@@ -11,38 +11,38 @@ const { getClient, initialize: initializeRedis } = require('../src/database/redi
 
 async function rebuildTradeSummary() {
   console.log('🔧 trade_summary再構築開始');
-  
+
   try {
     await initializeRedis();
     const client = getClient();
-    
+
     // 既存のtrade_summaryキーを削除
     const existingSummaries = await client.keys('summary:trade:*');
     if (existingSummaries.length > 0) {
       await client.del(existingSummaries);
       console.log(`✅ 既存のtrade_summary削除: ${existingSummaries.length}件`);
     }
-    
+
     // 全positionキーを取得
     const positionKeys = await client.keys('position:*');
     console.log(`📊 処理対象のposition: ${positionKeys.length}件`);
-    
+
     const summaryByStrategy = new Map(); // key: 'exchange:symbol:strategy', value: { buy, sell, netPosition }
-    
+
     // 各positionを処理
     for (const key of positionKeys) {
       try {
         const position = await client.hGetAll(key);
-        
+
         const exchange = position.exchangeId;
         const symbol = position.symbol;
         const strategy = position.strategyKey;
         const side = position.side;
         const amount = parseFloat(position.amount) || 0;
         const entryPrice = parseFloat(position.entryPrice) || 0;
-        
+
         const summaryKey = `${exchange}:${symbol}:${strategy}`;
-        
+
         if (!summaryByStrategy.has(summaryKey)) {
           summaryByStrategy.set(summaryKey, {
             exchange,
@@ -56,10 +56,10 @@ async function rebuildTradeSummary() {
             count: 0
           });
         }
-        
+
         const summary = summaryByStrategy.get(summaryKey);
         summary.count++;
-        
+
         if (side === 'buy') {
           summary.buyAmount += amount;
           summary.totalBuyCost += (amount * entryPrice);
@@ -69,19 +69,19 @@ async function rebuildTradeSummary() {
           summary.totalSellRevenue += (amount * entryPrice);
           summary.netPosition -= amount;
         }
-        
+
       } catch (error) {
         console.error(`❌ position処理エラー: ${key} - ${error.message}`);
       }
     }
-    
+
     console.log(`\n📈 再構築されるサマリー: ${summaryByStrategy.size}件`);
-    
+
     // trade_summaryキーを作成
     let createdCount = 0;
     for (const [summaryKey, data] of summaryByStrategy) {
       const redisKey = `summary:trade:${data.exchange}:${data.symbol}:${data.strategy}`;
-      
+
       await client.hSet(redisKey, {
         buyAmount: data.buyAmount.toFixed(8),
         sellAmount: data.sellAmount.toFixed(8),
@@ -95,16 +95,16 @@ async function rebuildTradeSummary() {
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
-      
+
       createdCount++;
-      
+
       if (data.netPosition !== 0) {
         console.log(`  📝 ${data.exchange}:${data.symbol}:${data.strategy} - netPosition: ${data.netPosition.toFixed(6)} (positions: ${data.count})`);
       }
     }
-    
+
     console.log(`\n✅ trade_summary再構築完了: ${createdCount}件作成`);
-    
+
     // 結果を通貨別に集計
     const currencyTotals = new Map();
     for (const [, data] of summaryByStrategy) {
@@ -114,14 +114,14 @@ async function rebuildTradeSummary() {
       }
       currencyTotals.set(currency, currencyTotals.get(currency) + data.netPosition);
     }
-    
+
     console.log('\n📊 通貨別Bot管理残高:');
     for (const [currency, total] of currencyTotals) {
       if (Math.abs(total) > 0.000001) {
         console.log(`  ${currency}: ${total.toFixed(8)}`);
       }
     }
-    
+
   } catch (error) {
     console.error('❌ 再構築エラー:', error);
     throw error;

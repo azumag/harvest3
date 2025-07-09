@@ -13,7 +13,7 @@ class PerformanceAnalyzer {
     this.cacheTimeout = options.cacheTimeout || 60000; // 1分間キャッシュ
     this.cache = new Map();
     this.advancedMetrics = new AdvancedPerformanceMetrics();
-    
+
     // パフォーマンス閾値
     this.thresholds = {
       excellent: 0.7,   // 70%以上
@@ -33,7 +33,7 @@ class PerformanceAnalyzer {
    */
   async getStrategyPerformance(strategyName, exchange = 'bitbank', lookbackDays = this.defaultLookbackPeriod) {
     const cacheKey = `perf_${strategyName}_${exchange}_${lookbackDays}_${Math.floor(Date.now() / this.cacheTimeout)}`;
-    
+
     // キャッシュチェック
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -42,7 +42,7 @@ class PerformanceAnalyzer {
     try {
       // 戦略のサマリーデータを取得
       const summary = await getTradeSummary(exchange, 'ALL', strategyName);
-      
+
       if (!summary) {
         console.warn(`[PerformanceAnalyzer] サマリーデータなし: ${strategyName}`);
         return this.getDefaultPerformance();
@@ -92,9 +92,9 @@ class PerformanceAnalyzer {
       performance.performanceLevel = this.getPerformanceLevel(performance.overallScore);
 
       this.cache.set(cacheKey, performance);
-      
+
       console.log(`[PerformanceAnalyzer] ${strategyName}: 勝率=${(performance.winRate * 100).toFixed(1)}%, スコア=${performance.overallScore.toFixed(3)}`);
-      
+
       return performance;
 
     } catch (error) {
@@ -113,7 +113,7 @@ class PerformanceAnalyzer {
   async getRecentSuccessRate(strategyName, exchange = 'bitbank', tradeCount = this.defaultTradeCount) {
     try {
       const performance = await this.getStrategyPerformance(strategyName, exchange);
-      
+
       // 十分な取引データがない場合はデフォルト値
       if (performance.totalTrades < tradeCount) {
         return 0.5; // 中間値
@@ -140,7 +140,7 @@ class PerformanceAnalyzer {
       }
 
       const score = performance.overallScore || performance.winRate || 0.5;
-      
+
       // スコアベースの調整
       if (score >= this.thresholds.excellent) {
         return 0.25; // 優秀なパフォーマンス：積極的
@@ -168,9 +168,9 @@ class PerformanceAnalyzer {
   calculateOverallScore(performance) {
     try {
       // 高度パフォーマンス指標が利用可能な場合の重み配分
-      const hasAdvancedMetrics = performance.calmarRatio !== undefined && 
+      const hasAdvancedMetrics = performance.calmarRatio !== undefined &&
                                 performance.sortinoRatio !== undefined;
-      
+
       const weights = hasAdvancedMetrics ? {
         winRate: 0.25,       // 勝率 25%
         profitFactor: 0.20,  // プロフィットファクター 20%
@@ -246,10 +246,18 @@ class PerformanceAnalyzer {
    * @returns {string} パフォーマンスレベル
    */
   getPerformanceLevel(score) {
-    if (score >= this.thresholds.excellent) return 'EXCELLENT';
-    if (score >= this.thresholds.good) return 'GOOD';
-    if (score >= this.thresholds.average) return 'AVERAGE';
-    if (score >= this.thresholds.poor) return 'POOR';
+    if (score >= this.thresholds.excellent) {
+      return 'EXCELLENT';
+    }
+    if (score >= this.thresholds.good) {
+      return 'GOOD';
+    }
+    if (score >= this.thresholds.average) {
+      return 'AVERAGE';
+    }
+    if (score >= this.thresholds.poor) {
+      return 'POOR';
+    }
     return 'BAD';
   }
 

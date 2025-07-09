@@ -16,7 +16,7 @@ async function populateStrategyParameters() {
     tradeCost: config.tradeCost,
     cancelOrderThreshold: config.cancelOrderThreshold,
     safetyJPYAmount: config.safetyJPYAmount,
-    amountPrecision: config.amountPrecision,
+    amountPrecision: config.amountPrecision
   };
   // 共通パラメータは 'global:all:common' という汎用キーで保存
   await saveStrategyParameters('global', 'all', 'common', commonParams);

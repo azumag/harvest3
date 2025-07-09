@@ -25,7 +25,7 @@ describe('SchedulingManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // mock task object
     mockTask = {
       running: true,
@@ -33,9 +33,9 @@ describe('SchedulingManager', () => {
       start: jest.fn(),
       destroy: jest.fn()
     };
-    
+
     cron.schedule.mockReturnValue(mockTask);
-    
+
     schedulingManager = new SchedulingManager();
   });
 
@@ -50,9 +50,9 @@ describe('SchedulingManager', () => {
   describe('scheduleHourlyTask', () => {
     it('毎時タスクの登録', () => {
       const taskFunction = jest.fn();
-      
+
       const task = schedulingManager.scheduleHourlyTask('test-hourly', taskFunction);
-      
+
       expect(cron.schedule).toHaveBeenCalledWith(
         '0 0 * * * *',
         expect.any(Function),
@@ -72,9 +72,9 @@ describe('SchedulingManager', () => {
         scheduled: false,
         runOnInit: true
       };
-      
+
       schedulingManager.scheduleHourlyTask('test-custom', taskFunction, options);
-      
+
       expect(cron.schedule).toHaveBeenCalledWith(
         '0 0 * * * *',
         expect.any(Function),
@@ -89,9 +89,9 @@ describe('SchedulingManager', () => {
   describe('scheduleIntervalTask', () => {
     it('間隔タスクの登録', () => {
       const taskFunction = jest.fn();
-      
+
       schedulingManager.scheduleIntervalTask('test-interval', taskFunction, 5);
-      
+
       expect(cron.schedule).toHaveBeenCalledWith(
         '0 */5 * * * *',
         expect.any(Function),
@@ -105,9 +105,9 @@ describe('SchedulingManager', () => {
 
     it('異なる間隔での登録', () => {
       const taskFunction = jest.fn();
-      
+
       schedulingManager.scheduleIntervalTask('test-15min', taskFunction, 15);
-      
+
       expect(cron.schedule).toHaveBeenCalledWith(
         '0 */15 * * * *',
         expect.any(Function),
@@ -120,9 +120,9 @@ describe('SchedulingManager', () => {
     it('カスタムcron表現での登録', () => {
       const taskFunction = jest.fn();
       const cronExpression = '0 30 2 * * *'; // 毎日2:30
-      
+
       schedulingManager.scheduleCustomTask('test-custom', cronExpression, taskFunction);
-      
+
       expect(cron.schedule).toHaveBeenCalledWith(
         cronExpression,
         expect.any(Function),
@@ -142,27 +142,27 @@ describe('SchedulingManager', () => {
 
     it('タスク一時停止', () => {
       const result = schedulingManager.pauseTask('test-task');
-      
+
       expect(result).toBe(true);
       expect(mockTask.stop).toHaveBeenCalled();
     });
 
     it('存在しないタスクの一時停止', () => {
       const result = schedulingManager.pauseTask('non-existent');
-      
+
       expect(result).toBe(false);
     });
 
     it('タスク再開', () => {
       const result = schedulingManager.resumeTask('test-task');
-      
+
       expect(result).toBe(true);
       expect(mockTask.start).toHaveBeenCalled();
     });
 
     it('タスク削除', () => {
       const result = schedulingManager.removeTask('test-task');
-      
+
       expect(result).toBe(true);
       expect(mockTask.destroy).toHaveBeenCalled();
       expect(schedulingManager.scheduledTasks.size).toBe(0);
@@ -175,9 +175,9 @@ describe('SchedulingManager', () => {
       schedulingManager.scheduleHourlyTask('test-status', taskFunction, {
         description: 'テストタスク'
       });
-      
+
       const status = schedulingManager.getTasksStatus();
-      
+
       expect(status).toHaveLength(1);
       expect(status[0]).toEqual({
         name: 'test-status',
@@ -193,9 +193,9 @@ describe('SchedulingManager', () => {
     it('優雅なシャットダウン', async () => {
       const taskFunction = jest.fn();
       schedulingManager.scheduleHourlyTask('test-shutdown', taskFunction);
-      
+
       await schedulingManager.gracefulShutdown();
-      
+
       expect(schedulingManager.isShutdown).toBe(true);
       expect(mockTask.destroy).toHaveBeenCalled();
       expect(schedulingManager.scheduledTasks.size).toBe(0);
@@ -205,11 +205,11 @@ describe('SchedulingManager', () => {
       const taskFunction = jest.fn();
       schedulingManager.scheduleHourlyTask('test-shutdown-check', taskFunction);
       schedulingManager.isShutdown = true;
-      
-      // タスク関数を模擬実行 
+
+      // タスク関数を模擬実行
       const [[, taskWrapper]] = cron.schedule.mock.calls;
       await taskWrapper();
-      
+
       // シャットダウン中はタスクが実行されない（taskFunctionが呼ばれない）
       expect(taskFunction).not.toHaveBeenCalled();
     });
@@ -219,7 +219,7 @@ describe('SchedulingManager', () => {
     it('同一インスタンス取得', () => {
       const instance1 = getSchedulingManager();
       const instance2 = getSchedulingManager();
-      
+
       expect(instance1).toBe(instance2);
     });
   });
@@ -228,18 +228,18 @@ describe('SchedulingManager', () => {
     it('タスク実行エラーの適切な処理', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       const errorTask = jest.fn().mockRejectedValue(new Error('Task error'));
-      
+
       schedulingManager.scheduleHourlyTask('error-task', errorTask);
-      
+
       // cronのコールバック関数を取得して実行
       const [[, taskWrapper]] = cron.schedule.mock.calls;
       await taskWrapper();
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('[スケジューラー] error-task エラー:'),
         'Task error'
       );
-      
+
       consoleSpy.mockRestore();
     });
   });

@@ -35,26 +35,26 @@ async function startBasicAnomalyDetector() {
   `);
 
   const detector = new BasicAnomalyDetector();
-  
+
   try {
     // 初期化
     console.log('\n🔧 BasicAnomalyDetector初期化中...');
     const initialized = await detector.initialize();
-    
+
     if (!initialized) {
       throw new Error('初期化に失敗しました');
     }
-    
+
     // 開始前の現状確認
     console.log('\n📊 開始前システム状態確認');
-    
+
     // Redis接続確認
     const client = detector.client;
     const positionCount = await client.keys('position:*').then(keys => keys.length);
     const summaryCount = await client.keys('summary:trade:*').then(keys => keys.length);
     const filledTradeCount = await client.keys('filled_trade:*').then(keys => keys.length);
     const pendingOrderCount = await client.keys('pending_order:*').then(keys => keys.length);
-    
+
     console.log(`
 現在のデータ状況:
   ポジション: ${positionCount}件
@@ -62,7 +62,7 @@ async function startBasicAnomalyDetector() {
   約定履歴: ${filledTradeCount}件
   未約定注文: ${pendingOrderCount}件
     `);
-    
+
     // 重要データの欠落チェック
     const criticalIssues = [];
     if (filledTradeCount === 0) {
@@ -74,7 +74,7 @@ async function startBasicAnomalyDetector() {
     if (positionCount > 200) {
       criticalIssues.push('🟡 WARNING: ポジション数過多');
     }
-    
+
     if (criticalIssues.length > 0) {
       console.log('\n⚠️ 検出された問題:');
       criticalIssues.forEach(issue => console.log(`  ${issue}`));
@@ -82,53 +82,53 @@ async function startBasicAnomalyDetector() {
     } else {
       console.log('\n✅ 現在のシステム状態: 正常');
     }
-    
+
     // 監視開始
     console.log('\n🚀 基本異常検知システム開始...');
     await detector.start();
-    
+
     // 定期的な状態レポート
     setInterval(() => {
       const status = detector.getStatus();
       const recentAlerts = status.alertHistory.length;
-      
+
       console.log(`\n📈 定期レポート (${new Date().toLocaleString('ja-JP')})`);
       console.log(`  システム稼働: ${status.isRunning ? '✅ 正常' : '❌ 停止'}`);
       console.log(`  直近アラート: ${recentAlerts}件`);
-      
+
       if (status.lastChecks.positionBias) {
         const longRatio = (status.lastChecks.positionBias.longRatio * 100).toFixed(1);
         console.log(`  ポジション偏り: ${longRatio}%`);
       }
-      
+
       if (status.lastChecks.positionSummaryConsistency) {
         const inconsistency = (status.lastChecks.positionSummaryConsistency.inconsistencyRate * 100).toFixed(1);
         console.log(`  データ整合性: ${inconsistency}%不整合`);
       }
-      
+
     }, 30 * 60 * 1000); // 30分ごと
-    
+
     // 緊急停止ハンドラー
     process.on('SIGINT', async () => {
       console.log('\n🛑 緊急停止シグナル受信...');
       await detector.stop();
-      
+
       const finalStatus = detector.getStatus();
-      console.log(`\n📊 最終レポート:`);
+      console.log('\n📊 最終レポート:');
       console.log(`  総アラート数: ${finalStatus.alertHistory.length}件`);
-      console.log(`  最終チェック: ${new Date(Object.values(finalStatus.lastChecks).reduce((latest, check) => 
+      console.log(`  最終チェック: ${new Date(Object.values(finalStatus.lastChecks).reduce((latest, check) =>
         Math.max(latest, check.timestamp || 0), 0)).toLocaleString('ja-JP')}`);
-      
+
       console.log('\n✅ 基本異常検知システム正常終了');
       process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
       console.log('\n🛑 終了シグナル受信...');
       await detector.stop();
       process.exit(0);
     });
-    
+
     // 初回Discord通知
     console.log('\n🤖 初期状態をDiscordに通知中...');
     try {
@@ -151,14 +151,14 @@ async function startBasicAnomalyDetector() {
 **Ultra-Deep Analysis成果実装:** 
 完了済み問題の再発防止と新規問題の早期検出を開始
       `;
-      
+
       // Discord通知は環境に応じて実装
       console.log('Discord通知内容:', notificationMessage);
-      
+
     } catch (error) {
       console.log('Discord通知エラー (継続実行):', error.message);
     }
-    
+
     console.log(`
 ════════════════════════════════════════════════════════════════════════
 🎉 基本異常検知システム稼働開始
@@ -175,18 +175,18 @@ async function startBasicAnomalyDetector() {
 Co-Authored-By: Claude <noreply@anthropic.com>
 ════════════════════════════════════════════════════════════════════════
     `);
-    
+
     // メインループ (永続実行)
     console.log('\n⏰ メインループ開始 - Ctrl+Cで停止');
-    
+
   } catch (error) {
     console.error(`❌ 基本異常検知システムエラー: ${error.message}`);
     console.error(error.stack);
-    
+
     if (detector) {
       await detector.stop();
     }
-    
+
     process.exit(1);
   }
 }

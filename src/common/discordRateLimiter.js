@@ -42,7 +42,7 @@ class DiscordRateLimiter {
     }
 
     const webhookQueue = this.webhookQueues.get(webhookUrl);
-    
+
     // 重複防止のためのハッシュを記録
     if (deduplicationKey) {
       this.errorHashes.set(deduplicationKey, {
@@ -62,7 +62,7 @@ class DiscordRateLimiter {
     };
 
     webhookQueue.queue.push(notificationTask);
-    
+
     // 優先度でソート（数値が小さいほど優先度が高い）
     webhookQueue.queue.sort((a, b) => a.priority - b.priority);
 
@@ -79,7 +79,9 @@ class DiscordRateLimiter {
    */
   isDuplicate(key, windowMs) {
     const existing = this.errorHashes.get(key);
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
 
     const now = Date.now();
     if (now - existing.timestamp > windowMs) {
@@ -96,14 +98,16 @@ class DiscordRateLimiter {
    */
   async processQueue(webhookUrl) {
     const webhookQueue = this.webhookQueues.get(webhookUrl);
-    if (!webhookQueue || webhookQueue.processing) return;
+    if (!webhookQueue || webhookQueue.processing) {
+      return;
+    }
 
     webhookQueue.processing = true;
 
     try {
       while (webhookQueue.queue.length > 0) {
         const now = Date.now();
-        
+
         // レートリミット中かチェック
         if (now < webhookQueue.rateLimitUntil) {
           const waitTime = webhookQueue.rateLimitUntil - now;
@@ -123,21 +127,21 @@ class DiscordRateLimiter {
 
         if (result.success) {
           webhookQueue.lastSent = Date.now();
-          console.log(`[DISCORD_RATE_LIMITER] Notification sent successfully`);
+          console.log('[DISCORD_RATE_LIMITER] Notification sent successfully');
         } else {
           // 失敗した場合のリトライ処理
           task.retryCount++;
           if (task.retryCount <= task.maxRetries) {
             console.log(`[DISCORD_RATE_LIMITER] Retry ${task.retryCount}/${task.maxRetries} for notification`);
-            
+
             if (result.rateLimitUntil) {
               webhookQueue.rateLimitUntil = result.rateLimitUntil;
             }
-            
+
             // 優先度を維持してキューに戻す
             webhookQueue.queue.unshift(task);
             webhookQueue.queue.sort((a, b) => a.priority - b.priority);
-            
+
             // 指数バックオフで待機
             const backoffTime = Math.min(1000 * Math.pow(2, task.retryCount - 1), 30000);
             await new Promise(resolve => setTimeout(resolve, backoffTime));
@@ -162,17 +166,17 @@ class DiscordRateLimiter {
     } catch (error) {
       if (error.response && error.response.status === 429) {
         // レートリミット処理
-        const retryAfterSeconds = error.response.data?.retry_after || 
+        const retryAfterSeconds = error.response.data?.retry_after ||
                                  parseInt(error.response.headers['retry-after'], 10) || 1;
         const rateLimitUntil = Date.now() + (retryAfterSeconds * 1000) + 1000; // 1秒の余裕
-        
+
         return {
           success: false,
           rateLimitUntil,
           error: 'rate_limit'
         };
       }
-      
+
       console.error('[DISCORD_RATE_LIMITER] Send error:', error.message);
       return { success: false, error: error.message };
     }
@@ -216,7 +220,7 @@ class DiscordRateLimiter {
     });
 
     expiredKeys.forEach(key => this.errorHashes.delete(key));
-    
+
     if (expiredKeys.length > 0) {
       console.log(`[DISCORD_RATE_LIMITER] Cleaned up ${expiredKeys.length} expired entries`);
     }

@@ -21,13 +21,13 @@ async function checkCcxtVersionDifferences() {
   // Bitbankインスタンスを作成
   console.log('\n2. Bitbankインスタンスの作成とメソッド確認:');
   const exchange = new ccxt.bitbank({
-    enableRateLimit: true,
+    enableRateLimit: true
     // APIキー不要
   });
 
   // インスタンスの主要メソッドを確認
   console.log('\n3. 主要メソッドの存在確認:');
-  
+
   const criticalMethods = [
     'loadMarkets',
     'fetchTicker',
@@ -67,7 +67,7 @@ async function checkCcxtVersionDifferences() {
     console.log('\n6. マーケットデータ読み込みテスト:');
     await exchange.loadMarkets();
     console.log(`成功: ${Object.keys(exchange.markets).length} マーケットを読み込みました`);
-    
+
     // 代表的なマーケットの構造を調査
     if ('BTC/JPY' in exchange.markets) {
       console.log('\n7. BTC/JPY マーケット構造:');
@@ -79,7 +79,7 @@ async function checkCcxtVersionDifferences() {
       console.log(`プレシジョン: ${JSON.stringify(market.precision)}`);
       console.log(`リミット: ${JSON.stringify(market.limits)}`);
     }
-    
+
     console.log('\n8. マーケットデータのプロパティ一覧:');
     const marketKeys = Object.keys(exchange.markets['BTC/JPY']).sort();
     console.log(marketKeys.join(', '));

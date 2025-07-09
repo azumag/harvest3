@@ -27,21 +27,21 @@ class BuyOrderExecutor extends TradingEngine {
       // Check position limits (buy-specific)
       if (!this.isBacktest && this.config.enableRiskManagement !== false) {
         const positionLimitCheck = await checkPositionLimits(
-          this.exchange, 
-          this.symbol, 
-          this.strategyKey, 
+          this.exchange,
+          this.symbol,
+          this.strategyKey,
           this.config.riskSettings
         );
-        
+
         if (!positionLimitCheck.allowed) {
-          const message = `⛔ [Risk Management] Position limit reached ⛔\n` +
+          const message = '⛔ [Risk Management] Position limit reached ⛔\n' +
                          `Exchange: ${this.exchange.id}\n` +
                          `Symbol: ${this.symbol}\n` +
                          `Strategy: ${this.strategyName}\n` +
                          `Reason: ${positionLimitCheck.reason}\n` +
                          `Current Price: ${currentPrice.toLocaleString()}円\n` +
-                         `🛑 Skipping new buy order`;
-          
+                         '🛑 Skipping new buy order';
+
           await this.sendNotification(message);
           return this.handleValidationFailure(positionLimitCheck.reason, { currentPrice });
         }
@@ -54,15 +54,15 @@ class BuyOrderExecutor extends TradingEngine {
 
       // Calculate trade amount using extracted common logic
       const tradeCalculation = this.calculateTradeAmount(
-        availableFunds, 
-        currentPrice, 
+        availableFunds,
+        currentPrice,
         this.config.tradePercentage
       );
 
       if (!tradeCalculation.isValid) {
         return this.handleValidationFailure(
           'Insufficient funds or amount below minimum',
-          { 
+          {
             availableFunds,
             calculatedAmount: tradeCalculation.amount,
             currentPrice,
@@ -95,10 +95,10 @@ class BuyOrderExecutor extends TradingEngine {
    */
   async executeBuyOrder(amount, currentPrice, signalInfo, realizedPnL) {
     const { orderType } = this.config;
-    
+
     try {
       let order;
-      
+
       if (this.isBacktest) {
         // Backtest mode
         order = await backtestCreateLimitBuyOrder(
@@ -142,10 +142,10 @@ class BuyOrderExecutor extends TradingEngine {
 
     } catch (orderError) {
       console.error(`[${this.strategyName}] Order creation failed:`, orderError);
-      return this.handleValidationFailure('Order creation failed', { 
+      return this.handleValidationFailure('Order creation failed', {
         error: orderError.message,
         amount,
-        currentPrice 
+        currentPrice
       });
     }
   }

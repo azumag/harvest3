@@ -16,7 +16,7 @@ const TIMEFRAME_TO_CANDLE_TYPE = {
   '30m': '30min',
   '1h': '1hour'
   // 注意: 4h, 8h, 12h, 1d, 1w, 1monthはBitbank APIでサポートされていない
-}
+};
 
 /**
  * API制限のための待機処理
@@ -38,13 +38,13 @@ const BITBANK_RATE_LIMIT_MS = 120; // 10回/秒 = 100ms間隔に安全マージ�
 async function executeBitbankAPIWithRateLimit(apiCall) {
   const now = Date.now();
   const timeSinceLastRequest = now - lastBitbankRequestTime;
-  
+
   if (timeSinceLastRequest < BITBANK_RATE_LIMIT_MS) {
     const waitTime = BITBANK_RATE_LIMIT_MS - timeSinceLastRequest;
     console.log(`[Bitbank API Rate Limit] ${waitTime}ms待機中...`);
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
-  
+
   try {
     const result = await apiCall();
     lastBitbankRequestTime = Date.now();
@@ -56,7 +56,7 @@ async function executeBitbankAPIWithRateLimit(apiCall) {
     consecutiveFailures++;
     console.error(`[Bitbank API Error] 連続失敗: ${consecutiveFailures}回`, error.message);
     throttleMonitor.recordRequest(true, error.message); // エラーを記録
-    
+
     // レートリミットエラーの場合はスマートな待機時間を使用
     if (error.message.includes('rate limit') || error.message.includes('429') || error.message.includes('throttle') || error.message.includes('maxCapacity')) {
       const recommendedDelay = throttleMonitor.getRecommendedDelay();
@@ -64,13 +64,13 @@ async function executeBitbankAPIWithRateLimit(apiCall) {
       console.warn(`[Bitbank API Throttle] スロットリングエラーのため${throttleDelay}ms待機...`);
       await new Promise(resolve => setTimeout(resolve, throttleDelay));
     }
-    
+
     // 連続失敗が多い場合はエラーを抜けて続行
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       console.error(`[Bitbank API Critical] 連続失敗が${MAX_CONSECUTIVE_FAILURES}回を超えました。エラーを抜けて続行します。`);
       return null;
     }
-    
+
     throw error;
   }
 }
@@ -86,11 +86,11 @@ async function fetchBitbankOHLCV(pair, candleType, dateStr, limit) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       let data = '';
-      
+
       res.on('data', (chunk) => {
         data += chunk;
       });
-      
+
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
@@ -99,7 +99,7 @@ async function fetchBitbankOHLCV(pair, candleType, dateStr, limit) {
             const ccxtData = parsed.data.candlestick[0].ohlcv.map(candle => [
               new Date(candle[5]).getTime(), // timestamp (index 5)
               parseFloat(candle[0]),         // open
-              parseFloat(candle[1]),         // high  
+              parseFloat(candle[1]),         // high
               parseFloat(candle[2]),         // low
               parseFloat(candle[3]),         // close
               parseFloat(candle[4])          // volume
@@ -113,11 +113,11 @@ async function fetchBitbankOHLCV(pair, candleType, dateStr, limit) {
         }
       });
     });
-    
+
     req.on('error', (error) => {
       reject(error);
     });
-    
+
     req.end();
   });
 }
@@ -136,8 +136,8 @@ function getDateFormat(candleType) {
  */
 function formatDateString(date, format) {
   if (format === 'YYYYMMDD') {
-    return date.getFullYear().toString() + 
-           (date.getMonth() + 1).toString().padStart(2, '0') + 
+    return date.getFullYear().toString() +
+           (date.getMonth() + 1).toString().padStart(2, '0') +
            date.getDate().toString().padStart(2, '0');
   } else {
     return date.getFullYear().toString();
@@ -169,44 +169,44 @@ function convertPairForHistoricalData(pair, targetDate) {
 async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
   const allData = [];
   const dateFormat = getDateFormat(candleType);
-  
+
   // バックテストモード時はログを簡略化
   const isBacktest = isBacktestMode();
   if (!isBacktest) {
     console.log(`[Bitbank API] データ取得開始: ${pair} ${candleType} ${limit}件 (形式: ${dateFormat})`);
   }
-  
+
   // 開始日を設定
   const currentDate = new Date();
-  
+
   // 必要な期間数を計算
   const periodsNeeded = dateFormat === 'YYYYMMDD' ? Math.min(limit, 30) : 3; // 最大30日または3年
-  
+
   for (let i = 0; i < periodsNeeded && allData.length < limit; i++) {
     const targetDate = new Date(currentDate);
-    
+
     if (dateFormat === 'YYYYMMDD') {
       targetDate.setDate(currentDate.getDate() - i);
     } else {
       targetDate.setFullYear(currentDate.getFullYear() - i);
     }
-    
+
     const dateStr = formatDateString(targetDate, dateFormat);
-    
+
     // 日付に基づいてシンボル変換（BCH → BCC）
     const actualPair = convertPairForHistoricalData(pair, targetDate);
-    
+
     try {
       if (!isBacktest) {
         console.log(`[Bitbank API] ${dateStr}のデータ取得中... (ペア: ${actualPair})`);
       }
       const periodData = await fetchBitbankOHLCV(actualPair, candleType, dateStr, limit - allData.length);
-      
+
       if (periodData.length === 0) {
         if (!isBacktest) {
           console.log(`[Bitbank API] ${dateStr}: データなし`);
         }
-        
+
         // BCCで失敗した場合、BCHを試す（または逆）
         if (actualPair !== pair) {
           if (!isBacktest) {
@@ -228,14 +228,14 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
         }
         continue;
       }
-      
+
       // 新しいデータを古いデータの前に追加（時系列順を保持）
       allData.unshift(...periodData);
-      
+
       if (!isBacktest) {
         console.log(`[Bitbank API] ${dateStr}: ${periodData.length}件取得 (合計: ${allData.length}件)`);
       }
-      
+
       // API制限対策: Bitbank制限 10回/秒 = 100ms間隔
       await waitForAPILimit(150);
     } catch (error) {
@@ -249,7 +249,7 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
         }
         continue;
       }
-      
+
       console.error(`[Bitbank API] ${dateStr}のデータ取得エラー:`, error.message);
       if (i === 0) {
         // 最新期間で重大なエラーの場合は中断
@@ -259,17 +259,17 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
       continue;
     }
   }
-  
+
   // 時系列順にソート（古い→新しい）
   allData.sort((a, b) => a[0] - b[0]);
-  
+
   // 必要な件数だけ返す（最新のデータから）
   const result = allData.slice(-limit);
-  
+
   if (!isBacktest) {
     console.log(`[Bitbank API] データ取得完了: ${result.length}件`);
   }
-  
+
   return result;
 }
 
@@ -283,7 +283,7 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
  */
 async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, limit) {
   const isBacktest = isBacktestMode();
-  
+
   // Bitbankでサポートされていないタイムフレームの事前チェック
   if (exchange.id === 'bitbank') {
     const supportedTimeframes = ['1m', '5m', '15m', '30m', '1h'];
@@ -295,57 +295,57 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
       return [];
     }
   }
-  
+
   if (!isBacktest) {
     console.log(`[標準API] fetchStandardHistoricalOHLCVData開始: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
   }
-  
+
   try {
     if (!isBacktest) {
       console.log(`[標準API] ${exchange.id}のCCXT標準APIを使用`);
     }
-    
+
     // 標準CCXT API呼び出し
     const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, undefined, limit);
-    
+
     if (!isBacktest) {
       console.log(`[標準API] データ取得完了: ${ohlcv.length}件`);
     }
-    
+
     return ohlcv;
   } catch (error) {
     const errorMessage = `fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}): ${error.message}`;
-    
+
     // デバッグ情報をログに出力
     if (!isBacktest) {
       console.log(`[DEBUG] Error details for ${exchange.id} ${symbol} ${timeframe}:`);
       console.log(`[DEBUG] error.message: ${error.message}`);
       console.log(`[DEBUG] error.message includes '10000': ${error.message.includes('10000')}`);
     }
-    
+
     // Bitbankのエラーコード10000（サポートされていないタイムフレーム）の場合
     if (exchange.id === 'bitbank' && (
-        error.message.includes('10000') || 
+      error.message.includes('10000') ||
         error.message.includes('"code":"10000"') ||
         (error.response && error.response.includes && error.response.includes('10000')) ||
         (typeof error.response === 'object' && error.response.data && error.response.data.code === '10000')
-      )) {
+    )) {
       console.warn(`[${exchange.id}] サポートされていないタイムフレーム: ${symbol} ${timeframe} - エラーコード10000 - Discordエラー送信をスキップ`);
       recordError(exchange.id, 'unsupported_timeframe', `${symbol} ${timeframe}`);
       return [];
     }
-    
+
     // その他のエラーは通常通り処理
     console.error(errorMessage, error);
     recordError(exchange.id, 'fetchOHLCV', error.message);
-    
+
     // 重要：10000エラーは既にキャッチされているはずなので、ここに到達した場合はDiscord通知
     try {
       await postErrorToDiscord(errorMessage);
     } catch (discordError) {
       console.error('Discord通知エラー:', discordError.message);
     }
-    
+
     return [];
   }
 }
@@ -360,29 +360,29 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
  */
 async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 100) {
   const isBacktest = isBacktestMode();
-  
+
   if (!isBacktest) {
     console.log(`[BACKTEST] fetchOHLCVDataAPI呼び出し: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     console.log(`[DEBUG] exchange.id: ${exchange.id}, timeframe: ${timeframe}, mapping: ${TIMEFRAME_TO_CANDLE_TYPE[timeframe]}`);
   }
-  
+
   // Bitbankの特定のtimeframeの場合は専用APIを使用（エラー時は標準APIにフォールバック）
   if (exchange.id === 'bitbank' && TIMEFRAME_TO_CANDLE_TYPE[timeframe]) {
     try {
       if (!isBacktest) {
         console.log('[BACKTEST] Bitbank専用API使用');
       }
-      
+
       // シンボルをBitbank APIで使用する形式に変換（BTC/JPY → btc_jpy）
       const pair = symbol.toLowerCase().replace('/', '_');
       const candleType = TIMEFRAME_TO_CANDLE_TYPE[timeframe];
-      
+
       const result = await fetchBitbankHistoricalOHLCVData(pair, candleType, limit);
-      
+
       if (!isBacktest) {
         console.log(`[BACKTEST] Bitbank専用API結果: ${result.length}件`);
       }
-      
+
       return result;
     } catch (error) {
       // エラーコード10000（サポートされていないタイムフレーム）の場合
@@ -393,7 +393,7 @@ async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 10
       }
       return await fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, limit);
     }
-  } 
+  }
   // それ以外のケースは標準実装を使用
   else {
     if (!isBacktest) {

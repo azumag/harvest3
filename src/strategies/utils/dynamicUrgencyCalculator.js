@@ -19,7 +19,7 @@ const URGENCY_LEVELS = {
 class DynamicUrgencyCalculator {
   constructor(config = {}) {
     this.enabled = config.enabled !== false; // デフォルトで有効
-    
+
     // 重み設定
     this.weights = {
       volatility: config.weights?.volatility || 0.3,
@@ -27,23 +27,23 @@ class DynamicUrgencyCalculator {
       timezone: config.weights?.timezone || 0.2,
       performance: config.weights?.performance || 0.25
     };
-    
+
     // 調整範囲制限
     this.adjustmentLimits = {
       min: config.adjustmentLimits?.min || -0.5,  // 最大50%ダウン調整
       max: config.adjustmentLimits?.max || 0.8    // 最大80%アップ調整
     };
-    
+
     // 各分析モジュールの初期化
     this.volatilityAnalyzer = new VolatilityAnalyzer(config.volatility || {});
     this.portfolioRiskAnalyzer = new PortfolioRiskAnalyzer(config.portfolioRisk || {});
     this.timezoneAnalyzer = new TimezoneAnalyzer(config.timezone || {});
     this.performanceAnalyzer = new PerformanceAnalyzer(config.performance || {});
-    
+
     // キャッシュ設定
     this.cacheTimeout = config.cacheDuration || 60000; // 1分間キャッシュ
     this.cache = new Map();
-    
+
     console.log('[DynamicUrgencyCalculator] 初期化完了:', this.enabled ? '有効' : '無効');
   }
 
@@ -60,7 +60,7 @@ class DynamicUrgencyCalculator {
     }
 
     const cacheKey = `urgency_${symbol}_${baseUrgency}_${context.strategyName || 'unknown'}_${Math.floor(Date.now() / this.cacheTimeout)}`;
-    
+
     // キャッシュチェック
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
@@ -70,7 +70,7 @@ class DynamicUrgencyCalculator {
 
     try {
       const startTime = Date.now();
-      
+
       // 各要素の並列計算
       const [
         volatilityFactor,
@@ -94,12 +94,12 @@ class DynamicUrgencyCalculator {
 
       // 重み付き統合
       const adjustmentFactor = this.combineFactors(factors);
-      
+
       // 最終urgency決定
       const finalUrgency = this.applyAdjustment(baseUrgency, adjustmentFactor);
-      
+
       const calculationTime = Date.now() - startTime;
-      
+
       // 結果をキャッシュ
       const result = {
         base: baseUrgency,
@@ -108,13 +108,13 @@ class DynamicUrgencyCalculator {
         final: finalUrgency,
         calculationTime
       };
-      
+
       this.cache.set(cacheKey, result);
-      
+
       // ログ出力
       console.log(`[DynamicUrgency] ${symbol}: ${baseUrgency} → ${finalUrgency} (調整=${adjustmentFactor.toFixed(3)}, ${calculationTime}ms)`);
       console.log(`  要素: vol=${volatilityFactor.toFixed(3)}, risk=${portfolioRiskFactor.toFixed(3)}, time=${timezoneFactor.toFixed(3)}, perf=${performanceFactor.toFixed(3)}`);
-      
+
       return finalUrgency;
 
     } catch (error) {
@@ -147,7 +147,7 @@ class DynamicUrgencyCalculator {
 
       // ボラティリティスコアを計算（0-1）
       const volatilityScore = await this.volatilityAnalyzer.calculateVolatilityScore(symbol, ohlcvData);
-      
+
       // スコアを調整係数に変換
       if (volatilityScore > 0.8) {
         return 0.5;  // 高ボラティリティ：積極的
@@ -208,7 +208,7 @@ class DynamicUrgencyCalculator {
 
       const exchange = context.exchange?.id || 'bitbank';
       const performance = await this.performanceAnalyzer.getStrategyPerformance(context.strategyName, exchange);
-      
+
       return this.performanceAnalyzer.calculatePerformanceAdjustment(performance);
     } catch (error) {
       console.error(`[DynamicUrgency] パフォーマンス計算エラー: ${error.message}`);
@@ -234,7 +234,7 @@ class DynamicUrgencyCalculator {
       }
 
       const combinedFactor = totalWeight > 0 ? weightedSum / totalWeight : 0;
-      
+
       // 調整範囲制限を適用
       return Math.max(this.adjustmentLimits.min, Math.min(this.adjustmentLimits.max, combinedFactor));
 
@@ -266,24 +266,28 @@ class DynamicUrgencyCalculator {
       };
 
       const currentLevel = urgencyToNumber[baseUrgency] ?? 1; // デフォルトMEDIUM
-      
+
       // 調整係数を適用
       let adjustedLevel = currentLevel;
-      
+
       if (adjustmentFactor > 0.3) {
         // 大きな積極調整: 1レベル上げる
         adjustedLevel = Math.min(2, currentLevel + 1);
       } else if (adjustmentFactor > 0.1) {
         // 小さな積極調整: MEDIUMより上にのみ適用
-        if (currentLevel === 0) adjustedLevel = 1;
+        if (currentLevel === 0) {
+          adjustedLevel = 1;
+        }
       } else if (adjustmentFactor < -0.3) {
         // 大きな慎重調整: 1レベル下げる
         adjustedLevel = Math.max(0, currentLevel - 1);
       } else if (adjustmentFactor < -0.1) {
         // 小さな慎重調整: MEDIUMより下にのみ適用
-        if (currentLevel === 2) adjustedLevel = 1;
+        if (currentLevel === 2) {
+          adjustedLevel = 1;
+        }
       }
-      
+
       return numberToUrgency[adjustedLevel] || baseUrgency;
 
     } catch (error) {

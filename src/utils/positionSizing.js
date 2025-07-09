@@ -54,5 +54,5 @@ const calculateDynamicParams = (ohlcv) => {
 };
 
 module.exports = {
-  calculateDynamicParams,
+  calculateDynamicParams
 };

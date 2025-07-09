@@ -26,9 +26,9 @@ const {
   StatisticalPairTrading
 } = require('./utils/correlation');
 
-const { 
-  fetchAndValidateOHLCVData, 
-  handleStrategySignals, 
+const {
+  fetchAndValidateOHLCVData,
+  handleStrategySignals,
   getCurrentPrice
 } = require('./utils/common');
 
@@ -46,9 +46,9 @@ let globalPairTrading = null;
  * 動的ペア選択と統計的ペアトレーディングを組み合わせた実用的な実装
  */
 async function mutualInformationStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  const { 
-    period, 
-    threshold, 
+  const {
+    period,
+    threshold,
     ohlcvInterval,
     useReturns,
     maxReferencePairs,
@@ -67,7 +67,7 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
     zScoreThreshold: 2.0,
     strategy_mode: 'enhanced'
   });
-  
+
   // グローバルインスタンスの初期化
   if (!globalPairSelector) {
     globalPairSelector = new DynamicPairSelector();
@@ -80,14 +80,14 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
       minCorrelation: threshold
     });
   }
-  
+
   let { referenceSymbols = ['BTC/USDT'] } = config;
 
   // 動的ペア選択の使用
   if (strategy_mode === 'enhanced' && options.referenceSymbols) {
     const selectedPairs = globalPairSelector.selectReferencePairs(
-      symbol, 
-      options.referenceSymbols, 
+      symbol,
+      options.referenceSymbols,
       maxReferencePairs
     );
     referenceSymbols = selectedPairs.length > 0 ? selectedPairs : referenceSymbols;
@@ -103,18 +103,20 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
   try {
     // メインシンボルのOHLCVデータを取得
     const validatedData = await fetchAndValidateOHLCVData(
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
+      exchange,
+      symbol,
+      ohlcvInterval,
       period + 10, // 余裕を持ってデータを取得
       postErrorToDiscord,
       'Mutual Information',
       options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes: mainCloses, ohlcv } = validatedData;
-    
+
     if (options.backtest) {
       options.backtest.ohlcvData = ohlcv;
     }
@@ -122,12 +124,14 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
     // 参照シンボルのデータを取得
     const referenceData = [];
     for (const refSymbol of referenceSymbols) {
-      if (refSymbol === symbol) continue; // 同じシンボルはスキップ
-      
+      if (refSymbol === symbol) {
+        continue;
+      } // 同じシンボルはスキップ
+
       try {
         // 参照シンボルに対応する取引所を見つける
         let refExchange = exchange; // デフォルトは現在の取引所
-        
+
         if (options.allExchangeSymbolPairs) {
           const symbolPair = options.allExchangeSymbolPairs.find(pair => pair.symbol === refSymbol);
           if (symbolPair && symbolPair.exchangeId !== exchange.id) {
@@ -141,17 +145,17 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
             }
           }
         }
-        
+
         const refValidatedData = await fetchAndValidateOHLCVData(
-          refExchange, 
-          refSymbol, 
-          ohlcvInterval, 
+          refExchange,
+          refSymbol,
+          ohlcvInterval,
           period + 10,
           postErrorToDiscord,
           'Mutual Information Ref',
           options
         );
-        
+
         if (refValidatedData) {
           referenceData.push({
             symbol: refSymbol,
@@ -183,7 +187,7 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
 
     // 戦略モードに応じたシグナル計算
     let signalResult;
-    
+
     if (strategy_mode === 'pair_trading' && enablePairTrading) {
       signalResult = await calculatePairTradingSignals(
         mainCloses,
@@ -223,8 +227,10 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
       );
     }
 
-    if (!signalResult) return;
-    
+    if (!signalResult) {
+      return;
+    }
+
     // シグナルによって売買
     return await handleStrategySignals(
       exchange,
@@ -266,20 +272,20 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
  * @returns {Object} シグナル計算結果
  */
 async function calculateEnhancedMutualInformationSignals(
-  mainCloses, 
-  referenceData, 
-  period, 
-  threshold, 
-  exchange, 
-  symbol, 
-  strategyKey, 
+  mainCloses,
+  referenceData,
+  period,
+  threshold,
+  exchange,
+  symbol,
+  strategyKey,
   useReturns,
   correlationWindow,
   options = {}
 ) {
   // 最新のperiod分のデータを取得
   const recentMainCloses = mainCloses.slice(-period);
-  
+
   // 参照データも同じ期間で切り取り
   const recentReferenceData = referenceData.map(ref => ({
     symbol: ref.symbol,
@@ -287,9 +293,9 @@ async function calculateEnhancedMutualInformationSignals(
   }));
 
   // データの長さを統一
-  const minLength = Math.min(recentMainCloses.length, 
+  const minLength = Math.min(recentMainCloses.length,
     ...recentReferenceData.map(ref => ref.closes.length));
-  
+
   if (minLength < correlationWindow) {
     console.log(`改良版相互情報量戦略: データが不足しています ${symbol}, minLength: ${minLength}`);
     return null;
@@ -316,14 +322,14 @@ async function calculateEnhancedMutualInformationSignals(
     const pearson = calculatePearsonCorrelation(mainData, ref.data);
     const spearman = calculateSpearmanCorrelation(mainData, ref.data);
     const mutualInfo = calculateMutualInformation(mainData, ref.data);
-    
+
     // 複合スコア：ピアソン相関 + スピアマン相関 + 相互情報量
     const compositeScore = (Math.abs(pearson) * 0.4 + Math.abs(spearman) * 0.3 + mutualInfo * 0.3);
-    
+
     return {
       symbol: ref.symbol,
       pearson,
-      spearman, 
+      spearman,
       mutualInfo,
       compositeScore,
       direction: pearson > 0 ? 1 : -1
@@ -331,7 +337,7 @@ async function calculateEnhancedMutualInformationSignals(
   });
 
   // 信頼性の高い相関のみを使用
-  const reliableCorrelations = correlationScores.filter(score => 
+  const reliableCorrelations = correlationScores.filter(score =>
     score.compositeScore > threshold && Math.abs(score.pearson) > 0.3
   );
 
@@ -352,7 +358,7 @@ async function calculateEnhancedMutualInformationSignals(
 
   // 加重平均でシグナル強度を計算
   const totalWeight = reliableCorrelations.reduce((sum, score) => sum + score.compositeScore, 0);
-  const weightedDirection = reliableCorrelations.reduce((sum, score) => 
+  const weightedDirection = reliableCorrelations.reduce((sum, score) =>
     sum + (score.direction * score.compositeScore), 0) / totalWeight;
 
   // 現在の価格とトレンドを分析
@@ -363,11 +369,11 @@ async function calculateEnhancedMutualInformationSignals(
   // シグナル生成（改良版）
   const signalStrength = Math.abs(weightedDirection);
   const trendAlignment = (weightedDirection * currentTrend) > 0;
-  
+
   let signalType = 'none';
   let buySignal = false;
   let sellSignal = false;
-  
+
   // 強い信号かつトレンドと一致する場合のみエントリー
   if (signalStrength > 0.6 && trendAlignment) {
     if (weightedDirection > 0 && currentTrend > 0) {
@@ -378,12 +384,12 @@ async function calculateEnhancedMutualInformationSignals(
       signalType = 'sell';
     }
   }
-  
+
   // 相関履歴を記録（動的ペア選択のため）
   reliableCorrelations.forEach(score => {
     globalPairSelector.recordCorrelation(
-      symbol, 
-      score.symbol, 
+      symbol,
+      score.symbol,
       score.pearson,
       0 // 利益は後で更新される
     );
@@ -412,12 +418,12 @@ async function calculateEnhancedMutualInformationSignals(
  * 統計的ペアトレーディングシグナルを計算する
  */
 async function calculatePairTradingSignals(
-  mainCloses, 
-  referenceData, 
-  period, 
-  threshold, 
-  exchange, 
-  symbol, 
+  mainCloses,
+  referenceData,
+  period,
+  threshold,
+  exchange,
+  symbol,
   strategyKey,
   options = {}
 ) {
@@ -429,7 +435,7 @@ async function calculatePairTradingSignals(
 
   // 取引ペアの発見
   const tradingPairs = await globalPairTrading.findTradingPairs(symbolsData);
-  
+
   if (tradingPairs.length === 0) {
     return {
       currentPrice: await getCurrentPrice(exchange, symbol, options),
@@ -470,7 +476,7 @@ async function calculatePairTradingSignals(
   // シンボルがロングまたはショートの対象かチェック
   const isLong = pairSignal.long === symbol;
   const isShort = pairSignal.short === symbol;
-  
+
   if (!isLong && !isShort) {
     return {
       currentPrice: await getCurrentPrice(exchange, symbol, options),
@@ -506,19 +512,19 @@ async function calculatePairTradingSignals(
  * レガシー相互情報量戦略のシグナルを計算する（下位互換性のため）
  */
 async function calculateMutualInformationSignals(
-  mainCloses, 
-  referenceData, 
-  period, 
-  threshold, 
-  exchange, 
-  symbol, 
-  strategyKey, 
+  mainCloses,
+  referenceData,
+  period,
+  threshold,
+  exchange,
+  symbol,
+  strategyKey,
   useReturns,
   options = {}
 ) {
   // 最新のperiod分のデータを取得
   const recentMainCloses = mainCloses.slice(-period);
-  
+
   // 参照データも同じ期間で切り取り
   const recentReferenceData = referenceData.map(ref => ({
     symbol: ref.symbol,
@@ -526,9 +532,9 @@ async function calculateMutualInformationSignals(
   }));
 
   // データの長さを統一
-  const minLength = Math.min(recentMainCloses.length, 
+  const minLength = Math.min(recentMainCloses.length,
     ...recentReferenceData.map(ref => ref.closes.length));
-  
+
   if (minLength < period / 2) {
     console.log(`相互情報量戦略: データが不足しています ${symbol}, minLength: ${minLength}`);
     return null;
@@ -558,7 +564,7 @@ async function calculateMutualInformationSignals(
 
   // 平均相互情報量を計算
   const avgMutualInfo = mutualInfoScores.reduce((sum, score) => sum + score.mutualInfo, 0) / mutualInfoScores.length;
-  
+
   // 現在の価格を取得（MarketDataProvider使用でAPI負荷削減）
   const currentPrice = await getCurrentPrice(exchange, symbol, options);
   if (!currentPrice) {
@@ -627,48 +633,48 @@ async function calculateMutualInformationSignals(
 function formatMutualInformationLogInfo(signalResult) {
   const { currentPrice, strategyResults } = signalResult;
   const { mode } = strategyResults;
-  
+
   if (mode === 'enhanced') {
     const { weightedDirection, signalStrength, currentTrend, reliableCorrelations } = signalResult;
     const { threshold, analysisType } = strategyResults;
-    
-    const correlationInfo = reliableCorrelations ? reliableCorrelations.map(score => 
+
+    const correlationInfo = reliableCorrelations ? reliableCorrelations.map(score =>
       `${score.symbol}:${score.compositeScore !== null && score.compositeScore !== undefined ? score.compositeScore.toFixed(3) : 'N/A'}`
     ).join(', ') : 'なし';
-    
+
     const logMessage = `重み方向: ${weightedDirection?.toFixed(4) || 'N/A'}, 信号強度: ${signalStrength?.toFixed(4) || 'N/A'}, トレンド: ${currentTrend?.toFixed(6) || 'N/A'}, 分析: ${analysisType || 'N/A'}, 相関: [${correlationInfo}]`;
-    
+
     return {
       buy: logMessage,
       sell: logMessage,
       none: logMessage,
       orderInfo: { weightedDirection, signalStrength, currentTrend, threshold },
-      result: { 
-        weightedDirection, 
+      result: {
+        weightedDirection,
         signalStrength,
-        currentTrend, 
-        currentPrice, 
-        threshold, 
+        currentTrend,
+        currentPrice,
+        threshold,
         analysisType,
         mode: 'enhanced',
-        reliableCorrelations: strategyResults.reliableCorrelations 
+        reliableCorrelations: strategyResults.reliableCorrelations
       }
     };
   } else if (mode === 'pair_trading') {
     const { confidence, zScore, bestPair } = signalResult;
     const pairInfo = bestPair ? `${bestPair.symbol1}/${bestPair.symbol2}` : 'なし';
-    
+
     const logMessage = `ペア: ${pairInfo}, 信頼度: ${confidence?.toFixed(4) || 'N/A'}, Z-score: ${zScore?.toFixed(4) || 'N/A'}, モード: ペアトレーディング`;
-    
+
     return {
       buy: logMessage,
       sell: logMessage,
       none: logMessage,
       orderInfo: { confidence, zScore, pairInfo },
-      result: { 
+      result: {
         confidence,
         zScore,
-        currentPrice, 
+        currentPrice,
         pairInfo,
         mode: 'pair_trading',
         bestPair: strategyResults.bestPair
@@ -678,26 +684,26 @@ function formatMutualInformationLogInfo(signalResult) {
     // レガシーモード
     const { avgMutualInfo, currentTrend } = signalResult;
     const { threshold, analysisType, mutualInfoScores } = strategyResults;
-    
-    const referenceInfo = mutualInfoScores ? mutualInfoScores.map(score => 
+
+    const referenceInfo = mutualInfoScores ? mutualInfoScores.map(score =>
       `${score.symbol}:${score.mutualInfo !== null && score.mutualInfo !== undefined ? score.mutualInfo.toFixed(3) : 'N/A'}`
     ).join(', ') : 'なし';
-    
+
     const logMessage = `相互情報量: ${avgMutualInfo?.toFixed(4) || 'N/A'}, トレンド: ${currentTrend?.toFixed(6) || 'N/A'}, 分析: ${analysisType}, 参照: [${referenceInfo}] (レガシー)`;
-    
+
     return {
       buy: logMessage,
       sell: logMessage,
       none: logMessage,
       orderInfo: { avgMutualInfo, currentTrend, threshold },
-      result: { 
-        avgMutualInfo, 
-        currentTrend, 
-        currentPrice, 
-        threshold, 
+      result: {
+        avgMutualInfo,
+        currentTrend,
+        currentPrice,
+        threshold,
         analysisType,
         mode: 'legacy',
-        mutualInfoScores: strategyResults.mutualInfoScores 
+        mutualInfoScores: strategyResults.mutualInfoScores
       }
     };
   }

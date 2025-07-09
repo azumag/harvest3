@@ -15,7 +15,7 @@ class MockChildProcess extends EventEmitter {
     this.stderr = new EventEmitter();
     this.killed = false;
   }
-  
+
   kill(signal) {
     this.killed = true;
     this.emit('close', -1);
@@ -50,18 +50,18 @@ const { MaintenanceScheduler, getMaintenanceScheduler } = require('../../../src/
 
 describe.skip('MaintenanceScheduler', () => {
   let scheduler;
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     jest.clearAllTimers();
     jest.useFakeTimers();
-    
+
     scheduler = new MaintenanceScheduler();
-    
+
     // デフォルトのモック設定
     spawn.mockReturnValue(mockChildProcess);
   });
-  
+
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -75,19 +75,19 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { notifyOnSuccess: false, notifyOnError: false }
         );
-        
+
         // 標準出力のシミュレート
         mockChildProcess.stdout.emit('data', 'Test output\n');
-        
+
         // 正常終了のシミュレート
         setTimeout(() => {
           mockChildProcess.emit('close', 0);
         }, 100);
-        
+
         jest.advanceTimersByTime(100);
-        
+
         const result = await executePromise;
-        
+
         expect(result.success).toBe(true);
         expect(result.code).toBe(0);
         expect(result.stdout).toContain('Test output');
@@ -101,19 +101,19 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { notifyOnSuccess: false, notifyOnError: false }
         );
-        
+
         // エラー出力のシミュレート
         mockChildProcess.stderr.emit('data', 'Error occurred\n');
-        
+
         // エラー終了のシミュレート
         setTimeout(() => {
           mockChildProcess.emit('close', 1);
         }, 100);
-        
+
         jest.advanceTimersByTime(100);
-        
+
         const result = await executePromise;
-        
+
         expect(result.success).toBe(false);
         expect(result.code).toBe(1);
         expect(result.stderr).toContain('Error occurred');
@@ -126,15 +126,15 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { notifyOnSuccess: true, notifyOnError: false }
         );
-        
+
         setTimeout(() => {
           mockChildProcess.emit('close', 0);
         }, 100);
-        
+
         jest.advanceTimersByTime(100);
-        
+
         await executePromise;
-        
+
         expect(mockPostOrderToDiscord).toHaveBeenCalledWith(
           expect.stringContaining('✅ **テストスクリプト実行完了**')
         );
@@ -147,17 +147,17 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { notifyOnSuccess: false, notifyOnError: true }
         );
-        
+
         mockChildProcess.stderr.emit('data', 'Critical error\n');
-        
+
         setTimeout(() => {
           mockChildProcess.emit('close', 1);
         }, 100);
-        
+
         jest.advanceTimersByTime(100);
-        
+
         await executePromise;
-        
+
         expect(mockPostErrorToDiscord).toHaveBeenCalledWith(
           expect.stringContaining('❌ **テストスクリプト実行エラー**')
         );
@@ -170,10 +170,10 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { timeout: 1000, notifyOnSuccess: false, notifyOnError: false }
         );
-        
+
         // タイムアウト時間経過
         jest.advanceTimersByTime(1000);
-        
+
         expect(mockChildProcess.kill).toBeDefined();
       });
 
@@ -184,16 +184,16 @@ describe.skip('MaintenanceScheduler', () => {
           [],
           { notifyOnSuccess: false, notifyOnError: true }
         );
-        
+
         const processError = new Error('Process spawn failed');
         setTimeout(() => {
           mockChildProcess.emit('error', processError);
         }, 100);
-        
+
         jest.advanceTimersByTime(100);
-        
+
         const result = await executePromise;
-        
+
         expect(result.success).toBe(false);
         expect(result.error).toBe('Process spawn failed');
         expect(mockPostErrorToDiscord).toHaveBeenCalledWith(
@@ -220,7 +220,7 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('runPositionConsistencyCheckが正しいパラメータで実行されること', async () => {
         await scheduler.runPositionConsistencyCheck();
-        
+
         expect(scheduler.executeMaintenanceScript).toHaveBeenCalledWith(
           'scripts/checkPositionConsistency.js',
           'ポジション整合性チェック',
@@ -235,7 +235,7 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('runPositionInconsistencyFixが自動修正モードで実行されること', async () => {
         await scheduler.runPositionInconsistencyFix();
-        
+
         expect(scheduler.executeMaintenanceScript).toHaveBeenCalledWith(
           'scripts/fixPositionInconsistencies.js',
           'ポジション不整合自動修正',
@@ -250,7 +250,7 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('runBalanceConsistencyCheckが正しく実行されること', async () => {
         await scheduler.runBalanceConsistencyCheck();
-        
+
         expect(scheduler.executeMaintenanceScript).toHaveBeenCalledWith(
           'scripts/balanceConsistencyChecker.js',
           '残高整合性チェック',
@@ -261,7 +261,7 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('runGhostPositionCleanupが正しく実行されること', async () => {
         await scheduler.runGhostPositionCleanup();
-        
+
         expect(scheduler.executeMaintenanceScript).toHaveBeenCalledWith(
           'scripts/deleteGhostPositions.js',
           'ゴーストポジション削除',
@@ -284,36 +284,36 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('全てのメンテナンスタスクが順次実行されること', async () => {
         const resultsPromise = scheduler.runWeeklyMaintenance();
-        
+
         // 各タスク間の待機時間をスキップ
         for (let i = 0; i < 5; i++) {
           jest.advanceTimersByTime(30000); // 30秒
           await Promise.resolve(); // マイクロタスクの実行
         }
-        
+
         const results = await resultsPromise;
-        
+
         expect(scheduler.runPositionConsistencyCheck).toHaveBeenCalled();
         expect(scheduler.runPositionInconsistencyFix).toHaveBeenCalled();
         expect(scheduler.runBalanceConsistencyCheck).toHaveBeenCalled();
         expect(scheduler.runExchangeBalanceComparison).toHaveBeenCalled();
         expect(scheduler.runGhostPositionCleanup).toHaveBeenCalled();
-        
+
         expect(results).toHaveLength(5);
         expect(results.every(r => r.success)).toBe(true);
       });
 
       it('週次メンテナンス結果のサマリー通知が送信されること', async () => {
         const resultsPromise = scheduler.runWeeklyMaintenance();
-        
+
         // タスクの完了を待つ
         for (let i = 0; i < 5; i++) {
           jest.advanceTimersByTime(30000);
           await Promise.resolve();
         }
-        
+
         await resultsPromise;
-        
+
         expect(mockPostOrderToDiscord).toHaveBeenCalledWith(
           expect.stringContaining('📊 **週次メンテナンス完了**')
         );
@@ -321,20 +321,20 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('エラーが発生してもメンテナンスが継続されること', async () => {
         scheduler.runPositionConsistencyCheck.mockRejectedValue(new Error('Task failed'));
-        
+
         const resultsPromise = scheduler.runWeeklyMaintenance();
-        
+
         for (let i = 0; i < 5; i++) {
           jest.advanceTimersByTime(30000);
           await Promise.resolve();
         }
-        
+
         const results = await resultsPromise;
-        
+
         expect(results).toHaveLength(5);
         expect(results[0].success).toBe(false);
         expect(results[0].error).toBe('Task failed');
-        
+
         // 他のタスクも実行されること
         expect(scheduler.runPositionInconsistencyFix).toHaveBeenCalled();
       });
@@ -345,21 +345,21 @@ describe.skip('MaintenanceScheduler', () => {
     describe('🔴 Red: スケジュールが正しく登録されること', () => {
       it('全ての定期タスクがスケジューリングマネージャーに登録されること', () => {
         scheduler.initializeSchedules();
-        
+
         expect(mockSchedulingManager.scheduleIntervalTask).toHaveBeenCalledWith(
           'position-consistency-check',
           expect.any(Function),
           120,
           expect.objectContaining({ description: 'ポジション整合性チェック（2時間間隔）' })
         );
-        
+
         expect(mockSchedulingManager.scheduleIntervalTask).toHaveBeenCalledWith(
           'balance-consistency-check',
           expect.any(Function),
           60,
           expect.objectContaining({ description: '残高整合性チェック（1時間間隔）' })
         );
-        
+
         expect(mockSchedulingManager.scheduleCustomTask).toHaveBeenCalledWith(
           'weekly-maintenance',
           '0 0 3 * * 0',
@@ -371,7 +371,7 @@ describe.skip('MaintenanceScheduler', () => {
       it('重複初期化を防ぐこと', () => {
         scheduler.initializeSchedules();
         scheduler.initializeSchedules(); // 2回目の呼び出し
-        
+
         // 2回目は何もしない（scheduleIntervalTaskの呼び出し回数が変わらない）
         const callCount = mockSchedulingManager.scheduleIntervalTask.mock.calls.length;
         expect(callCount).toBe(4); // 初回のみの呼び出し
@@ -379,7 +379,7 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('初期化完了通知が送信されること', (done) => {
         scheduler.initializeSchedules();
-        
+
         // 5秒後の通知を確認
         setTimeout(() => {
           expect(mockPostOrderToDiscord).toHaveBeenCalledWith(
@@ -387,7 +387,7 @@ describe.skip('MaintenanceScheduler', () => {
           );
           done();
         }, 5000);
-        
+
         jest.advanceTimersByTime(5000);
       });
     });
@@ -402,13 +402,13 @@ describe.skip('MaintenanceScheduler', () => {
 
       it('指定されたタスクが実行されること', async () => {
         await scheduler.runManualMaintenance('position-check');
-        
+
         expect(scheduler.runPositionConsistencyCheck).toHaveBeenCalled();
       });
 
       it('週次メンテナンスが実行されること', async () => {
         await scheduler.runManualMaintenance('weekly-maintenance');
-        
+
         expect(scheduler.runWeeklyMaintenance).toHaveBeenCalled();
       });
 
@@ -433,9 +433,9 @@ describe.skip('MaintenanceScheduler', () => {
 総計: 10件処理
 処理完了
         `;
-        
+
         const summary = scheduler.extractSummaryFromOutput(output);
-        
+
         expect(summary).toContain('不整合が発見されました: ASTR: -5.90810000');
         expect(summary).toContain('修正が必要です');
         expect(summary).toContain('削除完了: 3件');
@@ -449,9 +449,9 @@ describe.skip('MaintenanceScheduler', () => {
 正常な処理
 処理完了
         `;
-        
+
         const summary = scheduler.extractSummaryFromOutput(output);
-        
+
         expect(summary).toBe('エラー: 要約を抽出できませんでした');
       });
     });
@@ -465,11 +465,11 @@ describe.skip('MaintenanceScheduler', () => {
           scriptName: 'テストスクリプト',
           duration: 1000
         });
-        
+
         await scheduler.runPositionConsistencyCheck();
-        
+
         const results = scheduler.getRecentResults();
-        
+
         expect(results).toHaveLength(1);
         expect(results[0].name).toBe('ポジション整合性チェック');
       });
@@ -482,7 +482,7 @@ describe.skip('getMaintenanceScheduler', () => {
     it('同じインスタンスが返されること', () => {
       const instance1 = getMaintenanceScheduler();
       const instance2 = getMaintenanceScheduler();
-      
+
       expect(instance1).toBe(instance2);
     });
   });

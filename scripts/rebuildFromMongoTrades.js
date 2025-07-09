@@ -2,7 +2,7 @@
 
 /**
  * MongoDB取引履歴ベースの正しいtrade_summary再構築スクリプト
- * 
+ *
  * positionキーではなく、MongoDB内の実際の取引履歴に基づいて
  * trade_summaryを正確に再構築する
  */
@@ -13,42 +13,42 @@ const { getClient, initialize: initializeRedis } = require('../src/database/redi
 async function rebuildFromMongoTrades() {
   console.log('🔧 MongoDB取引履歴ベースの正しいtrade_summary再構築開始');
   console.log('================================================================================');
-  
+
   try {
     await connectDB();
     await initializeRedis();
     const client = getClient();
-    
+
     // MongoDBのコレクション参照を取得
     const mongoModule = require('../src/database/mongoDatabase');
     const tradesCollection = mongoModule.tradesCollection;
-    
+
     if (!tradesCollection) {
       throw new Error('tradesCollection not available');
     }
-    
+
     console.log('✅ データベース接続完了');
-    
+
     // 既存のtrade_summaryキーを削除
     const existingSummaries = await client.keys('summary:trade:*');
     if (existingSummaries.length > 0) {
       await client.del(existingSummaries);
       console.log(`✅ 既存のtrade_summary削除: ${existingSummaries.length}件`);
     }
-    
+
     // MongoDB内の全取引履歴を取得
     console.log('📊 MongoDB取引履歴を分析中...');
     const allTrades = await tradesCollection.find({}).toArray();
     console.log(`📊 取得した取引: ${allTrades.length}件`);
-    
+
     if (allTrades.length === 0) {
       console.log('⚠️  取引履歴が見つかりません');
       return;
     }
-    
+
     // 戦略別・通貨別にグループ化して集計
     const summaryByKey = new Map(); // key: 'exchange:symbol:strategy'
-    
+
     for (const trade of allTrades) {
       try {
         const exchange = trade.exchange || 'bitbank';
@@ -58,14 +58,14 @@ async function rebuildFromMongoTrades() {
         const amount = parseFloat(trade.amount) || 0;
         const value = parseFloat(trade.value) || 0;
         const fee = parseFloat(trade.fee) || 0;
-        
+
         if (!symbol || !side || amount <= 0) {
           console.warn(`  無効な取引をスキップ: ${JSON.stringify(trade)}`);
           continue;
         }
-        
+
         const summaryKey = `${exchange}:${symbol}:${strategy}`;
-        
+
         if (!summaryByKey.has(summaryKey)) {
           summaryByKey.set(summaryKey, {
             exchange,
@@ -84,13 +84,17 @@ async function rebuildFromMongoTrades() {
             lastTradeAt: trade.filledAt
           });
         }
-        
+
         const summary = summaryByKey.get(summaryKey);
-        
+
         // 取引日時の更新
-        if (trade.filledAt < summary.firstTradeAt) summary.firstTradeAt = trade.filledAt;
-        if (trade.filledAt > summary.lastTradeAt) summary.lastTradeAt = trade.filledAt;
-        
+        if (trade.filledAt < summary.firstTradeAt) {
+          summary.firstTradeAt = trade.filledAt;
+        }
+        if (trade.filledAt > summary.lastTradeAt) {
+          summary.lastTradeAt = trade.filledAt;
+        }
+
         if (side === 'buy') {
           summary.buyAmount += amount;
           summary.totalBuyCost += value;
@@ -102,24 +106,24 @@ async function rebuildFromMongoTrades() {
           summary.netPosition -= amount;
           summary.sellCount++;
         }
-        
+
         summary.totalFee += fee;
-        
+
       } catch (error) {
         console.error(`  取引処理エラー: ${error.message}`, trade);
       }
     }
-    
+
     console.log(`📈 再構築されるサマリー: ${summaryByKey.size}件`);
     console.log('');
-    
+
     // Redisにtrade_summaryキーを作成
     let createdCount = 0;
     const problemCurrencies = ['XRP/JPY', 'OMG/JPY', 'GALA/JPY', 'OAS/JPY'];
-    
+
     for (const [summaryKey, data] of summaryByKey) {
       const redisKey = `summary:trade:${data.exchange}:${data.symbol}:${data.strategy}`;
-      
+
       try {
         await client.hSet(redisKey, {
           buyAmount: data.buyAmount.toFixed(8),
@@ -134,9 +138,9 @@ async function rebuildFromMongoTrades() {
           createdAt: Date.now(),
           updatedAt: Date.now()
         });
-        
+
         createdCount++;
-        
+
         // 問題通貨の詳細表示
         if (problemCurrencies.includes(data.symbol)) {
           console.log(`🔍 ${data.exchange}:${data.symbol}:${data.strategy}:`);
@@ -146,19 +150,19 @@ async function rebuildFromMongoTrades() {
           console.log(`  手数料: ${data.totalFee.toFixed(6)}`);
           console.log('');
         }
-        
+
       } catch (error) {
         console.error(`  Redisキー作成エラー: ${redisKey} - ${error.message}`);
       }
     }
-    
+
     console.log(`✅ trade_summary再構築完了: ${createdCount}件作成`);
     console.log('');
-    
+
     // 結果を通貨別に集計して表示
     console.log('📊 問題通貨の修正結果:');
     const currencyTotals = new Map();
-    
+
     for (const [, data] of summaryByKey) {
       const currency = data.symbol.split('/')[0];
       if (problemCurrencies.some(pc => pc.startsWith(currency))) {
@@ -175,7 +179,7 @@ async function rebuildFromMongoTrades() {
         totals.netTotal += data.netPosition;
       }
     }
-    
+
     for (const [currency, totals] of currencyTotals) {
       console.log(`  ${currency}:`);
       console.log(`    買い累計: ${totals.buyTotal.toFixed(6)}`);
@@ -183,15 +187,15 @@ async function rebuildFromMongoTrades() {
       console.log(`    正味ポジション: ${totals.netTotal.toFixed(6)}`);
       console.log('');
     }
-    
+
     console.log('================================================================================');
     console.log('🎉 MongoDB取引履歴ベースの再構築完了');
-    
+
     return {
       totalSummaries: createdCount,
       processedTrades: allTrades.length
     };
-    
+
   } catch (error) {
     console.error('❌ 再構築エラー:', error);
     throw error;

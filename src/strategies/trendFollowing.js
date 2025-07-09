@@ -19,10 +19,10 @@ const {
   calculateADX
 } = require('./utils/indicators');
 
-const { 
-  fetchAndValidateOHLCVData, 
-  handleStrategySignals, 
-  executeBuyOrder, 
+const {
+  fetchAndValidateOHLCVData,
+  handleStrategySignals,
+  executeBuyOrder,
   executeSellOrder,
   confirmMultipleIndicators,
   identifyMarketEnvironment,
@@ -31,7 +31,7 @@ const {
   saveStrategySignal,
   createLogInfoBase,
   fetchAndValidateOHLCVWithBacktestSetup,
-  executeStrategyTemplate,
+  executeStrategyTemplate
 } = require('./utils/common');
 
 const { addSignal } = require('../database/manager');
@@ -54,8 +54,10 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
       exchange, symbol, ohlcvInterval, longPeriod, 'MA戦略', options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
 
     // シグナル計算
@@ -68,9 +70,11 @@ async function maStrategy(exchange, symbol, strategyKey, config, marketParameter
       strategyKey,
       options
     );
-    
-    if (!signalResult) return;
-    
+
+    if (!signalResult) {
+      return;
+    }
+
     // シグナル処理
     return await handleStrategySignals(
       exchange,
@@ -108,32 +112,32 @@ async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange
   // 短期と長期の移動平均線を計算
   const shortMA = calculateSMA(closes, shortPeriod);
   const longMA = calculateSMA(closes, longPeriod);
-  
+
   // 最新と1つ前の値を取得
   const currentShortMA = shortMA[shortMA.length - 1];
   const previousShortMA = shortMA[shortMA.length - 2];
   const currentLongMA = longMA[longMA.length - 1];
   const previousLongMA = longMA[longMA.length - 2];
-  
+
   // 共通化された価格取得
   const currentPrice = await getCurrentPrice(exchange, symbol, options);
-  
+
   // クロスを検出
   const crossUp = previousShortMA < previousLongMA && currentShortMA > currentLongMA;
   const crossDown = previousShortMA > previousLongMA && currentShortMA < currentLongMA;
 
   // シグナルタイプを決定
   const signalType = determineSignalType(crossUp, crossDown);
-  
+
   // 戦略固有の計算結果
   const strategyResults = createStrategyResults({
     shortMA: currentShortMA,
     longMA: currentLongMA
   });
-  
+
   // 共通化されたシグナル保存
   await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
-  
+
   return {
     currentPrice,
     currentShortMA,
@@ -152,7 +156,7 @@ async function calculateMACrossSignals(closes, shortPeriod, longPeriod, exchange
  */
 function formatMACrossLogInfo(signalResult) {
   const { currentPrice, currentShortMA, currentLongMA } = signalResult;
-  
+
   return {
     buy: `短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`,
     sell: `短期MA: ${currentShortMA}, 長期MA: ${currentLongMA}`,
@@ -179,47 +183,49 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
       exchange, symbol, ohlcvInterval, slowPeriod + signalPeriod, 'MACD戦略', options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
 
     // MACDを計算
     const macdData = calculateMACD(closes, fastPeriod, slowPeriod, signalPeriod);
-    
+
     // 最新と1つ前の値を取得
     const currentMACD = macdData.macd[macdData.macd.length - 1];
     const previousMACD = macdData.macd[macdData.macd.length - 2];
     const currentSignal = macdData.signal[macdData.signal.length - 1];
     const previousSignal = macdData.signal[macdData.signal.length - 2];
-    
+
     // null値チェック - 計算に必要な値がnullの場合は戦略をスキップ
-    if (currentMACD === null || currentMACD === undefined || 
+    if (currentMACD === null || currentMACD === undefined ||
         currentSignal === null || currentSignal === undefined ||
         previousMACD === null || previousMACD === undefined ||
         previousSignal === null || previousSignal === undefined) {
       console.log(`MACD戦略データ不足: ${symbol} - データが不十分です（計算に必要な値がnull）`);
       return;
     }
-    
+
     // 共通化された価格取得
     const currentPrice = await getCurrentPrice(exchange, symbol, options);
-    
+
     // クロスを検出
     const crossUp = previousMACD < previousSignal && currentMACD > currentSignal;
     const crossDown = previousMACD > previousSignal && currentMACD < currentSignal;
-    
+
     // シグナルタイプを決定
     const signalType = determineSignalType(crossUp, crossDown);
-    
+
     // 戦略固有の計算結果
     const strategyResults = createStrategyResults({
       macd: currentMACD,
       signal: currentSignal
     });
-    
+
     // 共通化されたシグナル保存
     await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
-    
+
     // シグナル結果をまとめる
     const signalResult = {
       currentPrice,
@@ -230,9 +236,9 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
       sellSignal: crossDown,
       strategyResults
     };
-    
+
     // console.log(`[MACD STRATEGY] ${symbol}: Creating signalResult:`, JSON.stringify(signalResult));
-    
+
     // シグナル処理を共通関数で行う
     // console.log(`[MACD STRATEGY] ${symbol}: About to call handleStrategySignals`);
     return await handleStrategySignals(
@@ -265,17 +271,17 @@ async function macdStrategy(exchange, symbol, strategyKey, config, marketParamet
 function formatMACDLogInfo(signalResult) {
   try {
     // console.log(`[MACD FORMAT] Entry with signalResult:`, JSON.stringify(signalResult));
-    
+
     const { currentPrice, currentMACD, currentSignal } = signalResult;
-    
+
     // console.log(`[MACD FORMAT] Extracted values - currentPrice:${currentPrice}, currentMACD:${currentMACD}, currentSignal:${currentSignal}`);
-    
+
     // null値を安全に処理
     const safeMACD = currentMACD !== null && currentMACD !== undefined ? currentMACD.toFixed(6) : 'N/A';
     const safeSignal = currentSignal !== null && currentSignal !== undefined ? currentSignal.toFixed(6) : 'N/A';
-    
+
     // console.log(`[MACD FORMAT] Safe values - safeMACD:${safeMACD}, safeSignal:${safeSignal}`);
-    
+
     return {
       buy: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
       sell: `MACD: ${safeMACD}, シグナル: ${safeSignal}`,
@@ -284,8 +290,8 @@ function formatMACDLogInfo(signalResult) {
       result: { macd: currentMACD, signal: currentSignal, currentPrice }
     };
   } catch (error) {
-    console.error(`[MACD FORMAT] ERROR in formatMACDLogInfo:`, error);
-    console.error(`[MACD FORMAT] signalResult at error:`, signalResult);
+    console.error('[MACD FORMAT] ERROR in formatMACDLogInfo:', error);
+    console.error('[MACD FORMAT] signalResult at error:', signalResult);
     throw error;
   }
 }
@@ -293,7 +299,7 @@ function formatMACDLogInfo(signalResult) {
 // RSI戦略
 async function rsiStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
   return await executeStrategyTemplate(async () => {
-    const { tradePercentage } = config; 
+    const { tradePercentage } = config;
     const { period, oversoldThreshold, overboughtThreshold, amount, ohlcvInterval } = extractConfigParameters(config, {
       period: 14,
       oversoldThreshold: 30,
@@ -307,39 +313,41 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
     const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
       exchange, symbol, ohlcvInterval, period, 'RSI戦略', options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
 
     // RSIを計算
     const rsiValues = calculateRSI(closes, period);
-    
+
     // 最新のRSI値を取得
     const currentRSI = rsiValues[rsiValues.length - 1];
     const previousRSI = rsiValues[rsiValues.length - 2];
-    
+
     // 共通化された価格取得
     const currentPrice = await getCurrentPrice(exchange, symbol, options);
-    
+
     // 買いシグナル: RSIが閾値を下回り、前回のRSIが閾値以上
     const buySignal = currentRSI < oversoldThreshold && previousRSI >= oversoldThreshold;
-    
+
     // 売りシグナル: RSIが閾値を上回り、前回のRSIが閾値以下
     const sellSignal = currentRSI > overboughtThreshold && previousRSI <= overboughtThreshold;
-    
+
     // シグナルタイプを決定
     const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-    
+
     // 戦略固有の計算結果
     const strategyResults = {
       rsi: currentRSI,
       oversoldThreshold,
       overboughtThreshold
     };
-    
+
     // 共通化されたシグナル保存
     await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, strategyResults, options);
-    
+
     // シグナル結果をまとめる
     const signalResult = {
       currentPrice,
@@ -351,7 +359,7 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
       sellSignal,
       strategyResults
     };
-    
+
     // シグナル処理を共通関数で行う
     return await handleStrategySignals(
       exchange,
@@ -382,10 +390,10 @@ async function rsiStrategy(exchange, symbol, strategyKey, config, marketParamete
  */
 function formatRSILogInfo(signalResult) {
   const { currentPrice, currentRSI, oversoldThreshold, overboughtThreshold } = signalResult;
-  
+
   // null値を安全に処理
   const safeRSI = currentRSI !== null && currentRSI !== undefined ? currentRSI.toFixed(2) : 'N/A';
-  
+
   return {
     buy: `RSI: ${safeRSI} (閾値: ${oversoldThreshold})`,
     sell: `RSI: ${safeRSI} (閾値: ${overboughtThreshold})`,
@@ -412,16 +420,18 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
   try {
     // OHLCVデータを取得して検証
     const validatedData = await fetchAndValidateOHLCVData(
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
-      period, 
+      exchange,
+      symbol,
+      ohlcvInterval,
+      period,
       postErrorToDiscord,
       'BB',
       options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
     if (options.backtest) {
       // バックテストモードの場合、OHLCVデータを保存
@@ -430,25 +440,25 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
 
     // ボリンジャーバンドを計算
     const bands = calculateBollingerBands(closes, period, stdDev);
-    
+
     // 最新の値を取得
     const currentUpper = bands.upper[bands.upper.length - 1];
     const currentMiddle = bands.middle[bands.middle.length - 1];
     const currentLower = bands.lower[bands.lower.length - 1];
-    
+
     // 共通化された価格取得
     const currentPrice = await getCurrentPrice(exchange, symbol, options);
-    
+
     // バンド幅を計算（ボラティリティの指標）
     const bandWidth = (currentUpper - currentLower) / currentMiddle;
-    
+
     // 既存のシグナルロジック
     const buySignal = currentPrice <= currentLower;// * 1.01;
     const sellSignal = currentPrice >= currentUpper;// * 0.99;
 
     // シグナルタイプを決定
     const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-    
+
     // 戦略固有の計算結果
     const strategyResults = {
       upper: currentUpper,
@@ -456,7 +466,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       lower: currentLower,
       bandWidth
     };
-    
+
     // シグナルがある場合のみ保存
     if (signalType !== 'none') {
       addSignal(
@@ -469,7 +479,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
         options // optionsを追加
       );
     }
-    
+
     // シグナル結果をまとめる
     const signalResult = {
       currentPrice,
@@ -482,7 +492,7 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       sellSignal,
       strategyResults
     };
-    
+
     // シグナル処理を共通関数で行う
     return await handleStrategySignals(
       exchange,
@@ -497,8 +507,8 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
       options,
       options.config
     );
-    
-    
+
+
   } catch (error) {
     console.error(`ボリンジャーバンド戦略でエラーが発生しました: ${symbol}`, error);
     if (postErrorToDiscord) {
@@ -519,11 +529,11 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
  */
 function formatBollingerBandsLogInfo(signalResult) {
   const { currentPrice, currentUpper, currentMiddle, currentLower, bandWidth } = signalResult;
-  
+
   // null値を安全に処理
   const safeUpper = currentUpper !== null && currentUpper !== undefined ? currentUpper.toFixed(2) : 'N/A';
   const safeLower = currentLower !== null && currentLower !== undefined ? currentLower.toFixed(2) : 'N/A';
-  
+
   return {
     buy: `価格: ${currentPrice}, 下限: ${safeLower}`,
     sell: `価格: ${currentPrice}, 上限: ${safeUpper}`,
@@ -538,18 +548,18 @@ function formatBollingerBandsLogInfo(signalResult) {
  * 複数の指標が同じ方向を示す場合のみ取引を実行
  */
 async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  const { 
+  const {
     ohlcvInterval,
     // マルチ指標設定（フラット化構造 - バックテスト対応）
     requiredConfirmations = 3,
-    
+
     // 重み設定
     weightMACD = 1.0,
     weightEMA = 0.8,
     weightRSI = 0.7,
     weightVolume = 0.5,
     weightADX = 0.9,
-    
+
     // 期間設定
     macdFastPeriod = 12,
     macdSlowPeriod = 26,
@@ -573,16 +583,18 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
 
     // OHLCVデータを取得して検証
     const validatedData = await fetchAndValidateOHLCVData(
-      exchange, 
-      symbol, 
-      ohlcvInterval, 
-      maxPeriod + 10, 
+      exchange,
+      symbol,
+      ohlcvInterval,
+      maxPeriod + 10,
       postErrorToDiscord,
       'マルチ指標',
       options
     );
-    if (!validatedData) return;
-    
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
     if (options.backtest) {
       options.backtest.ohlcvData = ohlcv;
@@ -593,7 +605,7 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
 
     // MACD
     indicators.macd = calculateMACD(
-      closes, 
+      closes,
       macdFastPeriod,
       macdSlowPeriod,
       macdSignalPeriod
@@ -758,30 +770,30 @@ async function multiIndicatorStrategy(exchange, symbol, strategyKey, config, mar
  * @returns {Object} フォーマットされたログ情報
  */
 function formatMultiIndicatorLogInfo(signalResult) {
-  const { 
-    currentPrice, 
-    confirmation, 
-    marketEnvironment, 
-    signalReason 
+  const {
+    currentPrice,
+    confirmation,
+    marketEnvironment,
+    signalReason
   } = signalResult;
-  
+
   const confirmationInfo = `確認数: ${confirmation.actualConfirmations.bullish}/${confirmation.actualConfirmations.bearish}, ` +
                           `スコア: ${confirmation.bullishScore}/${confirmation.bearishScore}`;
-  
+
   const marketInfo = `市場: ${marketEnvironment.description} (ADX: ${marketEnvironment.strength !== null && marketEnvironment.strength !== undefined ? marketEnvironment.strength.toFixed(1) : 'N/A'})`;
-  
+
   return {
     buy: `${confirmationInfo}, ${marketInfo}, 理由: ${signalReason}`,
     sell: `${confirmationInfo}, ${marketInfo}, 理由: ${signalReason}`,
     none: `${confirmationInfo}, ${marketInfo}`,
-    orderInfo: { 
-      confirmation, 
-      marketEnvironment, 
-      signalReason 
+    orderInfo: {
+      confirmation,
+      marketEnvironment,
+      signalReason
     },
-    result: { 
-      currentPrice, 
-      confirmation, 
+    result: {
+      currentPrice,
+      confirmation,
       marketEnvironment,
       signalReason
     }

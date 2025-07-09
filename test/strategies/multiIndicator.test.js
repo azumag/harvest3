@@ -1,13 +1,13 @@
 /**
  * マルチ指標戦略のテスト
  */
-const { 
-  calculateADX 
+const {
+  calculateADX
 } = require('../../src/strategies/utils/indicators');
 
-const { 
-  confirmMultipleIndicators, 
-  identifyMarketEnvironment 
+const {
+  confirmMultipleIndicators,
+  identifyMarketEnvironment
 } = require('../../src/strategies/utils/common');
 
 describe('ADX指標テスト', () => {
@@ -37,11 +37,11 @@ describe('ADX指標テスト', () => {
     expect(result).toHaveProperty('adx');
     expect(result).toHaveProperty('plusDI');
     expect(result).toHaveProperty('minusDI');
-    
+
     expect(Array.isArray(result.adx)).toBe(true);
     expect(Array.isArray(result.plusDI)).toBe(true);
     expect(Array.isArray(result.minusDI)).toBe(true);
-    
+
     // ADXの値が有効な範囲内にある
     const validADX = result.adx.filter(val => val !== null && val !== undefined);
     validADX.forEach(adx => {
@@ -57,7 +57,7 @@ describe('ADX指標テスト', () => {
     ];
 
     const result = calculateADX(shortData, 14);
-    
+
     expect(result.adx).toEqual([]);
     expect(result.plusDI).toEqual([]);
     expect(result.minusDI).toEqual([]);
@@ -161,7 +161,7 @@ describe('マルチ指標確認システムテスト', () => {
     };
 
     const config = {
-      requiredConfirmations: 4, // 高い確認数を要求
+      requiredConfirmations: 4 // 高い確認数を要求
     };
 
     const result = confirmMultipleIndicators(indicators, config);
@@ -282,14 +282,14 @@ describe('統合テスト', () => {
     // 確認結果の検証
     expect(confirmation.confirmed).toBe(true);
     expect(confirmation.direction).toBe('bullish');
-    
+
     // 市場環境の検証
     expect(marketEnvironment.environment).toBe('strong_trend');
     expect(marketEnvironment.direction).toBe('bullish');
-    
+
     // 統合判定（実際の戦略ロジック）
     let shouldTrade = false;
-    if (confirmation.confirmed && 
+    if (confirmation.confirmed &&
         marketEnvironment.environment !== 'range' &&
         confirmation.direction === marketEnvironment.direction) {
       shouldTrade = true;
@@ -320,9 +320,9 @@ describe('統合テスト', () => {
 
     // レンジ相場では慎重な判定
     expect(marketEnvironment.environment).toBe('range');
-    
+
     // レンジ相場では高いスコアが必要
-    const shouldTradeInRange = confirmation.confirmed && 
+    const shouldTradeInRange = confirmation.confirmed &&
                               marketEnvironment.environment === 'range' &&
                               parseFloat(confirmation.bullishScore) > 70;
 

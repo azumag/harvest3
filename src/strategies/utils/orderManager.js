@@ -42,16 +42,16 @@ class AdvancedOrderManager {
     this.orderTimeout = 60000; // 60秒でキャンセル
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1秒
-    
+
     // 未約定注文管理機能
     this.orderValidator = new OrderValidation(exchange);
     this.redisClient = null;
     this.validationEnabled = true;
-    
+
     // トランザクショナル注文管理
     this.transactionalManager = new TransactionalOrderManager(exchange);
     this.useTransactionalOrders = true; // デフォルトで有効
-    
+
     this.initRedisConnection();
   }
 
@@ -82,7 +82,7 @@ class AdvancedOrderManager {
     try {
       // 流動性レベルを評価
       const liquidityLevel = await this.assessLiquidity(symbol, amount);
-      
+
       // 緊急度と流動性に基づいて注文タイプを決定
       if (urgency === URGENCY_LEVELS.HIGH && liquidityLevel > 0.6) {
         return ORDER_TYPES.MARKET;
@@ -92,7 +92,7 @@ class AdvancedOrderManager {
       } else if (amount > this.getLargeOrderThreshold(symbol)) {
         return ORDER_TYPES.ICEBERG;
       }
-      
+
       // デフォルトはpost_only
       return ORDER_TYPES.LIMIT_POST_ONLY;
     } catch (error) {
@@ -211,10 +211,10 @@ class AdvancedOrderManager {
 
     // 最適な注文タイプを選択
     const orderType = await this.selectOptimalOrderType(symbol, urgency, amount);
-    
+
     // 価格調整
     const adjustedPrice = await this.calculateOptimalPrice(symbol, side, urgency, price);
-    
+
     // 注文実行
     return await this.executeOrderWithManagement(
       symbol, side, amount, adjustedPrice, orderType, options
@@ -237,21 +237,21 @@ class AdvancedOrderManager {
     try {
       // 包括的バリデーション実行
       const validation = await this.orderValidator.validateOrder(
-        this.redisClient, 
-        symbol, 
-        side, 
-        price, 
+        this.redisClient,
+        symbol,
+        side,
+        price,
         amount
       );
 
       if (!validation.valid) {
         console.log(`[注文管理] バリデーション失敗: ${validation.summary}`);
-        
+
         // エラー詳細をログ出力
         validation.errors.forEach(error => {
           console.log(`  - ${error.type}: ${error.reason}`);
           if (error.details) {
-            console.log(`    詳細:`, error.details);
+            console.log('    詳細:', error.details);
           }
         });
 
@@ -259,7 +259,7 @@ class AdvancedOrderManager {
         try {
           const recommendedPrice = await this.orderValidator.getRecommendedPrice(symbol, side);
           console.log(`  推奨価格: ¥${recommendedPrice.toLocaleString()}`);
-          
+
           return {
             valid: false,
             reason: validation.summary,
@@ -298,41 +298,41 @@ class AdvancedOrderManager {
     // トランザクショナル注文を使用するかチェック
     if (this.useTransactionalOrders && !options.backtest) {
       console.log(`[注文管理] トランザクショナル注文使用: ${symbol} ${side}`);
-      
+
       const transactionalOptions = {
         ...options,
         type: orderType,
         strategy: options.strategy || 'UNKNOWN'
       };
-      
+
       return await this.transactionalManager.executeTransactionalOrder(
         symbol, side, amount, price, transactionalOptions
       );
     }
-    
+
     // 従来の注文方式（バックテスト等）
     console.log(`[注文管理] 従来注文方式使用: ${symbol} ${side}`);
-    
+
     // 注文前バリデーション
     const validation = await this.validateOrderBeforeExecution(symbol, side, price, amount);
-    
+
     if (!validation.valid) {
       console.log(`[注文管理] 注文拒否: ${validation.reason}`);
-      
+
       // Discord通知（バリデーション失敗）
       if (postOrderToDiscord && !options.backtest) {
         let message = `🚫 **注文拒否** ${symbol} ${side.toUpperCase()}\n` +
-                     `━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                     `💰 **注文内容**\n` +
+                     '━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                     '💰 **注文内容**\n' +
                      `　価格: ¥${price.toLocaleString()}\n` +
                      `　数量: ${amount}\n` +
                      `　総額: ¥${(price * amount).toLocaleString()}\n\n` +
-                     `❌ **拒否理由**\n` +
+                     '❌ **拒否理由**\n' +
                      `　${validation.reason}\n`;
 
         // 詳細エラー情報を追加
         if (validation.errors && validation.errors.length > 0) {
-          message += `\n📋 **詳細情報**\n`;
+          message += '\n📋 **詳細情報**\n';
           validation.errors.forEach(error => {
             message += `　• ${error.type}: ${error.reason}\n`;
             if (error.details) {
@@ -360,16 +360,16 @@ class AdvancedOrderManager {
         // 推奨価格情報を追加
         if (validation.recommendedPrice) {
           const priceDeviation = ((validation.recommendedPrice - price) / price * 100);
-          message += `\n💡 **推奨価格**\n` +
+          message += '\n💡 **推奨価格**\n' +
                     `　¥${validation.recommendedPrice.toLocaleString()}\n` +
                     `　(${priceDeviation > 0 ? '+' : ''}${priceDeviation.toFixed(2)}% 調整)\n`;
         }
 
         message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
-        
+
         await postOrderToDiscord(message);
       }
-      
+
       return {
         success: false,
         error: new Error(validation.reason),
@@ -383,10 +383,10 @@ class AdvancedOrderManager {
     while (attempt < this.maxRetries) {
       try {
         attempt++;
-        
+
         // 注文パラメータを構築
         const params = this.buildOrderParams(orderType, options);
-        
+
         // CRITICAL: 注文実行前にMongoDBに保存（戦略リンク保持のため）
         // 一時的な注文オブジェクトを作成
         const preOrder = {
@@ -402,7 +402,7 @@ class AdvancedOrderManager {
           timestamp: Date.now(),
           params
         };
-        
+
         try {
           // MongoDBに事前保存
           const { addOrderMongoDB } = require('../../database/manager');
@@ -412,11 +412,11 @@ class AdvancedOrderManager {
           console.error(`[注文管理] 注文事前保存エラー: ${saveError.message}`);
           // エラーでも注文は続行（ログのみ）
         }
-        
+
         // 注文実行
         let order;
         if (orderType === ORDER_TYPES.MARKET) {
-          order = side === 'buy' 
+          order = side === 'buy'
             ? await this.exchange.createMarketBuyOrder(symbol, amount, params)
             : await this.exchange.createMarketSellOrder(symbol, amount, params);
         } else if (orderType === ORDER_TYPES.ICEBERG) {
@@ -428,7 +428,7 @@ class AdvancedOrderManager {
             ? await this.exchange.createLimitBuyOrder(symbol, amount, price, params)
             : await this.exchange.createLimitSellOrder(symbol, amount, price, params);
         }
-        
+
         // 実際の注文IDで更新
         if (order && order.id) {
           try {
@@ -472,7 +472,7 @@ class AdvancedOrderManager {
       } catch (error) {
         lastError = error;
         console.warn(`注文実行エラー (試行 ${attempt}/${this.maxRetries}): ${error.message}`);
-        
+
         if (attempt < this.maxRetries) {
           await sleep(this.retryDelay * attempt); // 指数バックオフ
         }
@@ -505,21 +505,21 @@ class AdvancedOrderManager {
     const params = {};
 
     switch (orderType) {
-      case ORDER_TYPES.LIMIT_POST_ONLY:
-        params.postOnly = true;
-        break;
-      case ORDER_TYPES.LIMIT:
-        // 通常のリミット注文（bitbank標準）
-        break;
-      case ORDER_TYPES.LIMIT_IOC:
-        // bitbankではIOCをサポートしていないため、通常のlimit注文として処理
-        console.warn('bitbankはIOCをサポートしていません。通常のlimit注文を使用します。');
-        break;
-      case ORDER_TYPES.STOP_LIMIT:
-        if (options.stopPrice) {
-          params.stopPrice = options.stopPrice;
-        }
-        break;
+    case ORDER_TYPES.LIMIT_POST_ONLY:
+      params.postOnly = true;
+      break;
+    case ORDER_TYPES.LIMIT:
+      // 通常のリミット注文（bitbank標準）
+      break;
+    case ORDER_TYPES.LIMIT_IOC:
+      // bitbankではIOCをサポートしていないため、通常のlimit注文として処理
+      console.warn('bitbankはIOCをサポートしていません。通常のlimit注文を使用します。');
+      break;
+    case ORDER_TYPES.STOP_LIMIT:
+      if (options.stopPrice) {
+        params.stopPrice = options.stopPrice;
+      }
+      break;
     }
 
     return params;
@@ -542,15 +542,15 @@ class AdvancedOrderManager {
 
     for (let i = 0; i < chunks; i++) {
       const currentAmount = Math.min(chunkSize, totalAmount - (i * chunkSize));
-      
+
       try {
         const params = { postOnly: true };
         const order = side === 'buy'
           ? await this.exchange.createLimitBuyOrder(symbol, currentAmount, price, params)
           : await this.exchange.createLimitSellOrder(symbol, currentAmount, price, params);
-        
+
         results.push(order);
-        
+
         // 最後のチャンク以外は待機
         if (i < chunks - 1) {
           await sleep(interval);
@@ -599,7 +599,9 @@ class AdvancedOrderManager {
    */
   async checkOrderStatus(orderId) {
     const managementInfo = this.activeOrders.get(orderId);
-    if (!managementInfo) return;
+    if (!managementInfo) {
+      return;
+    }
 
     try {
       const order = await this.exchange.fetchOrder(orderId);
@@ -646,12 +648,12 @@ class AdvancedOrderManager {
     try {
       // 既存注文をキャンセル
       await this.exchange.cancelOrder(managementInfo.order.id);
-      
+
       // 新しい価格で再発注
       const symbol = managementInfo.order.symbol;
       const side = managementInfo.order.side;
       const amount = managementInfo.order.amount;
-      
+
       // 現在の市場価格を取得して調整
       const ticker = await getTickerRedis(this.exchange.id, symbol);
       const newPrice = await this.calculateOptimalPrice(
@@ -681,7 +683,7 @@ class AdvancedOrderManager {
     // 簡易実装：総数量の10%または最小単位の100倍のいずれか大きい方
     const minChunk = 0.001; // 最小チャンクサイズ
     const percentageChunk = totalAmount * 0.1;
-    
+
     return Math.max(minChunk, percentageChunk);
   }
 
@@ -692,8 +694,12 @@ class AdvancedOrderManager {
    */
   getLargeOrderThreshold(symbol) {
     // 簡易実装：銘柄に応じた閾値
-    if (symbol.includes('BTC')) return 0.1;
-    if (symbol.includes('ETH')) return 1.0;
+    if (symbol.includes('BTC')) {
+      return 0.1;
+    }
+    if (symbol.includes('ETH')) {
+      return 1.0;
+    }
     return 10.0; // その他のアルトコイン
   }
 }

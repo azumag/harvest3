@@ -61,7 +61,7 @@ const {
 describe.skip('redisDatabase - 整合性チェック機能', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // デフォルトのモック設定
     mockGetStrategyKey.mockImplementation(strategy => strategy);
     mockSafeValidateTradeSummaryData.mockImplementation(trade => trade);
@@ -81,14 +81,14 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           value: 1000000,
           fee: 1000
         };
-        
+
         mockClient.exists.mockResolvedValue(0); // サマリーが存在しない
-        
+
         await updateTradeSummary(trade);
-        
+
         // multi() が呼ばれることを確認
         expect(mockClient.multi).toHaveBeenCalled();
-        
+
         // トランザクション内で適切な操作が実行されることを確認
         expect(mockMulti.hSet).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
@@ -98,19 +98,19 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
             netPosition: 0
           })
         );
-        
+
         expect(mockMulti.hIncrByFloat).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
           'buyAmount',
           1.0
         );
-        
+
         expect(mockMulti.hIncrByFloat).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
           'netPosition',
           1.0
         );
-        
+
         expect(mockMulti.exec).toHaveBeenCalled();
       });
 
@@ -124,25 +124,25 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           value: 600000,
           fee: 500
         };
-        
+
         mockClient.exists.mockResolvedValue(1); // サマリーが存在
         mockClient.hMGet.mockResolvedValue(['1.0', '1000000']); // buyAmount: 1.0, totalBuyCost: 1000000
-        
+
         await updateTradeSummary(trade);
-        
+
         // 売り注文の操作が実行されることを確認
         expect(mockMulti.hIncrByFloat).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
           'sellAmount',
           0.5
         );
-        
+
         expect(mockMulti.hIncrByFloat).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
           'netPosition',
           -0.5
         );
-        
+
         // 実現損益の計算: 売却価格600000 - (平均購入価格1000000 * 売却量0.5) = 100000
         expect(mockMulti.hIncrByFloat).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
@@ -161,10 +161,10 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           value: 1000000,
           fee: 1000
         };
-        
+
         mockClient.exists.mockResolvedValue(0);
         mockMulti.exec.mockResolvedValue([[new Error('Transaction failed'), null]]);
-        
+
         await expect(updateTradeSummary(trade)).rejects.toThrow('Redis transaction failed');
         expect(mockMulti.discard).toHaveBeenCalled();
       });
@@ -182,11 +182,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '1000000',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.isValid).toBe(true);
         expect(result.errors).toHaveLength(0);
         expect(result.warnings).toHaveLength(0);
@@ -201,11 +201,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '1000000',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('ネットポジション不整合: 記録値=0.5, 計算値=1, 差=0.5');
       });
@@ -219,11 +219,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '2000000',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('負のネットポジション検出: -1');
       });
@@ -237,13 +237,13 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '1000000',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
         mockClient.multi.mockReturnValue(mockMulti);
         mockMulti.exec.mockResolvedValue([[null, 'OK']]);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key', { autoFix: true });
-        
+
         expect(result.actions).toContain('ネットポジション修正: 0.5 → 1');
         expect(mockMulti.hSet).toHaveBeenCalledWith('test:summary:key', 'netPosition', '1');
         expect(result.fixed).toBe(true);
@@ -258,13 +258,13 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '0',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
         mockClient.multi.mockReturnValue(mockMulti);
         mockMulti.exec.mockResolvedValue([[null, 'OK']]);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key', { autoFix: true });
-        
+
         expect(result.actions).toContain('サマリー全体をリセット');
         expect(mockMulti.hSet).toHaveBeenCalledWith('test:summary:key', expect.objectContaining({
           buyAmount: '0',
@@ -285,11 +285,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '0',
           realizedPnL: '0'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.warnings).toContain('極端なネットポジション: 1500000');
       });
 
@@ -302,11 +302,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           totalSellValue: '0',
           realizedPnL: '150000000' // 1.5億円
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(summaryData);
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.warnings).toContain('極端な実現損益: 150000000円');
       });
     });
@@ -318,11 +318,11 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
         const orderData = {
           strategyKey: 'BOLLINGER_BANDS'
         };
-        
+
         mockClient.hGetAll.mockResolvedValue(orderData);
-        
+
         const result = await getValidatedStrategyKey('order123');
-        
+
         expect(result).toBe('BOLLINGER_BANDS');
         expect(mockClient.hGetAll).toHaveBeenCalledWith('pending_order:order123');
       });
@@ -333,9 +333,9 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           strategy: 'BB戦略'
         });
         mockGetStrategyKey.mockReturnValue('BOLLINGER_BANDS');
-        
+
         const result = await getValidatedStrategyKey('order123');
-        
+
         expect(result).toBe('BOLLINGER_BANDS');
         expect(mockGetOrderByOrderId).toHaveBeenCalledWith('order123');
         expect(mockGetStrategyKey).toHaveBeenCalledWith('BB戦略');
@@ -344,17 +344,17 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
       it('戦略情報が見つからない場合はフォールバックを返すこと', async () => {
         mockClient.hGetAll.mockResolvedValue({});
         mockGetOrderByOrderId.mockResolvedValue(null);
-        
+
         const result = await getValidatedStrategyKey('order123', 'FALLBACK_STRATEGY');
-        
+
         expect(result).toBe('FALLBACK_STRATEGY');
       });
 
       it('エラー発生時もフォールバックを返すこと', async () => {
         mockClient.hGetAll.mockRejectedValue(new Error('Redis error'));
-        
+
         const result = await getValidatedStrategyKey('order123', 'ERROR_FALLBACK');
-        
+
         expect(result).toBe('ERROR_FALLBACK');
       });
     });
@@ -372,20 +372,20 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
           value: 1000000,
           fee: 1000
         };
-        
+
         mockClient.exists.mockResolvedValue(0);
-        
+
         // validateAndFixTradeSummaryのスパイを作成
         const validateSpy = jest.spyOn(require('../../../src/database/redisDatabase'), 'validateAndFixTradeSummary');
         validateSpy.mockResolvedValue({ isValid: true, errors: [], warnings: [], actions: [] });
-        
+
         await updateTradeSummary(trade);
-        
+
         expect(validateSpy).toHaveBeenCalledWith(
           'summary:trade:bitbank:BTC/JPY:TEST_STRATEGY',
           { autoFix: true, logLevel: 'warn' }
         );
-        
+
         validateSpy.mockRestore();
       });
     });
@@ -395,24 +395,24 @@ describe.skip('redisDatabase - 整合性チェック機能', () => {
     describe('🔴 Red: 適切なエラー処理が行われること', () => {
       it('バリデーション失敗のトレードは更新をスキップすること', async () => {
         mockSafeValidateTradeSummaryData.mockReturnValue(null); // バリデーション失敗
-        
+
         const trade = {
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           strategy: 'TEST_STRATEGY',
           side: 'buy'
         };
-        
+
         await updateTradeSummary(trade);
-        
+
         expect(mockClient.multi).not.toHaveBeenCalled();
       });
 
       it('validateAndFixTradeSummaryで例外が発生してもエラーオブジェクトを返すこと', async () => {
         mockClient.hGetAll.mockRejectedValue(new Error('Redis connection failed'));
-        
+
         const result = await validateAndFixTradeSummary('test:summary:key');
-        
+
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('検証処理エラー: Redis connection failed');
       });

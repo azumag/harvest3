@@ -7,7 +7,7 @@ module.exports = {
   // Mock MongoDB connection functions
   connectDB: jest.fn().mockResolvedValue(true),
   closeDB: jest.fn().mockResolvedValue(true),
-  
+
   // Mock collections
   ordersCollection: {
     insertOne: jest.fn().mockResolvedValue({ insertedId: 'mock-id' }),
@@ -48,7 +48,7 @@ module.exports = {
       toArray: jest.fn().mockResolvedValue([])
     })
   },
-  
+
   // Mock all exported functions
   addOrderMongoDB: jest.fn().mockResolvedValue({ insertedId: 'mock-order-id' }),
   addOrdersBulk: jest.fn().mockResolvedValue({ insertedCount: 0 }),
@@ -68,7 +68,7 @@ module.exports = {
   listFilledPositions: jest.fn().mockResolvedValue([]),
   ensureCollectionsExist: jest.fn().mockResolvedValue(true),
   createIndexes: jest.fn().mockResolvedValue(true),
-  
+
   // Mock ObjectId
   ObjectId: jest.fn().mockImplementation((id) => ({ toString: () => id || 'mock-object-id' }))
 };

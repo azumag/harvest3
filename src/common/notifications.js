@@ -19,10 +19,10 @@ const discordBacktestURL = process.env.DISCORD_BACKTEST_WEBHOOK_URL; // Discord 
  */
 async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
   const message = `🚨 **MongoDB接続エラー**\n\`\`\`\nエラー: ${errorMessage}\n接続先: ${mongoUrl}\n時刻: ${new Date().toISOString()}\n\`\`\``;
-  
+
   // 重複防止のためのキーを生成
   const deduplicationKey = crypto.createHash('sha256').update(`mongodb_error_${errorMessage}_${mongoUrl}`).digest('hex');
-  
+
   await rateLimiter.send(discordErrorWebhookUrl, message, {
     priority: rateLimiter.notificationPriorities.CRITICAL,
     deduplicationKey,
@@ -42,7 +42,7 @@ async function postErrorToDiscord(message, options = {}) {
   }
 
   // メッセージから重複防止キーを生成
-  const deduplicationKey = options.deduplicationKey || 
+  const deduplicationKey = options.deduplicationKey ||
     crypto.createHash('sha256').update(message.substring(0, 200)).digest('hex');
 
   await rateLimiter.send(discordErrorWebhookUrl, message, {
@@ -65,7 +65,7 @@ async function postOrderToDiscord(message, options = {}) {
   }
 
   // 注文情報の重複防止キーを生成
-  const deduplicationKey = options.deduplicationKey || 
+  const deduplicationKey = options.deduplicationKey ||
     crypto.createHash('sha256').update(`order_${message.substring(0, 100)}`).digest('hex');
 
   await rateLimiter.send(discordOrderWebhookUrl, message, {
@@ -129,7 +129,7 @@ async function postResultToDiscord(message, discordWebhookURL = discordResultWeb
   // 各チャンクを統一レートリミッターで順番に送信
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const chunkDeduplicationKey = options.deduplicationKey ? 
+    const chunkDeduplicationKey = options.deduplicationKey ?
       `${options.deduplicationKey}_chunk_${i}` :
       crypto.createHash('sha256').update(`result_${chunk.substring(0, 100)}_${i}`).digest('hex');
 

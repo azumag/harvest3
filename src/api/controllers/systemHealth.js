@@ -12,7 +12,7 @@ const { checkAllExchangeBalances } = require('../../common/balanceChecker');
 async function getSystemHealth(req, res) {
   try {
     console.log('システムヘルス情報を取得中...');
-    
+
     // 並列でデータ取得
     const [
       positionsData,
@@ -52,17 +52,17 @@ async function getPositionsHealth() {
   try {
     const allPositions = await getAllPositionsRedis();
     const openPositions = allPositions.filter(pos => pos.status === 'open');
-    
+
     // ロング・ショートの比率計算
     const longPositions = openPositions.filter(pos => pos.side === 'buy');
     const shortPositions = openPositions.filter(pos => pos.side === 'sell');
-    
+
     const longRatio = openPositions.length > 0 ? (longPositions.length / openPositions.length) * 100 : 0;
-    
+
     // 健全性レベル決定
     let healthLevel = 'green';
     let healthMessage = '正常';
-    
+
     if (longRatio > 90) {
       healthLevel = 'red';
       healthMessage = '極度のロング偏重';
@@ -116,13 +116,13 @@ async function getPositionsHealth() {
 async function getPendingOrdersHealth() {
   try {
     const pendingOrders = await getAllPendingOrdersRedis();
-    
+
     // 買い・売り注文の分析
     const buyOrders = pendingOrders.filter(order => order.side === 'buy');
     const sellOrders = pendingOrders.filter(order => order.side === 'sell');
-    
+
     const buyRatio = pendingOrders.length > 0 ? (buyOrders.length / pendingOrders.length) * 100 : 0;
-    
+
     // 古い注文の分析
     const now = Date.now();
     const oldOrders = pendingOrders.filter(order => {
@@ -133,7 +133,7 @@ async function getPendingOrdersHealth() {
     // 健全性レベル決定
     let healthLevel = 'green';
     let healthMessage = '正常';
-    
+
     if (pendingOrders.length > 100) {
       healthLevel = 'red';
       healthMessage = '未約定注文過多';
@@ -176,16 +176,16 @@ async function getPendingOrdersHealth() {
 async function getBalanceHealth() {
   try {
     const balanceResults = await checkAllExchangeBalances();
-    
+
     const totalExchanges = balanceResults.length;
     const healthyExchanges = balanceResults.filter(result => result.isHealthy).length;
-    const discrepancies = balanceResults.reduce((total, result) => 
+    const discrepancies = balanceResults.reduce((total, result) =>
       total + (result.discrepancies ? result.discrepancies.length : 0), 0);
 
     // 健全性レベル決定
     let healthLevel = 'green';
     let healthMessage = '残高整合性OK';
-    
+
     if (discrepancies > 6) {
       healthLevel = 'red';
       healthMessage = '重大な残高不整合';
@@ -225,7 +225,7 @@ async function getBalanceHealth() {
 async function getSystemMetrics() {
   const uptime = process.uptime();
   const memUsage = process.memoryUsage();
-  
+
   return {
     uptime: {
       seconds: Math.floor(uptime),
@@ -249,7 +249,7 @@ async function getSystemMetrics() {
  */
 function calculateOverallHealth(healthData) {
   const levels = healthData.map(data => data.healthLevel);
-  
+
   if (levels.includes('red')) {
     return {
       level: 'red',
@@ -278,7 +278,7 @@ function formatUptime(seconds) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  
+
   if (days > 0) {
     return `${days}日 ${hours}時間 ${minutes}分`;
   } else if (hours > 0) {

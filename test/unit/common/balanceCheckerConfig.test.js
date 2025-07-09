@@ -37,15 +37,15 @@ describe('残高チェッカー設定のテスト', () => {
       expect(BALANCE_CHECKER_CONFIG.thresholds.significantBalance).toBe(0.00001);
       expect(BALANCE_CHECKER_CONFIG.thresholds.highDiscrepancyPercent).toBe(10);
       expect(BALANCE_CHECKER_CONFIG.thresholds.balanceComparisonTolerance).toBe(0);
-      
+
       expect(BALANCE_CHECKER_CONFIG.distributedLock.lockKeyPrefix).toBe('balance_checker_lock');
       expect(BALANCE_CHECKER_CONFIG.distributedLock.stateKey).toBe('balance_checker_state');
       expect(BALANCE_CHECKER_CONFIG.distributedLock.defaultTtl).toBe(300000);
-      
+
       expect(BALANCE_CHECKER_CONFIG.intervals.lightweightCheck).toBe(5 * 60 * 1000);
       expect(BALANCE_CHECKER_CONFIG.intervals.robustCheck).toBe(60 * 60 * 1000);
       expect(BALANCE_CHECKER_CONFIG.intervals.exchangeCheckDelay).toBe(2000);
-      
+
       expect(BALANCE_CHECKER_CONFIG.notifications.maxCurrenciesToShow).toBe(5);
       expect(BALANCE_CHECKER_CONFIG.notifications.maxInconsistenciesToShow).toBe(3);
     });
@@ -54,42 +54,42 @@ describe('残高チェッカー設定のテスト', () => {
   describe('環境変数オーバーライド', () => {
     it('significantBalance設定', () => {
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = '0.001';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.significantBalance).toBe(0.001);
     });
 
     it('highDiscrepancyPercent設定', () => {
       process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT = '15';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.highDiscrepancyPercent).toBe(15);
     });
 
     it('lockTtl設定', () => {
       process.env.BALANCE_CHECKER_LOCK_TTL = '600000';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.distributedLock.defaultTtl).toBe(600000);
     });
 
     it('lightweightInterval設定', () => {
       process.env.BALANCE_CHECKER_LIGHTWEIGHT_INTERVAL = '120000';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.intervals.lightweightCheck).toBe(120000);
     });
 
     it('robustInterval設定', () => {
       process.env.BALANCE_CHECKER_ROBUST_INTERVAL = '3600000';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.intervals.robustCheck).toBe(3600000);
     });
 
     it('デバッグモード有効化', () => {
       process.env.BALANCE_CHECKER_DEBUG = 'true';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.debug.enableDetailedLogging).toBe(true);
       expect(config.debug.logDataSnapshots).toBe(true);
@@ -100,7 +100,7 @@ describe('残高チェッカー設定のテスト', () => {
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = '0.0001';
       process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT = '20';
       process.env.BALANCE_CHECKER_DEBUG = 'true';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.significantBalance).toBe(0.0001);
       expect(config.thresholds.highDiscrepancyPercent).toBe(20);
@@ -175,9 +175,9 @@ describe('残高チェッカー設定のテスト', () => {
           highDiscrepancyPercent: 10
         },
         distributedLock: { defaultTtl: 300000 },
-        intervals: { 
+        intervals: {
           lightweightCheck: 30000,  // 60秒未満
-          robustCheck: 3600000 
+          robustCheck: 3600000
         }
       };
 
@@ -191,7 +191,7 @@ describe('残高チェッカー設定のテスト', () => {
           highDiscrepancyPercent: 10
         },
         distributedLock: { defaultTtl: 300000 },
-        intervals: { 
+        intervals: {
           lightweightCheck: 300000,
           robustCheck: 120000  // 5分未満
         }
@@ -207,7 +207,7 @@ describe('残高チェッカー設定のテスト', () => {
           highDiscrepancyPercent: 150  // エラー2
         },
         distributedLock: { defaultTtl: 500 },  // エラー3
-        intervals: { 
+        intervals: {
           lightweightCheck: 30000,  // エラー4
           robustCheck: 120000       // エラー5
         }
@@ -220,7 +220,7 @@ describe('残高チェッカー設定のテスト', () => {
   describe('検証済み設定取得のテスト', () => {
     it('有効な設定で検証済み設定を取得できる', () => {
       const config = getValidatedConfig();
-      
+
       expect(config).toBeDefined();
       expect(config.thresholds).toBeDefined();
       expect(config.distributedLock).toBeDefined();
@@ -231,7 +231,7 @@ describe('残高チェッカー設定のテスト', () => {
 
     it('無効な環境変数設定で検証エラーを投げる', () => {
       process.env.BALANCE_CHECKER_LOCK_TTL = '100'; // 1000ms未満で無効
-      
+
       expect(() => getValidatedConfig()).toThrow('defaultTtl must be at least 1000ms');
     });
   });
@@ -241,7 +241,7 @@ describe('残高チェッカー設定のテスト', () => {
       // 確実に削除してから空文字列を設定
       delete process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD;
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = '';
-      
+
       const { getBalanceCheckerConfig } = require('../../../src/common/balanceCheckerConfig');
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.significantBalance).toBe(0.00001); // デフォルト値
@@ -249,7 +249,7 @@ describe('残高チェッカー設定のテスト', () => {
 
     it('無効な数値形式の環境変数は無視される', () => {
       process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD = 'invalid_number';
-      
+
       const config = getBalanceCheckerConfig();
       expect(config.thresholds.significantBalance).toBeNaN();
     });
@@ -258,7 +258,7 @@ describe('残高チェッカー設定のテスト', () => {
       // 確実に削除してからfalseを設定
       delete process.env.BALANCE_CHECKER_DEBUG;
       process.env.BALANCE_CHECKER_DEBUG = 'false';
-      
+
       const { getBalanceCheckerConfig } = require('../../../src/common/balanceCheckerConfig');
       const config = getBalanceCheckerConfig();
       expect(config.debug.enableDetailedLogging).toBe(false);

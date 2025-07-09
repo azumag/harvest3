@@ -11,16 +11,16 @@ const BacktestExecutor = require('./trading/BacktestExecutor');
  * Refactored: ~15 lines using BacktestExecutor
  */
 async function runBacktestForSymbol(
-  exchange, 
-  symbol, 
-  strategy, 
-  strategyKey, 
-  marketParametersByExchange, 
-  autoUpdate, 
-  gridSearch, 
-  startDate, 
-  endDate, 
-  retryCount, 
+  exchange,
+  symbol,
+  strategy,
+  strategyKey,
+  marketParametersByExchange,
+  autoUpdate,
+  gridSearch,
+  startDate,
+  endDate,
+  retryCount,
   allExchangeSymbolPairs
 ) {
   // Create BacktestExecutor with all configuration
@@ -32,10 +32,10 @@ async function runBacktestForSymbol(
     retryCount,
     allExchangeSymbolPairs
   });
-  
+
   // Run comprehensive backtest using extracted common logic
   const results = await executor.runBacktest();
-  
+
   // Return results in format compatible with original function
   return {
     shouldRetry: results.bestResult?.finalBaseFund <= 10000, // Retry if no profit
@@ -54,12 +54,12 @@ async function runBacktestForSymbol(
 async function runMainBacktest() {
   // All the complex setup logic remains the same...
   // (exchange initialization, symbol loading, etc.)
-  
+
   // But now each symbol backtest is just one clean call:
   for (const symbol of symbols) {
     for (const strategyKey of Object.keys(strategies)) {
       const strategy = strategies[strategyKey];
-      
+
       // This replaces 339 lines of complex logic with a simple call
       const result = await runBacktestForSymbol(
         exchange,
@@ -74,7 +74,7 @@ async function runMainBacktest() {
         0, // retryCount
         allExchangeSymbolPairs
       );
-      
+
       console.log(`${symbol} ${strategyKey} backtest completed:`, result.summary);
     }
   }

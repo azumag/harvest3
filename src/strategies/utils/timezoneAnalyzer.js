@@ -8,7 +8,7 @@ class TimezoneAnalyzer {
     this.timezone = options.timezone || 'Asia/Tokyo';
     this.cacheTimeout = options.cacheTimeout || 300000; // 5分間キャッシュ
     this.cache = new Map();
-    
+
     // 市場活発時間の定義（JST基準）
     this.marketHours = {
       // 日本市場時間
@@ -45,7 +45,7 @@ class TimezoneAnalyzer {
    */
   getMarketActivityScore(timestamp = Date.now()) {
     const cacheKey = `activity_${Math.floor(timestamp / this.cacheTimeout)}`;
-    
+
     // キャッシュチェック
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -55,10 +55,10 @@ class TimezoneAnalyzer {
       const date = new Date(timestamp);
       const hour = date.getHours(); // JST時間
       const day = date.getDay(); // 0=日曜, 1=月曜, ..., 6=土曜
-      
+
       // 平日/休日チェック
       const isWeekday = day >= 1 && day <= 5;
-      let baseScore = isWeekday ? 1.0 : 0.3; // 平日は基本スコア1.0、週末は0.3
+      const baseScore = isWeekday ? 1.0 : 0.3; // 平日は基本スコア1.0、週末は0.3
 
       // 時間帯別調整
       let timeMultiplier = 0.5; // デフォルト
@@ -107,11 +107,11 @@ class TimezoneAnalyzer {
       }
 
       const finalScore = Math.min(1.0, baseScore * timeMultiplier);
-      
+
       this.cache.set(cacheKey, finalScore);
-      
+
       console.log(`[TimezoneAnalyzer] 時刻=${hour}時, スコア=${finalScore.toFixed(3)}, 市場数=${marketScores.length}`);
-      
+
       return finalScore;
 
     } catch (error) {
@@ -137,7 +137,7 @@ class TimezoneAnalyzer {
           12: 0.7, 13: 0.7, 14: 0.7, 15: 0.8, 16: 0.8, 17: 0.8,
           18: 0.7, 19: 0.7, 20: 0.8, 21: 0.9, 22: 0.9, 23: 0.8
         };
-        
+
         return cryptoPattern[hour] || 0.5;
       }
 
@@ -160,10 +160,10 @@ class TimezoneAnalyzer {
       const activityScore = this.getMarketActivityScore(timestamp);
       const hour = new Date(timestamp).getHours();
       const liquidityExpectation = this.getLiquidityExpectation(hour);
-      
+
       // 活発度と流動性の組み合わせ
       const combinedScore = (activityScore * 0.7) + (liquidityExpectation * 0.3);
-      
+
       // スコアに基づく調整係数計算
       if (combinedScore > 0.8) {
         return 0.15; // 積極的
@@ -215,11 +215,11 @@ class TimezoneAnalyzer {
       const date = new Date(timestamp);
       const hour = date.getHours();
       const day = date.getDay();
-      
+
       const activityScore = this.getMarketActivityScore(timestamp);
       const liquidityExpectation = this.getLiquidityExpectation(hour);
       const adjustment = this.calculateTimezoneAdjustment(timestamp);
-      
+
       // 営業中の市場を特定
       const activeMarkets = [];
       for (const [marketName, hours] of Object.entries(this.marketHours)) {

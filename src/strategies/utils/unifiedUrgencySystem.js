@@ -13,20 +13,20 @@ class UnifiedUrgencySystem {
   constructor(config = {}) {
     this.enabled = config.enabled !== false;
     this.mode = config.mode || 'production'; // development, testing, production
-    
+
     // コンポーネント初期化
     this.dynamicCalculator = new DynamicUrgencyCalculator(config.dynamic || {});
     this.performanceMonitor = new UrgencyPerformanceMonitor(config.monitoring || {});
     this.mlPredictor = new MLUrgencyPredictor(config.ml || {});
     this.multiTimeframeAnalyzer = new MultiTimeframeUrgencyAnalysis(config.multiTimeframe || {});
     this.abTestingSystem = new UrgencyABTestingSystem(config.abTesting || {});
-    
+
     // システム設定
     this.fallbackStrategy = config.fallbackStrategy || 'rule_based';
     this.maxCalculationTime = config.maxCalculationTime || 5000; // 5秒
     this.enableAutoOptimization = config.enableAutoOptimization !== false;
     this.enableRealTimeAdaptation = config.enableRealTimeAdaptation !== false;
-    
+
     // パフォーマンス追跡
     this.systemMetrics = {
       totalRequests: 0,
@@ -36,11 +36,11 @@ class UnifiedUrgencySystem {
       errorCount: 0,
       lastOptimization: 0
     };
-    
+
     // 最適化設定
     this.optimizationInterval = config.optimizationInterval || 24 * 60 * 60 * 1000; // 24時間
     this.adaptationThreshold = config.adaptationThreshold || 0.05; // 5%改善で適応
-    
+
     console.log('[UnifiedUrgencySystem] 統合システム初期化完了');
   }
 
@@ -69,15 +69,15 @@ class UnifiedUrgencySystem {
 
       // 統合urgency計算実行
       const result = await this.executeUnifiedCalculation(context);
-      
+
       // パフォーマンス監視記録
       this.recordPerformanceData(context, result, startTime);
-      
+
       // リアルタイム適応（有効時）
       if (this.enableRealTimeAdaptation) {
         await this.performRealTimeAdaptation(context, result);
       }
-      
+
       this.systemMetrics.successfulCalculations++;
       this.systemMetrics.avgCalculationTime = this.updateAverage(
         this.systemMetrics.avgCalculationTime,
@@ -90,7 +90,7 @@ class UnifiedUrgencySystem {
     } catch (error) {
       console.error('[UnifiedUrgency] 計算エラー:', error.message);
       this.systemMetrics.errorCount++;
-      
+
       // フォールバック戦略実行
       return await this.executeFallbackStrategy(context, error);
     }
@@ -149,16 +149,16 @@ class UnifiedUrgencySystem {
   async executeUnifiedCalculation(context) {
     const calculations = {};
     const weights = await this.getDynamicWeights(context);
-    
+
     // 並列計算実行（タイムアウト付き）
     const calculationPromises = [
-      this.executeWithTimeout('ruleBased', () => 
+      this.executeWithTimeout('ruleBased', () =>
         this.dynamicCalculator.calculateDynamicUrgency(context.symbol, context.baseUrgency, context)
       ),
-      this.executeWithTimeout('ml', () => 
+      this.executeWithTimeout('ml', () =>
         this.mlPredictor.predictOptimalUrgency(context, context.baseUrgency)
       ),
-      this.executeWithTimeout('multiTimeframe', () => 
+      this.executeWithTimeout('multiTimeframe', () =>
         this.multiTimeframeAnalyzer.analyzeMultiTimeframeUrgency(
           context.exchange, context.symbol, context.baseUrgency, context
         )
@@ -166,12 +166,12 @@ class UnifiedUrgencySystem {
     ];
 
     const results = await Promise.allSettled(calculationPromises);
-    
+
     // 結果処理
     results.forEach((result, index) => {
       const methods = ['ruleBased', 'ml', 'multiTimeframe'];
       const method = methods[index];
-      
+
       if (result.status === 'fulfilled') {
         calculations[method] = result.value;
       } else {
@@ -182,10 +182,10 @@ class UnifiedUrgencySystem {
 
     // アンサンブル統合
     const integratedResult = this.integrateCalculationResults(calculations, weights, context);
-    
+
     // 信頼度検証
     const validatedResult = this.validateResult(integratedResult, context);
-    
+
     return validatedResult;
   }
 
@@ -198,7 +198,7 @@ class UnifiedUrgencySystem {
   async executeWithTimeout(method, calculationFunc) {
     return Promise.race([
       calculationFunc(),
-      new Promise((_, reject) => 
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`${method} timeout`)), this.maxCalculationTime)
       )
     ]);
@@ -212,7 +212,7 @@ class UnifiedUrgencySystem {
   async getDynamicWeights(context) {
     // パフォーマンス履歴に基づく動的重み調整
     const performanceHistory = await this.performanceMonitor.generatePerformanceReport();
-    
+
     if (!performanceHistory) {
       return { ruleBased: 0.4, ml: 0.3, multiTimeframe: 0.3 }; // デフォルト重み
     }
@@ -220,7 +220,7 @@ class UnifiedUrgencySystem {
     // 各手法の成功率に基づく重み調整
     const weights = {};
     let totalWeight = 0;
-    
+
     ['ruleBased', 'ml', 'multiTimeframe'].forEach(method => {
       const successRate = this.extractSuccessRate(performanceHistory, method);
       const confidence = this.extractConfidence(performanceHistory, method);
@@ -246,7 +246,7 @@ class UnifiedUrgencySystem {
   integrateCalculationResults(calculations, weights, context) {
     const urgencyScores = { low: 0, medium: 1, high: 2 };
     const scoreToUrgency = { 0: 'low', 1: 'medium', 2: 'high' };
-    
+
     let weightedScore = 0;
     let totalWeight = 0;
     let totalConfidence = 0;
@@ -259,12 +259,12 @@ class UnifiedUrgencySystem {
         const urgencyScore = urgencyScores[result.urgency] || 1;
         const confidence = result.confidence || 0.5;
         const weight = weights[method] || 0.1;
-        
+
         weightedScore += urgencyScore * weight * confidence;
         totalWeight += weight * confidence;
         totalConfidence += confidence;
         validMethods++;
-        
+
         methodResults[method] = {
           urgency: result.urgency,
           confidence: confidence,
@@ -281,7 +281,7 @@ class UnifiedUrgencySystem {
 
     // 一致性チェック
     const consistency = this.calculateMethodConsistency(calculations);
-    
+
     return {
       urgency: finalUrgency,
       confidence: avgConfidence * consistency, // 一致性で信頼度調整
@@ -307,14 +307,16 @@ class UnifiedUrgencySystem {
     const urgencies = Object.values(calculations)
       .filter(calc => calc && !calc.error)
       .map(calc => calc.urgency);
-    
-    if (urgencies.length < 2) return 0.5;
-    
+
+    if (urgencies.length < 2) {
+      return 0.5;
+    }
+
     const urgencyCount = {};
     urgencies.forEach(urgency => {
       urgencyCount[urgency] = (urgencyCount[urgency] || 0) + 1;
     });
-    
+
     const maxCount = Math.max(...Object.values(urgencyCount));
     return maxCount / urgencies.length; // 最多一致率
   }
@@ -344,7 +346,7 @@ class UnifiedUrgencySystem {
     // 最終安全性チェック
     result.safetyChecked = true;
     result.validationTimestamp = Date.now();
-    
+
     return result;
   }
 
@@ -359,17 +361,17 @@ class UnifiedUrgencySystem {
     if (context.marketCondition?.volatility > 0.8 && result.urgency === 'low') {
       return { isConsistent: false, reason: 'high_volatility_low_urgency' };
     }
-    
+
     // 低ボラティリティ時の高urgency警告
     if (context.marketCondition?.volatility < 0.2 && result.urgency === 'high') {
       return { isConsistent: false, reason: 'low_volatility_high_urgency' };
     }
-    
+
     // リスク限界接近時の高urgency警告
     if (context.portfolioRisk?.riskProximity > 0.8 && result.urgency === 'high') {
       return { isConsistent: false, reason: 'high_risk_high_urgency' };
     }
-    
+
     return { isConsistent: true };
   }
 
@@ -381,27 +383,27 @@ class UnifiedUrgencySystem {
    */
   async executeFallbackStrategy(context, error) {
     this.systemMetrics.fallbackUsage++;
-    
+
     try {
       let fallbackResult;
-      
+
       switch (this.fallbackStrategy) {
-        case 'rule_based':
-          fallbackResult = await this.dynamicCalculator.calculateDynamicUrgency(
-            context.symbol, context.baseUrgency, context
-          );
-          break;
-          
-        case 'static':
-          fallbackResult = context.baseUrgency;
-          break;
-          
-        case 'conservative':
-          fallbackResult = 'low'; // 保守的
-          break;
-          
-        default:
-          fallbackResult = context.baseUrgency;
+      case 'rule_based':
+        fallbackResult = await this.dynamicCalculator.calculateDynamicUrgency(
+          context.symbol, context.baseUrgency, context
+        );
+        break;
+
+      case 'static':
+        fallbackResult = context.baseUrgency;
+        break;
+
+      case 'conservative':
+        fallbackResult = 'low'; // 保守的
+        break;
+
+      default:
+        fallbackResult = context.baseUrgency;
       }
 
       return {
@@ -460,12 +462,12 @@ class UnifiedUrgencySystem {
       if (result.confidence < 0.4) {
         await this.adaptToLowConfidence(context, result);
       }
-      
+
       // 一致性が低い場合の適応
       if (result.consistency < 0.5) {
         await this.adaptToLowConsistency(context, result);
       }
-      
+
       // 定期最適化チェック
       if (Date.now() - this.systemMetrics.lastOptimization > this.optimizationInterval) {
         await this.performSystemOptimization();
@@ -482,12 +484,12 @@ class UnifiedUrgencySystem {
    */
   async adaptToLowConfidence(context, result) {
     console.log(`[UnifiedUrgency] 低信頼度適応開始: ${result.confidence.toFixed(3)}`);
-    
+
     // 機械学習モデル再訓練トリガー
     if (this.mlPredictor.shouldRetrain()) {
       await this.mlPredictor.retrainModels();
     }
-    
+
     // 重み調整
     await this.adjustMethodWeights('confidence_adaptation');
   }
@@ -499,10 +501,10 @@ class UnifiedUrgencySystem {
    */
   async adaptToLowConsistency(context, result) {
     console.log(`[UnifiedUrgency] 低一致性適応開始: ${result.consistency.toFixed(3)}`);
-    
+
     // 不一致原因分析
     const inconsistencyAnalysis = this.analyzeInconsistency(result.integrationDetails.calculations);
-    
+
     // 問題のある手法の重み削減
     await this.adjustMethodWeights('consistency_adaptation', inconsistencyAnalysis);
   }
@@ -512,23 +514,23 @@ class UnifiedUrgencySystem {
    */
   async performSystemOptimization() {
     console.log('[UnifiedUrgency] システム最適化開始');
-    
+
     try {
       // A/Bテスト結果に基づく最適化
       const abTestReport = this.abTestingSystem.generateABTestReport();
       if (abTestReport) {
         await this.optimizeFromABTestResults(abTestReport);
       }
-      
+
       // パフォーマンス履歴に基づく最適化
       const performanceReport = this.performanceMonitor.generatePerformanceReport();
       if (performanceReport) {
         await this.optimizeFromPerformanceHistory(performanceReport);
       }
-      
+
       this.systemMetrics.lastOptimization = Date.now();
       console.log('[UnifiedUrgency] システム最適化完了');
-      
+
     } catch (error) {
       console.error('[UnifiedUrgency] システム最適化エラー:', error.message);
     }
@@ -545,14 +547,14 @@ class UnifiedUrgencySystem {
       if (testId && this.abTestingSystem.enabled) {
         this.abTestingSystem.recordTestResult(testId, executionResult);
       }
-      
+
       // パフォーマンス監視システムに記録
       this.performanceMonitor.recordOrderExecution(
         executionResult.orderData,
         executionResult.urgencyData,
         executionResult
       );
-      
+
     } catch (error) {
       console.error('[UnifiedUrgency] フィードバック記録エラー:', error.message);
     }
@@ -594,22 +596,28 @@ class UnifiedUrgencySystem {
    * @returns {Object} 健全性評価
    */
   assessSystemHealth() {
-    const successRate = this.systemMetrics.totalRequests > 0 
-      ? this.systemMetrics.successfulCalculations / this.systemMetrics.totalRequests 
+    const successRate = this.systemMetrics.totalRequests > 0
+      ? this.systemMetrics.successfulCalculations / this.systemMetrics.totalRequests
       : 1;
-    
+
     const errorRate = this.systemMetrics.totalRequests > 0
       ? this.systemMetrics.errorCount / this.systemMetrics.totalRequests
       : 0;
-    
+
     const fallbackRate = this.systemMetrics.totalRequests > 0
       ? this.systemMetrics.fallbackUsage / this.systemMetrics.totalRequests
       : 0;
 
     let healthStatus = 'excellent';
-    if (successRate < 0.9 || errorRate > 0.1 || fallbackRate > 0.2) healthStatus = 'good';
-    if (successRate < 0.8 || errorRate > 0.2 || fallbackRate > 0.4) healthStatus = 'fair';
-    if (successRate < 0.7 || errorRate > 0.3 || fallbackRate > 0.6) healthStatus = 'poor';
+    if (successRate < 0.9 || errorRate > 0.1 || fallbackRate > 0.2) {
+      healthStatus = 'good';
+    }
+    if (successRate < 0.8 || errorRate > 0.2 || fallbackRate > 0.4) {
+      healthStatus = 'fair';
+    }
+    if (successRate < 0.7 || errorRate > 0.3 || fallbackRate > 0.6) {
+      healthStatus = 'poor';
+    }
 
     return {
       status: healthStatus,

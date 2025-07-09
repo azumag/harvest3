@@ -24,15 +24,15 @@ async function migrateTradeSummaryKeys() {
     for (const oldKey of oldKeys) {
       try {
         const hashData = await client.hGetAll(oldKey);
-        
+
         // 新しいキー名を生成 (trade_summary:exchange:symbol:strategy -> summary:trade:exchange:symbol:strategy)
         const parts = oldKey.split(':');
         if (parts.length === 4 && parts[0] === 'trade_summary') {
           const newKey = `summary:trade:${parts[1]}:${parts[2]}:${parts[3]}`;
-          
+
           // 新しいキーにデータを書き込み
           await client.hSet(newKey, hashData);
-          
+
           // 古いキーを削除
           await client.del(oldKey);
           migratedCount++;

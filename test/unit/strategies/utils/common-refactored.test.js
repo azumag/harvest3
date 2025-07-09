@@ -77,7 +77,7 @@ describe('リファクタリング共通関数テスト', () => {
         bid: 4999000,
         ask: 5001000
       };
-      
+
       fetchTicker.mockResolvedValue(mockTicker);
 
       const exchange = { id: 'bitbank' };
@@ -95,7 +95,7 @@ describe('リファクタリング共通関数テスト', () => {
         symbol: 'BTC/JPY',
         last: 4800000
       };
-      
+
       fetchTicker.mockResolvedValue(mockTicker);
 
       const exchange = { id: 'test' };
@@ -149,7 +149,7 @@ describe('リファクタリング共通関数テスト', () => {
       const currentPrice = 5000000;
       const strategySpecificInfo = {
         buy: 'MA上抜けによる買いシグナル',
-        sell: 'MA下抜けによる売りシグナル', 
+        sell: 'MA下抜けによる売りシグナル',
         none: 'シグナル条件未満',
         orderInfo: { amount: 0.01, type: 'limit' },
         result: { ma: 4950000, signal: 'buy' }
@@ -191,7 +191,7 @@ describe('リファクタリング共通関数テスト', () => {
       const mockOHLCV = Array.from({ length: 50 }, (_, i) => [
         1640995200000 + i * 60000, // timestamp
         5000000 + i * 1000,        // open
-        5100000 + i * 1000,        // high  
+        5100000 + i * 1000,        // high
         4900000 + i * 1000,        // low
         5050000 + i * 1000,        // close
         100 + i                    // volume

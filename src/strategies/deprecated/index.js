@@ -42,7 +42,7 @@ const STRATEGIES = {
     description: '価格の変動幅を統計的に捉え、上限や下限に達した際に逆張りをする戦略や、バンド幅の拡大でトレンドの発生を予測する戦略',
     function: bollingerBandsStrategy
   },
-  
+
   // 逆張り戦略
   MEAN_REVERSION: {
     type: STRATEGY_TYPES.MEAN_REVERSION,
@@ -56,7 +56,7 @@ const STRATEGIES = {
     description: 'RSIやストキャスティクスなどのオシレーター系指標が買われすぎや売られすぎの水準を示す際に、反転を狙う',
     function: oscillatorStrategy
   },
-  
+
   // アービトラージ戦略
   INTER_EXCHANGE_ARBITRAGE: {
     type: STRATEGY_TYPES.ARBITRAGE,
@@ -64,7 +64,7 @@ const STRATEGIES = {
     description: '複数の取引所間でビットコインの価格差が生じた際に、安い取引所で買って高い取引所で売ることで利益を得る戦略',
     function: interExchangeArbitrage
   },
-  
+
   // 高頻度取引戦略
   HFT: {
     type: STRATEGY_TYPES.HIGH_FREQUENCY,
@@ -78,7 +78,7 @@ const STRATEGIES = {
     description: 'スプレッド（買値と売値の差）に基づいて取引を行う戦略',
     function: scalpingStrategy
   },
-  
+
   // マーケットメイキング戦略
   MARKET_MAKING: {
     type: STRATEGY_TYPES.MARKET_MAKING,
@@ -86,7 +86,7 @@ const STRATEGIES = {
     description: 'レンジ相場において買い指値注文と売り指値注文を同時に発注し、約定時にメイカー手数料を得る戦略',
     function: passiveMarketMaking
   },
-  
+
   // ローソク足パターン戦略
   INYO: {
     type: STRATEGY_TYPES.CANDLESTICK_PATTERN,
@@ -129,7 +129,7 @@ function getAvailableStrategies(type = null) {
     }
     return filteredStrategies;
   }
-  
+
   const availableStrategies = {};
   for (const [key, strategy] of Object.entries(STRATEGIES)) {
     availableStrategies[key] = {
@@ -144,42 +144,42 @@ function getAvailableStrategies(type = null) {
 module.exports = {
   // 戦略タイプ
   STRATEGY_TYPES,
-  
+
   // 戦略定義
   STRATEGIES,
-  
+
   // 戦略関数
   executeStrategy,
   getAvailableStrategies,
-  
+
   // 指標計算関数
   calculateSMA,
   calculateEMA,
   calculateMACD,
   calculateRSI,
   calculateBollingerBands,
-  
+
   // トレンドフォロー戦略
   maStrategy,
   macdStrategy,
   rsiStrategy,
   bollingerBandsStrategy,
-  
+
   // 逆張り戦略
   meanReversionStrategy,
   oscillatorStrategy,
-  
+
   // アービトラージ戦略
   interExchangeArbitrage,
-  
+
   // 高頻度取引戦略
   highFrequencyTrading,
   scalpingStrategy,
   orderCheckCancel,
-  
+
   // マーケットメイキング戦略
   passiveMarketMaking,
-  
+
   // ローソク足パターン戦略
   inyoStrategy
 };

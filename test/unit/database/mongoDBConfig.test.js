@@ -11,7 +11,7 @@ describe('MongoDB Connection Configuration', () => {
       const path = require('path');
       const mongoDbPath = path.join(__dirname, '../../../src/database/mongoDatabase.js');
       const mongoDbSource = fs.readFileSync(mongoDbPath, 'utf8');
-      
+
       // bufferMaxEntriesが使用されていないことを確認
       expect(mongoDbSource).not.toMatch(/bufferMaxEntries\s*:\s*\d+/);
       expect(mongoDbSource).toMatch(/bufferMaxEntries.*削除.*新しいドライバでは非対応/);
@@ -22,11 +22,11 @@ describe('MongoDB Connection Configuration', () => {
       const fs = require('fs');
       const path = require('path');
       const envPath = path.join(__dirname, '../../../.env');
-      
+
       if (fs.existsSync(envPath)) {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const mongoUrlMatch = envContent.match(/MONGO_URL=(.+)/);
-        
+
         if (mongoUrlMatch) {
           const mongoUrl = mongoUrlMatch[1];
           // クエリパラメータが含まれていないことを確認
@@ -41,7 +41,7 @@ describe('MongoDB Connection Configuration', () => {
       // 実際のmongoOptionsオブジェクトをテスト（require使用は避ける）
       const expectedOptions = [
         'serverSelectionTimeoutMS',
-        'connectTimeoutMS', 
+        'connectTimeoutMS',
         'socketTimeoutMS',
         'maxPoolSize',
         'minPoolSize',
@@ -72,7 +72,7 @@ describe('MongoDB Connection Configuration', () => {
   describe('MongoDB Driver Compatibility', () => {
     test('MongoClientが新しいオプションで作成できること', () => {
       const { MongoClient } = require('mongodb');
-      
+
       const testOptions = {
         serverSelectionTimeoutMS: 30000,
         connectTimeoutMS: 10000,

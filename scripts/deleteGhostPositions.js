@@ -9,9 +9,9 @@ const fs = require('fs');
 async function deleteGhostPositions() {
   try {
     console.log('🚨 ゴーストポジション緊急削除開始...');
-    
+
     await initRedisClient();
-    
+
     // キャンセル済み注文のリスト（15件）
     const canceledOrders = [
       { currency: 'XRP', strategy: 'MACD', orderId: '47147742663', amount: 0.6532 },
@@ -30,32 +30,32 @@ async function deleteGhostPositions() {
       { currency: 'SOL', strategy: 'BOLLINGER_BANDS', orderId: '47147824278', amount: 0.0089 },
       { currency: 'SOL', strategy: 'MA', orderId: '47149160486', amount: 0.0021 }
     ];
-    
+
     const exchangeId = 'bitbank';
     const deletedKeys = [];
     const backupData = [];
-    
+
     console.log('\n📋 削除対象ポジション特定・バックアップ中...');
-    
+
     for (const canceledOrder of canceledOrders) {
       const symbol = `${canceledOrder.currency}/JPY`;
       console.log(`\n🔍 ${canceledOrder.currency} ${canceledOrder.strategy} (OrderID: ${canceledOrder.orderId})`);
-      
+
       try {
         const positions = await getStrategyPositionsRedis(exchangeId, symbol, canceledOrder.strategy);
-        
-        const targetPositions = positions.filter(p => 
-          p.orderId === canceledOrder.orderId && 
-          p.status === 'open' && 
+
+        const targetPositions = positions.filter(p =>
+          p.orderId === canceledOrder.orderId &&
+          p.status === 'open' &&
           p.side === 'buy'
         );
-        
+
         if (targetPositions.length > 0) {
           console.log(`  ✅ 削除対象ポジション: ${targetPositions.length}件`);
-          
+
           for (const pos of targetPositions) {
             const redisKey = `position:${exchangeId}:${symbol}:${canceledOrder.strategy}:${pos.orderId}`;
-            
+
             // バックアップ用にデータを保存
             const positionData = await redisClient.hGetAll(redisKey);
             if (Object.keys(positionData).length > 0) {
@@ -68,34 +68,34 @@ async function deleteGhostPositions() {
                 amount: pos.amount,
                 timestamp: new Date().toISOString()
               });
-              
+
               console.log(`    📝 バックアップ済み: ${redisKey}`);
               console.log(`        Amount: ${pos.amount} ${canceledOrder.currency}`);
               console.log(`        OrderID: ${pos.orderId}`);
             }
           }
         } else {
-          console.log(`  ⚠️ 対象ポジションが見つかりません`);
+          console.log('  ⚠️ 対象ポジションが見つかりません');
         }
       } catch (err) {
         console.log(`  ❌ エラー: ${err.message}`);
       }
     }
-    
+
     // バックアップファイル作成
     const backupFilename = `ghost-positions-backup-${Date.now()}.json`;
     fs.writeFileSync(backupFilename, JSON.stringify(backupData, null, 2));
     console.log(`\n💾 バックアップファイル作成: ${backupFilename}`);
     console.log(`📊 バックアップ対象: ${backupData.length}件`);
-    
+
     if (backupData.length === 0) {
       console.log('\n⚠️ 削除対象のポジションが見つかりませんでした');
       return;
     }
-    
+
     // 実際の削除実行
     console.log('\n🗑️ ゴーストポジション削除実行中...');
-    
+
     for (const backup of backupData) {
       try {
         const result = await redisClient.del(backup.redisKey);
@@ -110,23 +110,23 @@ async function deleteGhostPositions() {
         console.log(`  ❌ 削除エラー: ${backup.redisKey} - ${deleteErr.message}`);
       }
     }
-    
-    console.log(`\n✅ ゴーストポジション削除完了`);
+
+    console.log('\n✅ ゴーストポジション削除完了');
     console.log(`📊 削除実行件数: ${deletedKeys.length}件`);
     console.log(`💾 バックアップファイル: ${backupFilename}`);
-    
+
     // 削除されたキーのリストを出力
     console.log('\n📋 削除されたRedisキー一覧:');
     deletedKeys.forEach((key, index) => {
       console.log(`[${index + 1}] ${key}`);
     });
-    
+
     return {
       deletedKeys,
       backupFile: backupFilename,
       deletedCount: deletedKeys.length
     };
-    
+
   } catch (error) {
     console.error('❌ エラー:', error.message);
     console.error(error.stack);

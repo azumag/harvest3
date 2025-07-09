@@ -15,10 +15,10 @@ describe('統一戦略管理', () => {
 
       // 緊急対応中: すべての戦略が無効化されているため、空配列が期待される
       expect(Array.isArray(strategies)).toBe(true);
-      
+
       // 期待される戦略（緊急対応解除後は有効化される）
       const expectedStrategies = [
-        'MACD', 'BOLLINGER_BANDS', 'MA', 'OSCILLATOR', 
+        'MACD', 'BOLLINGER_BANDS', 'MA', 'OSCILLATOR',
         'RSI', 'MULTI_INDICATOR', 'MUTUAL_INFO', 'MEAN_REVERSION'
       ];
 
@@ -28,7 +28,7 @@ describe('統一戦略管理', () => {
         expect(strategy).toBeDefined();
         expect(strategy.type).toBeDefined();
         expect(strategy.type).not.toBe('high_frequency');
-        
+
         // 緊急対応中はすべて無効化されていることを確認（現在は一部有効化されている場合がある）
         expect(typeof strategy.enabled).toBe('boolean');
       });
@@ -40,7 +40,7 @@ describe('統一戦略管理', () => {
     test('HFT戦略は型ベースフィルタリングにより除外される', () => {
       const hftStrategy = config.strategies.HFT;
       expect(hftStrategy.type).toBe('high_frequency');
-      
+
       // HFTが有効でも型ベースフィルタリングにより除外されることを確認
       const mockConfig = {
         strategies: {
@@ -50,7 +50,7 @@ describe('統一戦略管理', () => {
           }
         }
       };
-      
+
       const strategies = getBalanceCheckEligibleStrategies(mockConfig);
       expect(strategies).not.toContain('HFT');
     });
@@ -91,13 +91,13 @@ describe('統一戦略管理', () => {
 
     test('レガシー戦略（OUTSIDE, UNKNOWN）は無効化されているが型ベースフィルタリング対象', () => {
       const legacyStrategies = ['OUTSIDE', 'UNKNOWN'];
-      
+
       legacyStrategies.forEach(strategyKey => {
         const strategy = config.strategies[strategyKey];
         expect(strategy.enabled).toBe(false);
         expect(strategy.type).toBe('legacy');
         expect(strategy.function).toBe(null);
-        
+
         // 型ベースフィルタリングでは、有効化されていれば含まれることを確認
         const mockConfig = {
           strategies: {
@@ -107,7 +107,7 @@ describe('統一戦略管理', () => {
             }
           }
         };
-        
+
         const strategies = getBalanceCheckEligibleStrategies(mockConfig);
         expect(strategies).toContain(strategyKey);
       });
@@ -115,7 +115,7 @@ describe('統一戦略管理', () => {
 
     test('high_frequency型以外の有効戦略は残高チェック対象', () => {
       const strategies = getBalanceCheckEligibleStrategies(config);
-      
+
       strategies.forEach(strategyKey => {
         const strategy = config.strategies[strategyKey];
         expect(strategy.type).not.toBe('high_frequency');

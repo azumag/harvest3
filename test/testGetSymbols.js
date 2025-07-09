@@ -20,7 +20,7 @@ async function testSymbolHandling() {
   } catch (error) {
     console.log(`エラー発生 (期待通り): ${error.message}`);
     console.log(`エラータイプ: ${error.constructor.name}`);
-    
+
     // エラーのプロパティを表示
     console.log('\nエラーの詳細情報:');
     for (const key in error) {
@@ -28,7 +28,7 @@ async function testSymbolHandling() {
         console.log(`  ${key}: ${error[key]}`);
       }
     }
-    
+
     // エラー処理方法の提案
     console.log('\n推奨される解決方法:');
     console.log('1. fetchOpenOrders等を呼び出す前に、そのシンボルがサポートされているか確認する');

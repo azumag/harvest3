@@ -21,20 +21,20 @@ class EmergencyPhase1Auditor {
    */
   async executePhase1() {
     console.log('🚨 【Phase 1】緊急診断と修復を開始します...\n');
-    
+
     try {
       console.log('Step 1: 偽約定ポジション検出中...');
       await this.detectFakePositions();
-      
+
       console.log('\nStep 2: 取引所API経由で注文状態を確認中...');
       await this.verifyOrdersWithExchange();
-      
+
       console.log('\nStep 3: 偽約定ポジションを安全に削除中...');
       await this.deleteFakePositions();
-      
+
       console.log('\nStep 4: 結果レポート生成中...');
       await this.generatePhase1Report();
-      
+
     } catch (error) {
       const errorMsg = `Phase 1 実行エラー: ${error.message}`;
       console.error(errorMsg);
@@ -48,13 +48,13 @@ class EmergencyPhase1Auditor {
    */
   async detectFakePositions() {
     const allPositions = await getAllPositionsRedis();
-    
+
     // 既知の問題ポジション（Gemini分析結果から）
     const knownFakeOrders = [
       '47148451536', // GALA - Bot: 27.3962, 取引所used: 0
       '47148562118'  // OAS - Bot: 43.0267, 取引所used: 0
     ];
-    
+
     for (const position of allPositions) {
       // 既知の偽約定注文をマーク
       if (knownFakeOrders.includes(position.orderId)) {
@@ -66,13 +66,13 @@ class EmergencyPhase1Auditor {
         console.log(`❌ 【重大】偽約定検出: ${position.symbol} ${position.strategyKey} (${position.amount})`);
         console.log(`   オーダーID: ${position.orderId} - 取引所残高: 0`);
       }
-      
+
       // その他の怪しいパターンも検出
       else if (position.status === 'open' && position.side === 'buy') {
         // 作成から24時間以上経過した大量ポジション
         const ageHours = (Date.now() - position.createdAt) / (1000 * 60 * 60);
         const isOldLargePosition = ageHours > 24 && position.amount > 10;
-        
+
         if (isOldLargePosition) {
           this.suspiciousPositions.push({
             ...position,
@@ -85,7 +85,7 @@ class EmergencyPhase1Auditor {
         }
       }
     }
-    
+
     console.log(`\n📊 検出結果: 重大${this.suspiciousPositions.filter(p => p.severity === 'critical').length}件, 中程度${this.suspiciousPositions.filter(p => p.severity === 'medium').length}件`);
   }
 
@@ -102,11 +102,11 @@ class EmergencyPhase1Auditor {
         }
 
         console.log(`🔍 注文確認中: ${position.orderId} (${position.symbol})`);
-        
+
         try {
           // 注文状態を取得
           const order = await exchange.fetchOrder(position.orderId, position.symbol);
-          
+
           if (order.status === 'canceled' || order.status === 'rejected') {
             console.log(`❌ 【確認】注文が取り消し済み: ${position.orderId} (${order.status})`);
             this.verifiedFakePositions.push({
@@ -121,9 +121,9 @@ class EmergencyPhase1Auditor {
             console.log(`⚠️ 【部分約定】期待値と実際の約定量に差異: ${position.orderId}`);
             console.log(`   期待: ${position.amount}, 実際: ${order.filled}`);
           }
-          
+
         } catch (orderError) {
-          if (orderError.message.includes('Order not found') || 
+          if (orderError.message.includes('Order not found') ||
               orderError.message.includes('order_not_found')) {
             console.log(`❌ 【確認】注文が存在しません: ${position.orderId}`);
             this.verifiedFakePositions.push({
@@ -135,10 +135,10 @@ class EmergencyPhase1Auditor {
             console.warn(`注文確認エラー: ${position.orderId} - ${orderError.message}`);
           }
         }
-        
+
         // API制限を避けるため待機
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
       } catch (error) {
         const errorMsg = `注文確認エラー: ${position.orderId} - ${error.message}`;
         console.error(errorMsg);
@@ -154,13 +154,13 @@ class EmergencyPhase1Auditor {
     for (const fakePosition of this.verifiedFakePositions) {
       try {
         console.log(`🗑️ 偽約定ポジション削除中: ${fakePosition.orderId} (${fakePosition.symbol})`);
-        
+
         // Redisからポジション削除
         await deletePositionRedis(fakePosition.key);
-        
+
         this.deletedPositions.push(fakePosition);
         console.log(`✅ 削除完了: ${fakePosition.orderId}`);
-        
+
       } catch (error) {
         const errorMsg = `ポジション削除エラー: ${fakePosition.orderId} - ${error.message}`;
         console.error(errorMsg);
@@ -176,7 +176,7 @@ class EmergencyPhase1Auditor {
     console.log('\n' + '='.repeat(80));
     console.log('📋 【Phase 1】緊急診断と修復 - 結果レポート');
     console.log('='.repeat(80));
-    
+
     console.log(`🔍 疑わしいポジション検出: ${this.suspiciousPositions.length}件`);
     console.log(`✅ 偽約定確認済み: ${this.verifiedFakePositions.length}件`);
     console.log(`🗑️ 削除完了: ${this.deletedPositions.length}件`);
@@ -203,7 +203,7 @@ class EmergencyPhase1Auditor {
 
     // Discord通知
     await this.sendPhase1Notification();
-    
+
     console.log('='.repeat(80));
     console.log('【Phase 1】緊急診断と修復完了');
     console.log('='.repeat(80));
@@ -215,7 +215,7 @@ class EmergencyPhase1Auditor {
   async sendPhase1Notification() {
     const severity = this.verifiedFakePositions.length > 0 ? '🚨' : '✅';
     const status = this.verifiedFakePositions.length > 0 ? '偽約定検出・修復完了' : '問題なし';
-    
+
     let message = `${severity} **【Phase 1】緊急診断と修復完了**\n\n`;
     message += `🔍 疑わしいポジション: ${this.suspiciousPositions.length}件\n`;
     message += `✅ 偽約定確認: ${this.verifiedFakePositions.length}件\n`;
@@ -251,7 +251,7 @@ async function main() {
     console.log('Redis接続完了\n');
 
     await auditor.executePhase1();
-    
+
   } catch (error) {
     console.error('Phase 1 実行エラー:', error);
     process.exit(1);

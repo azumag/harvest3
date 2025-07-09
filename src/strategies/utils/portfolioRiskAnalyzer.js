@@ -20,7 +20,7 @@ class PortfolioRiskAnalyzer {
    */
   async getCurrentDrawdown(exchange = 'bitbank') {
     const cacheKey = `drawdown_${exchange}_${Math.floor(Date.now() / this.cacheTimeout)}`;
-    
+
     // キャッシュチェック
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -39,10 +39,10 @@ class PortfolioRiskAnalyzer {
           if (summary) {
             const currentEquity = parseFloat(summary.totalValue || 0);
             const pnl = parseFloat(summary.totalPnL || 0);
-            
+
             totalEquity += currentEquity;
             totalPnL += pnl;
-            
+
             // 過去の最高水準を推定（現在の損益がプラスなら、その分を加算した値を過去最高とする）
             maxEquity += currentEquity + Math.max(0, -pnl);
           }
@@ -79,14 +79,14 @@ class PortfolioRiskAnalyzer {
     try {
       const drawdown = await this.getCurrentDrawdown(exchange);
       const concentration = await this.getPositionConcentration(exchange);
-      
+
       // ドローダウンとポジション集中度を組み合わせ
       const drawdownRisk = drawdown / this.maxDrawdownThreshold;
       const concentrationRisk = concentration / this.concentrationThreshold;
-      
+
       // 最大値を取る（どちらかが高ければ高リスク）
       const riskProximity = Math.max(drawdownRisk, concentrationRisk);
-      
+
       return Math.max(0, Math.min(1, riskProximity));
 
     } catch (error) {
@@ -102,7 +102,7 @@ class PortfolioRiskAnalyzer {
    */
   async getPositionConcentration(exchange = 'bitbank') {
     const cacheKey = `concentration_${exchange}_${Math.floor(Date.now() / this.cacheTimeout)}`;
-    
+
     // キャッシュチェック
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -117,12 +117,12 @@ class PortfolioRiskAnalyzer {
       for (const strategy of strategies) {
         try {
           const positions = await getStrategyPositionsRedis(exchange, strategy);
-          
+
           for (const [positionKey, position] of positions) {
             if (position.status === 'open') {
               const symbol = position.symbol;
               const value = parseFloat(position.amount) * parseFloat(position.entryPrice);
-              
+
               symbolPositions.set(symbol, (symbolPositions.get(symbol) || 0) + value);
               totalPositionValue += value;
             }
@@ -165,7 +165,7 @@ class PortfolioRiskAnalyzer {
   async calculateRiskAdjustment(exchange = 'bitbank') {
     try {
       const riskProximity = await this.getRiskProximity(exchange);
-      
+
       // リスク接近度に基づく調整
       if (riskProximity > 0.8) {
         return -0.4; // 大幅に慎重モード

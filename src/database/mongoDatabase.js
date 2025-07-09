@@ -1,8 +1,8 @@
 const { MongoClient, ObjectId } = require('mongodb');
 const dotenv = require('dotenv');
-const { 
-  safeValidateTradeData, 
-  safeValidateOrderData 
+const {
+  safeValidateTradeData,
+  safeValidateOrderData
 } = require('./schemas');
 const { postMongoConnectionErrorToDiscord } = require('../common/notifications');
 dotenv.config();
@@ -78,15 +78,15 @@ function startConnectionMonitoring() {
   if (connectionMonitoringInterval) {
     clearInterval(connectionMonitoringInterval);
   }
-  
+
   connectionMonitoringInterval = setInterval(() => {
     updateConnectionStats();
-    
+
     // 警告レベルのチェック（接続プールの80%を超えた場合）
     const usageRatio = connectionStats.totalConnections / connectionStats.maxConnections;
     if (usageRatio > 0.8) {
       console.warn(`[MongoDB] 接続プール使用率が高いです: ${Math.round(usageRatio * 100)}% (${connectionStats.totalConnections}/${connectionStats.maxConnections})`);
-      
+
       // Discord通知を送信（循環参照回避のため条件付き読み込み）
       try {
         const { postErrorToDiscord } = require('../common/notifications');
@@ -115,7 +115,9 @@ function getConnectionStats() {
  */
 async function isConnected() {
   try {
-    if (!client) return false;
+    if (!client) {
+      return false;
+    }
     // ping コマンドで接続状態を確認
     await client.db('admin').command({ ping: 1 });
     return true;
@@ -134,12 +136,12 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
       console.warn(`[MongoDB] ${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
-      
+
       if (isLastAttempt) {
         console.error(`[MongoDB] ${operationName} 最終失敗:`, error);
         throw error;
       }
-      
+
       const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, max 10s
       console.log(`[MongoDB] ${backoffMs}ms後にリトライします...`);
       await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -153,7 +155,7 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
 async function connectDB() {
   if (!await isConnected()) {
     await retryWithBackoff(async () => {
-      console.log({mongoDbName, mongoUrl});
+      console.log({ mongoDbName, mongoUrl });
       client = new MongoClient(mongoUrl, mongoOptions);
       await client.connect();
       db = client.db(mongoDbName);
@@ -176,7 +178,7 @@ async function connectDB() {
       // インデックスの作成 (冪等性があるため、接続時に実行しても問題ない)
       await createIndexes();
     }, 'MongoDB接続', 3);
-    
+
     // 接続成功後のDiscord通知（エラー時のみ送信していたが、接続復旧も通知）
     try {
       // 接続エラー履歴がある場合のみ復旧通知
@@ -195,10 +197,10 @@ async function ensureCollectionsExist() {
     // 既存のコレクション一覧を取得
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
-    
+
     // 必要なコレクションのリスト
     const requiredCollections = ['orders', 'trades', 'signals', 'ohlcv', 'tickers'];
-    
+
     // 存在しないコレクションを作成
     for (const name of requiredCollections) {
       if (!collectionNames.includes(name)) {
@@ -244,19 +246,19 @@ async function createIndexes() {
       { key: { exchange: 1 }, options: {} },
       { key: { symbol: 1 }, options: {} }
     ]);
-    
+
     await createCollectionIndexesIfNotExist('trades', [
       { key: { orderId: 1 }, options: {} },
       { key: { tradeId: 1 }, options: { unique: true } },
       { key: { filledAt: 1 }, options: {} },
       { key: { filledAt: -1 }, options: {} }
     ]);
-    
+
     await createCollectionIndexesIfNotExist('signals', [
       { key: { timestamp: 1 }, options: {} },
       { key: { timestamp: -1 }, options: {} }
     ]);
-    
+
     await createCollectionIndexesIfNotExist('ohlcv', [
       { key: { exchange: 1, symbol: 1, timeframe: 1, timestamp: 1 }, options: { unique: true } },
       { key: { timestamp: 1 }, options: {} }, // タイムスタンプでの検索・ソート用
@@ -268,7 +270,7 @@ async function createIndexes() {
       { key: { timestamp: 1 }, options: {} },
       { key: { timestamp: -1 }, options: {} }
     ]);
-    
+
     console.log('MongoDBインデックスの確認/作成が完了しました');
   } catch (error) {
     console.error('MongoDBインデックス作成エラー:', error);
@@ -282,21 +284,21 @@ async function createIndexes() {
  */
 async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
   const collection = db.collection(collectionName);
-  
+
   // 既存のインデックスを取得
   const existingIndexes = await collection.listIndexes().toArray();
   const existingIndexMap = new Map();
-  
+
   // 既存インデックス情報をマップに格納
   existingIndexes.forEach(index => {
     // インデックス名をキーとする
     existingIndexMap.set(JSON.stringify(index.key), index);
   });
-  
+
   // 必要なインデックスを確認し、存在しない場合のみ作成
   for (const spec of indexSpecs) {
     const indexKey = JSON.stringify(spec.key);
-    
+
     if (!existingIndexMap.has(indexKey)) {
       console.log(`コレクション ${collectionName} にインデックスを作成: ${indexKey}`);
       await collection.createIndex(spec.key, spec.options);
@@ -318,7 +320,7 @@ async function addOrderMongoDB(orderData) {
     if (!validatedOrderData) {
       throw new Error('Order data validation failed - see console for details');
     }
-    
+
     const result = await module.exports.ordersCollection.insertOne(validatedOrderData);
     // console.log('Order added:', result.insertedId);
     return result;
@@ -327,14 +329,14 @@ async function addOrderMongoDB(orderData) {
     if (error.code === 11000 && error.keyPattern && error.keyPattern.orderId) {
       console.warn(`[MongoDB] Order ${orderData.orderId} already exists, skipping duplicate insertion`);
       // Return success-like result for duplicate orders to maintain compatibility
-      return { 
-        acknowledged: true, 
-        insertedId: null, 
-        duplicate: true, 
-        orderId: orderData.orderId 
+      return {
+        acknowledged: true,
+        insertedId: null,
+        duplicate: true,
+        orderId: orderData.orderId
       };
     }
-    
+
     console.error('Error adding order:', error);
     throw error;
   }
@@ -348,7 +350,7 @@ async function addOrdersBulk(ordersData) {
   if (!Array.isArray(ordersData) || ordersData.length === 0) {
     return { insertedCount: 0 };
   }
-  
+
   // Validate all orders in the bulk data
   const validatedOrdersData = [];
   for (let i = 0; i < ordersData.length; i++) {
@@ -358,7 +360,7 @@ async function addOrdersBulk(ordersData) {
     }
     validatedOrdersData.push(validatedOrder);
   }
-  
+
   await connectDB();
   try {
     const result = await module.exports.ordersCollection.insertMany(validatedOrdersData);
@@ -381,14 +383,14 @@ async function addTradeMongoDB(tradeData) {
     if (!validatedTradeData) {
       throw new Error('Trade data validation failed - see console for details');
     }
-    
+
     // upsert操作を使用して重複エラーを回避
     const result = await module.exports.tradesCollection.replaceOne(
       { tradeId: validatedTradeData.tradeId },
       validatedTradeData,
       { upsert: true }
     );
-    
+
     if (result.upsertedCount > 0) {
       console.log('New trade added:', result.upsertedId);
     } else if (result.modifiedCount > 0) {
@@ -396,7 +398,7 @@ async function addTradeMongoDB(tradeData) {
     } else {
       console.log('Trade already exists (no changes):', validatedTradeData.tradeId);
     }
-    
+
     return result;
   } catch (error) {
     console.error('Error adding/updating trade:', error);
@@ -437,9 +439,9 @@ async function listOrders(filter = {}, options = {}) {
         $not: /^pre_/
       }
     };
-    
+
     const orders = await module.exports.ordersCollection.find(enhancedFilter, options).toArray();
-    
+
     // Convert MongoDB _id to string and ensure all required fields exist
     const processedOrders = orders.map(order => {
       return {
@@ -456,12 +458,12 @@ async function listOrders(filter = {}, options = {}) {
         timestamp: order.timestamp || order.orderedAt || Date.now()
       };
     });
-    
+
     console.log(`listOrders: ${processedOrders.length} orders processed from DB (excluded pre-saved orders)`);
     if (processedOrders.length > 0) {
       console.log('Sample order structure:', processedOrders[0]);
     }
-    
+
     return processedOrders;
   } catch (error) {
     console.error('Error listing orders:', error);
@@ -478,7 +480,7 @@ async function listOrders(filter = {}, options = {}) {
 async function listTrades(filter = {}, options = {}) {
   await connectDB();
   try {
-    console.log({filter})
+    console.log({ filter });
     const trades = await module.exports.tradesCollection.find(filter, options).toArray();
     return trades;
   } catch (error) {
@@ -597,7 +599,7 @@ async function deleteOrderByOrderId(orderId) {
 
 /**
  * OHLCVデータをohlcvコレクションに追加する
- * @param {Object} ohlcvData 
+ * @param {Object} ohlcvData
  */
 async function addOhlcvMongoDB(ohlcvData) {
   await connectDB();
@@ -646,10 +648,10 @@ async function addOhlcvMongoDB(ohlcvData) {
 async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, timestamp) {
   await connectDB();
   try {
-    const query = { 
-      exchange: exchange, 
-      symbol: symbol, 
-      timeframe: timeframe,
+    const query = {
+      exchange: exchange,
+      symbol: symbol,
+      timeframe: timeframe
     };
 
     if (timestamp) {
@@ -657,7 +659,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
     }
 
     // console.log('OHLCV query:', query);
-    
+
     const ohlcvData = await module.exports.ohlcvCollection
       .find(query)
       .sort({ timestamp: -1 })
@@ -666,7 +668,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
 
     // 一番新しいデータを表示
     // console.log(ohlcvData[0]);
-      
+
     // console.log(`Retrieved ${ohlcvData.length} OHLCV records for ${symbol} at ${timeframe}.`);
     // 最新のデータを末尾に持ってくる
     if (ohlcvData && ohlcvData.length > 0) {
@@ -730,7 +732,7 @@ function startHealthCheck() {
   if (healthCheckInterval) {
     clearInterval(healthCheckInterval);
   }
-  
+
   healthCheckInterval = setInterval(async () => {
     try {
       if (!await isConnected()) {
@@ -773,7 +775,7 @@ async function saveTickerMongoDB(tickerData) {
   try {
     // 重複キーエラー防止のためreplaceOneとupsertを使用
     const result = await module.exports.tickersCollection.replaceOne(
-      { 
+      {
         exchange: tickerData.exchange,
         symbol: tickerData.symbol,
         timestamp: tickerData.timestamp
@@ -781,27 +783,27 @@ async function saveTickerMongoDB(tickerData) {
       tickerData,
       { upsert: true }
     );
-    
+
     // 一週間分の分速データの上限（7日 × 1440分）
     const MAX_TICKER_RECORDS = 7 * 1440;
-    
+
     // 同じ銘柄・取引所のデータ数をカウント
     const count = await module.exports.tickersCollection.countDocuments({
       exchange: tickerData.exchange,
       symbol: tickerData.symbol
     });
-    
+
     // 上限を超えている場合、古いデータを削除
     if (count > MAX_TICKER_RECORDS) {
       const recordsToDelete = count - MAX_TICKER_RECORDS;
-      
+
       // 最も古いデータを特定して削除
       const oldestRecords = await module.exports.tickersCollection
         .find({ exchange: tickerData.exchange, symbol: tickerData.symbol })
         .sort({ timestamp: 1 })
         .limit(recordsToDelete)
         .toArray();
-      
+
       if (oldestRecords.length > 0) {
         const oldestIds = oldestRecords.map(record => record._id);
         await module.exports.tickersCollection.deleteMany({
@@ -810,7 +812,7 @@ async function saveTickerMongoDB(tickerData) {
         // console.log(`${tickerData.exchange}:${tickerData.symbol} の古いticker ${recordsToDelete}件を削除しました`);
       }
     }
-    
+
     return result;
   } catch (error) {
     // 重複キーエラーの場合は警告ログのみで処理継続
@@ -887,32 +889,32 @@ async function listFilledPositions(filter = {}, limit = 1000) {
   try {
     // フィルタ条件を構築
     const query = {};
-    
+
     if (filter.exchangeId) {
       query.exchangeId = filter.exchangeId;
     }
-    
+
     if (filter.symbol) {
       query.symbol = filter.symbol;
     }
-    
+
     if (filter.strategyKey) {
       query.strategyKey = filter.strategyKey;
     }
-    
+
     // 約定済み（closed）ポジションのみを取得
     query.status = 'closed';
-    
+
     console.log('listFilledPositions query:', query);
-    
+
     const positions = await module.exports.positionsCollection
       .find(query)
       .sort({ closedAt: -1 })
       .limit(limit)
       .toArray();
-    
+
     console.log(`listFilledPositions found ${positions.length} positions`);
-    
+
     return positions;
   } catch (error) {
     console.error('約定済みポジションの取得に失敗:', error);
@@ -933,12 +935,12 @@ module.exports = {
   addOrdersBulk,
   addTradeMongoDB,
   addSignalMongoDB,
-  addOhlcvMongoDB, 
+  addOhlcvMongoDB,
   saveTickerMongoDB,
   fetchTickerFromMongoDB,
   listOrders,
   listTrades,
-  listSignals, 
+  listSignals,
   countSignals,
   getOrderByOrderId,
   updateOrderByOrderId,

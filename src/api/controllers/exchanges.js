@@ -24,7 +24,7 @@ async function getExchanges(req, res) {
 async function getSymbols(req, res) {
   try {
     const { exchange } = req.query;
-    
+
     if (!exchange) {
       return res.status(400).json({ error: 'Exchange parameter is required' });
     }
@@ -36,15 +36,15 @@ async function getSymbols(req, res) {
     }
 
     const exchangeInstance = exchangeConfig.instance;
-    
+
     // 取引所から銘柄リストを取得
     console.log(`Fetching markets for exchange: ${exchangeInstance.id}`); // ログ追加
     const markets = await exchangeInstance.fetchMarkets();
     console.log(`Markets fetched for ${exchangeInstance.id}:`, markets); // ログ追加
-    
+
     const symbols = markets.map(market => market.symbol);
     console.log(`Symbols extracted for ${exchangeInstance.id}:`, symbols); // ログ追加
-    
+
     res.json(symbols);
   } catch (error) {
     console.error(`Error fetching symbols for ${exchange}:`, error); // ログ修正
@@ -55,5 +55,7 @@ async function getSymbols(req, res) {
 module.exports = {
   getExchanges,
   getSymbols,
-  getTradeKeyList: (req, res) => { res.json([]); } // routes.jsで参照されているため実装
+  getTradeKeyList: (req, res) => {
+    res.json([]);
+  } // routes.jsで参照されているため実装
 };

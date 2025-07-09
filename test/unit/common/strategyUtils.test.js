@@ -39,7 +39,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
   describe('基本機能', () => {
     it('残高チェック対象の戦略キーの配列を返すこと', () => {
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(Array.isArray(result)).toBe(true);
       expect(result).toEqual(expect.arrayContaining(['MUTUAL_INFO', 'MEAN_REVERSION', 'MACD']));
       expect(result.length).toBe(3);
@@ -49,7 +49,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
 
     it('enabledがtrueかつhigh_frequency以外の戦略のみを返すこと', () => {
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       result.forEach(strategyKey => {
         const strategy = mockConfig.strategies[strategyKey];
         expect(strategy.enabled).toBe(true);
@@ -62,10 +62,10 @@ describe('getBalanceCheckEligibleStrategies', () => {
       jest.doMock('../../../src/config', () => ({
         config: mockConfig
       }));
-      
+
       const { getBalanceCheckEligibleStrategies: getStrategies } = require('../../../src/common/strategyUtils');
       const result = getStrategies();
-      
+
       expect(Array.isArray(result)).toBe(true);
       expect(result).toEqual(expect.arrayContaining(['MUTUAL_INFO', 'MEAN_REVERSION', 'MACD']));
       expect(result.length).toBe(3);
@@ -75,9 +75,9 @@ describe('getBalanceCheckEligibleStrategies', () => {
   describe('型によるフィルタリング', () => {
     it('high_frequency型の戦略は除外されること', () => {
       mockConfig.strategies.HFT.enabled = true;
-      
+
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(result).not.toContain('HFT');
     });
 
@@ -85,7 +85,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
       const result = getBalanceCheckEligibleStrategies(mockConfig, {
         types: ['trend_following']
       });
-      
+
       expect(result).toEqual(['MACD']);
       expect(result).not.toContain('MUTUAL_INFO');
       expect(result).not.toContain('MEAN_REVERSION');
@@ -95,7 +95,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
       const result = getBalanceCheckEligibleStrategies(mockConfig, {
         types: ['statistical', 'mean_reversion']
       });
-      
+
       expect(result).toEqual(expect.arrayContaining(['MUTUAL_INFO', 'MEAN_REVERSION']));
       expect(result.length).toBe(2);
       expect(result).not.toContain('MACD');
@@ -105,9 +105,9 @@ describe('getBalanceCheckEligibleStrategies', () => {
   describe('エッジケース', () => {
     it('戦略が存在しない場合は空配列を返すこと', () => {
       mockConfig.strategies = {};
-      
+
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0);
     });
@@ -116,9 +116,9 @@ describe('getBalanceCheckEligibleStrategies', () => {
       Object.values(mockConfig.strategies).forEach(strategy => {
         strategy.enabled = false;
       });
-      
+
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0);
     });
@@ -128,9 +128,9 @@ describe('getBalanceCheckEligibleStrategies', () => {
         type: 'high_frequency',
         enabled: true
       };
-      
+
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(result).not.toContain('TEST_STRATEGY');
     });
 
@@ -139,22 +139,22 @@ describe('getBalanceCheckEligibleStrategies', () => {
         type: 'trend_following',
         enabled: true
       };
-      
+
       const result = getBalanceCheckEligibleStrategies(mockConfig);
-      
+
       expect(result).toContain('VALID_STRATEGY');
     });
 
     it('configがnullの場合は空配列を返すこと', () => {
       const result = getBalanceCheckEligibleStrategies(null);
-      
+
       expect(result).toBeInstanceOf(Array);
       expect(result).toHaveLength(0);
     });
 
     it('config.strategiesがnullの場合は空配列を返すこと', () => {
       const result = getBalanceCheckEligibleStrategies({ strategies: null });
-      
+
       expect(result).toBeInstanceOf(Array);
       expect(result).toHaveLength(0);
     });
@@ -188,7 +188,7 @@ describe('getBalanceCheckEligibleStrategies', () => {
       };
 
       const result = getBalanceCheckEligibleStrategies(realConfig);
-      
+
       expect(result).toEqual(['MUTUAL_INFO']);
     });
   });

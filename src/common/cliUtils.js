@@ -48,7 +48,7 @@ class CLIUtils {
         // 長いオプション形式 (--option=value または --flag)
         const [optionName, ...valueParts] = arg.slice(2).split('=');
         const value = valueParts.join('=') || null;
-        
+
         if (finalSchema[optionName]) {
           if (finalSchema[optionName].type === 'flag') {
             parsed.flags[optionName] = true;
@@ -68,7 +68,7 @@ class CLIUtils {
         // 短いオプション形式 (-o value または -f)
         const shortName = arg.slice(1);
         const fullName = aliasMap[shortName];
-        
+
         if (fullName && finalSchema[fullName]) {
           if (finalSchema[fullName].type === 'flag') {
             parsed.flags[fullName] = true;
@@ -109,7 +109,7 @@ class CLIUtils {
       if (config.required) {
         const hasValue = (config.type === 'flag' && parsed.flags[key]) ||
                         (config.type === 'option' && parsed.options[key] !== undefined);
-        
+
         if (!hasValue) {
           parsed.errors.push(`Required ${config.type} --${key} is missing`);
         }
@@ -155,32 +155,32 @@ class CLIUtils {
    */
   showHelp(schema, description = null) {
     console.log(`\n使用法: node ${this.scriptName}.js [OPTIONS] [ARGS...]\n`);
-    
+
     if (description) {
       console.log(`${description}\n`);
     }
 
     console.log('オプション:');
-    
+
     const maxKeyLength = Math.max(...Object.keys(schema).map(k => k.length));
-    
+
     for (const [key, config] of Object.entries(schema)) {
       const shortForm = config.alias ? `-${config.alias}, ` : '    ';
       const longForm = `--${key}`.padEnd(maxKeyLength + 2);
       const required = config.required ? ' (必須)' : '';
       const dataType = config.dataType ? ` <${config.dataType}>` : '';
       const choices = config.choices ? ` [${config.choices.join('|')}]` : '';
-      
+
       console.log(`  ${shortForm}${longForm}${dataType}${choices}${required}`);
-      
+
       if (config.description) {
         console.log(`      ${config.description}`);
       }
-      
+
       if (config.default !== undefined) {
         console.log(`      デフォルト: ${config.default}`);
       }
-      
+
       console.log('');
     }
   }
@@ -195,7 +195,7 @@ class CLIUtils {
         console.error(`  ${error}`);
       });
       console.error(`\nヘルプを表示するには: node ${this.scriptName}.js --help\n`);
-      
+
       if (exitOnError) {
         process.exit(1);
       }
@@ -228,7 +228,7 @@ class CLIUtils {
 
       console.log(`✅ 設定ファイルを読み込みました: ${configPath}`);
       return { ...defaultConfig, ...config };
-      
+
     } catch (error) {
       console.error(`❌ 設定ファイル読み込みエラー: ${error.message}`);
       return defaultConfig;
@@ -241,20 +241,20 @@ class CLIUtils {
   createProgressBar(total, description = 'Progress') {
     let current = 0;
     const barLength = 40;
-    
+
     const update = (increment = 1) => {
       current += increment;
       const percentage = Math.round((current / total) * 100);
       const filledLength = Math.round((current / total) * barLength);
       const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
-      
+
       process.stdout.write(`\r${description}: [${bar}] ${current}/${total} (${percentage}%)`);
-      
+
       if (current >= total) {
         console.log(''); // 改行
       }
     };
-    
+
     return { update };
   }
 
@@ -267,18 +267,18 @@ class CLIUtils {
       input: process.stdin,
       output: process.stdout
     });
-    
+
     const defaultText = defaultAnswer ? '[Y/n]' : '[y/N]';
     const answer = await new Promise(resolve => {
       rl.question(`${question} ${defaultText}: `, resolve);
     });
-    
+
     rl.close();
-    
+
     if (answer.trim() === '') {
       return defaultAnswer;
     }
-    
+
     return ['y', 'yes', '1', 'true'].includes(answer.toLowerCase().trim());
   }
 
@@ -295,7 +295,7 @@ class CLIUtils {
     };
     const reset = '\x1b[0m';
     const color = levelColors[level] || '';
-    
+
     console.log(`${color}[${timestamp}] ${level.toUpperCase()}:${reset} ${message}`, ...args);
   }
 
@@ -304,7 +304,7 @@ class CLIUtils {
    */
   createTimer() {
     const startTime = Date.now();
-    
+
     return {
       elapsed: () => Date.now() - startTime,
       elapsedFormatted: () => {
@@ -329,11 +329,11 @@ class CLIUtils {
 CLIUtils.quickParse = function(schema, description = null) {
   const cli = new CLIUtils();
   const parsed = cli.parseScriptArguments(schema);
-  
+
   if (!cli.handleErrors(parsed)) {
     return null;
   }
-  
+
   return {
     ...parsed.options,
     ...parsed.flags,

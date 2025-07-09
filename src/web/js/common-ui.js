@@ -20,7 +20,7 @@ function createInputField(paramName, paramValue, paramKey) {
   const dataAttributes = `data-param-key="${paramKey}" data-param-name="${paramName}"`;
 
   // すべてのinputに適用する共通スタイル (border-box, width 100%, no border/margin/padding)
-  const commonStyles = "box-sizing: border-box; width: 100%; border: none; margin: 0; padding: 0.1rem 0.25rem; height: 100%; min-height: 1.8em;";
+  const commonStyles = 'box-sizing: border-box; width: 100%; border: none; margin: 0; padding: 0.1rem 0.25rem; height: 100%; min-height: 1.8em;';
 
   if (type === 'boolean') {
     // 真偽値の場合はチェックボックス

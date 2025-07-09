@@ -1,7 +1,7 @@
 /**
  * 安全な取引ユーティリティ関数
  * Safe Trading Utility Functions
- * 
+ *
  * これらの関数は戦略間で共通する安全なパターンを統合します
  * 核心的な取引実行ロジック（executeBuyOrder/executeSellOrder）は
  * 金融安全性のため意図的に保持されています
@@ -9,17 +9,17 @@
 
 /**
  * 設定パラメータを安全に抽出する
- * @param {Object} config - 設定オブジェクト  
+ * @param {Object} config - 設定オブジェクト
  * @param {Object} parameterMap - パラメータ名とデフォルト値のマッピング
  * @returns {Object} 抽出されたパラメータ
  */
 function extractConfigParameters(config, parameterMap) {
   const extractedParams = {};
-  
+
   for (const [key, defaultValue] of Object.entries(parameterMap)) {
     extractedParams[key] = config[key] !== undefined ? config[key] : defaultValue;
   }
-  
+
   return extractedParams;
 }
 
@@ -31,18 +31,18 @@ function extractConfigParameters(config, parameterMap) {
  */
 function extractMarketParameters(marketParameters, requiredFields = []) {
   const extracted = {};
-  
+
   // Handle null or undefined marketParameters safely
   if (!marketParameters) {
     return extracted;
   }
-  
+
   requiredFields.forEach(field => {
     if (marketParameters[field] !== undefined) {
       extracted[field] = marketParameters[field];
     }
   });
-  
+
   return extracted;
 }
 
@@ -78,7 +78,7 @@ function createStrategyResults(baseData, specificData = {}) {
  */
 function createStandardLogFormat(signalResult, messageTemplates, dataExtractor) {
   const extractedData = dataExtractor(signalResult);
-  
+
   return {
     buy: messageTemplates.buy(extractedData),
     sell: messageTemplates.sell(extractedData),
@@ -101,11 +101,11 @@ function createStandardLogFormat(signalResult, messageTemplates, dataExtractor) 
 async function fetchAndValidateStrategyData(exchange, symbol, ohlcvInterval, period, strategyName, options = {}) {
   // 共通のfetchAndValidateOHLCVWithBacktestSetupを使用
   const { fetchAndValidateOHLCVWithBacktestSetup } = require('../strategies/utils/common');
-  
+
   const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
     exchange, symbol, ohlcvInterval, period, strategyName, options
   );
-  
+
   return validatedData;
 }
 
@@ -116,8 +116,8 @@ async function fetchAndValidateStrategyData(exchange, symbol, ohlcvInterval, per
  * @returns {string} フォーマットされた文字列またはN/A
  */
 function safeNumberFormat(value, decimals = 2) {
-  return (value !== null && value !== undefined && !isNaN(value)) 
-    ? value.toFixed(decimals) 
+  return (value !== null && value !== undefined && !isNaN(value))
+    ? value.toFixed(decimals)
     : 'N/A';
 }
 
@@ -140,30 +140,30 @@ function safePercentageFormat(value, decimals = 2) {
  */
 function validateStrategyConfig(config, validationRules) {
   const errors = [];
-  
+
   for (const [param, rules] of Object.entries(validationRules)) {
     const value = config[param];
-    
+
     if (rules.required && (value === undefined || value === null)) {
       errors.push(`${param} is required`);
       continue;
     }
-    
+
     if (value !== undefined && value !== null) {
       if (rules.type && typeof value !== rules.type) {
         errors.push(`${param} must be of type ${rules.type}`);
       }
-      
+
       if (rules.min !== undefined && value < rules.min) {
         errors.push(`${param} must be >= ${rules.min}`);
       }
-      
+
       if (rules.max !== undefined && value > rules.max) {
         errors.push(`${param} must be <= ${rules.max}`);
       }
     }
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors

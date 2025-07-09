@@ -15,11 +15,11 @@ class TradingEngine {
     this.config = config;
     this.marketParameters = marketParameters;
     this.options = options;
-    
+
     // Extract common properties
     this.isBacktest = options.backtest || false;
     this.strategyName = config.strategyName || strategyKey;
-    
+
     // Validate required parameters
     this.validateInputs();
   }
@@ -31,7 +31,7 @@ class TradingEngine {
     if (!this.marketParameters) {
       throw new Error(`[${this.strategyName}] marketParameters is undefined: ${this.symbol}`);
     }
-    
+
     const { amountPrecision, minTradeAmount } = this.marketParameters;
     if (amountPrecision === undefined || minTradeAmount === undefined) {
       throw new Error(`[${this.strategyName}] Invalid marketParameters for ${this.symbol}`);
@@ -68,10 +68,10 @@ class TradingEngine {
 
     // Stop loss check
     const stopLossPositions = await checkStopLoss(
-      this.exchange, 
-      this.symbol, 
-      this.strategyKey, 
-      currentPrice, 
+      this.exchange,
+      this.symbol,
+      this.strategyKey,
+      currentPrice,
       this.config.riskSettings
     );
 
@@ -79,10 +79,10 @@ class TradingEngine {
     for (const position of stopLossPositions) {
       const safeMarketParameters = this.getSafeMarketParameters();
       await executeStopLoss(
-        this.exchange, 
-        this.symbol, 
-        this.strategyKey, 
-        position, 
+        this.exchange,
+        this.symbol,
+        this.strategyKey,
+        position,
         safeMarketParameters
       );
     }
@@ -120,13 +120,13 @@ class TradingEngine {
   calculateTradeAmount(availableFunds, currentPrice, tradePercentage) {
     const safeAvailableFunds = availableFunds !== null && availableFunds !== undefined ? availableFunds : 0;
     const safeTradePercentage = tradePercentage !== null && tradePercentage !== undefined ? tradePercentage : 0;
-    
+
     const rawAmount = (safeAvailableFunds * safeTradePercentage) / currentPrice;
     const { amountPrecision, minTradeAmount } = this.getSafeMarketParameters();
-    
+
     // Apply precision
     const formattedAmount = parseFloat(rawAmount.toFixed(amountPrecision));
-    
+
     this.logDebugInfo('Trade Amount Calculation', {
       availableFunds: safeAvailableFunds,
       tradePercentage: safeTradePercentage,
@@ -139,8 +139,8 @@ class TradingEngine {
     return {
       amount: formattedAmount,
       isValid: formattedAmount >= minTradeAmount,
-      validationMessage: formattedAmount < minTradeAmount 
-        ? `Amount ${formattedAmount} below minimum ${minTradeAmount}` 
+      validationMessage: formattedAmount < minTradeAmount
+        ? `Amount ${formattedAmount} below minimum ${minTradeAmount}`
         : 'Valid'
     };
   }
@@ -179,9 +179,9 @@ class TradingEngine {
   async handleValidationFailure(reason, data = {}) {
     const message = `[${this.strategyName}] Order validation failed: ${reason} - ${this.symbol}`;
     console.log(message);
-    
+
     await this.sendNotification(`❌ ${message}`);
-    
+
     return this.createOrderResult(false, {
       earlyReturn: true,
       returnValue: {

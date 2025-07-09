@@ -3,7 +3,7 @@
  */
 
 // グローバル変数
-let currentFilters = {
+const currentFilters = {
   exchangeId: 'all',
   symbol: 'all',
   strategyKey: 'all'
@@ -17,25 +17,25 @@ let totalPositions = [];
 // 初期化関数
 function initPositions() {
   console.log('ポジション詳細の初期化を開始します');
-  
+
   // ページサイズの初期設定
   pageSize = parseInt(document.getElementById('page-size-selector').value);
-  
+
   // 初期データ読み込み
   loadPositions();
-  
+
   // フィルターのイベントリスナー設定
   document.getElementById('exchange-filter').addEventListener('change', updateFilters);
   document.getElementById('symbol-filter').addEventListener('change', updateFilters);
   document.getElementById('strategy-filter').addEventListener('change', updateFilters);
-  
+
   // ページサイズ変更のイベントリスナー
   document.getElementById('page-size-selector').addEventListener('change', function() {
     pageSize = parseInt(this.value);
     currentPage = 1; // ページサイズ変更時は1ページ目に戻る
     displayPositions(); // 表示を更新
   });
-  
+
   // ページネーションのイベントリスナー
   document.getElementById('prev-page').addEventListener('click', function(e) {
     e.preventDefault();
@@ -44,7 +44,7 @@ function initPositions() {
       displayPositions();
     }
   });
-  
+
   document.getElementById('next-page').addEventListener('click', function(e) {
     e.preventDefault();
     const maxPage = Math.ceil(totalPositions.length / pageSize);
@@ -53,7 +53,7 @@ function initPositions() {
       displayPositions();
     }
   });
-  
+
   // リアルタイム更新の設定
   setupRealtimeUpdates();
 }
@@ -65,10 +65,10 @@ function updateFilters() {
   currentFilters.exchangeId = document.getElementById('exchange-filter').value;
   currentFilters.symbol = document.getElementById('symbol-filter').value;
   currentFilters.strategyKey = document.getElementById('strategy-filter').value;
-  
+
   // フィルター変更時は1ページ目に戻る
   currentPage = 1;
-  
+
   // データを再読み込み
   loadPositions();
 }
@@ -78,7 +78,7 @@ function updateFilters() {
  */
 function loadPositions() {
   const container = document.getElementById('positions-container');
-  
+
   // ローディング表示
   container.innerHTML = `
     <div class="text-center py-5">
@@ -87,9 +87,9 @@ function loadPositions() {
       </div>
     </div>
   `;
-  
+
   // クエリパラメータの構築
-  let queryParams = [];
+  const queryParams = [];
   if (currentFilters.exchangeId !== 'all') {
     queryParams.push(`exchange=${encodeURIComponent(currentFilters.exchangeId)}`);
   }
@@ -99,9 +99,9 @@ function loadPositions() {
   if (currentFilters.strategyKey !== 'all') {
     queryParams.push(`strategy=${encodeURIComponent(currentFilters.strategyKey)}`);
   }
-  
+
   const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-  
+
   // APIからデータ取得
   fetch(`/api/filled-positions${queryString}`)
     .then(response => response.json())
@@ -114,13 +114,13 @@ function loadPositions() {
         `;
         return;
       }
-      
+
       // フィルターオプションを更新
       updateFilterOptions(data.positions);
-      
+
       // 全ポジションデータを保存
       totalPositions = data.positions;
-      
+
       // ページングを使用してポジションを表示
       displayPositions();
     })
@@ -142,32 +142,32 @@ function updateFilterOptions(positions) {
   const exchanges = new Set();
   const symbols = new Set();
   const strategies = new Set();
-  
+
   positions.forEach(position => {
     exchanges.add(position.exchange);
     symbols.add(position.symbol);
     strategies.add(position.strategy);
   });
-  
+
   // 現在の選択値を保存
   const currentExchange = document.getElementById('exchange-filter').value;
   const currentSymbol = document.getElementById('symbol-filter').value;
   const currentStrategy = document.getElementById('strategy-filter').value;
-  
+
   // 取引所フィルターを更新
   let exchangeOptions = '<option value="all">すべて</option>';
   exchanges.forEach(exchange => {
     exchangeOptions += `<option value="${exchange}" ${currentExchange === exchange ? 'selected' : ''}>${exchange}</option>`;
   });
   document.getElementById('exchange-filter').innerHTML = exchangeOptions;
-  
+
   // 銘柄フィルターを更新
   let symbolOptions = '<option value="all">すべて</option>';
   symbols.forEach(symbol => {
     symbolOptions += `<option value="${symbol}" ${currentSymbol === symbol ? 'selected' : ''}>${symbol}</option>`;
   });
   document.getElementById('symbol-filter').innerHTML = symbolOptions;
-  
+
   // 戦略フィルターを更新
   let strategyOptions = '<option value="all">すべて</option>';
   strategies.forEach(strategy => {
@@ -186,7 +186,7 @@ function setupRealtimeUpdates() {
       // ポジションを更新（重複更新を避けるため遅延実行）
       debounceUpdate();
     });
-    
+
     // バッチ更新イベント
     realtimeUpdater.addListener('batch_update', (updates) => {
       // ポジションを更新
@@ -209,7 +209,7 @@ function debounceUpdate() {
  */
 function displayPositions() {
   const container = document.getElementById('positions-container');
-  
+
   if (totalPositions.length === 0) {
     container.innerHTML = `
       <div class="no-data-message">
@@ -219,18 +219,18 @@ function displayPositions() {
     updatePagination(0);
     return;
   }
-  
+
   // 現在のページのデータを取得
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, totalPositions.length);
   const currentPageData = totalPositions.slice(startIndex, endIndex);
-  
+
   // ポジションカードを表示
   let html = '';
   currentPageData.forEach(position => {
     const isPositive = position.unrealizedPnL > 0;
     const cardClass = isPositive ? 'positive' : position.unrealizedPnL < 0 ? 'negative' : '';
-    
+
     html += `
       <div class="position-card ${cardClass} mb-3" id="position-card-${position.exchange}-${position.symbol.replace('/', '-')}-${position.strategy}">
         <div class="card-body">
@@ -261,9 +261,9 @@ function displayPositions() {
       </div>
     `;
   });
-  
+
   container.innerHTML = html;
-  
+
   // ページネーションを更新
   updatePagination(totalPositions.length);
 }
@@ -275,10 +275,10 @@ function displayPositions() {
 function updatePagination(totalItems) {
   const paginationContainer = document.getElementById('pagination-container');
   const paginationList = paginationContainer.querySelector('ul.pagination');
-  
+
   // 総ページ数を計算
   const totalPages = Math.ceil(totalItems / pageSize);
-  
+
   // ページネーションが必要ない場合は非表示
   if (totalPages <= 1) {
     paginationContainer.style.display = 'none';
@@ -286,7 +286,7 @@ function updatePagination(totalItems) {
   } else {
     paginationContainer.style.display = 'flex';
   }
-  
+
   // 前へボタンの状態を更新
   const prevButton = document.getElementById('prev-page').parentNode;
   if (currentPage <= 1) {
@@ -294,7 +294,7 @@ function updatePagination(totalItems) {
   } else {
     prevButton.classList.remove('disabled');
   }
-  
+
   // 次へボタンの状態を更新
   const nextButton = document.getElementById('next-page').parentNode;
   if (currentPage >= totalPages) {
@@ -302,19 +302,19 @@ function updatePagination(totalItems) {
   } else {
     nextButton.classList.remove('disabled');
   }
-  
+
   // ページ番号ボタンを生成
   let pageButtonsHtml = '';
-  
+
   // 表示するページ番号の範囲を決定
   let startPage = Math.max(1, currentPage - 2);
-  let endPage = Math.min(totalPages, startPage + 4);
-  
+  const endPage = Math.min(totalPages, startPage + 4);
+
   // 範囲が5ページに満たない場合、可能であれば範囲を調整
   if (endPage - startPage < 4) {
     startPage = Math.max(1, endPage - 4);
   }
-  
+
   // 最初のページへのリンク
   if (startPage > 1) {
     pageButtonsHtml += `
@@ -330,7 +330,7 @@ function updatePagination(totalItems) {
       `;
     }
   }
-  
+
   // ページ番号ボタン
   for (let i = startPage; i <= endPage; i++) {
     pageButtonsHtml += `
@@ -339,7 +339,7 @@ function updatePagination(totalItems) {
       </li>
     `;
   }
-  
+
   // 最後のページへのリンク
   if (endPage < totalPages) {
     if (endPage < totalPages - 1) {
@@ -355,7 +355,7 @@ function updatePagination(totalItems) {
       </li>
     `;
   }
-  
+
   // 前へ・次へボタンの間にページ番号ボタンを挿入
   paginationList.innerHTML = `
     <li class="page-item ${currentPage <= 1 ? 'disabled' : ''}">
@@ -366,7 +366,7 @@ function updatePagination(totalItems) {
       <a class="page-link" href="#" id="next-page">次へ</a>
     </li>
   `;
-  
+
   // ページ番号ボタンのイベントリスナーを設定
   paginationList.querySelectorAll('a.page-link[data-page]').forEach(link => {
     link.addEventListener('click', function(e) {
@@ -375,7 +375,7 @@ function updatePagination(totalItems) {
       displayPositions();
     });
   });
-  
+
   // 前へ・次へボタンのイベントリスナーを再設定
   document.getElementById('prev-page').addEventListener('click', function(e) {
     e.preventDefault();
@@ -384,7 +384,7 @@ function updatePagination(totalItems) {
       displayPositions();
     }
   });
-  
+
   document.getElementById('next-page').addEventListener('click', function(e) {
     e.preventDefault();
     if (currentPage < totalPages) {

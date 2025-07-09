@@ -18,7 +18,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
   const strategyKey = 'INTER_EXCHANGE_ARBITRAGE';
 
   if (symbol === 'MONA/JPY') {
-    console.log(`MONA/JPY はアービトラージ戦略の対象外です`);
+    console.log('MONA/JPY はアービトラージ戦略の対象外です');
     return {
       strategy: 'Inter-Exchange Arbitrage',
       symbol,
@@ -30,7 +30,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
   try {
     // オプションから値を取得
     const { postOrderToDiscord, postErrorToDiscord, tradePercentage = 0.01 } = options;
-    
+
     // 各取引所の価格情報を取得
     const exchangePrices = [];
     for (const exchange of exchanges) {
@@ -38,10 +38,10 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         // リトライロジックを追加
         const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
         const market = exchange.markets[symbol];
-        
+
         // 手数料を取得
         let takerFee = 0.002; // デフォルト値
-        if (exchange.has['fetchTradingFees']) {
+        if (exchange.has.fetchTradingFees) {
           try {
             const fees = await exchange.fetchTradingFees();
             takerFee = fees[symbol]?.taker || 0.002;
@@ -51,17 +51,17 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         } else if (market.taker) {
           takerFee = market.taker;
         }
-        
+
         // 最小取引量を取得
         let minTradeAmount = market.limits?.amount?.min || amount;
         if (exchange.id === 'bitflyer' && options.bitflyerMinTradeAmounts && options.bitflyerMinTradeAmounts[symbol]) {
           minTradeAmount = options.bitflyerMinTradeAmounts[symbol];
         }
-        
+
         // 精度を取得
         const pricePrecision = market.precision?.price || 8;
         const amountPrecision = market.precision?.amount || 8;
-        
+
         exchangePrices.push({
           exchange,
           id: exchange.id,
@@ -79,7 +79,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         }
       }
     }
-    
+
     // 価格情報が2つ以上ない場合は終了
     if (exchangePrices.length < 2) {
       console.log(`アービトラージに必要な取引所情報が不足しています: ${symbol}`);
@@ -89,11 +89,11 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         error: '取引所情報が不足しています'
       };
     }
-    
+
     // 最も高い買値と最も低い売値を見つける
     let highestBid = { price: 0, exchange: null };
     let lowestAsk = { price: Number.MAX_VALUE, exchange: null };
-    
+
     for (const priceInfo of exchangePrices) {
       if (priceInfo.bid > highestBid.price) {
         highestBid = { price: priceInfo.bid, exchange: priceInfo };
@@ -102,7 +102,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         lowestAsk = { price: priceInfo.ask, exchange: priceInfo };
       }
     }
-    
+
     // 同じ取引所の場合はアービトラージできない
     if (highestBid.exchange.id === lowestAsk.exchange.id) {
       console.log(`同じ取引所内ではアービトラージできません: ${symbol}`);
@@ -114,14 +114,14 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
         signal: 'none'
       };
     }
-    
+
     // 利益率を計算（手数料を考慮）
     const buyFee = lowestAsk.price * lowestAsk.exchange.takerFee;
     const sellFee = highestBid.price * highestBid.exchange.takerFee;
     const grossProfit = highestBid.price - lowestAsk.price;
     const netProfit = grossProfit - buyFee - sellFee;
     const profitPercent = (netProfit / lowestAsk.price) * 100;
-    
+
     // 最小取引量を考慮
     const maxMinTradeAmount = Math.max(
       lowestAsk.exchange.minTradeAmount,
@@ -130,74 +130,74 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
     // 固定の取引量ではなく、利用可能な資金の割合に基づいて計算する
     // ただし、最小取引量は確保する
     const tradeAmount = Math.max(maxMinTradeAmount, amount);
-    
+
     // 精度に合わせて丸める
     // amountPrecisionのデフォルト値を設定
     const lowestAskPrecision = lowestAsk.exchange.amountPrecision || 8;
     const highestBidPrecision = highestBid.exchange.amountPrecision || 8;
-    
+
     let formattedAmount = parseFloat(tradeAmount.toFixed(
       Math.min(lowestAskPrecision, highestBidPrecision)
     ));
-    
+
     // 最小精度（0.0001）を下回らないようにする
     formattedAmount = Math.max(formattedAmount, 0.0001);
-    
+
     // 利益率が閾値を超えた場合に取引を実行
     if (profitPercent >= minProfitPercent) {
       console.log(`アービトラージ機会検出: ${symbol} - 買い: ${lowestAsk.exchange.id} (${lowestAsk.price}), 売り: ${highestBid.exchange.id} (${highestBid.price}), 利益率: ${profitPercent.toFixed(2)}%`);
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[アービトラージ] 機会検出: ${symbol} - 買い: ${lowestAsk.exchange.id} (${lowestAsk.price}), 売り: ${highestBid.exchange.id} (${highestBid.price}), 利益率: ${profitPercent.toFixed(2)}%`);
       }
-      
+
       // 取引所A（最低売値）での注文実行
       const exchangeA = lowestAsk.exchange.exchange;
       const exchangeAId = lowestAsk.exchange.id;
       const buyPriceA = lowestAsk.price;
       const sellPriceA = highestBid.price;
-      
+
       // 取引所B（最高買値）での注文実行
       const exchangeB = highestBid.exchange.exchange;
       const exchangeBId = highestBid.exchange.id;
       const buyPriceB = lowestAsk.price;
       const sellPriceB = highestBid.price;
-      
+
       // 通貨情報を取得
       const baseCurrency = symbol.split('/')[1];
       const quoteCurrency = symbol.split('/')[0];
-      
+
       // 精度情報を設定
       const lowestAskPrecision = lowestAsk.exchange.amountPrecision || 8;
       const highestBidPrecision = highestBid.exchange.amountPrecision || 8;
       const amountPrecision = Math.min(lowestAskPrecision, highestBidPrecision);
-      
+
       // 取引所Aでの注文処理
       try {
         // 利用可能な資金を確認
         const balanceA = await exchangeA.fetchBalance();
         const availableFundsA = balanceA.free[baseCurrency];
         const availableAssetA = balanceA.free[quoteCurrency];
-        
+
         // 利用可能な資金の割合に基づいて取引量を計算
         const maxBuyAmountA = availableFundsA * tradePercentage / buyPriceA;
         let adjustedAmountA = Math.max(formattedAmount, maxBuyAmountA);
-        
+
         // 精度を考慮して調整
         adjustedAmountA = parseFloat(adjustedAmountA.toFixed(amountPrecision));
         adjustedAmountA = Math.max(adjustedAmountA, 0.0001);
-        
+
         // 取引所Aでの買い注文
         if (availableFundsA >= buyPriceA * adjustedAmountA) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             // await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-            
+
             // 買い注文を作成
             const buyOrderA = await exchangeA.createLimitBuyOrder(symbol, adjustedAmountA, buyPriceA);
             if (postOrderToDiscord) {
               postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeAId} - ${symbol} - 価格: ${buyPriceA}, 数量: ${adjustedAmountA}`);
             }
-            
+
             addOrder(exchangeA, symbol, strategyKey, 'buy', adjustedAmountA, buyPriceA, buyOrderA.id, 'limit');
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeAId} - ${symbol}`, error);
@@ -211,19 +211,19 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${exchangeAId} - ${symbol} - 必要: ${buyPriceA * adjustedAmountA}, 利用可能: ${availableFundsA}`);
           }
         }
-        
+
         // 取引所Aでの売り注文
         // 戦略で買った額を取得
         // tradeRecordsパラメータを追加し、awaitを使用
         const inyoBuyAmountA = await formattedAvailableAmount(exchangeA, symbol, 'INTER_EXCHANGE_ARBITRAGE', amountPrecision);
-        
+
         // 売却量を戦略で買った量のみに設定
         adjustedAmountA = parseFloat(inyoBuyAmountA.toFixed(amountPrecision));
         console.log(`売却量を買い分のみに設定しました: ${exchangeAId} - ${symbol} - 買い分: ${inyoBuyAmountA}, 売却量: ${adjustedAmountA}`);
         if (postOrderToDiscord) {
           postOrderToDiscord(`[アービトラージ] 売却量を買い分のみに設定しました: ${exchangeAId} - ${symbol} - 買い分: ${inyoBuyAmountA}, 売却量: ${adjustedAmountA}`);
         }
-        
+
         if (adjustedAmountA < 0.0001) {
           console.log(`調整後の売却量が最小取引量より小さいため、売り注文はスキップします: ${exchangeAId} - ${symbol} - 調整後: ${adjustedAmountA}`);
           if (postOrderToDiscord) {
@@ -233,13 +233,13 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             // await orderCheckCancel(exchangeA, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-            
+
             // 売り注文を作成
             const sellOrderA = await exchangeA.createLimitSellOrder(symbol, adjustedAmountA, sellPriceA);
             if (postOrderToDiscord) {
               postOrderToDiscord(`[アービトラージ] 売り注文実行: ${exchangeAId} - ${symbol} - 価格: ${sellPriceA}, 数量: ${adjustedAmountA}`);
             }
-            
+
             // 取引記録を更新
             addOrder(exchangeA, symbol, strategyKey, 'sell', adjustedAmountA, sellPriceA, sellOrderA.id, 'limit');
           } catch (error) {
@@ -260,34 +260,34 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           await postErrorToDiscord(`[アービトラージ] 取引所Aでの注文処理に失敗しました: ${exchangeAId} - ${symbol} - ${error.message}`);
         }
       }
-      
+
       // 取引所Bでの注文処理
       try {
         // 利用可能な資金を確認
         const balanceB = await exchangeB.fetchBalance();
         const availableFundsB = balanceB.free[baseCurrency];
         const availableAssetB = balanceB.free[quoteCurrency];
-        
+
         // 利用可能な資金の割合に基づいて取引量を計算
         const maxBuyAmountB = availableFundsB * tradePercentage / buyPriceB;
         let adjustedAmountB = Math.max(formattedAmount, maxBuyAmountB);
-        
+
         // 精度を考慮して調整
         adjustedAmountB = parseFloat(adjustedAmountB.toFixed(amountPrecision));
         adjustedAmountB = Math.max(adjustedAmountB, 0.0001);
-        
+
         // 取引所Bでの買い注文
         if (availableFundsB >= buyPriceB * adjustedAmountB) {
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             // await orderCheckCancel(exchangeB, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-            
+
             // 買い注文を作成
             const buyOrderB = await exchangeB.createLimitBuyOrder(symbol, adjustedAmountB, buyPriceB);
             if (postOrderToDiscord) {
               postOrderToDiscord(`[アービトラージ] 買い注文実行: ${exchangeBId} - ${symbol} - 価格: ${buyPriceB}, 数量: ${adjustedAmountB}`);
             }
-            
+
             addOrder(exchangeB, symbol, strategyKey, 'buy', adjustedAmountB, buyPriceB, buyOrderB.id, 'limit');
           } catch (error) {
             console.error(`買い注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
@@ -301,18 +301,18 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             postOrderToDiscord(`[アービトラージ] 資金不足のため買い注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${buyPriceB * adjustedAmountB}, 利用可能: ${availableFundsB}`);
           }
         }
-        
+
         // 取引所Bでの売り注文
         // 戦略で買った額を取得
-        const inyoBuyAmountB = await formattedAvailableAmount(exchangeB, symbol, "INTER_EXCHANGE_ARBITRAGE", amountPrecision);
-        
+        const inyoBuyAmountB = await formattedAvailableAmount(exchangeB, symbol, 'INTER_EXCHANGE_ARBITRAGE', amountPrecision);
+
         // 売却量を戦略で買った量のみに設定
         adjustedAmountB = parseFloat(inyoBuyAmountB.toFixed(amountPrecision));
         console.log(`売却量を買い分のみに設定しました: ${exchangeBId} - ${symbol} - 買い分: ${inyoBuyAmountB}, 売却量: ${adjustedAmountB}`);
         if (postOrderToDiscord) {
           postOrderToDiscord(`[アービトラージ] 売却量を買い分のみに設定しました: ${exchangeBId} - ${symbol} - 買い分: ${inyoBuyAmountB}, 売却量: ${adjustedAmountB}`);
         }
-        
+
         if (adjustedAmountB < 0.0001) {
           console.log(`調整後の売却量が最小取引量より小さいため、売り注文はスキップします: ${exchangeBId} - ${symbol} - 調整後: ${adjustedAmountB}`);
           if (postOrderToDiscord) {
@@ -322,13 +322,13 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           try {
             // 注文数をチェックし、必要に応じて古い注文をキャンセル
             // await orderCheckCancel(exchangeB, symbol, config.cancelOrderThreshold, postOrderToDiscord);
-            
+
             // 売り注文を作成
             const sellOrderB = await exchangeB.createLimitSellOrder(symbol, adjustedAmountB, sellPriceB);
             if (postOrderToDiscord) {
               postOrderToDiscord(`[アービトラージ] 売り注文実行: ${exchangeBId} - ${symbol} - 価格: ${sellPriceB}, 数量: ${adjustedAmountB}`);
             }
-            
+
             addOrder(exchangeB, symbol, strategyKey, 'sell', adjustedAmountB, sellPriceB, sellOrderB.id, 'limit');
           } catch (error) {
             console.error(`売り注文の実行に失敗しました: ${exchangeBId} - ${symbol}`, error);
@@ -342,7 +342,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
             postOrderToDiscord(`[アービトラージ] 資産不足のため売り注文をスキップ: ${exchangeBId} - ${symbol} - 必要: ${adjustedAmountB}, 利用可能: ${availableAssetB}`);
           }
         }
-        
+
         // 取引結果を報告
         const totalProfit = netProfit * Math.min(adjustedAmountA || 0, adjustedAmountB || 0);
         if (postOrderToDiscord) {
@@ -354,7 +354,7 @@ async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0,
           postErrorToDiscord(`[アービトラージ] 取引所Bでの注文処理に失敗しました: ${exchangeBId} - ${symbol} - ${error.message}`);
         }
       }
-      
+
       return {
         strategy: 'Inter-Exchange Arbitrage',
         symbol,

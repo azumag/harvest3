@@ -59,7 +59,7 @@ class TransactionalOrderManager {
 
     } catch (error) {
       console.error(`[トランザクショナル注文] エラー: ${transactionId} - ${error.message}`);
-      
+
       // ロールバック処理
       await this.rollbackTransaction(transactionId, preOrder, exchangeOrder, error);
 
@@ -78,7 +78,7 @@ class TransactionalOrderManager {
    */
   async saveOrderBeforeExecution(transactionId, symbol, side, amount, price, options) {
     const preOrderId = `pre_${transactionId}`;
-    
+
     const preOrder = {
       id: preOrderId,
       orderId: preOrderId,
@@ -101,7 +101,7 @@ class TransactionalOrderManager {
     try {
       await addOrderMongoDB(preOrder);
       this.pendingOrders.set(transactionId, preOrder);
-      
+
       console.log(`[Phase 1] 事前保存完了: ${preOrderId} 戦略: ${preOrder.strategy}`);
       return preOrder;
 
@@ -124,7 +124,7 @@ class TransactionalOrderManager {
 
         let order;
         if (options.type === 'market') {
-          order = side === 'buy' 
+          order = side === 'buy'
             ? await this.exchange.createMarketBuyOrder(symbol, amount, params)
             : await this.exchange.createMarketSellOrder(symbol, amount, params);
         } else {
@@ -143,7 +143,7 @@ class TransactionalOrderManager {
       } catch (error) {
         lastError = error;
         console.warn(`[Phase 2] 試行 ${attempt} 失敗: ${error.message}`);
-        
+
         if (attempt < this.maxRetries) {
           await this.sleep(this.retryDelay * attempt);
         }
@@ -181,7 +181,7 @@ class TransactionalOrderManager {
 
       // Update the existing pre-saved order instead of creating a new one
       const result = await updateOrderByOrderId(preOrder.orderId, updateData);
-      
+
       if (result.matchedCount === 0) {
         console.warn(`[Phase 3] 事前保存注文が見つかりません: ${preOrder.orderId}`);
         // If pre-order not found, create new order as fallback
@@ -190,7 +190,7 @@ class TransactionalOrderManager {
           timestamp: preOrder.timestamp
         });
       }
-      
+
       console.log(`[Phase 3] 注文更新完了: ${exchangeOrder.id} (事前ID: ${preOrder.id})`);
 
     } catch (error) {
@@ -212,7 +212,7 @@ class TransactionalOrderManager {
 
     this.completedOrders.set(transactionId, transaction);
     this.pendingOrders.delete(transactionId);
-    
+
     console.log(`[Phase 4] トランザクション完了: ${transactionId}`);
   }
 
@@ -266,8 +266,8 @@ class TransactionalOrderManager {
    * ロールバック通知
    */
   async notifyRollback(transactionId, preOrder, exchangeOrder, originalError) {
-    let message = `⚠️ **トランザクショナル注文ロールバック**\n` +
-                 `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    let message = '⚠️ **トランザクショナル注文ロールバック**\n' +
+                 '━━━━━━━━━━━━━━━━━━━━━━━\n' +
                  `🆔 **トランザクション**: ${transactionId}\n`;
 
     if (preOrder) {
@@ -305,11 +305,11 @@ class TransactionalOrderManager {
    */
   buildOrderParams(options) {
     const params = {};
-    
+
     if (options.type === 'post_only' || options.postOnly) {
       params.postOnly = true;
     }
-    
+
     if (options.timeInForce) {
       params.timeInForce = options.timeInForce;
     }
@@ -346,7 +346,7 @@ class TransactionalOrderManager {
         try {
           // 関連する取引から正しい戦略を推測
           const correctStrategy = await this.inferCorrectStrategy(order);
-          
+
           if (correctStrategy && correctStrategy !== 'OUTSIDE') {
             // 正しい戦略で更新
             const repairData = {
@@ -357,7 +357,7 @@ class TransactionalOrderManager {
 
             await updateOrderByOrderId(order.orderId, repairData);
             repairedCount++;
-            
+
             console.log(`[孤立注文修復] 修復: ${order.id} ${order.strategy} → ${correctStrategy}`);
           }
 
@@ -381,7 +381,7 @@ class TransactionalOrderManager {
   async inferCorrectStrategy(order) {
     // 実装: 注文の前後の取引、価格、時間などから戦略を推測
     // この実装は複雑になるため、簡単なバージョンを提供
-    
+
     // デフォルトの推測ロジック
     if (order.type === 'limit' && order.side === 'buy') {
       return 'RSI'; // 買い注文の多くはRSI戦略と仮定

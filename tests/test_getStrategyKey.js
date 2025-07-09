@@ -15,7 +15,7 @@ const testCases = [
   { input: 'RSI', expected: 'RSI' },
   { input: 'マルチ指標戦略', expected: 'MULTI_INDICATOR' },
   { input: 'MULTI_INDICATOR', expected: 'MULTI_INDICATOR' },
-  { input: 'UNKNOWN_STRATEGY', expected: 'UNKNOWN_STRATEGY' }, // Should return as-is
+  { input: 'UNKNOWN_STRATEGY', expected: 'UNKNOWN_STRATEGY' } // Should return as-is
 ];
 
 let passedTests = 0;
@@ -24,7 +24,7 @@ let failedTests = 0;
 testCases.forEach((test, index) => {
   const result = getStrategyKey(test.input);
   const passed = result === test.expected;
-  
+
   if (passed) {
     console.log(`✅ Test ${index + 1} PASSED: getStrategyKey('${test.input}') => '${result}'`);
     passedTests++;
@@ -34,15 +34,15 @@ testCases.forEach((test, index) => {
   }
 });
 
-console.log(`\n=== Test Summary ===`);
+console.log('\n=== Test Summary ===');
 console.log(`Total tests: ${testCases.length}`);
 console.log(`Passed: ${passedTests}`);
 console.log(`Failed: ${failedTests}`);
 
 if (failedTests === 0) {
-  console.log(`\n✅ All tests passed! The getStrategyKey function is working correctly.`);
+  console.log('\n✅ All tests passed! The getStrategyKey function is working correctly.');
   process.exit(0);
 } else {
-  console.log(`\n❌ Some tests failed. Please check the implementation.`);
+  console.log('\n❌ Some tests failed. Please check the implementation.');
   process.exit(1);
 }

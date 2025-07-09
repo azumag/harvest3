@@ -14,24 +14,24 @@ function calculateCalmarRatio(annualizedReturn, maxDrawdown) {
   if (typeof annualizedReturn !== 'number' || typeof maxDrawdown !== 'number') {
     return 0;
   }
-  
+
   if (!isFinite(annualizedReturn) || !isFinite(maxDrawdown) || isNaN(annualizedReturn) || isNaN(maxDrawdown)) {
     return 0;
   }
-  
+
   // ゼロ除算対策 - 最大値を設定
   if (Math.abs(maxDrawdown) < 1e-10) {
     // ドローダウンが非常に小さい場合、固定値を返す
     return annualizedReturn >= 0 ? 100 : -100;
   }
-  
+
   const calmarRatio = annualizedReturn / Math.abs(maxDrawdown);
-  
+
   // 結果の妥当性チェック
   if (!isFinite(calmarRatio) || isNaN(calmarRatio)) {
     return 0;
   }
-  
+
   // 極端な値を制限
   return Math.max(-1000, Math.min(1000, calmarRatio));
 }
@@ -46,21 +46,21 @@ function calculateDownsideDeviation(returns, targetReturn = 0) {
   if (!Array.isArray(returns) || returns.length === 0) {
     return 0;
   }
-  
+
   // 負のリターン（ターゲット以下）のみを抽出
   const downsideReturns = returns
     .filter(r => typeof r === 'number' && !isNaN(r))
     .filter(r => r < targetReturn)
     .map(r => r - targetReturn);
-  
+
   if (downsideReturns.length === 0) {
     return 0;
   }
-  
+
   // ダウンサイド分散を計算
   const downsideVariance = downsideReturns
     .reduce((sum, r) => sum + (r * r), 0) / downsideReturns.length;
-  
+
   return Math.sqrt(downsideVariance);
 }
 
@@ -74,41 +74,41 @@ function calculateSortinoRatio(returns, riskFreeRate = 0.02) {
   if (!Array.isArray(returns) || returns.length === 0) {
     return 0;
   }
-  
+
   const validReturns = returns.filter(r => typeof r === 'number' && !isNaN(r));
-  
+
   if (validReturns.length === 0) {
     return 0;
   }
-  
+
   // 年換算リターンを計算
   const annualizedReturn = calculateAnnualizedReturn(validReturns);
-  
+
   // 日次リスクフリーレートに変換
   const dailyRiskFreeRate = riskFreeRate / 365;
-  
+
   // ダウンサイド偏差を計算
   const downsideDeviation = calculateDownsideDeviation(validReturns, dailyRiskFreeRate);
-  
+
   if (Math.abs(downsideDeviation) < 1e-10) {
     // ダウンサイド偏差が非常に小さい場合、固定値を返す
     return annualizedReturn > riskFreeRate ? 100 : 0;
   }
-  
+
   // 年換算ダウンサイド偏差
   const annualizedDownsideDeviation = downsideDeviation * Math.sqrt(365);
-  
+
   if (!isFinite(annualizedDownsideDeviation) || annualizedDownsideDeviation <= 0) {
     return 0;
   }
-  
+
   const sortinoRatio = (annualizedReturn - riskFreeRate) / annualizedDownsideDeviation;
-  
+
   // 結果の妥当性チェックと制限
   if (!isFinite(sortinoRatio) || isNaN(sortinoRatio)) {
     return 0;
   }
-  
+
   return Math.max(-1000, Math.min(1000, sortinoRatio));
 }
 
@@ -122,30 +122,30 @@ function calculateVaR(returns, confidenceLevel = 0.95) {
   if (!Array.isArray(returns) || returns.length === 0) {
     return 0;
   }
-  
+
   const validReturns = returns
     .filter(r => typeof r === 'number' && isFinite(r) && !isNaN(r))
     .sort((a, b) => a - b);
-  
+
   if (validReturns.length === 0) {
     return 0;
   }
-  
+
   // 信頼区間の妥当性チェック
   if (confidenceLevel <= 0 || confidenceLevel >= 1) {
     confidenceLevel = 0.95;
   }
-  
+
   // パーセンタイルインデックスを計算
   const percentileIndex = Math.floor((1 - confidenceLevel) * validReturns.length);
   const adjustedIndex = Math.max(0, Math.min(percentileIndex, validReturns.length - 1));
-  
+
   const varValue = validReturns[adjustedIndex];
-  
+
   if (!isFinite(varValue) || isNaN(varValue)) {
     return 0;
   }
-  
+
   return varValue;
 }
 
@@ -158,26 +158,26 @@ function calculateAnnualizedReturn(returns) {
   if (!Array.isArray(returns) || returns.length === 0) {
     return 0;
   }
-  
+
   const validReturns = returns.filter(r => typeof r === 'number' && isFinite(r) && !isNaN(r));
-  
+
   if (validReturns.length === 0) {
     return 0;
   }
-  
+
   const averageDailyReturn = validReturns.reduce((sum, r) => sum + r, 0) / validReturns.length;
-  
+
   if (!isFinite(averageDailyReturn) || isNaN(averageDailyReturn)) {
     return 0;
   }
-  
+
   // 365日で年換算
   const annualizedReturn = averageDailyReturn * 365;
-  
+
   if (!isFinite(annualizedReturn) || isNaN(annualizedReturn)) {
     return 0;
   }
-  
+
   // 極端な値を制限（年率-10000%から+10000%まで）
   return Math.max(-100, Math.min(100, annualizedReturn));
 }

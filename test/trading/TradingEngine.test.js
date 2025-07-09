@@ -69,7 +69,7 @@ describe('TradingEngine Base Class', () => {
     );
 
     const result = engine.calculateTradeAmount(100000, 50000, 0.1);
-    
+
     expect(result.amount).toBeCloseTo(0.2, 4); // (100000 * 0.1) / 50000
     expect(result.isValid).toBe(true);
     expect(result.validationMessage).toBe('Valid');
@@ -85,7 +85,7 @@ describe('TradingEngine Base Class', () => {
     );
 
     const result = engine.calculateTradeAmount(1, 50000, 0.1); // Very small amount
-    
+
     expect(result.isValid).toBe(false);
     expect(result.validationMessage).toContain('below minimum');
   });
@@ -139,13 +139,13 @@ describe('BuyOrderExecutor', () => {
   test('should execute buy order successfully in backtest mode', async () => {
     // Mock the required methods
     buyExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({ 
-      free: { JPY: 100000 } 
+    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({
+      free: { JPY: 100000 }
     });
     buyExecutor.getRealizedPnL = jest.fn().mockResolvedValue(1000);
-    
+
     const result = await buyExecutor.execute(50000, { signal: 'buy' });
-    
+
     expect(result.success).toBe(true);
     expect(result.type).toBe('buy');
     expect(result.signal).toBe('buy');
@@ -153,12 +153,12 @@ describe('BuyOrderExecutor', () => {
 
   test('should handle insufficient funds', async () => {
     buyExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({ 
+    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({
       free: { JPY: 1 } // Insufficient funds
     });
-    
+
     const result = await buyExecutor.execute(50000, { signal: 'buy' });
-    
+
     expect(result.success).toBe(false);
     expect(result.reason).toContain('Insufficient funds');
   });
@@ -195,13 +195,13 @@ describe('SellOrderExecutor', () => {
     formattedAvailableAmount.mockResolvedValue(0.5); // Sufficient amount
 
     sellExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    sellExecutor.getAvailableBalance = jest.fn().mockResolvedValue({ 
-      free: { BTC: 0.5 } 
+    sellExecutor.getAvailableBalance = jest.fn().mockResolvedValue({
+      free: { BTC: 0.5 }
     });
     sellExecutor.getRealizedPnL = jest.fn().mockResolvedValue(1500);
-    
+
     const result = await sellExecutor.execute(50000, { signal: 'sell' });
-    
+
     expect(result.success).toBe(true);
     expect(result.type).toBe('sell');
     expect(result.signal).toBe('sell');
@@ -212,9 +212,9 @@ describe('SellOrderExecutor', () => {
     formattedAvailableAmount.mockResolvedValue(0.00001); // Below minimum
 
     sellExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    
+
     const result = await sellExecutor.execute(50000, { signal: 'sell' });
-    
+
     expect(result.success).toBe(false);
     expect(result.reason).toContain('Execution error');
   });
@@ -267,7 +267,7 @@ describe('BacktestExecutor', () => {
     ];
 
     const unique = backtestExecutor.removeDuplicateParameters(params);
-    
+
     expect(unique).toHaveLength(2);
     expect(unique[0]).toEqual({ period: 14, threshold: 0.5 });
     expect(unique[1]).toEqual({ period: 20, threshold: 0.3 });
@@ -281,7 +281,7 @@ describe('BacktestExecutor', () => {
     ];
 
     const ranked = backtestExecutor.rankResults(results);
-    
+
     expect(ranked[0].finalBaseFund).toBe(11000);
     expect(ranked[1].finalBaseFund).toBe(10500);
     expect(ranked[2].finalBaseFund).toBe(10200);
@@ -292,7 +292,7 @@ describe('Integration Tests - Behavior Preservation', () => {
   test('refactored executeBuyOrder should behave identically to original', async () => {
     // This test would compare outputs of original vs refactored functions
     // with identical inputs to ensure behavior is preserved
-    
+
     const mockInputs = {
       exchange: { id: 'bitbank' },
       symbol: 'BTC/JPY',
@@ -304,7 +304,7 @@ describe('Integration Tests - Behavior Preservation', () => {
       signalInfo: { signal: 'buy' },
       options: { backtest: true }
     };
-    
+
     // Mock dependencies for consistent behavior
     const buyExecutor = new BuyOrderExecutor(
       mockInputs.exchange,
@@ -314,19 +314,19 @@ describe('Integration Tests - Behavior Preservation', () => {
       mockInputs.marketParameters,
       mockInputs.options
     );
-    
+
     // Ensure mocks are set up for predictable results
     buyExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({ 
-      free: { JPY: 100000 } 
+    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({
+      free: { JPY: 100000 }
     });
     buyExecutor.getRealizedPnL = jest.fn().mockResolvedValue(0);
-    
+
     const refactoredResult = await buyExecutor.execute(
-      mockInputs.currentPrice, 
+      mockInputs.currentPrice,
       mockInputs.signalInfo
     );
-    
+
     // Verify the result structure matches original function
     expect(refactoredResult).toHaveProperty('success');
     expect(refactoredResult).toHaveProperty('strategy');
@@ -338,7 +338,7 @@ describe('Integration Tests - Behavior Preservation', () => {
 describe('Performance Tests', () => {
   test('refactored components should perform within acceptable limits', async () => {
     const startTime = Date.now();
-    
+
     const buyExecutor = new BuyOrderExecutor(
       { id: 'bitbank' },
       'BTC/JPY',
@@ -347,18 +347,18 @@ describe('Performance Tests', () => {
       { amountPrecision: 4, minTradeAmount: 0.0001 },
       { backtest: true }
     );
-    
+
     // Mock dependencies for performance test
     buyExecutor.performRiskManagement = jest.fn().mockResolvedValue({ allowed: true });
-    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({ 
-      free: { JPY: 100000 } 
+    buyExecutor.getAvailableBalance = jest.fn().mockResolvedValue({
+      free: { JPY: 100000 }
     });
     buyExecutor.getRealizedPnL = jest.fn().mockResolvedValue(0);
-    
+
     await buyExecutor.execute(50000, { signal: 'buy' });
-    
+
     const executionTime = Date.now() - startTime;
-    
+
     // Should execute in under 100ms (much faster than original 320+ line function)
     expect(executionTime).toBeLessThan(100);
   });

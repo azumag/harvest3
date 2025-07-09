@@ -21,7 +21,7 @@ const strategies = {}; // 通貨ペアごとの戦略インスタンスを保持
  */
 async function startHFTStrategy(config) {
   logger.header('🚀 Bitbank HFT Strategy Initialization');
-  
+
   if (!config || !config.strategies || !config.strategies.HFT || config.strategies.HFT.enabled !== true) {
     logger.warn('HFT Strategy is disabled in the config.');
     logger.info('To enable HFT, set HFT_ENABLED=true in your .env file');
@@ -118,5 +118,5 @@ function stopHFTStrategy() {
 // src/config.js から呼び出せるようにエクスポート
 module.exports = {
   startHFTStrategy,
-  stopHFTStrategy,
+  stopHFTStrategy
 };

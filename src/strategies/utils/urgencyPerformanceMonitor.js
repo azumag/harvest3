@@ -10,16 +10,16 @@ class UrgencyPerformanceMonitor {
     this.enabled = options.enabled !== false;
     this.measurementWindow = options.measurementWindow || 86400000; // 24時間
     this.minSampleSize = options.minSampleSize || 10;
-    
+
     // パフォーマンス追跡データ
     this.urgencyHistory = new Map(); // urgencyレベル別の成果追跡
     this.adjustmentImpacts = new Map(); // 調整要因別の効果測定
     this.timeBasedEffects = new Map(); // 時間帯別効果
-    
+
     // A/Bテスト用のコントロール群
     this.controlGroup = new Map(); // 静的urgencyでの結果
     this.testGroup = new Map();    // 動的urgencyでの結果
-    
+
     console.log('[UrgencyPerformanceMonitor] 初期化完了');
   }
 
@@ -30,7 +30,9 @@ class UrgencyPerformanceMonitor {
    * @param {Object} result - 実行結果
    */
   recordOrderExecution(orderData, urgencyData, result) {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      return;
+    }
 
     try {
       const timestamp = Date.now();
@@ -47,14 +49,14 @@ class UrgencyPerformanceMonitor {
         finalUrgency: urgencyData.final,
         adjustmentFactor: urgencyData.adjustmentFactor,
         factors: urgencyData.factors,
-        
+
         // 実行結果
         success: result.success,
         executionTime: result.executionTime,
         slippage: result.slippage,
         fillRate: result.fillRate,
         avgPrice: result.avgPrice,
-        
+
         // 市場状況
         marketCondition: {
           volatility: urgencyData.factors?.volatility || 0,
@@ -66,13 +68,13 @@ class UrgencyPerformanceMonitor {
 
       // urgencyレベル別統計
       this.updateUrgencyStats(urgencyData.final, record);
-      
+
       // 調整要因別効果測定
       this.updateAdjustmentImpacts(urgencyData, record);
-      
+
       // 時間帯別効果
       this.updateTimeBasedEffects(timestamp, record);
-      
+
       // A/Bテスト記録
       this.updateABTestData(urgencyData, record);
 
@@ -103,7 +105,7 @@ class UrgencyPerformanceMonitor {
 
     const stats = this.urgencyHistory.get(urgencyLevel);
     stats.count++;
-    
+
     if (record.success) {
       stats.successCount++;
       stats.totalExecutionTime += record.executionTime || 0;
@@ -123,7 +125,7 @@ class UrgencyPerformanceMonitor {
    */
   updateAdjustmentImpacts(urgencyData, record) {
     const factors = ['volatility', 'portfolioRisk', 'timezone', 'performance'];
-    
+
     factors.forEach(factor => {
       const factorValue = urgencyData.factors?.[factor] || 0;
       const impactCategory = this.categorizeImpact(factorValue);
@@ -145,7 +147,7 @@ class UrgencyPerformanceMonitor {
       const impact = this.adjustmentImpacts.get(key);
       impact.count++;
       impact.totalAdjustment += Math.abs(factorValue);
-      
+
       if (record.success) {
         impact.successCount++;
         // パフォーマンススコア：実行時間とスリッページの逆数
@@ -181,10 +183,10 @@ class UrgencyPerformanceMonitor {
     const timeEffect = this.timeBasedEffects.get(timeSlot);
     timeEffect.count++;
     timeEffect.totalAdjustmentMagnitude += Math.abs(record.adjustmentFactor || 0);
-    
+
     if (record.success) {
       timeEffect.successCount++;
-      
+
       // 最適urgency分析
       const urgency = record.finalUrgency;
       if (!timeEffect.optimalUrgency.has(urgency)) {
@@ -222,7 +224,7 @@ class UrgencyPerformanceMonitor {
 
     const data = groupData.get(key);
     data.count++;
-    
+
     if (record.success) {
       data.successCount++;
       data.totalExecutionTime += record.executionTime || 0;
@@ -238,10 +240,18 @@ class UrgencyPerformanceMonitor {
    * 調整影響をカテゴリ化
    */
   categorizeImpact(value) {
-    if (value > 0.3) return 'strong_positive';
-    if (value > 0.1) return 'moderate_positive';
-    if (value > -0.1) return 'neutral';
-    if (value > -0.3) return 'moderate_negative';
+    if (value > 0.3) {
+      return 'strong_positive';
+    }
+    if (value > 0.1) {
+      return 'moderate_positive';
+    }
+    if (value > -0.1) {
+      return 'neutral';
+    }
+    if (value > -0.3) {
+      return 'moderate_negative';
+    }
     return 'strong_negative';
   }
 
@@ -299,7 +309,7 @@ class UrgencyPerformanceMonitor {
    */
   generateUrgencyAnalysis() {
     const analysis = {};
-    
+
     for (const [urgency, stats] of this.urgencyHistory) {
       if (stats.count >= this.minSampleSize) {
         analysis[urgency] = {
@@ -320,7 +330,7 @@ class UrgencyPerformanceMonitor {
    */
   generateFactorEffectiveness() {
     const effectiveness = {};
-    
+
     for (const [key, impact] of this.adjustmentImpacts) {
       if (impact.count >= this.minSampleSize) {
         effectiveness[key] = {
@@ -341,7 +351,7 @@ class UrgencyPerformanceMonitor {
    */
   generateTimeBasedInsights() {
     const insights = {};
-    
+
     for (const [timeSlot, effect] of this.timeBasedEffects) {
       if (effect.count >= this.minSampleSize) {
         insights[timeSlot] = {
@@ -402,15 +412,21 @@ class UrgencyPerformanceMonitor {
   calculateEffectiveness(impact) {
     const successWeight = 0.4;
     const performanceWeight = 0.6;
-    
+
     const successScore = impact.successRate;
     const performanceScore = Math.min(impact.performanceScore / 100, 1); // 正規化
-    
+
     const effectiveness = (successScore * successWeight) + (performanceScore * performanceWeight);
-    
-    if (effectiveness > 0.8) return 'excellent';
-    if (effectiveness > 0.6) return 'good';
-    if (effectiveness > 0.4) return 'moderate';
+
+    if (effectiveness > 0.8) {
+      return 'excellent';
+    }
+    if (effectiveness > 0.6) {
+      return 'good';
+    }
+    if (effectiveness > 0.4) {
+      return 'moderate';
+    }
     return 'poor';
   }
 
@@ -456,20 +472,28 @@ class UrgencyPerformanceMonitor {
    */
   calculateOverallImprovement(successRate, executionTime, slippage) {
     const weights = { successRate: 0.5, executionTime: 0.3, slippage: 0.2 };
-    
+
     // 正規化スコア（-1 to 1）
     const successScore = Math.max(-1, Math.min(1, successRate / 0.1)); // 10%改善で満点
     const executionScore = Math.max(-1, Math.min(1, executionTime / 1000)); // 1秒改善で満点
     const slippageScore = Math.max(-1, Math.min(1, slippage / 0.001)); // 0.1%改善で満点
 
-    const totalScore = (successScore * weights.successRate) + 
-                      (executionScore * weights.executionTime) + 
+    const totalScore = (successScore * weights.successRate) +
+                      (executionScore * weights.executionTime) +
                       (slippageScore * weights.slippage);
 
-    if (totalScore > 0.5) return 'significant_improvement';
-    if (totalScore > 0.2) return 'moderate_improvement';
-    if (totalScore > -0.2) return 'neutral';
-    if (totalScore > -0.5) return 'moderate_degradation';
+    if (totalScore > 0.5) {
+      return 'significant_improvement';
+    }
+    if (totalScore > 0.2) {
+      return 'moderate_improvement';
+    }
+    if (totalScore > -0.2) {
+      return 'neutral';
+    }
+    if (totalScore > -0.5) {
+      return 'moderate_degradation';
+    }
     return 'significant_degradation';
   }
 
@@ -482,7 +506,7 @@ class UrgencyPerformanceMonitor {
     // urgency別パフォーマンス分析に基づく推奨
     let bestUrgency = 'medium';
     let bestPerformance = 0;
-    
+
     for (const [urgency, stats] of this.urgencyHistory) {
       if (stats.count >= this.minSampleSize) {
         const performance = stats.successRate * 0.6 + (1 - stats.avgSlippage) * 0.4;

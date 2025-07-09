@@ -95,18 +95,18 @@ async function initRedisClient() {
     console.log('Redis接続が無効化されています');
     return null;
   }
-  
+
   try {
     if (!client.isReady && !client.isOpen) {
       console.log(`Redis接続を初期化しています: ${REDIS_URL}`);
       await client.connect();
-      
+
       // 接続が完了するまで待機
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Redis接続タイムアウト'));
         }, MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT + 5000); // タイムアウト値 + 5秒のマージン
-        
+
         if (client.isReady) {
           clearTimeout(timeout);
           resolve();

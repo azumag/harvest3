@@ -13,7 +13,7 @@ const { getClient, initialize: initializeRedis } = require('../src/database/redi
 // 調査対象のオーダーID
 const TARGET_ORDERS = {
   'GALA/JPY': '47148451536',
-  'OAS/JPY': '47148562118',
+  'OAS/JPY': '47148562118'
 };
 
 // メイン実行関数
@@ -28,7 +28,7 @@ async function investigateAndRepair() {
     client = getClient();
     const exchange = new ccxt.bitbank({
       apiKey: process.env.BB_API_KEY,
-      secret: process.env.BB_API_SECRET,
+      secret: process.env.BB_API_SECRET
     });
 
     for (const [symbol, orderId] of Object.entries(TARGET_ORDERS)) {
@@ -53,7 +53,7 @@ async function investigateAndRepair() {
       const positionKeys = await client.keys(positionPattern);
 
       if (positionKeys.length === 0) {
-        console.log(`  [Redis] ポジション記録なし。整合性OK。`);
+        console.log('  [Redis] ポジション記録なし。整合性OK。');
         continue;
       }
       const positionKey = positionKeys[0];

@@ -10,19 +10,19 @@ class DynamicStrategySelector {
     this.client = null;
     this.isActive = false;
     this.startTime = null;
-    
+
     // 戦略選択設定
     this.strategyConfig = {
       // 利用可能戦略
       availableStrategies: [
         'BOLLINGER_BANDS_CONSERVATIVE',
-        'BOLLINGER_BANDS_AGGRESSIVE', 
+        'BOLLINGER_BANDS_AGGRESSIVE',
         'MULTI_INDICATOR',
         'MEAN_REVERSION',
         'MACD',
         'TECHNICAL_MOMENTUM'
       ],
-      
+
       // 市場状況別戦略適性
       marketRegimeStrategies: {
         trending: {
@@ -46,7 +46,7 @@ class DynamicStrategySelector {
           avoid: []
         }
       },
-      
+
       // 戦略切り替え条件
       switchingThresholds: {
         minPerformancePeriod: 24 * 60 * 60 * 1000,  // 24時間
@@ -54,7 +54,7 @@ class DynamicStrategySelector {
         volatilityChangeThreshold: 0.2,             // 20%変化
         trendChangeThreshold: 0.15                  // 15%変化
       },
-      
+
       // 戦略パフォーマンス重み
       performanceWeights: {
         profitability: 0.4,    // 収益性
@@ -63,7 +63,7 @@ class DynamicStrategySelector {
         sharpeRatio: 0.1       // シャープレシオ
       }
     };
-    
+
     // 市場状況分析
     this.marketAnalysis = {
       currentRegime: 'neutral',
@@ -73,7 +73,7 @@ class DynamicStrategySelector {
       lastAnalysis: null,
       confidence: 0
     };
-    
+
     // 戦略パフォーマンス追跡
     this.strategyPerformance = {};
     this.performanceHistory = [];
@@ -84,10 +84,10 @@ class DynamicStrategySelector {
     try {
       this.client = redis.createClient({ url: 'redis://redis:6379' });
       await this.client.connect();
-      
+
       // 戦略パフォーマンス初期化
       await this.initializeStrategyPerformance();
-      
+
       console.log('✅ DynamicStrategySelector initialized');
       return true;
     } catch (error) {
@@ -123,40 +123,46 @@ class DynamicStrategySelector {
 
     this.isActive = true;
     this.startTime = Date.now();
-    
+
     // 初期市場分析
     await this.analyzeMarketConditions();
-    
+
     // 定期市場分析 (15分間隔)
     this.marketAnalysisInterval = setInterval(async () => {
       await this.analyzeMarketConditions();
     }, 15 * 60 * 1000);
-    
+
     // 戦略選択評価 (1時間間隔)
     this.strategyEvaluationInterval = setInterval(async () => {
       await this.evaluateAndSelectStrategies();
     }, 60 * 60 * 1000);
-    
+
     // パフォーマンス更新 (30分間隔)
     this.performanceUpdateInterval = setInterval(async () => {
       await this.updateStrategyPerformance();
     }, 30 * 60 * 1000);
-    
+
     console.log('🎉 動的戦略選択システム稼働開始');
   }
 
   async deactivate() {
     console.log('🛑 DynamicStrategySelector停止中...');
     this.isActive = false;
-    
-    if (this.marketAnalysisInterval) clearInterval(this.marketAnalysisInterval);
-    if (this.strategyEvaluationInterval) clearInterval(this.strategyEvaluationInterval);
-    if (this.performanceUpdateInterval) clearInterval(this.performanceUpdateInterval);
-    
+
+    if (this.marketAnalysisInterval) {
+      clearInterval(this.marketAnalysisInterval);
+    }
+    if (this.strategyEvaluationInterval) {
+      clearInterval(this.strategyEvaluationInterval);
+    }
+    if (this.performanceUpdateInterval) {
+      clearInterval(this.performanceUpdateInterval);
+    }
+
     if (this.client) {
       await this.client.quit();
     }
-    
+
     console.log('✅ DynamicStrategySelector停止完了');
   }
 
@@ -185,25 +191,25 @@ class DynamicStrategySelector {
   async analyzeMarketConditions() {
     try {
       console.log('\n🔍 市場状況分析実行中...');
-      
+
       // 過去24時間のデータ分析 (シミュレーション)
       const marketData = await this.getMarketData();
-      
+
       // トレンド強度計算
       const trendStrength = this.calculateTrendStrength(marketData);
-      
+
       // ボラティリティ計算
       const volatility = this.calculateVolatility(marketData);
-      
+
       // モメンタム計算
       const momentum = this.calculateMomentum(marketData);
-      
+
       // 市場体制判定
       const regime = this.determineMarketRegime(trendStrength, volatility, momentum);
-      
+
       // 信頼度計算
       const confidence = this.calculateAnalysisConfidence(trendStrength, volatility);
-      
+
       this.marketAnalysis = {
         currentRegime: regime,
         trendStrength,
@@ -212,17 +218,17 @@ class DynamicStrategySelector {
         lastAnalysis: Date.now(),
         confidence
       };
-      
+
       console.log('  市場分析結果:');
       console.log(`    市場体制: ${regime}`);
       console.log(`    トレンド強度: ${(trendStrength * 100).toFixed(1)}%`);
       console.log(`    ボラティリティ: ${(volatility * 100).toFixed(1)}%`);
       console.log(`    モメンタム: ${(momentum * 100).toFixed(1)}%`);
       console.log(`    分析信頼度: ${(confidence * 100).toFixed(1)}%`);
-      
+
       // Redis保存
       await this.saveMarketAnalysis();
-      
+
     } catch (error) {
       console.error('❌ 市場分析エラー:', error.message);
     }
@@ -234,7 +240,7 @@ class DynamicStrategySelector {
     // ここではシミュレーションデータを生成
     const data = [];
     const baseTime = Date.now() - 24 * 60 * 60 * 1000; // 24時間前
-    
+
     for (let _i = 0; _i < 24; _i++) {
       data.push({
         timestamp: baseTime + _i * 60 * 60 * 1000,
@@ -243,26 +249,33 @@ class DynamicStrategySelector {
         change: (Math.random() - 0.5) * 0.1 // ±5%変化
       });
     }
-    
+
     return data;
   }
 
   // トレンド強度計算
   calculateTrendStrength(data) {
-    if (data.length < 2) return 0;
-    
+    if (data.length < 2) {
+      return 0;
+    }
+
     let upMoves = 0;
     let downMoves = 0;
-    
+
     for (let i = 1; i < data.length; i++) {
       const change = data[i].change;
-      if (change > 0) upMoves++;
-      else if (change < 0) downMoves++;
+      if (change > 0) {
+        upMoves++;
+      } else if (change < 0) {
+        downMoves++;
+      }
     }
-    
+
     const totalMoves = upMoves + downMoves;
-    if (totalMoves === 0) return 0;
-    
+    if (totalMoves === 0) {
+      return 0;
+    }
+
     // トレンド方向性の一貫性
     const dominantDirection = Math.max(upMoves, downMoves);
     return dominantDirection / totalMoves;
@@ -270,24 +283,28 @@ class DynamicStrategySelector {
 
   // ボラティリティ計算
   calculateVolatility(data) {
-    if (data.length < 2) return 0;
-    
+    if (data.length < 2) {
+      return 0;
+    }
+
     const changes = data.slice(1).map((d, _i) => Math.abs(d.change));
     const avgVolatility = changes.reduce((sum, change) => sum + change, 0) / changes.length;
-    
+
     return Math.min(avgVolatility * 10, 1); // 正規化
   }
 
   // モメンタム計算
   calculateMomentum(data) {
-    if (data.length < 3) return 0;
-    
+    if (data.length < 3) {
+      return 0;
+    }
+
     const recent = data.slice(-6); // 最新6時間
     const earlier = data.slice(-12, -6); // その前6時間
-    
+
     const recentAvg = recent.reduce((sum, d) => sum + d.change, 0) / recent.length;
     const earlierAvg = earlier.reduce((sum, d) => sum + d.change, 0) / earlier.length;
-    
+
     return Math.max(-1, Math.min(1, (recentAvg - earlierAvg) * 5)); // 正規化
   }
 
@@ -309,7 +326,7 @@ class DynamicStrategySelector {
     // 強いトレンドまたは明確な低ボラティリティ時に高信頼度
     const trendConfidence = Math.abs(trendStrength - 0.5) * 2; // 0.5から離れるほど高信頼度
     const volatilityConfidence = volatility > 0.8 || volatility < 0.2 ? 0.8 : 0.5;
-    
+
     return (trendConfidence + volatilityConfidence) / 2;
   }
 
@@ -317,21 +334,21 @@ class DynamicStrategySelector {
   async evaluateAndSelectStrategies() {
     try {
       console.log('\n🎯 戦略評価・選択実行中...');
-      
+
       // 現在の市場体制に基づく戦略推奨
       const regimeStrategies = this.strategyConfig.marketRegimeStrategies[this.marketAnalysis.currentRegime];
-      
+
       console.log(`  市場体制: ${this.marketAnalysis.currentRegime}`);
       console.log(`  推奨戦略: ${regimeStrategies.primary.join(', ')}`);
       console.log(`  補助戦略: ${regimeStrategies.secondary.join(', ')}`);
       console.log(`  回避戦略: ${regimeStrategies.avoid.join(', ')}`);
-      
+
       // 戦略パフォーマンススコア計算
       const strategyScores = {};
-      
+
       for (const strategy of this.strategyConfig.availableStrategies) {
         let score = this.strategyPerformance[strategy].performanceScore;
-        
+
         // 市場適性ボーナス/ペナルティ
         if (regimeStrategies.primary.includes(strategy)) {
           score *= 1.3; // 30%ボーナス
@@ -340,26 +357,26 @@ class DynamicStrategySelector {
         } else if (regimeStrategies.avoid.includes(strategy)) {
           score *= 0.7; // 30%ペナルティ
         }
-        
+
         // 信頼度による調整
         const confidenceMultiplier = 0.7 + (this.marketAnalysis.confidence * 0.3);
         score *= confidenceMultiplier;
-        
+
         strategyScores[strategy] = score;
       }
-      
+
       // スコア順にソート
       const rankedStrategies = Object.entries(strategyScores)
         .sort(([,a], [,b]) => b - a)
         .map(([strategy, score]) => ({ strategy, score }));
-      
+
       console.log('\n  戦略ランキング:');
       rankedStrategies.forEach((item, index) => {
         const rank = index + 1;
         const emoji = rank <= 3 ? '🥇🥈🥉'[rank - 1] : '📊';
         console.log(`    ${rank}. ${emoji} ${item.strategy}: ${item.score.toFixed(1)}点`);
       });
-      
+
       // 選択結果記録
       const selection = {
         timestamp: Date.now(),
@@ -372,19 +389,19 @@ class DynamicStrategySelector {
           tertiary: rankedStrategies[2].strategy
         }
       };
-      
+
       this.selectionHistory.push(selection);
-      
+
       // 最新50件のみ保持
       if (this.selectionHistory.length > 50) {
         this.selectionHistory = this.selectionHistory.slice(-50);
       }
-      
+
       // Redis保存
       await this.saveStrategySelection(selection);
-      
+
       console.log(`\n  🎯 最適戦略選択: ${selection.recommendations.primary}`);
-      
+
     } catch (error) {
       console.error('❌ 戦略評価・選択エラー:', error.message);
     }
@@ -394,18 +411,20 @@ class DynamicStrategySelector {
   async updateStrategyPerformance() {
     try {
       console.log('\n📊 戦略パフォーマンス更新中...');
-      
+
       // 各戦略のポジション分析
       const positionKeys = await this.client.keys('position:*');
       const strategyStats = {};
-      
+
       for (const key of positionKeys) {
         try {
           const pos = await this.client.hGetAll(key);
           const strategy = pos.strategyKey || 'unknown';
-          
-          if (!this.strategyConfig.availableStrategies.includes(strategy)) continue;
-          
+
+          if (!this.strategyConfig.availableStrategies.includes(strategy)) {
+            continue;
+          }
+
           if (!strategyStats[strategy]) {
             strategyStats[strategy] = {
               positions: 0,
@@ -414,47 +433,47 @@ class DynamicStrategySelector {
               performance: []
             };
           }
-          
+
           const amount = parseFloat(pos.amount) || 0;
           const price = parseFloat(pos.entryPrice) || 0;
           const value = Math.abs(amount * price);
-          
+
           strategyStats[strategy].positions++;
           strategyStats[strategy].totalValue += value;
-          
+
         } catch {
           // エラーはスキップ
         }
       }
-      
+
       // パフォーマンススコア更新 (シミュレーション)
       for (const strategy of this.strategyConfig.availableStrategies) {
         const stats = strategyStats[strategy] || { positions: 0, totalValue: 0 };
-        
+
         // 基本パフォーマンススコア (シミュレーション)
         const baseScore = 50 + (Math.random() - 0.5) * 20; // 40-60の範囲
-        
+
         // ポジション数による調整
         const positionMultiplier = Math.min(1.2, 1 + (stats.positions * 0.01));
-        
-        // 価値による調整  
+
+        // 価値による調整
         const valueMultiplier = Math.min(1.1, 1 + (stats.totalValue / 10000));
-        
+
         const finalScore = Math.max(0, Math.min(100, baseScore * positionMultiplier * valueMultiplier));
-        
+
         this.strategyPerformance[strategy] = {
           ...this.strategyPerformance[strategy],
           totalTrades: stats.positions,
           performanceScore: finalScore,
           lastUpdated: Date.now()
         };
-        
+
         console.log(`  ${strategy}: ${finalScore.toFixed(1)}点 (ポジション: ${stats.positions}件)`);
       }
-      
+
       // Redis保存
       await this.saveStrategyPerformance();
-      
+
     } catch (error) {
       console.error('❌ パフォーマンス更新エラー:', error.message);
     }

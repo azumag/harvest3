@@ -52,11 +52,11 @@ async function runDynamicPositionSizingTests() {
   try {
     const volatility = calculateCurrentVolatility(sampleOHLCVData);
     const isValid = volatility >= 0.001 && volatility <= 0.5;
-    
+
     console.log(`計算されたボラティリティ: ${(volatility * 100).toFixed(4)}%`);
-    console.log(`期待値範囲: 0.1% - 50.0%`);
+    console.log('期待値範囲: 0.1% - 50.0%');
     console.log(`結果: ${isValid ? '✅ PASS' : '❌ FAIL'}`);
-    
+
     if (isValid) {
       testResults.passedTests++;
       testResults.results.push({ test: 'volatility', status: 'PASS', value: volatility });
@@ -77,14 +77,14 @@ async function runDynamicPositionSizingTests() {
     const currentPrice = 162;
     const marketConditions = analyzeMarketConditions(sampleOHLCVData, currentPrice);
     const isValid = marketConditions.trend !== 'unknown';
-    
+
     console.log(`トレンド: ${marketConditions.trend}`);
     console.log(`方向: ${marketConditions.direction}`);
     console.log(`強度: ${(marketConditions.strength * 100).toFixed(2)}%`);
     console.log(`価格変動: ${(marketConditions.priceChange * 100).toFixed(2)}%`);
     console.log(`SMA比較: ${(marketConditions.priceVsSma * 100).toFixed(2)}%`);
     console.log(`結果: ${isValid ? '✅ PASS' : '❌ FAIL'}`);
-    
+
     if (isValid) {
       testResults.passedTests++;
       testResults.results.push({ test: 'market_analysis', status: 'PASS', value: marketConditions });
@@ -104,7 +104,7 @@ async function runDynamicPositionSizingTests() {
   try {
     const volatility = calculateCurrentVolatility(sampleOHLCVData);
     const marketConditions = analyzeMarketConditions(sampleOHLCVData, 162);
-    
+
     const dynamicSizing = new DynamicPositionSizing({
       baseRiskPerTrade: 0.02, // 2%
       atrPeriod: 14,
@@ -136,7 +136,7 @@ async function runDynamicPositionSizingTests() {
 
     const positionResult = dynamicSizing.calculateATRBasedPosition(testParams);
     const isValid = positionResult.reason === 'success' && positionResult.positionSize > 0;
-    
+
     console.log(`ポジション計算結果: ${positionResult.reason}`);
     if (positionResult.reason === 'success') {
       console.log(`推奨ポジションサイズ: ${positionResult.positionSize.toFixed(6)}`);
@@ -147,7 +147,7 @@ async function runDynamicPositionSizingTests() {
       console.log(`最小ポジション: ${positionResult.minPosition.toFixed(6)}`);
     }
     console.log(`結果: ${isValid ? '✅ PASS' : '❌ FAIL'}`);
-    
+
     if (isValid) {
       testResults.passedTests++;
       testResults.results.push({ test: 'position_sizing', status: 'PASS', value: positionResult });
@@ -168,25 +168,25 @@ async function runDynamicPositionSizingTests() {
     // 損失シナリオ
     const lossRatio = 5000 / 100000;
     const lossAdjustment = Math.max(0.3, 1.0 - (lossRatio * 2));
-    
+
     // 利益シナリオ
     const profitRatio = 3000 / 100000;
     const profitAdjustment = Math.min(1.5, 1.0 + (profitRatio * 0.5));
-    
+
     const lossValid = lossAdjustment < 1.0;
     const profitValid = profitAdjustment > 1.0;
     const isValid = lossValid && profitValid;
-    
+
     console.log('損失シナリオ (realizedPnL = -5000):');
     console.log(`損失率: ${(lossRatio * 100).toFixed(1)}%`);
     console.log(`調整係数: ${lossAdjustment.toFixed(2)}`);
     console.log(`結果: ${lossValid ? '✅ PASS (ポジション削減)' : '❌ FAIL'}`);
-    
+
     console.log('利益シナリオ (realizedPnL = +3000):');
     console.log(`利益率: ${(profitRatio * 100).toFixed(1)}%`);
     console.log(`調整係数: ${profitAdjustment.toFixed(2)}`);
     console.log(`結果: ${profitValid ? '✅ PASS (ポジション増加)' : '❌ FAIL'}`);
-    
+
     if (isValid) {
       testResults.passedTests++;
       testResults.results.push({ test: 'performance_adjustment', status: 'PASS', value: { lossAdjustment, profitAdjustment } });
@@ -213,8 +213,8 @@ async function runDynamicPositionSizingTests() {
     const highVolatility = 0.08; // 8%
     const highVolConfig = {
       ...baseConfig,
-      baseRiskPerTrade: highVolatility > 0.05 ? 
-        baseConfig.baseRiskPerTrade * 0.7 : 
+      baseRiskPerTrade: highVolatility > 0.05 ?
+        baseConfig.baseRiskPerTrade * 0.7 :
         baseConfig.baseRiskPerTrade
     };
 
@@ -222,21 +222,21 @@ async function runDynamicPositionSizingTests() {
     const strongTrend = { trend: 'strong' };
     const trendConfig = {
       ...baseConfig,
-      atrMultiplier: strongTrend.trend === 'strong' ? 
-        baseConfig.atrMultiplier * 1.2 : 
+      atrMultiplier: strongTrend.trend === 'strong' ?
+        baseConfig.atrMultiplier * 1.2 :
         baseConfig.atrMultiplier
     };
-    
+
     const riskReduced = highVolConfig.baseRiskPerTrade < baseConfig.baseRiskPerTrade;
     const multiplierIncreased = trendConfig.atrMultiplier > baseConfig.atrMultiplier;
     const isValid = riskReduced && multiplierIncreased;
-    
+
     console.log(`高ボラティリティ時のリスク調整: ${baseConfig.baseRiskPerTrade} → ${highVolConfig.baseRiskPerTrade}`);
     console.log(`結果: ${riskReduced ? '✅ PASS (リスク削減)' : '❌ FAIL'}`);
-    
+
     console.log(`強いトレンド時のATR調整: ${baseConfig.atrMultiplier} → ${trendConfig.atrMultiplier}`);
     console.log(`結果: ${multiplierIncreased ? '✅ PASS (マルチプライヤー増加)' : '❌ FAIL'}`);
-    
+
     if (isValid) {
       testResults.passedTests++;
       testResults.results.push({ test: 'dynamic_config', status: 'PASS', value: { highVolConfig, trendConfig } });
@@ -257,12 +257,12 @@ async function runDynamicPositionSizingTests() {
   console.log(`成功: ${testResults.passedTests}`);
   console.log(`失敗: ${testResults.failedTests}`);
   console.log(`成功率: ${((testResults.passedTests / testResults.totalTests) * 100).toFixed(1)}%`);
-  
+
   if (testResults.failedTests === 0) {
     console.log('\n✅ 全テスト成功! 動的ポジションサイジング機能は正常に動作しています。');
     console.log('実装された機能:');
     console.log('  ✅ 市場ボラティリティに基づく動的リスク調整');
-    console.log('  ✅ トレンド強度に基づくATRマルチプライヤー調整');  
+    console.log('  ✅ トレンド強度に基づくATRマルチプライヤー調整');
     console.log('  ✅ 実現損益に基づくパフォーマンス調整');
     console.log('  ✅ 市場条件分析とトレンド検出');
     console.log('  ✅ 包括的なリスク管理とポジションサイジング');

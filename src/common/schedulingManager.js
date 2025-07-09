@@ -30,21 +30,23 @@ class SchedulingManager {
 
     // 毎時0分に実行 (秒 分 時 日 月 曜日)
     const cronExpression = '0 0 * * * *';
-    
+
     const task = cron.schedule(cronExpression, async () => {
-      if (this.isShutdown) return;
-      
+      if (this.isShutdown) {
+        return;
+      }
+
       try {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
-        
+
         await taskFunction();
-        
+
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
         console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
-        
+
         // エラー通知機能があれば使用
         if (typeof postErrorToDiscord !== 'undefined') {
           await postErrorToDiscord(`スケジュールタスクエラー: ${taskName} - ${error.message}`);
@@ -93,21 +95,23 @@ class SchedulingManager {
 
     // 分間隔のcron表現を生成
     const cronExpression = `0 */${intervalMinutes} * * * *`;
-    
+
     const task = cron.schedule(cronExpression, async () => {
-      if (this.isShutdown) return;
-      
+      if (this.isShutdown) {
+        return;
+      }
+
       try {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
-        
+
         await taskFunction();
-        
+
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
         console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
-        
+
         if (typeof postErrorToDiscord !== 'undefined') {
           await postErrorToDiscord(`スケジュールタスクエラー: ${taskName} - ${error.message}`);
         }
@@ -155,19 +159,21 @@ class SchedulingManager {
     console.log(`[スケジューラー] カスタムタスク登録: ${taskName} (${cronExpression}) ${description}`);
 
     const task = cron.schedule(cronExpression, async () => {
-      if (this.isShutdown) return;
-      
+      if (this.isShutdown) {
+        return;
+      }
+
       try {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
-        
+
         await taskFunction();
-        
+
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
         console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
-        
+
         if (typeof postErrorToDiscord !== 'undefined') {
           await postErrorToDiscord(`スケジュールタスクエラー: ${taskName} - ${error.message}`);
         }
@@ -192,7 +198,7 @@ class SchedulingManager {
    */
   setupDefaultBalanceTasks() {
     console.log('[スケジューラー] デフォルト残高チェックタスク設定中...');
-    
+
     // 設定から間隔を取得（ミリ秒を分に変換）
     const lightweightIntervalMinutes = Math.round(this.config.intervals.lightweightCheck / (1000 * 60));
     const robustIntervalMinutes = Math.round(this.config.intervals.robustCheck / (1000 * 60));
@@ -295,7 +301,7 @@ class SchedulingManager {
   async gracefulShutdown() {
     console.log('[スケジューラー] 優雅なシャットダウン開始...');
     this.isShutdown = true;
-    
+
     // 全タスクを停止
     for (const [name, info] of this.scheduledTasks.entries()) {
       try {
@@ -305,7 +311,7 @@ class SchedulingManager {
         console.error(`[スケジューラー] タスク停止エラー ${name}:`, error.message);
       }
     }
-    
+
     this.scheduledTasks.clear();
     console.log('[スケジューラー] 全タスク停止完了');
   }

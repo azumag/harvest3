@@ -23,20 +23,20 @@ class VolatilityAnalyzer {
     }
 
     const trueRanges = [];
-    
+
     for (let i = 1; i < ohlcvData.length; i++) {
       const current = ohlcvData[i];
       const previous = ohlcvData[i - 1];
-      
+
       const high = current[2]; // High
       const low = current[3];  // Low
       const prevClose = previous[4]; // Previous Close
-      
+
       // True Range = max(high-low, abs(high-prevClose), abs(low-prevClose))
       const tr1 = high - low;
       const tr2 = Math.abs(high - prevClose);
       const tr3 = Math.abs(low - prevClose);
-      
+
       trueRanges.push(Math.max(tr1, tr2, tr3));
     }
 
@@ -57,12 +57,12 @@ class VolatilityAnalyzer {
     }
 
     const returns = [];
-    
+
     // 日次リターンを計算
     for (let i = 1; i < ohlcvData.length; i++) {
       const currentClose = ohlcvData[i][4];
       const prevClose = ohlcvData[i - 1][4];
-      
+
       if (prevClose > 0) {
         const returnRate = (currentClose - prevClose) / prevClose;
         returns.push(returnRate);
@@ -75,15 +75,15 @@ class VolatilityAnalyzer {
 
     // 最近period期間のリターンを使用
     const recentReturns = returns.slice(-period);
-    
+
     // 平均リターンを計算
     const meanReturn = recentReturns.reduce((sum, ret) => sum + ret, 0) / recentReturns.length;
-    
+
     // 標準偏差を計算
     const variance = recentReturns.reduce((sum, ret) => {
       return sum + Math.pow(ret - meanReturn, 2);
     }, 0) / recentReturns.length;
-    
+
     return Math.sqrt(variance);
   }
 
@@ -111,7 +111,7 @@ class VolatilityAnalyzer {
    */
   async calculateVolatilityScore(symbol, ohlcvData) {
     const cacheKey = `${symbol}_volatility_${Date.now()}`;
-    
+
     // キャッシュチェック
     const cached = this.getCachedResult(cacheKey);
     if (cached !== null) {
@@ -164,7 +164,7 @@ class VolatilityAnalyzer {
   calculateHistoricalATRs(ohlcvData, lookbackPeriod) {
     const atrs = [];
     const minDataPoints = this.atrPeriod + lookbackPeriod;
-    
+
     if (ohlcvData.length < minDataPoints) {
       return []; // データ不足
     }
@@ -173,7 +173,7 @@ class VolatilityAnalyzer {
       const sliceData = ohlcvData.slice(Math.max(0, i - this.atrPeriod), i + 1);
       const atr = this.calculateATR(sliceData);
       const price = ohlcvData[i][4];
-      
+
       if (price > 0) {
         atrs.push(atr / price);
       }
@@ -191,7 +191,7 @@ class VolatilityAnalyzer {
   calculateHistoricalPriceVols(ohlcvData, lookbackPeriod) {
     const vols = [];
     const minDataPoints = this.volatilityPeriod + lookbackPeriod;
-    
+
     if (ohlcvData.length < minDataPoints) {
       return []; // データ不足
     }
@@ -212,7 +212,7 @@ class VolatilityAnalyzer {
    */
   getCachedResult(key) {
     const baseKey = key.split('_').slice(0, -1).join('_'); // タイムスタンプ部分を除去
-    
+
     for (const [cachedKey, value] of this.cache.entries()) {
       if (cachedKey.startsWith(baseKey)) {
         const cachedTime = parseInt(cachedKey.split('_').pop());
@@ -223,7 +223,7 @@ class VolatilityAnalyzer {
         }
       }
     }
-    
+
     return null;
   }
 
@@ -238,7 +238,7 @@ class VolatilityAnalyzer {
       const oldestKey = this.cache.keys().next().value;
       this.cache.delete(oldestKey);
     }
-    
+
     this.cache.set(key, value);
   }
 

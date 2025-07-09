@@ -6,7 +6,9 @@ const OHLCVTimeFrames = ['1m', '5m', '15m', '30m', '1h'];
 
 // 環境変数の安全な解析関数
 function parseEnvInt(envVar, defaultValue, minValue = 0) {
-  if (!envVar) return defaultValue;
+  if (!envVar) {
+    return defaultValue;
+  }
   const parsed = parseInt(envVar);
   if (isNaN(parsed) || parsed < minValue) {
     console.warn(`[Config] Invalid environment variable: ${envVar}, using default: ${defaultValue}`);
@@ -43,7 +45,7 @@ const RISK_MANAGEMENT_SETTINGS = {
   DEFAULT_STOP_LOSS_PERCENT: parseFloat(process.env.DEFAULT_STOP_LOSS_PERCENT) || 0.02, // 2%
   TIME_BASED_STOP_HOURS: parseEnvInt(process.env.TIME_BASED_STOP_HOURS, 24, 1), // 24時間
   MAX_POSITION_SIZE_PERCENT: parseFloat(process.env.MAX_POSITION_SIZE_PERCENT) || 0.05, // 5%
-  MAX_DAILY_LOSS_PERCENT: parseFloat(process.env.MAX_DAILY_LOSS_PERCENT) || 0.10, // 10%
+  MAX_DAILY_LOSS_PERCENT: parseFloat(process.env.MAX_DAILY_LOSS_PERCENT) || 0.10 // 10%
 };
 
 // 監視システム設定定数
@@ -52,7 +54,7 @@ const MONITORING_SETTINGS = {
   REDIS_CONNECTION_TIMEOUT: parseEnvInt(process.env.REDIS_CONNECTION_TIMEOUT, 10000, 5000), // 10秒
   THROTTLE_MONITOR_INTERVAL: parseEnvInt(process.env.THROTTLE_MONITOR_INTERVAL, 5000, 1000), // 5秒
   HEARTBEAT_INTERVAL: parseEnvInt(process.env.HEARTBEAT_INTERVAL, 60000, 30000), // 1分間隔
-  ALERT_COOLDOWN_MS: parseEnvInt(process.env.ALERT_COOLDOWN_MS, 300000, 60000), // 5分間
+  ALERT_COOLDOWN_MS: parseEnvInt(process.env.ALERT_COOLDOWN_MS, 300000, 60000) // 5分間
 };
 
 // 通知設定定数
@@ -61,7 +63,7 @@ const NOTIFICATION_SETTINGS = {
   RATE_LIMIT_WINDOW_MS: parseEnvInt(process.env.NOTIFICATION_RATE_LIMIT_WINDOW, 60000, 30000), // 1分間
   MAX_NOTIFICATIONS_PER_WINDOW: parseEnvInt(process.env.MAX_NOTIFICATIONS_PER_WINDOW, 10, 1), // 10通知/分
   RETRY_ATTEMPTS: parseEnvInt(process.env.NOTIFICATION_RETRY_ATTEMPTS, 3, 1), // 3回
-  RETRY_DELAY_MS: parseEnvInt(process.env.NOTIFICATION_RETRY_DELAY, 5000, 1000), // 5秒
+  RETRY_DELAY_MS: parseEnvInt(process.env.NOTIFICATION_RETRY_DELAY, 5000, 1000) // 5秒
 };
 
 // 戦略設定定数
@@ -71,7 +73,7 @@ const STRATEGY_SETTINGS = {
   BOLLINGER_BAND_PERIOD: parseEnvInt(process.env.BOLLINGER_BAND_PERIOD, 20, 5), // 20期間
   BOLLINGER_BAND_DEVIATION: parseFloat(process.env.BOLLINGER_BAND_DEVIATION) || 2.0, // 2標準偏差
   VOLUME_THRESHOLD_MULTIPLIER: parseFloat(process.env.VOLUME_THRESHOLD_MULTIPLIER) || 1.5, // 1.5倍
-  MOMENTUM_LOOKBACK_PERIODS: parseEnvInt(process.env.MOMENTUM_LOOKBACK_PERIODS, 14, 1), // 14期間
+  MOMENTUM_LOOKBACK_PERIODS: parseEnvInt(process.env.MOMENTUM_LOOKBACK_PERIODS, 14, 1) // 14期間
 };
 
 // 取引設定定数
@@ -83,7 +85,7 @@ const TRADING_SETTINGS = {
     'MATIC/',
     'RNDR/',
     'BCH/',  // ゼロボリューム・データ不足のため除外
-    'ASTR/', // bitbank APIエラー10009のため除外
+    'ASTR/' // bitbank APIエラー10009のため除外
     // 'ATOM/',
   ]
 };
@@ -97,7 +99,7 @@ const BITFLYER_MIN_TRADE_AMOUNTS = {
   'ETH/JPY': 0.01,
   'XRP/JPY': 0.1,
   'XLM/JPY': 0.1,
-  'MONA/JPY': 0.1,
+  'MONA/JPY': 0.1
 };
 
 // 注文管理設定定数
@@ -106,7 +108,7 @@ const ORDER_MANAGEMENT_SETTINGS = {
   ORDER_TIMEOUT: parseEnvInt(process.env.ORDER_TIMEOUT, 60000, 5000), // 60秒
   ORDER_MAX_RETRIES: parseEnvInt(process.env.ORDER_MAX_RETRIES, 3, 1), // 3回
   ORDER_RETRY_DELAY: parseEnvInt(process.env.ORDER_RETRY_DELAY, 1000, 500), // 1秒
-  POSITION_TIMEOUT_HOURS: parseEnvInt(process.env.POSITION_TIMEOUT_HOURS, 24, 1), // 24時間
+  POSITION_TIMEOUT_HOURS: parseEnvInt(process.env.POSITION_TIMEOUT_HOURS, 24, 1) // 24時間
 };
 
 module.exports = {
@@ -118,5 +120,5 @@ module.exports = {
   RISK_MANAGEMENT_SETTINGS,
   MONITORING_SETTINGS,
   NOTIFICATION_SETTINGS,
-  STRATEGY_SETTINGS,
+  STRATEGY_SETTINGS
 };

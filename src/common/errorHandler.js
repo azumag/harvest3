@@ -19,11 +19,11 @@ class ErrorHandler {
   generateErrorHash(error) {
     const message = typeof error === 'string' ? error : error.message;
     const stack = typeof error === 'object' && error.stack ? error.stack : '';
-    
+
     // エラーメッセージとスタックトレースの最初の3行を使用してハッシュを生成
     const stackLines = stack.split('\n').slice(0, 3).join('\n');
     const hashSource = `${message}:${stackLines}`;
-    
+
     // 簡易ハッシュ生成（実際の環境では crypto.createHash を使用することを推奨）
     let hash = 0;
     for (let i = 0; i < hashSource.length; i++) {
@@ -50,14 +50,14 @@ class ErrorHandler {
       // Discord通知の作成
       const message = typeof error === 'string' ? error : error.message;
       const stack = typeof error === 'object' && error.stack ? error.stack : '';
-      
-      let discordMessage = `🚨 **エラー発生**\n`;
+
+      let discordMessage = '🚨 **エラー発生**\n';
       if (context) {
         discordMessage += `**コンテキスト**: ${context}\n`;
       }
       discordMessage += `**メッセージ**: ${message}\n`;
       discordMessage += `**時刻**: ${new Date(now).toLocaleString('ja-JP')}\n`;
-      
+
       if (stack) {
         // スタックトレースを制限して追加
         const stackLines = stack.split('\n').slice(0, 10).join('\n');

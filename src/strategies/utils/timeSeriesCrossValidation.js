@@ -1,9 +1,9 @@
 /**
  * Time Series Cross-Validation 実装
- * 
+ *
  * Advance of Decline Lopez de Prado手法を参考にした
  * 金融時系列データ用クロスバリデーション機能
- * 
+ *
  * 主要機能：
  * - Time Series Split
  * - Purged GroupKFold
@@ -14,7 +14,7 @@
  * - データ汚染防止・情報漏洩検出
  * - Temporal leakage prevention
  * - Lopez de Prado手法 (Triplet Barrier, Meta-Labeling, etc.)
- * 
+ *
  * 作成者: worker-claude
  * 日付: 2025-06-27
  */
@@ -35,28 +35,28 @@ class TimeSeriesCrossValidator {
       maxTestSize: config.maxTestSize || null,
       ...config
     };
-    
+
     this.validateConfig();
   }
-  
+
   validateConfig() {
     if (this.config.nSplits <= 0) {
       throw new Error('分割数は1以上である必要があります');
     }
-    
+
     if (this.config.testSize <= 0 || this.config.testSize >= 1) {
       throw new Error('テストサイズは0より大きく1より小さい必要があります');
     }
-    
+
     if (this.config.purgeGap < 0) {
       throw new Error('purgeGapは0以上である必要があります');
     }
-    
+
     if (this.config.embargoLength < 0) {
       throw new Error('embargoLengthは0以上である必要があります');
     }
   }
-  
+
   /**
    * 時系列データを分割する
    * @param {Array} data - 時系列データ
@@ -64,37 +64,37 @@ class TimeSeriesCrossValidator {
    */
   timeSeriesSplit(data) {
     this.validateTimeSeriesData(data);
-    
+
     const dataLength = data.length;
-    const testLength = this.config.adaptiveTestSize ? 
-      this.calculateAdaptiveTestSize(data) : 
+    const testLength = this.config.adaptiveTestSize ?
+      this.calculateAdaptiveTestSize(data) :
       Math.floor(dataLength * this.config.testSize);
-    
+
     if (dataLength < this.config.minTrainSize + testLength) {
       throw new Error('データサイズが不十分です');
     }
-    
+
     const splits = [];
     const usableLength = dataLength - testLength - this.config.purgeGap - this.config.embargoLength;
     const stepSize = Math.floor(usableLength / this.config.nSplits);
-    
+
     if (stepSize < this.config.minTrainSize) {
       throw new Error('データサイズが不十分です');
     }
-    
+
     for (let i = 0; i < this.config.nSplits; i++) {
       const trainStart = i * stepSize;
       const trainEnd = trainStart + this.config.minTrainSize + stepSize;
       const testStart = trainEnd + this.config.purgeGap + this.config.embargoLength;
       const testEnd = Math.min(testStart + testLength, dataLength);
-      
+
       if (testEnd > dataLength || testStart >= testEnd || trainEnd >= dataLength) {
         break;
       }
-      
-      const trainIndices = Array.from({length: trainEnd - trainStart}, (_, idx) => trainStart + idx);
-      const testIndices = Array.from({length: testEnd - testStart}, (_, idx) => testStart + idx);
-      
+
+      const trainIndices = Array.from({ length: trainEnd - trainStart }, (_, idx) => trainStart + idx);
+      const testIndices = Array.from({ length: testEnd - testStart }, (_, idx) => testStart + idx);
+
       const split = {
         trainIndices,
         testIndices,
@@ -106,13 +106,13 @@ class TimeSeriesCrossValidator {
         testEnd,
         splitIndex: i
       };
-      
+
       splits.push(split);
     }
-    
+
     return splits;
   }
-  
+
   /**
    * 時系列データの妥当性を検証
    * @param {Array} data - 時系列データ
@@ -121,43 +121,43 @@ class TimeSeriesCrossValidator {
     if (!Array.isArray(data) || data.length === 0) {
       throw new Error('データが不正です');
     }
-    
+
     // 時系列順序の検証
     for (let i = 1; i < data.length; i++) {
       if (!data[i].timestamp || !data[i-1].timestamp) {
         throw new Error('タイムスタンプが不正です');
       }
-      
+
       if (data[i].timestamp.getTime() < data[i-1].timestamp.getTime()) {
         throw new Error('時系列順序が破綻しています');
       }
     }
   }
-  
+
   /**
    * 分割結果の妥当性を検証
    * @param {Array} data - 時系列データまたは分割結果
    */
   validateSplits(data) {
     // データ配列の場合は分割を作成してから検証
-    const splits = Array.isArray(data) && data.length > 0 && data[0].timestamp ? 
+    const splits = Array.isArray(data) && data.length > 0 && data[0].timestamp ?
       this.timeSeriesSplit(data) : data;
-    
+
     if (!Array.isArray(splits)) {
       throw new Error('分割結果が不正です');
     }
-    
+
     splits.forEach(split => {
       // 未来データアクセスの検出
       if (split.trainData && split.testData) {
         const lastTrainTime = split.trainData[split.trainData.length - 1].timestamp.getTime();
         const firstTestTime = split.testData[0].timestamp.getTime();
-        
+
         if (firstTestTime <= lastTrainTime) {
           throw new Error('未来データアクセスが検出されました');
         }
       }
-      
+
       // 未来情報の検出
       if (split.trainData) {
         split.trainData.forEach(item => {
@@ -168,7 +168,7 @@ class TimeSeriesCrossValidator {
       }
     });
   }
-  
+
   /**
    * 適応的テストサイズの計算
    * @param {Array} data - 時系列データ
@@ -177,32 +177,34 @@ class TimeSeriesCrossValidator {
   calculateAdaptiveTestSize(data) {
     const baseTestSize = Math.floor(data.length * this.config.testSize);
     const volatility = this.calculateVolatility(data);
-    
+
     // ボラティリティに基づく調整
     const adjustment = volatility > 0.03 ? 1.2 : 0.8;
     const adaptiveSize = Math.floor(baseTestSize * adjustment);
-    
-    return Math.max(this.config.minTrainSize, 
-           Math.min(adaptiveSize, this.config.maxTestSize || data.length));
+
+    return Math.max(this.config.minTrainSize,
+      Math.min(adaptiveSize, this.config.maxTestSize || data.length));
   }
-  
+
   /**
    * ボラティリティの計算
    * @param {Array} data - 時系列データ
    * @returns {number} ボラティリティ
    */
   calculateVolatility(data) {
-    if (data.length < 2) return 0;
-    
+    if (data.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < data.length; i++) {
       const return_ = (data[i].price - data[i-1].price) / data[i-1].price;
       returns.push(return_);
     }
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const sumOfSquares = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0);
-    
+
     return Math.sqrt(sumOfSquares / (returns.length - 1));
   }
 }
@@ -221,20 +223,20 @@ class PurgedGroupKFold {
       volatilityBasedPurging: config.volatilityBasedPurging || false,
       ...config
     };
-    
+
     this.validateConfig();
   }
-  
+
   validateConfig() {
     if (this.config.nSplits <= 0) {
       throw new Error('分割数は1以上である必要があります');
     }
-    
+
     if (this.config.purgeGap < 0) {
       throw new Error('purgeGapは0以上である必要があります');
     }
   }
-  
+
   /**
    * Purged GroupKFold分割
    * @param {Array} data - データ
@@ -244,34 +246,34 @@ class PurgedGroupKFold {
    */
   split(data, y = null, groups) {
     this.validateGroups(groups, data.length);
-    
+
     const uniqueGroups = [...new Set(groups)].sort((a, b) => a - b);
-    
+
     if (uniqueGroups.length < this.config.nSplits) {
       throw new Error('グループ数が分割数より少なすぎます');
     }
-    
+
     const splits = [];
     const groupSize = Math.floor(uniqueGroups.length / this.config.nSplits);
-    
+
     for (let i = 0; i < this.config.nSplits; i++) {
       const testGroupStart = i * groupSize;
-      const testGroupEnd = (i === this.config.nSplits - 1) ? 
-        uniqueGroups.length : 
+      const testGroupEnd = (i === this.config.nSplits - 1) ?
+        uniqueGroups.length :
         (i + 1) * groupSize;
-      
+
       const testGroups = new Set(uniqueGroups.slice(testGroupStart, testGroupEnd));
-      
+
       // Purge gap適用
-      const purgeGap = this.config.adaptivePurgeGap ? 
-        this.calculateAdaptivePurgeGap(data, testGroups) : 
+      const purgeGap = this.config.adaptivePurgeGap ?
+        this.calculateAdaptivePurgeGap(data, testGroups) :
         this.config.purgeGap;
-      
+
       const purgedGroups = this.applyPurgeGap(uniqueGroups, testGroups, purgeGap);
-      
+
       const trainIndices = [];
       const testIndices = [];
-      
+
       groups.forEach((group, index) => {
         if (testGroups.has(group)) {
           testIndices.push(index);
@@ -279,7 +281,7 @@ class PurgedGroupKFold {
           trainIndices.push(index);
         }
       });
-      
+
       const split = {
         trainIndices,
         testIndices,
@@ -288,17 +290,17 @@ class PurgedGroupKFold {
         purgedGroups: [...purgedGroups],
         adaptedPurgeGap: purgeGap
       };
-      
+
       if (this.config.volatilityBasedPurging) {
         split.volatilityAdjustment = this.calculateVolatilityAdjustment(data, split);
       }
-      
+
       splits.push(split);
     }
-    
+
     return splits;
   }
-  
+
   /**
    * グループラベルの妥当性を検証
    * @param {Array} groups - グループラベル
@@ -308,12 +310,12 @@ class PurgedGroupKFold {
     if (!Array.isArray(groups) || groups.length === 0) {
       throw new Error('グループラベルが不正です');
     }
-    
+
     if (groups.length !== dataLength) {
       throw new Error('グループラベルの長さがデータ長と一致しません');
     }
   }
-  
+
   /**
    * Purge gapを適用
    * @param {Array} allGroups - 全グループ
@@ -323,7 +325,7 @@ class PurgedGroupKFold {
    */
   applyPurgeGap(allGroups, testGroups, purgeGap) {
     const purgedGroups = new Set();
-    
+
     testGroups.forEach(testGroup => {
       for (let i = 0; i < allGroups.length; i++) {
         if (allGroups[i] === testGroup) {
@@ -335,10 +337,10 @@ class PurgedGroupKFold {
         }
       }
     });
-    
+
     return purgedGroups;
   }
-  
+
   /**
    * 適応的Purge gapの計算
    * @param {Array} data - データ
@@ -348,37 +350,39 @@ class PurgedGroupKFold {
   calculateAdaptivePurgeGap(data, testGroups) {
     const baseGap = this.config.purgeGap;
     const volatility = this.calculateLocalVolatility(data, testGroups);
-    
+
     // ボラティリティに基づく調整
     const adjustment = volatility > 0.03 ? 1.5 : 1.0;
-    
+
     return Math.max(1, Math.floor(Math.max(baseGap, baseGap * adjustment)));
   }
-  
+
   /**
    * ローカルボラティリティの計算
    * @param {Array} data - データ
-   * @param {Set} testGroups - テストグループ 
+   * @param {Set} testGroups - テストグループ
    * @returns {number} ローカルボラティリティ
    */
   calculateLocalVolatility(data, testGroups) {
     // 簡単なボラティリティ計算の実装
     const relevantData = data.filter((_, idx) => testGroups.has(idx % 10));
-    
-    if (relevantData.length < 2) return 0;
-    
+
+    if (relevantData.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < relevantData.length; i++) {
       const return_ = (relevantData[i].price - relevantData[i-1].price) / relevantData[i-1].price;
       returns.push(return_);
     }
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+
     return Math.sqrt(variance);
   }
-  
+
   /**
    * ボラティリティ調整の計算
    * @param {Array} data - データ
@@ -388,7 +392,7 @@ class PurgedGroupKFold {
   calculateVolatilityAdjustment(data, split) {
     const trainVol = this.calculateGroupVolatility(data, split.trainIndices);
     const testVol = this.calculateGroupVolatility(data, split.testIndices);
-    
+
     return {
       trainVolatility: trainVol,
       testVolatility: testVol,
@@ -396,7 +400,7 @@ class PurgedGroupKFold {
       adjustment: Math.abs(trainVol - testVol) / trainVol
     };
   }
-  
+
   /**
    * グループボラティリティの計算
    * @param {Array} data - データ
@@ -405,18 +409,20 @@ class PurgedGroupKFold {
    */
   calculateGroupVolatility(data, indices) {
     const groupData = indices.map(idx => data[idx]);
-    
-    if (groupData.length < 2) return 0;
-    
+
+    if (groupData.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < groupData.length; i++) {
       const return_ = (groupData[i].price - groupData[i-1].price) / groupData[i-1].price;
       returns.push(return_);
     }
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+
     return Math.sqrt(variance);
   }
 }
@@ -438,16 +444,16 @@ class EmbargoValidator {
       liquidityBasedAdjustment: config.liquidityBasedAdjustment || false,
       ...config
     };
-    
+
     this.validateConfig();
   }
-  
+
   validateConfig() {
     if (this.config.embargoLength < 0) {
       throw new Error('embargo期間は0以上である必要があります');
     }
   }
-  
+
   /**
    * Embargo期間を適用した分割
    * @param {Array} data - データ
@@ -457,45 +463,47 @@ class EmbargoValidator {
     if (this.config.embargoLength >= data.length) {
       throw new Error('embargo期間がデータ長を超えています');
     }
-    
+
     const splits = [];
     const nSplits = 5; // デフォルト分割数
     const testSize = Math.floor(data.length * 0.2);
-    
+
     for (let i = 0; i < nSplits; i++) {
       const trainEnd = Math.floor(data.length * (0.6 + i * 0.1));
       const embargoAdjustedLength = this.calculateEmbargoLength(data, trainEnd);
       const testStart = trainEnd + embargoAdjustedLength;
       const testEnd = Math.min(testStart + testSize, data.length);
-      
-      if (testEnd > data.length) break;
-      
+
+      if (testEnd > data.length) {
+        break;
+      }
+
       const split = {
-        trainIndices: Array.from({length: trainEnd}, (_, idx) => idx),
-        testIndices: Array.from({length: testEnd - testStart}, (_, idx) => testStart + idx),
+        trainIndices: Array.from({ length: trainEnd }, (_, idx) => idx),
+        testIndices: Array.from({ length: testEnd - testStart }, (_, idx) => testStart + idx),
         embargoApplied: true,
         embargoLength: this.config.embargoLength,
         adjustedEmbargoLength: embargoAdjustedLength
       };
-      
+
       if (this.config.optimizationMethod === 'information_decay') {
         split.optimizedEmbargoLength = this.calculateOptimizedEmbargo(data, trainEnd);
         split.informationDecayScore = this.calculateInformationDecay(data, trainEnd);
         split.autocorrelationAdjustment = this.calculateAutocorrelationAdjustment(data, trainEnd);
       }
-      
+
       if (this.config.microstructureAware) {
         split.microstructureAdjustment = this.calculateMicrostructureAdjustment(data, trainEnd);
         split.liquidityAdjustedLength = this.calculateLiquidityAdjustment(data, trainEnd);
         split.spreadAdjustment = this.calculateSpreadAdjustment(data, trainEnd);
       }
-      
+
       splits.push(split);
     }
-    
+
     return splits;
   }
-  
+
   /**
    * Embargo期間の妥当性を検証
    * @param {Array} data - データ
@@ -504,13 +512,13 @@ class EmbargoValidator {
     if (data.embargoViolation) {
       const violation = data.embargoViolation;
       const actualGap = violation.testStart - violation.trainEnd;
-      
+
       if (actualGap < violation.requiredGap) {
         throw new Error('embargo期間の違反が検出されました');
       }
     }
   }
-  
+
   /**
    * Embargo期間の計算
    * @param {Array} data - データ
@@ -519,18 +527,18 @@ class EmbargoValidator {
    */
   calculateEmbargoLength(data, trainEnd) {
     let embargoLength = this.config.embargoLength;
-    
+
     if (this.config.dynamicAdjustment) {
       const localVolatility = this.calculateLocalVolatility(data, trainEnd);
-      
+
       if (localVolatility > this.config.volatilityThreshold) {
         embargoLength = Math.floor(embargoLength * 1.5);
       }
     }
-    
+
     return embargoLength;
   }
-  
+
   /**
    * 最適化されたEmbargo期間の計算
    * @param {Array} data - データ
@@ -540,13 +548,13 @@ class EmbargoValidator {
   calculateOptimizedEmbargo(data, trainEnd) {
     const baseLength = this.config.embargoLength;
     const informationDecay = this.calculateInformationDecay(data, trainEnd);
-    
+
     // 情報減衰に基づく調整
     const adjustment = 1 + (informationDecay * 0.5);
-    
+
     return Math.floor(baseLength * adjustment);
   }
-  
+
   /**
    * 情報減衰スコアの計算
    * @param {Array} data - データ
@@ -556,13 +564,13 @@ class EmbargoValidator {
   calculateInformationDecay(data, trainEnd) {
     const windowSize = Math.min(20, trainEnd);
     const recentData = data.slice(trainEnd - windowSize, trainEnd);
-    
+
     // 自己相関に基づく情報減衰の計算
     const autocorrelation = this.calculateAutocorrelation(recentData);
-    
+
     return Math.max(0.1, Math.min(1, Math.abs(autocorrelation) + 0.1));
   }
-  
+
   /**
    * 自己相関調整の計算
    * @param {Array} data - データ
@@ -572,38 +580,42 @@ class EmbargoValidator {
   calculateAutocorrelationAdjustment(data, trainEnd) {
     const windowSize = Math.min(30, trainEnd);
     const recentData = data.slice(trainEnd - windowSize, trainEnd);
-    
+
     return this.calculateAutocorrelation(recentData);
   }
-  
+
   /**
    * 自己相関の計算
    * @param {Array} data - データ
    * @returns {number} 自己相関
    */
   calculateAutocorrelation(data) {
-    if (data.length < 2) return 0;
-    
+    if (data.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < data.length; i++) {
       const return_ = (data[i].price - data[i-1].price) / data[i-1].price;
       returns.push(return_);
     }
-    
-    if (returns.length < 2) return 0;
-    
+
+    if (returns.length < 2) {
+      return 0;
+    }
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     let numerator = 0;
     let denominator = 0;
-    
+
     for (let i = 0; i < returns.length - 1; i++) {
       numerator += (returns[i] - mean) * (returns[i + 1] - mean);
       denominator += Math.pow(returns[i] - mean, 2);
     }
-    
+
     return denominator === 0 ? 0 : numerator / denominator;
   }
-  
+
   /**
    * ローカルボラティリティの計算
    * @param {Array} data - データ
@@ -613,21 +625,23 @@ class EmbargoValidator {
   calculateLocalVolatility(data, position) {
     const windowSize = Math.min(20, position);
     const recentData = data.slice(position - windowSize, position);
-    
-    if (recentData.length < 2) return 0;
-    
+
+    if (recentData.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < recentData.length; i++) {
       const return_ = (recentData[i].price - recentData[i-1].price) / recentData[i-1].price;
       returns.push(return_);
     }
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+
     return Math.sqrt(variance);
   }
-  
+
   /**
    * マイクロ構造調整の計算
    * @param {Array} data - データ
@@ -637,17 +651,17 @@ class EmbargoValidator {
   calculateMicrostructureAdjustment(data, position) {
     const windowSize = Math.min(10, position);
     const recentData = data.slice(position - windowSize, position);
-    
+
     const avgSpread = recentData.reduce((sum, item) => sum + (item.bidAskSpread || 0), 0) / recentData.length;
     const avgLiquidity = recentData.reduce((sum, item) => sum + (item.liquidity || 0), 0) / recentData.length;
-    
+
     return {
       averageSpread: avgSpread,
       averageLiquidity: avgLiquidity,
       microstructureScore: avgSpread / avgLiquidity
     };
   }
-  
+
   /**
    * 流動性調整の計算
    * @param {Array} data - データ
@@ -657,13 +671,13 @@ class EmbargoValidator {
   calculateLiquidityAdjustment(data, position) {
     const microstructure = this.calculateMicrostructureAdjustment(data, position);
     const baseLength = this.config.embargoLength;
-    
+
     // 流動性が低い場合はembargo期間を延長
     const liquidityAdjustment = microstructure.averageLiquidity < 1000 ? 1.3 : 1.0;
-    
+
     return Math.floor(baseLength * liquidityAdjustment);
   }
-  
+
   /**
    * スプレッド調整の計算
    * @param {Array} data - データ
@@ -672,7 +686,7 @@ class EmbargoValidator {
    */
   calculateSpreadAdjustment(data, position) {
     const microstructure = this.calculateMicrostructureAdjustment(data, position);
-    
+
     // スプレッドが大きい場合の調整
     return microstructure.averageSpread > 0.001 ? 1.2 : 1.0;
   }
@@ -692,20 +706,20 @@ class NestedCrossValidator {
       memoryEfficient: config.memoryEfficient || false,
       ...config
     };
-    
+
     this.validateConfig();
   }
-  
+
   validateConfig() {
     if (this.config.outerSplits <= 0) {
       throw new Error('分割数は1以上である必要があります');
     }
-    
+
     if (this.config.innerSplits <= 0) {
       throw new Error('分割数は1以上である必要があります');
     }
   }
-  
+
   /**
    * Nested cross-validation分割
    * @param {Array} data - データ
@@ -715,31 +729,31 @@ class NestedCrossValidator {
     if (data.length < 100) {
       throw new Error('データサイズが不十分です');
     }
-    
+
     const outerSplits = this.createOuterSplits(data);
     const nestedSplits = [];
-    
+
     outerSplits.forEach((outerSplit, outerIndex) => {
       const innerSplits = this.createInnerSplits(outerSplit.outerTrain, data);
-      
+
       const nestedSplit = {
         outerTrain: outerSplit.outerTrain,
         outerTest: outerSplit.outerTest,
         innerSplits: innerSplits,
         outerIndex: outerIndex
       };
-      
+
       if (this.config.cacheOptimization) {
         nestedSplit.cacheKey = this.generateCacheKey(outerSplit);
         nestedSplit.memoryOptimized = this.config.memoryEfficient;
       }
-      
+
       nestedSplits.push(nestedSplit);
     });
-    
+
     return nestedSplits;
   }
-  
+
   /**
    * 外側分割の作成
    * @param {Array} data - データ
@@ -748,14 +762,14 @@ class NestedCrossValidator {
   createOuterSplits(data) {
     const splits = [];
     const testSize = Math.floor(data.length / this.config.outerSplits);
-    
+
     for (let i = 0; i < this.config.outerSplits; i++) {
       const testStart = i * testSize;
       const testEnd = (i === this.config.outerSplits - 1) ? data.length : (i + 1) * testSize;
-      
+
       const outerTrain = [];
       const outerTest = [];
-      
+
       for (let j = 0; j < data.length; j++) {
         if (j >= testStart && j < testEnd) {
           outerTest.push(j);
@@ -765,7 +779,7 @@ class NestedCrossValidator {
           outerTrain.push(j);
         }
       }
-      
+
       splits.push({
         outerTrain,
         outerTest,
@@ -773,10 +787,10 @@ class NestedCrossValidator {
         outerTestSize: outerTest.length
       });
     }
-    
+
     return splits;
   }
-  
+
   /**
    * 内側分割の作成
    * @param {Array} outerTrainIndices - 外側訓練インデックス
@@ -786,16 +800,16 @@ class NestedCrossValidator {
   createInnerSplits(outerTrainIndices, originalData) {
     const innerSplits = [];
     const trainSize = Math.floor(outerTrainIndices.length / this.config.innerSplits);
-    
+
     for (let i = 0; i < this.config.innerSplits; i++) {
       const validationStart = i * trainSize;
-      const validationEnd = (i === this.config.innerSplits - 1) ? 
-        outerTrainIndices.length : 
+      const validationEnd = (i === this.config.innerSplits - 1) ?
+        outerTrainIndices.length :
         (i + 1) * trainSize;
-      
+
       const train = [];
       const validation = [];
-      
+
       for (let j = 0; j < outerTrainIndices.length; j++) {
         if (j >= validationStart && j < validationEnd) {
           validation.push(outerTrainIndices[j]);
@@ -805,7 +819,7 @@ class NestedCrossValidator {
           train.push(outerTrainIndices[j]);
         }
       }
-      
+
       innerSplits.push({
         train,
         validation,
@@ -814,10 +828,10 @@ class NestedCrossValidator {
         innerIndex: i
       });
     }
-    
+
     return innerSplits;
   }
-  
+
   /**
    * キャッシュキーの生成
    * @param {Object} outerSplit - 外側分割
@@ -826,7 +840,7 @@ class NestedCrossValidator {
   generateCacheKey(outerSplit) {
     const trainHash = outerSplit.outerTrain.slice(0, 10).join(',');
     const testHash = outerSplit.outerTest.slice(0, 10).join(',');
-    
+
     return `outer_${trainHash}_${testHash}`;
   }
 }
@@ -843,7 +857,7 @@ class BlockedCrossValidator {
       ...config
     };
   }
-  
+
   split(data) {
     // 実装は省略（基本的なブロック分割）
     return [];
@@ -862,7 +876,7 @@ class CombinatorialPurgedCV {
       ...config
     };
   }
-  
+
   split(data) {
     // 実装は省略（組み合わせ的パージド分割）
     return [];
@@ -876,7 +890,7 @@ class DataContaminationDetector {
   constructor(config = {}) {
     this.config = config;
   }
-  
+
   detectContamination(data) {
     // 実装は省略（データ汚染検出）
     return { hasContamination: false };
@@ -890,7 +904,7 @@ class InformationLeakageDetector {
   constructor(config = {}) {
     this.config = config;
   }
-  
+
   detectLeakage(data) {
     // 実装は省略（情報漏洩検出）
     return { hasLeakage: false };
@@ -904,7 +918,7 @@ class TemporalLeakagePreventor {
   constructor(config = {}) {
     this.config = config;
   }
-  
+
   preventLeakage(data) {
     // 実装は省略（時間的漏洩防止）
     return data;
@@ -933,20 +947,20 @@ class LopezDePradoSplitter {
       stationarityThreshold: config.stationarityThreshold || 0.05,
       ...config
     };
-    
+
     this.validateConfig();
   }
-  
+
   validateConfig() {
     if (this.config.upperBarrier <= this.config.lowerBarrier) {
       throw new Error('バリア設定が不正です');
     }
-    
+
     if (this.config.timeBarrier <= 0) {
       throw new Error('バリア設定が不正です');
     }
   }
-  
+
   /**
    * サンプル重み付き分割
    * @param {Array} data - データ
@@ -957,11 +971,11 @@ class LopezDePradoSplitter {
     if (weights.some(w => w < 0)) {
       throw new Error('サンプル重みが不正です');
     }
-    
+
     // 重み付き分割の実装
     return [];
   }
-  
+
   /**
    * Triplet Barrier Labelsの作成
    * @param {Array} data - データ
@@ -969,19 +983,19 @@ class LopezDePradoSplitter {
    */
   createTripletBarrierLabels(data) {
     const labels = [];
-    
+
     for (let i = 0; i < data.length - this.config.minPeriod; i++) {
       const startPrice = data[i].price;
       const startTime = data[i].timestamp;
-      
+
       let endTime = null;
       let label = 0;
       let barrierHit = 'time';
-      
+
       for (let j = i + 1; j < Math.min(i + this.config.timeBarrier, data.length); j++) {
         const currentPrice = data[j].price;
         const return_ = (currentPrice - startPrice) / startPrice;
-        
+
         if (return_ >= this.config.upperBarrier) {
           endTime = data[j].timestamp;
           label = 1;
@@ -994,12 +1008,12 @@ class LopezDePradoSplitter {
           break;
         }
       }
-      
+
       if (endTime === null) {
         endTime = data[Math.min(i + this.config.timeBarrier, data.length - 1)].timestamp;
         barrierHit = 'time';
       }
-      
+
       labels.push({
         startTime,
         endTime,
@@ -1009,10 +1023,10 @@ class LopezDePradoSplitter {
         endIndex: Math.min(i + this.config.timeBarrier, data.length - 1)
       });
     }
-    
+
     return labels;
   }
-  
+
   /**
    * Sample Uniquenessの確保
    * @param {Array} data - データ
@@ -1021,10 +1035,10 @@ class LopezDePradoSplitter {
   ensureSampleUniqueness(data) {
     const labels = this.createTripletBarrierLabels(data);
     const uniqueLabels = [];
-    
+
     for (let i = 0; i < labels.length; i++) {
       let isUnique = true;
-      
+
       for (let j = 0; j < uniqueLabels.length; j++) {
         const overlap = this.calculateOverlap(labels[i], uniqueLabels[j]);
         if (overlap > this.config.overlapThreshold) {
@@ -1032,15 +1046,15 @@ class LopezDePradoSplitter {
           break;
         }
       }
-      
+
       if (isUnique) {
         uniqueLabels.push(labels[i]);
       }
     }
-    
+
     return uniqueLabels;
   }
-  
+
   /**
    * 重複度の計算
    * @param {Object} label1 - ラベル1
@@ -1052,20 +1066,20 @@ class LopezDePradoSplitter {
     const end1 = label1.endIndex;
     const start2 = label2.startIndex;
     const end2 = label2.endIndex;
-    
+
     const overlapStart = Math.max(start1, start2);
     const overlapEnd = Math.min(end1, end2);
-    
+
     if (overlapStart >= overlapEnd) {
       return 0;
     }
-    
+
     const overlapLength = overlapEnd - overlapStart;
     const unionLength = Math.max(end1, end2) - Math.min(start1, start2);
-    
+
     return overlapLength / unionLength;
   }
-  
+
   /**
    * 重複度の配列計算
    * @param {Array} labels - ラベル配列
@@ -1073,7 +1087,7 @@ class LopezDePradoSplitter {
    */
   calculateOverlaps(labels) {
     const overlaps = [];
-    
+
     for (let i = 0; i < labels.length; i++) {
       for (let j = i + 1; j < labels.length; j++) {
         const overlapRatio = this.calculateOverlap(labels[i], labels[j]);
@@ -1084,10 +1098,10 @@ class LopezDePradoSplitter {
         });
       }
     }
-    
+
     return overlaps;
   }
-  
+
   /**
    * Sequential Bootstrapping
    * @param {Array} data - データ
@@ -1096,15 +1110,15 @@ class LopezDePradoSplitter {
   sequentialBootstrap(data) {
     const bootstrapped = [];
     const labels = this.createTripletBarrierLabels(data);
-    
+
     for (let i = 0; i < this.config.bootstrapSamples; i++) {
       const sample = this.createBootstrapSample(labels);
       bootstrapped.push(sample);
     }
-    
+
     return bootstrapped;
   }
-  
+
   /**
    * ブートストラップサンプルの作成
    * @param {Array} labels - ラベル
@@ -1114,20 +1128,20 @@ class LopezDePradoSplitter {
     const sampleSize = Math.floor(labels.length * 0.8);
     const indices = [];
     const weights = [];
-    
+
     for (let i = 0; i < sampleSize; i++) {
       const randomIndex = Math.floor(Math.random() * labels.length);
       indices.push(randomIndex);
       weights.push(1 / sampleSize);
     }
-    
+
     return {
       indices,
       weights,
       sampleSize
     };
   }
-  
+
   /**
    * Meta Labelsの作成
    * @param {Array} data - データ
@@ -1136,11 +1150,11 @@ class LopezDePradoSplitter {
   createMetaLabels(data) {
     const primaryLabels = this.createTripletBarrierLabels(data);
     const metaLabels = [];
-    
+
     primaryLabels.forEach((primaryLabel, index) => {
       const metaFeatures = this.extractMetaFeatures(data, primaryLabel);
       const confidence = this.calculateConfidence(primaryLabel);
-      
+
       const metaLabel = {
         primaryPrediction: primaryLabel.label,
         metaFeatures,
@@ -1148,13 +1162,13 @@ class LopezDePradoSplitter {
         confidence,
         index
       };
-      
+
       metaLabels.push(metaLabel);
     });
-    
+
     return metaLabels;
   }
-  
+
   /**
    * メタ特徴量の抽出
    * @param {Array} data - データ
@@ -1164,24 +1178,24 @@ class LopezDePradoSplitter {
   extractMetaFeatures(data, label) {
     const relevantData = data.slice(label.startIndex, label.endIndex + 1);
     const features = [];
-    
+
     if (this.config.metaModelFeatures.includes('volatility')) {
       features.push(this.calculateVolatility(relevantData));
     }
-    
+
     if (this.config.metaModelFeatures.includes('volume')) {
       const avgVolume = relevantData.reduce((sum, item) => sum + item.volume, 0) / relevantData.length;
       features.push(avgVolume);
     }
-    
+
     if (this.config.metaModelFeatures.includes('spread')) {
       const avgSpread = relevantData.reduce((sum, item) => sum + (item.bidAskSpread || 0), 0) / relevantData.length;
       features.push(avgSpread);
     }
-    
+
     return features;
   }
-  
+
   /**
    * 信頼度の計算
    * @param {Object} label - ラベル
@@ -1191,10 +1205,10 @@ class LopezDePradoSplitter {
     // 簡単な信頼度計算
     const duration = label.endIndex - label.startIndex;
     const confidence = Math.max(0, Math.min(1, duration / this.config.timeBarrier));
-    
+
     return confidence;
   }
-  
+
   /**
    * Fractional Differentiationの適用
    * @param {Array} data - データ
@@ -1203,15 +1217,15 @@ class LopezDePradoSplitter {
   applyFractionalDifferentiation(data) {
     const fracDiffData = [];
     const d = this.config.optimalD;
-    
+
     for (let i = 1; i < data.length; i++) {
       const price = data[i].price;
       const prevPrice = data[i-1].price;
-      
+
       // 簡単な分数差分の近似
       const fracDiffValue = price - prevPrice * Math.pow(i, -d);
       const stationarityScore = Math.abs(fracDiffValue) < this.config.stationarityThreshold ? 1 : 0;
-      
+
       fracDiffData.push({
         ...data[i],
         fracDiffValue,
@@ -1219,27 +1233,29 @@ class LopezDePradoSplitter {
         originalIndex: i
       });
     }
-    
+
     return fracDiffData;
   }
-  
+
   /**
    * ボラティリティの計算
    * @param {Array} data - データ
    * @returns {number} ボラティリティ
    */
   calculateVolatility(data) {
-    if (data.length < 2) return 0;
-    
+    if (data.length < 2) {
+      return 0;
+    }
+
     const returns = [];
     for (let i = 1; i < data.length; i++) {
       const return_ = (data[i].price - data[i-1].price) / data[i-1].price;
       returns.push(return_);
     }
-    
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+
     return Math.sqrt(variance);
   }
 }
@@ -1265,14 +1281,14 @@ class FinancialTimeSeriesValidator {
       performanceMonitoring: config.performanceMonitoring || false,
       ...config
     };
-    
+
     this.timeSeriesCV = new TimeSeriesCrossValidator(this.config.timeSeriesSplit);
     this.purgedKFold = new PurgedGroupKFold(this.config.purgedGroupKFold);
     this.embargoValidator = new EmbargoValidator(this.config.embargo);
     this.nestedCV = new NestedCrossValidator(this.config.nestedCV);
     this.lopezSplitter = new LopezDePradoSplitter(this.config.lopezDePrado);
   }
-  
+
   /**
    * 包括的検証
    * @param {Array} data - データ
@@ -1286,14 +1302,14 @@ class FinancialTimeSeriesValidator {
       nestedCVResults: this.nestedCV.split(data),
       lopezDePradoResults: this.lopezSplitter.createTripletBarrierLabels(data)
     };
-    
+
     // 総合スコアの計算
     results.overallScore = this.calculateOverallScore(results);
     results.recommendedMethod = this.recommendMethod(results);
-    
+
     return results;
   }
-  
+
   /**
    * 時系列診断
    * @param {Array} data - データ
@@ -1307,13 +1323,13 @@ class FinancialTimeSeriesValidator {
       structuralBreakTest: this.config.detectStructuralBreaks ? this.testStructuralBreaks(data) : null,
       recommendations: []
     };
-    
+
     // 推奨事項の生成
     diagnostics.recommendations = this.generateRecommendations(diagnostics);
-    
+
     return diagnostics;
   }
-  
+
   /**
    * ストリーミング検証
    * @param {Array} data - データ
@@ -1321,7 +1337,7 @@ class FinancialTimeSeriesValidator {
    */
   validateStreaming(data) {
     const startTime = performance.now();
-    
+
     const streamResults = {
       validationStream: this.createValidationStream(data),
       performanceMetrics: {
@@ -1331,14 +1347,14 @@ class FinancialTimeSeriesValidator {
       },
       adaptationTriggers: this.detectAdaptationTriggers(data)
     };
-    
+
     const endTime = performance.now();
     streamResults.performanceMetrics.latency = endTime - startTime;
     streamResults.performanceMetrics.throughput = data.length / (endTime - startTime) * 1000;
-    
+
     return streamResults;
   }
-  
+
   /**
    * 総合スコアの計算
    * @param {Object} results - 検証結果
@@ -1347,35 +1363,35 @@ class FinancialTimeSeriesValidator {
   calculateOverallScore(results) {
     let score = 0;
     let components = 0;
-    
+
     if (results.timeSeriesSplits.length > 0) {
       score += 0.2;
       components++;
     }
-    
+
     if (results.purgedSplits.length > 0) {
       score += 0.25;
       components++;
     }
-    
+
     if (results.embargoResults.length > 0) {
       score += 0.2;
       components++;
     }
-    
+
     if (results.nestedCVResults.length > 0) {
       score += 0.2;
       components++;
     }
-    
+
     if (results.lopezDePradoResults.length > 0) {
       score += 0.15;
       components++;
     }
-    
+
     return components > 0 ? score : 0;
   }
-  
+
   /**
    * 推奨手法の決定
    * @param {Object} results - 検証結果
@@ -1392,7 +1408,7 @@ class FinancialTimeSeriesValidator {
       return 'Standard Time Series Split';
     }
   }
-  
+
   /**
    * グループラベルの生成
    * @param {number} dataLength - データ長
@@ -1402,7 +1418,7 @@ class FinancialTimeSeriesValidator {
     const numGroups = Math.min(20, Math.floor(dataLength / 10));
     return Array(dataLength).fill(0).map((_, i) => Math.floor(i / (dataLength / numGroups)));
   }
-  
+
   /**
    * 自己相関テスト
    * @param {Array} data - データ
@@ -1411,7 +1427,7 @@ class FinancialTimeSeriesValidator {
   testAutocorrelation(data) {
     const returns = this.calculateReturns(data);
     const autocorr = this.calculateAutocorrelation(returns);
-    
+
     return {
       autocorrelation: autocorr,
       isSignificant: Math.abs(autocorr) > 0.1,
@@ -1419,7 +1435,7 @@ class FinancialTimeSeriesValidator {
       pValue: 0.05 // 簡単な実装
     };
   }
-  
+
   /**
    * 不均一分散テスト
    * @param {Array} data - データ
@@ -1428,7 +1444,7 @@ class FinancialTimeSeriesValidator {
   testHeteroskedasticity(data) {
     const returns = this.calculateReturns(data);
     const volatility = this.calculateRollingVolatility(returns);
-    
+
     return {
       hasHeteroskedasticity: volatility.some(vol => vol > 0.05),
       averageVolatility: volatility.reduce((sum, vol) => sum + vol, 0) / volatility.length,
@@ -1436,7 +1452,7 @@ class FinancialTimeSeriesValidator {
       pValue: 0.05
     };
   }
-  
+
   /**
    * 定常性テスト
    * @param {Array} data - データ
@@ -1445,7 +1461,7 @@ class FinancialTimeSeriesValidator {
   testStationarity(data) {
     const returns = this.calculateReturns(data);
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
-    
+
     return {
       isStationary: Math.abs(mean) < 0.001,
       mean: mean,
@@ -1453,7 +1469,7 @@ class FinancialTimeSeriesValidator {
       pValue: 0.05
     };
   }
-  
+
   /**
    * 構造変化テスト
    * @param {Array} data - データ
@@ -1463,10 +1479,10 @@ class FinancialTimeSeriesValidator {
     const midpoint = Math.floor(data.length / 2);
     const firstHalf = data.slice(0, midpoint);
     const secondHalf = data.slice(midpoint);
-    
+
     const vol1 = this.calculateVolatility(firstHalf);
     const vol2 = this.calculateVolatility(secondHalf);
-    
+
     return {
       hasStructuralBreak: Math.abs(vol1 - vol2) > 0.01,
       breakPoint: midpoint,
@@ -1476,7 +1492,7 @@ class FinancialTimeSeriesValidator {
       pValue: 0.05
     };
   }
-  
+
   /**
    * 推奨事項の生成
    * @param {Object} diagnostics - 診断結果
@@ -1484,26 +1500,26 @@ class FinancialTimeSeriesValidator {
    */
   generateRecommendations(diagnostics) {
     const recommendations = [];
-    
+
     if (diagnostics.autocorrelationTest?.isSignificant) {
       recommendations.push('自己相関が検出されました。Embargo期間の延長を推奨します。');
     }
-    
+
     if (diagnostics.heteroskedasticityTest?.hasHeteroskedasticity) {
       recommendations.push('不均一分散が検出されました。Purged GroupKFoldの使用を推奨します。');
     }
-    
+
     if (diagnostics.stationarityTest && !diagnostics.stationarityTest.isStationary) {
       recommendations.push('非定常性が検出されました。Fractional Differentiationの適用を推奨します。');
     }
-    
+
     if (diagnostics.structuralBreakTest?.hasStructuralBreak) {
       recommendations.push('構造変化が検出されました。適応的分割手法の使用を推奨します。');
     }
-    
+
     return recommendations;
   }
-  
+
   /**
    * 検証ストリームの作成
    * @param {Array} data - データ
@@ -1512,11 +1528,11 @@ class FinancialTimeSeriesValidator {
   createValidationStream(data) {
     const stream = [];
     const windowSize = 100;
-    
+
     for (let i = windowSize; i < data.length; i += windowSize) {
       const window = data.slice(i - windowSize, i);
       const validation = this.validateWindow(window);
-      
+
       stream.push({
         timestamp: data[i].timestamp,
         windowStart: i - windowSize,
@@ -1524,10 +1540,10 @@ class FinancialTimeSeriesValidator {
         validation
       });
     }
-    
+
     return stream;
   }
-  
+
   /**
    * ウィンドウの検証
    * @param {Array} window - ウィンドウデータ
@@ -1540,7 +1556,7 @@ class FinancialTimeSeriesValidator {
       issues: []
     };
   }
-  
+
   /**
    * 適応トリガーの検出
    * @param {Array} data - データ
@@ -1548,12 +1564,12 @@ class FinancialTimeSeriesValidator {
    */
   detectAdaptationTriggers(data) {
     const triggers = [];
-    
+
     // 簡単な適応トリガー検出
     for (let i = 100; i < data.length; i += 100) {
       const recentVol = this.calculateVolatility(data.slice(i - 100, i));
       const historicalVol = this.calculateVolatility(data.slice(0, i - 100));
-      
+
       if (Math.abs(recentVol - historicalVol) > 0.01) {
         triggers.push({
           timestamp: data[i].timestamp,
@@ -1563,10 +1579,10 @@ class FinancialTimeSeriesValidator {
         });
       }
     }
-    
+
     return triggers;
   }
-  
+
   /**
    * リターンの計算
    * @param {Array} data - データ
@@ -1580,27 +1596,29 @@ class FinancialTimeSeriesValidator {
     }
     return returns;
   }
-  
+
   /**
    * 自己相関の計算
    * @param {Array} returns - リターン
    * @returns {number} 自己相関
    */
   calculateAutocorrelation(returns) {
-    if (returns.length < 2) return 0;
-    
+    if (returns.length < 2) {
+      return 0;
+    }
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     let numerator = 0;
     let denominator = 0;
-    
+
     for (let i = 0; i < returns.length - 1; i++) {
       numerator += (returns[i] - mean) * (returns[i + 1] - mean);
       denominator += Math.pow(returns[i] - mean, 2);
     }
-    
+
     return denominator === 0 ? 0 : numerator / denominator;
   }
-  
+
   /**
    * ローリングボラティリティの計算
    * @param {Array} returns - リターン
@@ -1609,17 +1627,17 @@ class FinancialTimeSeriesValidator {
   calculateRollingVolatility(returns) {
     const windowSize = 20;
     const rollingVol = [];
-    
+
     for (let i = windowSize; i < returns.length; i++) {
       const window = returns.slice(i - windowSize, i);
       const mean = window.reduce((sum, ret) => sum + ret, 0) / window.length;
       const variance = window.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (window.length - 1);
       rollingVol.push(Math.sqrt(variance));
     }
-    
+
     return rollingVol;
   }
-  
+
   /**
    * ボラティリティの計算
    * @param {Array} data - データ
@@ -1627,12 +1645,14 @@ class FinancialTimeSeriesValidator {
    */
   calculateVolatility(data) {
     const returns = this.calculateReturns(data);
-    
-    if (returns.length < 2) return 0;
-    
+
+    if (returns.length < 2) {
+      return 0;
+    }
+
     const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
     const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (returns.length - 1);
-    
+
     return Math.sqrt(variance);
   }
 }

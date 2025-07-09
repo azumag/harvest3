@@ -10,13 +10,13 @@ class MLUrgencyPredictor {
     this.trainingWindow = options.trainingWindow || 7 * 24 * 60 * 60 * 1000; // 7日
     this.minTrainingData = options.minTrainingData || 100;
     this.retrainInterval = options.retrainInterval || 24 * 60 * 60 * 1000; // 24時間
-    
+
     // モデル状態
     this.models = new Map();
     this.featureStats = new Map();
     this.lastTrainingTime = 0;
     this.isTraining = false;
-    
+
     // 特徴量定義
     this.features = [
       'volatilityScore', 'riskProximity', 'timeActivity', 'performanceScore',
@@ -24,7 +24,7 @@ class MLUrgencyPredictor {
       'volumeRatio', 'spreadRatio', 'marketCap',
       'orderBookDepth', 'recentTrades', 'liquidityScore'
     ];
-    
+
     // アンサンブルモデル
     this.ensemble = {
       neuralNetwork: new SimpleNeuralNetwork(),
@@ -32,7 +32,7 @@ class MLUrgencyPredictor {
       linearRegression: new WeightedLinearRegression(),
       adaptiveRules: new AdaptiveRuleEngine()
     };
-    
+
     console.log('[MLUrgencyPredictor] 初期化完了');
   }
 
@@ -50,18 +50,18 @@ class MLUrgencyPredictor {
     try {
       // 特徴量抽出
       const features = await this.extractFeatures(marketContext);
-      
+
       // モデル再訓練チェック
       if (this.shouldRetrain()) {
         await this.retrainModels();
       }
-      
+
       // アンサンブル予測
       const predictions = await this.generateEnsemblePredictions(features);
-      
+
       // 最終予測統合
       const finalPrediction = this.integratePredictions(predictions, baseUrgency);
-      
+
       return {
         urgency: finalPrediction.urgency,
         confidence: finalPrediction.confidence,
@@ -83,24 +83,24 @@ class MLUrgencyPredictor {
    */
   async extractFeatures(context) {
     const { symbol, marketData, portfolioData, timeData, performanceData } = context;
-    
+
     const raw = {
       // 基本要因
       volatilityScore: marketData?.volatilityScore || 0.5,
       riskProximity: portfolioData?.riskProximity || 0,
       timeActivity: timeData?.activityScore || 0.5,
       performanceScore: performanceData?.overallScore || 0.5,
-      
+
       // 価格変動特徴
       priceChange1h: marketData?.priceChange1h || 0,
       priceChange4h: marketData?.priceChange4h || 0,
       priceChange24h: marketData?.priceChange24h || 0,
-      
+
       // 市場構造特徴
       volumeRatio: marketData?.volumeRatio || 1,
       spreadRatio: marketData?.spreadRatio || 0.001,
       marketCap: marketData?.marketCap || 0,
-      
+
       // 流動性特徴
       orderBookDepth: marketData?.orderBookDepth || 0.5,
       recentTrades: marketData?.recentTradeCount || 0,
@@ -109,10 +109,10 @@ class MLUrgencyPredictor {
 
     // 特徴量正規化
     const normalized = this.normalizeFeatures(raw);
-    
+
     // 相互作用特徴量
     const interactions = this.createInteractionFeatures(normalized);
-    
+
     return { raw, normalized, interactions };
   }
 
@@ -123,23 +123,23 @@ class MLUrgencyPredictor {
    */
   normalizeFeatures(rawFeatures) {
     const normalized = {};
-    
+
     for (const [feature, value] of Object.entries(rawFeatures)) {
       const stats = this.featureStats.get(feature) || {
         mean: 0, std: 1, min: value, max: value, count: 1
       };
-      
+
       // Z-score正規化 + Min-Max正規化のハイブリッド
       const zScore = stats.std > 0 ? (value - stats.mean) / stats.std : 0;
       const minMax = stats.max > stats.min ? (value - stats.min) / (stats.max - stats.min) : 0.5;
-      
+
       // ロバストな正規化（外れ値に強い）
       normalized[feature] = (zScore * 0.7) + (minMax * 0.3);
-      
+
       // 統計情報更新
       this.updateFeatureStats(feature, value, stats);
     }
-    
+
     return normalized;
   }
 
@@ -150,7 +150,7 @@ class MLUrgencyPredictor {
    */
   createInteractionFeatures(features) {
     const interactions = {};
-    
+
     // 重要な特徴量ペアの相互作用
     const importantPairs = [
       ['volatilityScore', 'riskProximity'],
@@ -159,16 +159,16 @@ class MLUrgencyPredictor {
       ['priceChange1h', 'spreadRatio'],
       ['orderBookDepth', 'recentTrades']
     ];
-    
+
     importantPairs.forEach(([feat1, feat2]) => {
       const val1 = features[feat1] || 0;
       const val2 = features[feat2] || 0;
-      
+
       interactions[`${feat1}_x_${feat2}`] = val1 * val2;
       interactions[`${feat1}_plus_${feat2}`] = (val1 + val2) / 2;
       interactions[`${feat1}_diff_${feat2}`] = Math.abs(val1 - val2);
     });
-    
+
     // 非線形変換
     Object.keys(features).forEach(feat => {
       const val = features[feat] || 0;
@@ -176,7 +176,7 @@ class MLUrgencyPredictor {
       interactions[`${feat}_sqrt`] = Math.sqrt(Math.abs(val));
       interactions[`${feat}_tanh`] = Math.tanh(val);
     });
-    
+
     return interactions;
   }
 
@@ -187,7 +187,7 @@ class MLUrgencyPredictor {
    */
   async generateEnsemblePredictions(features) {
     const predictions = {};
-    
+
     // 各モデルから予測を取得
     for (const [modelName, model] of Object.entries(this.ensemble)) {
       try {
@@ -206,7 +206,7 @@ class MLUrgencyPredictor {
         };
       }
     }
-    
+
     return predictions;
   }
 
@@ -221,29 +221,29 @@ class MLUrgencyPredictor {
     let totalWeight = 0;
     let weightedAdjustment = 0;
     let avgConfidence = 0;
-    
+
     const modelWeights = {
       neuralNetwork: 0.3,
       decisionTree: 0.25,
       linearRegression: 0.25,
       adaptiveRules: 0.2
     };
-    
+
     for (const [modelName, prediction] of Object.entries(predictions)) {
       const baseWeight = modelWeights[modelName] || 0.1;
       const weight = baseWeight * (prediction.confidence || 0.1);
-      
+
       totalWeight += weight;
       weightedAdjustment += prediction.urgencyAdjustment * weight;
       avgConfidence += prediction.confidence;
     }
-    
+
     const finalAdjustment = totalWeight > 0 ? weightedAdjustment / totalWeight : 0;
     const finalConfidence = avgConfidence / Object.keys(predictions).length;
-    
+
     // urgency適用
     const finalUrgency = this.applyAdjustmentToUrgency(baseUrgency, finalAdjustment);
-    
+
     return {
       urgency: finalUrgency,
       confidence: finalConfidence,
@@ -261,19 +261,21 @@ class MLUrgencyPredictor {
   applyAdjustmentToUrgency(baseUrgency, adjustment) {
     const urgencyLevels = ['low', 'medium', 'high'];
     const currentIndex = urgencyLevels.indexOf(baseUrgency);
-    
-    if (currentIndex === -1) return baseUrgency;
-    
+
+    if (currentIndex === -1) {
+      return baseUrgency;
+    }
+
     // 調整の適用
     let newIndex = currentIndex;
-    
+
     if (adjustment > 0.3) {
       newIndex = Math.min(urgencyLevels.length - 1, currentIndex + 1);
     } else if (adjustment < -0.3) {
       newIndex = Math.max(0, currentIndex - 1);
     }
     // -0.3 to 0.3の範囲では変更なし
-    
+
     return urgencyLevels[newIndex];
   }
 
@@ -290,20 +292,22 @@ class MLUrgencyPredictor {
    * モデル再訓練
    */
   async retrainModels() {
-    if (this.isTraining) return;
-    
+    if (this.isTraining) {
+      return;
+    }
+
     try {
       this.isTraining = true;
       console.log('[MLUrgency] モデル再訓練開始');
-      
+
       // 訓練データ収集
       const trainingData = await this.collectTrainingData();
-      
+
       if (trainingData.length < this.minTrainingData) {
         console.log(`[MLUrgency] 訓練データ不足: ${trainingData.length}/${this.minTrainingData}`);
         return;
       }
-      
+
       // 各モデルを並列訓練
       const trainingPromises = Object.entries(this.ensemble).map(async ([name, model]) => {
         try {
@@ -313,12 +317,12 @@ class MLUrgencyPredictor {
           console.error(`[MLUrgency] ${name}訓練エラー:`, error.message);
         }
       });
-      
+
       await Promise.all(trainingPromises);
-      
+
       this.lastTrainingTime = Date.now();
       console.log('[MLUrgency] 全モデル再訓練完了');
-      
+
     } catch (error) {
       console.error('[MLUrgency] 再訓練エラー:', error.message);
     } finally {
@@ -349,7 +353,7 @@ class MLUrgencyPredictor {
     stats.std = Math.sqrt(((stats.count - 1) * Math.pow(stats.std, 2) + delta * (value - stats.mean)) / stats.count);
     stats.min = Math.min(stats.min, value);
     stats.max = Math.max(stats.max, value);
-    
+
     this.featureStats.set(feature, stats);
   }
 }
@@ -372,7 +376,7 @@ class SimpleNeuralNetwork {
     try {
       const input = this.featuresToVector(features.normalized);
       const output = this.forwardPass(input);
-      
+
       return {
         adjustment: Math.tanh(output[0]), // -1 to 1の範囲に正規化
         confidence: 0.8,
@@ -454,11 +458,11 @@ class WeightedLinearRegression {
     try {
       const featureVector = Object.values(features.normalized);
       let prediction = this.intercept;
-      
+
       for (let i = 0; i < featureVector.length && i < this.coefficients.length; i++) {
         prediction += featureVector[i] * this.coefficients[i];
       }
-      
+
       return {
         adjustment: Math.tanh(prediction), // 正規化
         confidence: 0.6,
@@ -488,17 +492,17 @@ class AdaptiveRuleEngine {
     try {
       let totalWeight = 0;
       let weightedAdjustment = 0;
-      
+
       for (const [ruleId, rule] of this.rules) {
         const weight = this.ruleWeights.get(ruleId) || 0.1;
         const activation = this.evaluateRule(rule, features.normalized);
-        
+
         totalWeight += weight * activation.strength;
         weightedAdjustment += activation.adjustment * weight * activation.strength;
       }
-      
+
       const finalAdjustment = totalWeight > 0 ? weightedAdjustment / totalWeight : 0;
-      
+
       return {
         adjustment: finalAdjustment,
         confidence: Math.min(totalWeight, 1),

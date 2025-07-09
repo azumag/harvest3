@@ -1,7 +1,7 @@
 /**
  * 戦略Period抽出エンジン
  * GitHub Issue #184: バックテスト改善 - Periodの動的設定
- * 
+ *
  * 有効な戦略設定からperiod関連パラメータを動的に抽出し、
  * 最適なバッファサイズを自動計算する
  */
@@ -41,17 +41,17 @@ function extractStrategyPeriods(config, symbol = null) {
 
     for (const strategyKey of strategyKeys) {
       const strategy = strategies[strategyKey];
-      
+
       // 戦略が有効でない場合はスキップ
       if (!strategy.enabled) {
         continue;
       }
 
       results.enabledStrategies++;
-      
+
       // 戦略固有のperiod設定を抽出
       const periodData = extractPeriodFromStrategy(strategyKey, strategy);
-      
+
       if (periodData.periods.length > 0) {
         results.requiredPeriods[strategyKey] = periodData.periods;
         results.details.push({
@@ -70,7 +70,7 @@ function extractStrategyPeriods(config, symbol = null) {
     }
 
     console.log(`[Period Extractor] 抽出完了: ${results.enabledStrategies}/${results.totalStrategies}戦略, 最大Period: ${results.maxPeriod}`);
-    
+
     return results;
   } catch (error) {
     console.error('[Period Extractor] エラー:', error);
@@ -97,91 +97,91 @@ function extractPeriodFromStrategy(strategyKey, strategy) {
 
   // 戦略タイプ別のperiod抽出ロジック
   switch (strategyKey) {
-    case 'MUTUAL_INFO':
-      // 相互情報量戦略: period(30), correlationWindow(20)
-      if (strategy.period) {
-        periods.push(strategy.period);
-        parameters.period = strategy.period;
-      }
-      if (strategy.correlationWindow) {
-        periods.push(strategy.correlationWindow);
-        parameters.correlationWindow = strategy.correlationWindow;
-      }
-      break;
+  case 'MUTUAL_INFO':
+    // 相互情報量戦略: period(30), correlationWindow(20)
+    if (strategy.period) {
+      periods.push(strategy.period);
+      parameters.period = strategy.period;
+    }
+    if (strategy.correlationWindow) {
+      periods.push(strategy.correlationWindow);
+      parameters.correlationWindow = strategy.correlationWindow;
+    }
+    break;
 
-    case 'MEAN_REVERSION':
-    case 'BOLLINGER_BANDS':
-    case 'OSCILLATOR':
-    case 'RSI':
-      // 平均回帰系戦略: period(14-20)
-      if (strategy.period) {
-        periods.push(strategy.period);
-        parameters.period = strategy.period;
-      }
-      break;
+  case 'MEAN_REVERSION':
+  case 'BOLLINGER_BANDS':
+  case 'OSCILLATOR':
+  case 'RSI':
+    // 平均回帰系戦略: period(14-20)
+    if (strategy.period) {
+      periods.push(strategy.period);
+      parameters.period = strategy.period;
+    }
+    break;
 
-    case 'MACD':
-      // MACD戦略: fastPeriod(12), slowPeriod(26), signalPeriod(9)
-      if (strategy.fastPeriod) {
-        periods.push(strategy.fastPeriod);
-        parameters.fastPeriod = strategy.fastPeriod;
-      }
-      if (strategy.slowPeriod) {
-        periods.push(strategy.slowPeriod);
-        parameters.slowPeriod = strategy.slowPeriod;
-      }
-      if (strategy.signalPeriod) {
-        periods.push(strategy.signalPeriod);
-        parameters.signalPeriod = strategy.signalPeriod;
-      }
-      break;
+  case 'MACD':
+    // MACD戦略: fastPeriod(12), slowPeriod(26), signalPeriod(9)
+    if (strategy.fastPeriod) {
+      periods.push(strategy.fastPeriod);
+      parameters.fastPeriod = strategy.fastPeriod;
+    }
+    if (strategy.slowPeriod) {
+      periods.push(strategy.slowPeriod);
+      parameters.slowPeriod = strategy.slowPeriod;
+    }
+    if (strategy.signalPeriod) {
+      periods.push(strategy.signalPeriod);
+      parameters.signalPeriod = strategy.signalPeriod;
+    }
+    break;
 
-    case 'MA':
-      // 移動平均戦略: shortPeriod(5), longPeriod(20)
-      if (strategy.shortPeriod) {
-        periods.push(strategy.shortPeriod);
-        parameters.shortPeriod = strategy.shortPeriod;
-      }
-      if (strategy.longPeriod) {
-        periods.push(strategy.longPeriod);
-        parameters.longPeriod = strategy.longPeriod;
-      }
-      break;
+  case 'MA':
+    // 移動平均戦略: shortPeriod(5), longPeriod(20)
+    if (strategy.shortPeriod) {
+      periods.push(strategy.shortPeriod);
+      parameters.shortPeriod = strategy.shortPeriod;
+    }
+    if (strategy.longPeriod) {
+      periods.push(strategy.longPeriod);
+      parameters.longPeriod = strategy.longPeriod;
+    }
+    break;
 
-    case 'MULTI_INDICATOR':
-      // マルチ指標戦略: 複数のperiod設定
-      const multiParams = [
-        'macdFastPeriod', 'macdSlowPeriod', 'macdSignalPeriod',
-        'emaShortPeriod', 'emaLongPeriod', 'rsiPeriod', 
-        'adxPeriod', 'volumeMAPeriod'
-      ];
-      
-      multiParams.forEach(param => {
-        if (strategy[param]) {
-          periods.push(strategy[param]);
-          parameters[param] = strategy[param];
-        }
-      });
-      break;
+  case 'MULTI_INDICATOR':
+    // マルチ指標戦略: 複数のperiod設定
+    const multiParams = [
+      'macdFastPeriod', 'macdSlowPeriod', 'macdSignalPeriod',
+      'emaShortPeriod', 'emaLongPeriod', 'rsiPeriod',
+      'adxPeriod', 'volumeMAPeriod'
+    ];
 
-    default:
-      // 汎用period検出: 一般的なパラメータ名をチェック
-      const commonPeriodParams = [
-        'period', 'shortPeriod', 'longPeriod', 'fastPeriod', 'slowPeriod',
-        'signalPeriod', 'atrPeriod', 'correlationWindow', 'rsiPeriod'
-      ];
-      
-      commonPeriodParams.forEach(param => {
-        if (strategy[param] && typeof strategy[param] === 'number') {
-          periods.push(strategy[param]);
-          parameters[param] = strategy[param];
-        }
-      });
-      break;
+    multiParams.forEach(param => {
+      if (strategy[param]) {
+        periods.push(strategy[param]);
+        parameters[param] = strategy[param];
+      }
+    });
+    break;
+
+  default:
+    // 汎用period検出: 一般的なパラメータ名をチェック
+    const commonPeriodParams = [
+      'period', 'shortPeriod', 'longPeriod', 'fastPeriod', 'slowPeriod',
+      'signalPeriod', 'atrPeriod', 'correlationWindow', 'rsiPeriod'
+    ];
+
+    commonPeriodParams.forEach(param => {
+      if (strategy[param] && typeof strategy[param] === 'number') {
+        periods.push(strategy[param]);
+        parameters[param] = strategy[param];
+      }
+    });
+    break;
   }
 
   // 数値でないまたは範囲外の値をフィルタ
-  const validPeriods = periods.filter(p => 
+  const validPeriods = periods.filter(p =>
     typeof p === 'number' && p > 0 && p <= 200
   );
 
@@ -222,19 +222,19 @@ function calculateDynamicLimit(timeframe, days, maxPeriod, options = {}) {
 
     // 基本バッファを計算
     const basicBuffer = Math.ceil(maxPeriod * (1 + bufferPercent));
-    
+
     // 制限値を適用
     let finalBuffer = Math.max(minBuffer, Math.min(maxBuffer, basicBuffer));
-    
+
     // タイムフレーム別の調整（将来の拡張用）
     const timeframeMultiplier = getTimeframeMultiplier(timeframe);
     finalBuffer = Math.ceil(finalBuffer * timeframeMultiplier);
-    
+
     // 最終制限チェック
     finalBuffer = Math.max(minBuffer, Math.min(maxBuffer, finalBuffer));
-    
+
     console.log(`[Dynamic Limit] 計算完了: maxPeriod=${maxPeriod}, buffer=${finalBuffer} (${bufferPercent*100}%+)`);
-    
+
     return finalBuffer;
   } catch (error) {
     console.error('[Dynamic Limit] 計算エラー:', error);
@@ -257,7 +257,7 @@ function getTimeframeMultiplier(timeframe) {
     '4h': 0.7,
     '1d': 0.6    // 長期間では少なめのバッファ
   };
-  
+
   return multipliers[timeframe] || 1.0;
 }
 
@@ -270,7 +270,7 @@ function getTimeframeMultiplier(timeframe) {
 function validatePeriodRequirements(strategies, symbol = null) {
   try {
     const extraction = extractStrategyPeriods({ strategies }, symbol);
-    
+
     const validation = {
       isValid: true,
       maxPeriod: extraction.maxPeriod,
@@ -326,7 +326,7 @@ function getEnabledStrategiesForSymbol(symbol, config) {
 
   // 現在は全戦略を返すが、将来的にシンボル固有のフィルタリングを実装可能
   const enabledStrategies = {};
-  
+
   Object.keys(config.strategies).forEach(key => {
     const strategy = config.strategies[key];
     if (strategy.enabled) {

@@ -2,7 +2,7 @@
 const TRADING_PAIRS = [
   'btc_jpy',
   'xrp_jpy',
-  'eth_jpy',
+  'eth_jpy'
 ];
 
 // WebSocket接続設定
@@ -28,5 +28,5 @@ const STRATEGY_PARAMS = {
 module.exports = {
   TRADING_PAIRS,
   WS_CONFIG,
-  STRATEGY_PARAMS,
+  STRATEGY_PARAMS
 };

@@ -62,7 +62,9 @@ function calculateSpearmanCorrelation(x, y) {
  * @returns {Array} 乖離値配列
  */
 function calculateMADeviation(prices, window = 20) {
-  if (!prices || prices.length < window) return [];
+  if (!prices || prices.length < window) {
+    return [];
+  }
 
   const result = [];
   for (let i = window - 1; i < prices.length; i++) {
@@ -80,7 +82,9 @@ function calculateMADeviation(prices, window = 20) {
  * @returns {Array} スプレッド配列
  */
 function calculateSpread(prices1, prices2, logarithmic = true) {
-  if (!prices1 || !prices2 || prices1.length !== prices2.length) return [];
+  if (!prices1 || !prices2 || prices1.length !== prices2.length) {
+    return [];
+  }
 
   if (logarithmic) {
     return prices1.map((p1, i) => Math.log(p1) - Math.log(prices2[i]));
@@ -96,7 +100,9 @@ function calculateSpread(prices1, prices2, logarithmic = true) {
  * @returns {Array} Z-score配列
  */
 function calculateZScore(spread, window = 20) {
-  if (!spread || spread.length < window) return [];
+  if (!spread || spread.length < window) {
+    return [];
+  }
 
   const result = [];
   for (let i = window - 1; i < spread.length; i++) {
@@ -104,7 +110,7 @@ function calculateZScore(spread, window = 20) {
     const mean = slice.reduce((a, b) => a + b) / window;
     const variance = slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / window;
     const std = Math.sqrt(variance);
-    
+
     result.push(std === 0 ? 0 : (spread[i] - mean) / std);
   }
   return result;
@@ -116,12 +122,14 @@ function calculateZScore(spread, window = 20) {
  * @returns {number} 半減期（期間数）
  */
 function calculateHalfLife(spread) {
-  if (!spread || spread.length < 10) return null;
+  if (!spread || spread.length < 10) {
+    return null;
+  }
 
   // 回帰分析で自己相関を計算
   const y = spread.slice(1);
   const x = spread.slice(0, -1);
-  
+
   const n = x.length;
   const sumX = x.reduce((a, b) => a + b, 0);
   const sumY = y.reduce((a, b) => a + b, 0);
@@ -129,7 +137,7 @@ function calculateHalfLife(spread) {
   const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
 
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-  
+
   // 半減期 = -ln(2) / ln(slope + 1)
   return slope >= 0 ? null : -Math.log(2) / Math.log(1 + slope);
 }
@@ -153,11 +161,11 @@ class DynamicPairSelector {
    */
   recordCorrelation(targetSymbol, refSymbol, correlation, profit = 0) {
     const key = `${targetSymbol}_${refSymbol}`;
-    
+
     if (!this.correlationHistory.has(key)) {
       this.correlationHistory.set(key, []);
     }
-    
+
     if (!this.profitableCorrelations.has(targetSymbol)) {
       this.profitableCorrelations.set(targetSymbol, []);
     }
@@ -171,7 +179,7 @@ class DynamicPairSelector {
 
     // 古いデータを削除（30日以上前）
     const cutoff = timestamp - (this.performanceWindow * 24 * 60 * 60 * 1000);
-    this.correlationHistory.set(key, 
+    this.correlationHistory.set(key,
       this.correlationHistory.get(key).filter(record => record.timestamp > cutoff)
     );
 
@@ -187,8 +195,10 @@ class DynamicPairSelector {
   updateProfitability(targetSymbol, refSymbol) {
     const key = `${targetSymbol}_${refSymbol}`;
     const history = this.correlationHistory.get(key) || [];
-    
-    if (history.length === 0) return;
+
+    if (history.length === 0) {
+      return;
+    }
 
     const avgCorrelation = history.reduce((sum, record) => sum + record.correlation, 0) / history.length;
     const totalProfit = history.reduce((sum, record) => sum + record.profit, 0);
@@ -222,7 +232,7 @@ class DynamicPairSelector {
    */
   selectReferencePairs(targetSymbol, availableSymbols, maxPairs = 5) {
     const profitableList = this.profitableCorrelations.get(targetSymbol) || [];
-    
+
     if (profitableList.length === 0) {
       // 履歴がない場合は主要通貨ペアを返す
       const majorPairs = ['BTC/USDT', 'ETH/USDT', 'BTC/JPY', 'ETH/JPY'];
@@ -251,8 +261,10 @@ class DynamicPairSelector {
    */
   getCorrelationStats(targetSymbol) {
     const profitableList = this.profitableCorrelations.get(targetSymbol) || [];
-    
-    if (profitableList.length === 0) return null;
+
+    if (profitableList.length === 0) {
+      return null;
+    }
 
     const totalProfitability = profitableList.reduce((sum, item) => sum + item.profitability, 0);
     const avgProfitability = totalProfitability / profitableList.length;
@@ -300,11 +312,11 @@ class StatisticalPairTrading {
         }
 
         const correlation = calculatePearsonCorrelation(prices1, prices2);
-        
+
         if (Math.abs(correlation) >= this.minCorrelation) {
           const spread = calculateSpread(prices1, prices2);
           const halfLife = calculateHalfLife(spread);
-          
+
           pairs.push({
             symbol1,
             symbol2,
@@ -337,9 +349,11 @@ class StatisticalPairTrading {
 
     const spread = calculateSpread(currentPrices1, currentPrices2);
     const zScores = calculateZScore(spread, this.lookbackPeriod);
-    
-    if (zScores.length === 0) return null;
-    
+
+    if (zScores.length === 0) {
+      return null;
+    }
+
     const currentZScore = zScores[zScores.length - 1];
 
     if (Math.abs(currentZScore) > this.entryZScore) {
@@ -367,9 +381,11 @@ class StatisticalPairTrading {
   generateExitSignal(pair, currentPrices1, currentPrices2, position) {
     const spread = calculateSpread(currentPrices1, currentPrices2);
     const zScores = calculateZScore(spread, this.lookbackPeriod);
-    
-    if (zScores.length === 0) return false;
-    
+
+    if (zScores.length === 0) {
+      return false;
+    }
+
     const currentZScore = zScores[zScores.length - 1];
     return Math.abs(currentZScore) <= this.exitZScore;
   }

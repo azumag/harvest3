@@ -52,7 +52,7 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
     jest.clearAllMocks();
     jest.clearAllTimers();
     jest.useFakeTimers();
-    
+
     // デフォルトのモック設定
     mockClient.connect.mockResolvedValue();
     mockClient.close.mockResolvedValue();
@@ -84,7 +84,7 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
 
       it('ping成功時はtrueを返すこと', async () => {
         mockDb.command.mockResolvedValue({ ok: 1 });
-        
+
         const result = await isConnected();
         expect(result).toBe(true);
         expect(mockDb.command).toHaveBeenCalledWith({ ping: 1 });
@@ -92,7 +92,7 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
 
       it('pingエラー時はfalseを返すこと', async () => {
         mockDb.command.mockRejectedValue(new Error('Connection failed'));
-        
+
         const result = await isConnected();
         expect(result).toBe(false);
       });
@@ -103,16 +103,16 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
     describe('🔴 Red: 指数バックオフ再試行が正しく動作すること', () => {
       it('1回目で成功する場合は即座に完了すること', async () => {
         mockClient.connect.mockResolvedValueOnce();
-        
+
         await connectWithRetry(3, 1000);
-        
+
         expect(mockClient.connect).toHaveBeenCalledTimes(1);
       });
 
       it('最大再試行回数まで失敗した場合はエラーを投げること', async () => {
         const connectionError = new Error('Connection failed');
         mockClient.connect.mockRejectedValue(connectionError);
-        
+
         await expect(connectWithRetry(2, 1000)).rejects.toThrow('MongoDB接続が2回失敗しました');
         expect(mockClient.connect).toHaveBeenCalledTimes(2);
       });
@@ -121,14 +121,14 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
         mockClient.connect
           .mockRejectedValueOnce(new Error('First attempt failed'))
           .mockResolvedValueOnce();
-        
+
         const connectPromise = connectWithRetry(3, 1000);
-        
+
         // 最初の失敗後、1秒待機してから2回目の接続
         jest.advanceTimersByTime(1000);
-        
+
         await connectPromise;
-        
+
         expect(mockClient.connect).toHaveBeenCalledTimes(2);
       });
 
@@ -137,17 +137,17 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
           .mockRejectedValueOnce(new Error('Attempt 1 failed'))
           .mockRejectedValueOnce(new Error('Attempt 2 failed'))
           .mockResolvedValueOnce();
-        
+
         const connectPromise = connectWithRetry(3, 1000);
-        
+
         // 1回目失敗 → 1秒待機
         jest.advanceTimersByTime(1000);
-        
+
         // 2回目失敗 → 2秒待機（指数バックオフ）
         jest.advanceTimersByTime(2000);
-        
+
         await connectPromise;
-        
+
         expect(mockClient.connect).toHaveBeenCalledTimes(3);
       });
     });
@@ -157,9 +157,9 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
     describe('🔴 Red: 定期的な接続監視が正しく動作すること', () => {
       it('ヘルスチェック開始時にintervalが設定されること', () => {
         const setIntervalSpy = jest.spyOn(global, 'setInterval');
-        
+
         startHealthCheck();
-        
+
         expect(setIntervalSpy).toHaveBeenCalledWith(
           expect.any(Function),
           60000 // 1分間隔
@@ -169,24 +169,24 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
       it('接続切断検出時に再接続を試行すること', async () => {
         mockDb.command.mockRejectedValue(new Error('Connection lost'));
         const connectWithRetrySpy = jest.fn().mockResolvedValue();
-        
+
         startHealthCheck();
-        
+
         // ヘルスチェック実行
         jest.advanceTimersByTime(60000);
-        
+
         // 非同期処理の完了を待つ
         await new Promise(resolve => setImmediate(resolve));
-        
+
         expect(mockDb.command).toHaveBeenCalledWith({ ping: 1 });
       });
 
       it('ヘルスチェック停止時にintervalがクリアされること', () => {
         const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
-        
+
         startHealthCheck();
         stopHealthCheck();
-        
+
         expect(clearIntervalSpy).toHaveBeenCalled();
       });
     });
@@ -196,15 +196,15 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
     describe('🔴 Red: 安全なデータベース切断が行われること', () => {
       it('ヘルスチェックが停止され、クライアントが閉じられること', async () => {
         const stopHealthCheckSpy = jest.fn();
-        
+
         await closeDB();
-        
+
         expect(mockClient.close).toHaveBeenCalled();
       });
 
       it('クライアント切断時のエラーがキャッチされること', async () => {
         mockClient.close.mockRejectedValue(new Error('Close failed'));
-        
+
         // エラーが投げられずに完了することを確認
         await expect(closeDB()).resolves.toBeUndefined();
       });
@@ -215,7 +215,7 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
     describe('🔴 Red: MongoDB接続の改善された設定が適用されること', () => {
       it('適切なタイムアウト設定でMongoClientが作成されること', async () => {
         await connectDB();
-        
+
         expect(MongoClient).toHaveBeenCalledWith(
           'mongodb://test:27017',
           expect.objectContaining({
@@ -238,9 +238,9 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
         const { postMongoConnectionErrorToDiscord } = require('../../../src/common/notifications');
         const connectionError = new Error('Connection failed');
         mockClient.connect.mockRejectedValue(connectionError);
-        
+
         await expect(connectDB()).rejects.toThrow();
-        
+
         expect(postMongoConnectionErrorToDiscord).toHaveBeenCalledWith(
           'Connection failed',
           'mongodb://test:27017'
@@ -254,21 +254,21 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
       it('再試行時間が指数バックオフパターンに従うこと', async () => {
         const delays = [];
         const originalSetTimeout = setTimeout;
-        
+
         // setTimeoutをスパイして実際の遅延時間を記録
         jest.spyOn(global, 'setTimeout').mockImplementation((fn, delay) => {
           delays.push(delay);
           return originalSetTimeout(fn, 0); // 実際には待機しない
         });
-        
+
         mockClient.connect
           .mockRejectedValueOnce(new Error('Attempt 1'))
           .mockRejectedValueOnce(new Error('Attempt 2'))
           .mockRejectedValueOnce(new Error('Attempt 3'))
           .mockResolvedValueOnce();
-        
+
         await connectWithRetry(4, 1000);
-        
+
         // 指数バックオフ: 1000, 2000, 4000ms
         expect(delays).toEqual([1000, 2000, 4000]);
       });
@@ -279,7 +279,7 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
           delays.push(delay);
           return setTimeout(fn, 0);
         });
-        
+
         mockClient.connect
           .mockRejectedValueOnce(new Error('Attempt 1'))
           .mockRejectedValueOnce(new Error('Attempt 2'))
@@ -287,9 +287,9 @@ describe.skip('mongoDatabase - 接続改善機能', () => {
           .mockRejectedValueOnce(new Error('Attempt 4'))
           .mockRejectedValueOnce(new Error('Attempt 5'))
           .mockResolvedValueOnce();
-        
+
         await connectWithRetry(6, 1000);
-        
+
         // 指数バックオフだが最大30秒制限: 1000, 2000, 4000, 8000, 16000 → 30000, 30000
         expect(Math.max(...delays)).toBeLessThanOrEqual(30000);
       });

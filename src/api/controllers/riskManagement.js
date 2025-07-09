@@ -19,11 +19,11 @@ async function getRiskPositions(req, res) {
 
     // 全ての戦略ポジションを取得
     const allPositions = await getAllPositionsRedis();
-    
+
     // まずRedisから未約定注文を取得（高速）
     let openOrderPositions = [];
     let useExchangeAPIFallback = false;
-    
+
     try {
       const pendingOrders = await getAllPendingOrdersRedis();
       if (pendingOrders.length > 0) {
@@ -44,22 +44,22 @@ async function getRiskPositions(req, res) {
         }));
         console.log(`[INFO] Redis から ${openOrderPositions.length} 件の未約定注文を取得しました`);
       } else {
-        console.log(`[INFO] Redis に未約定注文なし、取引所APIフォールバックを実行します`);
+        console.log('[INFO] Redis に未約定注文なし、取引所APIフォールバックを実行します');
         useExchangeAPIFallback = true;
       }
     } catch (redisError) {
       console.warn('Redis からの未約定注文取得に失敗、取引所APIにフォールバック:', redisError.message);
       useExchangeAPIFallback = true;
     }
-    
+
     if (useExchangeAPIFallback) {
-      
+
       // フォールバック: 取引所APIから取得
       const exchangeSymbolPairs = [...new Set(allPositions.map(p => `${p.exchange}:${p.symbol}`))];
-      
+
       for (const pair of exchangeSymbolPairs) {
         const [exchangeId, symbol] = pair.split(':');
-        
+
         try {
           // 取引所インスタンスを作成
           const exchangeClass = ccxt[exchangeId];
@@ -67,7 +67,7 @@ async function getRiskPositions(req, res) {
             console.warn(`Exchange ${exchangeId} not found in ccxt`);
             continue;
           }
-          
+
           const exchange = new exchangeClass({
             apiKey: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_KEY`],
             secret: process.env[`${exchangeId.toUpperCase() === 'BITBANK' ? 'BB' : exchangeId.toUpperCase()}_API_SECRET`],
@@ -77,26 +77,28 @@ async function getRiskPositions(req, res) {
               defaultType: 'spot'
             }
           });
-          
+
           // 市場情報をロード
           if (!exchange.markets) {
             await exchange.loadMarkets();
           }
-          
+
           // シンボルがサポートされているか確認
           if (!(symbol in exchange.markets)) {
             continue;
           }
-          
+
           // 未約定注文を取得
           const openOrders = await exchange.fetchOpenOrders(symbol);
-          
+
           // 各未約定注文をポジション形式に変換
           for (const order of openOrders) {
             // 戦略キーを取得
             const strategyKey = await getOrderStrategyKeyByOrderId(order.id);
-            if (!strategyKey) continue;
-            
+            if (!strategyKey) {
+              continue;
+            }
+
             // 未約定注文をポジション形式で追加
             openOrderPositions.push({
               key: `open-order:${order.id}`,
@@ -119,13 +121,13 @@ async function getRiskPositions(req, res) {
         }
       }
     }
-    
+
     // 約定済みポジションと未約定注文を結合
     const allPositionsWithOrders = [...allPositions, ...openOrderPositions];
-    
+
     // フィルタ条件を適用
     let filteredPositions = allPositionsWithOrders;
-    
+
     if (exchange) {
       filteredPositions = filteredPositions.filter(pos => pos.exchange === exchange);
     }
@@ -142,7 +144,7 @@ async function getRiskPositions(req, res) {
         try {
           // Redisからティッカーデータを取得して現在価格を更新
           let currentPrice = position.entryPrice || 0; // フォールバック値
-          
+
           try {
             const ticker = await getTickerRedis(position.exchange, position.symbol);
             if (ticker && ticker.last && ticker.last > 0) {
@@ -155,11 +157,11 @@ async function getRiskPositions(req, res) {
 
           const entryPrice = position.entryPrice || 0;
           const amount = position.amount || 0;
-          
+
           // 正しい未実現損益計算（ポジションの売買方向を考慮）
           let unrealizedPnL = 0;
           let unrealizedPnLPercent = 0;
-          
+
           if (position.side === 'buy') {
             unrealizedPnL = (currentPrice - entryPrice) * amount;
             unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
@@ -182,22 +184,22 @@ async function getRiskPositions(req, res) {
             ...position,
             // Redisのティッカーデータから取得した現在価格
             currentPrice,
-            
+
             // 損益計算
             unrealizedPnL,
             unrealizedPnLPercent,
-            
+
             // リスク管理状態
             stopLossTriggered,
             timeStopTriggered,
             elapsedHours: Math.round(elapsedHours * 100) / 100,
-            
+
             // 日時情報
             createdAt: new Date(position.timestamp).toISOString(),
-            
+
             // ポジション状態
             status: position.filled === false ? 'pending' : (stopLossTriggered || timeStopTriggered) ? 'at_risk' : 'active',
-            
+
             // 追加情報
             filled: position.filled !== false,
             orderStatus: position.orderStatus || null,
@@ -221,7 +223,7 @@ async function getRiskPositions(req, res) {
       activePositions: enrichedPositions.filter(p => p.status === 'active').length,
       atRiskPositions: enrichedPositions.filter(p => p.status === 'at_risk').length,
       totalUnrealizedPnL: enrichedPositions.filter(p => p.filled).reduce((sum, p) => sum + (p.unrealizedPnL || 0), 0),
-      averageHoldingTime: enrichedPositions.filter(p => p.filled).length > 0 ? 
+      averageHoldingTime: enrichedPositions.filter(p => p.filled).length > 0 ?
         enrichedPositions.filter(p => p.filled).reduce((sum, p) => sum + (p.elapsedHours || 0), 0) / enrichedPositions.filter(p => p.filled).length : 0
     };
 
@@ -232,9 +234,9 @@ async function getRiskPositions(req, res) {
     });
   } catch (error) {
     console.error('Error fetching risk positions:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch risk positions',
-      message: error.message 
+      message: error.message
     });
   }
 }
@@ -247,13 +249,13 @@ async function getRiskPositions(req, res) {
 async function getRiskStats(req, res) {
   try {
     const { period = 'daily' } = req.query;
-    
+
     // 期間別損益を取得
     const periodPnL = await calculatePeriodPnLRedis(period);
-    
+
     // 全ポジション取得（約定済み）
     const allPositions = await getAllPositionsRedis();
-    
+
     // 未約定注文を取得
     let pendingOrdersCount = 0;
     try {
@@ -263,7 +265,7 @@ async function getRiskStats(req, res) {
       console.warn('Failed to get pending orders for risk stats:', error.message);
       // フォールバック: 取引所APIから取得する処理は省略（パフォーマンス考慮）
     }
-    
+
     // 取引所別統計
     const exchangeStats = {};
     allPositions.forEach(position => {
@@ -276,19 +278,19 @@ async function getRiskStats(req, res) {
       }
       exchangeStats[position.exchange].positions++;
       exchangeStats[position.exchange].totalAmount += position.amount || 0;
-      
+
       // 正しい未実現損益計算（ポジションの売買方向を考慮）
       const currentPrice = position.currentPrice || 0;
       const entryPrice = position.entryPrice || 0;
       const amount = position.amount || 0;
       let unrealizedPnL = 0;
-      
+
       if (position.side === 'buy') {
         unrealizedPnL = (currentPrice - entryPrice) * amount;
       } else if (position.side === 'sell') {
         unrealizedPnL = (entryPrice - currentPrice) * amount;
       }
-      
+
       exchangeStats[position.exchange].unrealizedPnL += unrealizedPnL;
     });
 
@@ -303,9 +305,9 @@ async function getRiskStats(req, res) {
     });
   } catch (error) {
     console.error('Error fetching risk stats:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch risk stats',
-      message: error.message 
+      message: error.message
     });
   }
 }
@@ -323,12 +325,12 @@ async function getFilledPositions(req, res) {
 
     // Redisから全ての未売却ポジション（アクティブポジション）を取得
     const allActivePositions = await getAllPositionsRedis();
-    
+
     console.log(`getFilledPositions received ${allActivePositions.length} active positions from Redis`);
 
     // フィルタ条件を適用
     let filteredPositions = allActivePositions;
-    
+
     if (exchange) {
       filteredPositions = filteredPositions.filter(pos => pos.exchange === exchange);
     }
@@ -345,7 +347,7 @@ async function getFilledPositions(req, res) {
         try {
           // 現在価格を取得
           let currentPrice = position.entryPrice || 0;
-          
+
           try {
             const ticker = await getTickerRedis(position.exchange, position.symbol);
             if (ticker && ticker.last && ticker.last > 0) {
@@ -357,11 +359,11 @@ async function getFilledPositions(req, res) {
 
           const entryPrice = position.entryPrice || 0;
           const amount = position.amount || 0;
-          
+
           // 未実現損益計算（現在価格で売った場合の損益）
           let unrealizedPnL = 0;
           let unrealizedPnLPercent = 0;
-          
+
           if (position.side === 'buy') {
             unrealizedPnL = (currentPrice - entryPrice) * amount;
             unrealizedPnLPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
@@ -399,7 +401,7 @@ async function getFilledPositions(req, res) {
     const stats = {
       totalFilledPositions: enrichedPositions.length,
       totalUnrealizedPnL: enrichedPositions.reduce((sum, p) => sum + (p.unrealizedPnL || 0), 0),
-      averageHoldingTime: enrichedPositions.length > 0 ? 
+      averageHoldingTime: enrichedPositions.length > 0 ?
         enrichedPositions.reduce((sum, p) => sum + (p.holdingTimeHours || 0), 0) / enrichedPositions.length : 0
     };
 
@@ -410,9 +412,9 @@ async function getFilledPositions(req, res) {
     });
   } catch (error) {
     console.error('Error fetching filled positions:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch filled positions',
-      message: error.message 
+      message: error.message
     });
   }
 }

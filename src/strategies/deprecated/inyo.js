@@ -18,7 +18,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
   try {
     // MONA/JPYは除外
     if (symbol === 'MONA/JPY') {
-      console.log(`MONA/JPY は陰陽戦略の対象外です`);
+      console.log('MONA/JPY は陰陽戦略の対象外です');
       return {
         strategy: 'Inyo',
         symbol,
@@ -32,7 +32,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
 
     // 過去のローソク足データを取得（過去3本分のローソク足）
     const ohlcv = await exchange.fetchOHLCV(symbol, '1m', undefined, 3);
-    
+
     if (ohlcv.length < 3) {
       console.log(`十分なローソク足データがありません: ${symbol}`);
       return {
@@ -85,9 +85,9 @@ async function inyoStrategy(exchange, symbol, options = {}) {
     const strategyKey = 'INYO';
 
     // 銘柄ごとの前回のシグナルを確認
-    const hasTradeRecords = tradeRecords && 
-                           tradeRecords[exchange.id] && 
-                           tradeRecords[exchange.id][symbol] && 
+    const hasTradeRecords = tradeRecords &&
+                           tradeRecords[exchange.id] &&
+                           tradeRecords[exchange.id][symbol] &&
                            tradeRecords[exchange.id][symbol][strategyKey];
 
     // 注文を作成
@@ -108,12 +108,12 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[陰陽戦略] 買いシグナル: ${exchange.id} - ${symbol} - 陽線を検出`);
       }
-      
+
       // 利用可能な資金を確認
       const balance = await exchange.fetchBalance();
       const baseCurrency = symbol.split('/')[1];
       const availableFunds = balance.free[baseCurrency];
-      
+
       // 利用可能な資金の割合に基づいて取引量を計算
       const maxBuyAmount = availableFunds * tradePercentage / currentPrice;
       // 取引量を計算（最小取引量と計算した最大取引量の大きい方を使用）
@@ -122,7 +122,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 0.0001 単位を下回らない
       formattedAmount = Math.max(formattedAmount, 0.0001);
-      
+
       if (availableFunds >= currentPrice * formattedAmount) {
         // 買い注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -132,11 +132,11 @@ async function inyoStrategy(exchange, symbol, options = {}) {
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[陰陽戦略] 買い注文実行: ${exchange.id} - ${symbol} - 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'buy', strategyKey, order.id, 'market');
-          
+
           // 最後のシグナルを記録
           if (!tradeRecords[exchange.id][symbol][strategyKey].lastSignal) {
             tradeRecords[exchange.id][symbol][strategyKey].lastSignal = 'buy';
@@ -167,7 +167,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       if (postOrderToDiscord) {
         await postOrderToDiscord(`[陰陽戦略] 売りシグナル: ${exchange.id} - ${symbol} - 陰線を検出`);
       }
-      
+
       // 利用可能な資産を確認
       const balance = await exchange.fetchBalance();
       const quoteCurrency = symbol.split('/')[0];
@@ -177,28 +177,32 @@ async function inyoStrategy(exchange, symbol, options = {}) {
       let buyAmount = 0;
       if (updateTradeRecord && hasTradeRecords) {
         buyAmount = tradeRecords[exchange.id][symbol][strategyKey].netPosition;
-        if (Number.isNaN(buyAmount)) buyAmount = 0; // NaNの場合は0にする
-        if (buyAmount < 0) buyAmount = 0; // 負の値にならないように
+        if (Number.isNaN(buyAmount)) {
+          buyAmount = 0;
+        } // NaNの場合は0にする
+        if (buyAmount < 0) {
+          buyAmount = 0;
+        } // 負の値にならないように
       }
 
       // 売却量を計算（買った分だけを売却）
       let sellAmount = buyAmount;
-      
+
       // 買った記録がなくても、利用可能な資産があれば残高 * sellPercentageと最小単位の大きい方を売却
       if (sellAmount <= 0 && availableAsset >= minTradeAmount) {
         sellAmount = Math.max(minTradeAmount, availableAsset * sellPercentage);
       }
-      
+
       // 利用可能な資産を超えないようにする
       sellAmount = Math.min(sellAmount, availableAsset);
-      
+
       // 取引量を計算（最小取引量と計算した売却量の大きい方を使用）
       const tradeAmount = Math.max(minTradeAmount, sellAmount);
       // 精度を考慮して、最小精度以上の値を確保
       let formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       // 0.0001 単位で取引
       formattedAmount = Math.max(formattedAmount, 0.0001);
-      
+
       if (availableAsset >= formattedAmount) {
         // 売り注文を作成
         // 注文数をチェックし、必要に応じて古い注文をキャンセル
@@ -208,11 +212,11 @@ async function inyoStrategy(exchange, symbol, options = {}) {
         if (postOrderToDiscord) {
           await postOrderToDiscord(`[陰陽戦略] 売り注文実行: ${exchange.id} - ${symbol} - 数量: ${formattedAmount}`);
         }
-        
+
         // 取引記録を更新
         if (updateTradeRecord) {
           updateTradeRecord(exchange.id, symbol, formattedAmount, currentPrice, 'sell', strategyKey, order.id, 'market');
-          
+
           // 最後のシグナルを記録
           if (!tradeRecords[exchange.id][symbol][strategyKey].lastSignal) {
             tradeRecords[exchange.id][symbol][strategyKey].lastSignal = 'sell';
@@ -229,7 +233,7 @@ async function inyoStrategy(exchange, symbol, options = {}) {
     } else {
       console.log(`陰陽戦略 シグナルなし: ${symbol} - 条件を満たしませんでした`);
     }
-    
+
     return {
       strategy: 'Inyo',
       symbol,
