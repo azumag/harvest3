@@ -19,6 +19,7 @@ const {
   listFilledPositions
 } = require('./mongoDatabase');
 
+const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
 
 // フォールバック定数
@@ -1234,24 +1235,6 @@ async function addSignal(exchange, symbol, strategyKey, side, price, detail, opt
 
   // シグナルが出過ぎるので一時的にシャットアウト
   return;
-
-  // リアルタイムモードの場合 (既存ロジック)
-  const timestamp = Date.now();
-
-  const signal = {
-    exchange: exchange.id,
-    symbol,
-    strategy: strategyKey,
-    side,
-    price,
-    detail,
-    timestamp
-  };
-
-  // console.log('Adding signal with exchange:', exchange); // ログを追加
-  // console.log('Signal object to be saved:', signal); // ログを追加
-
-  return await addSignalMongoDB(signal);
 }
 
 /**

@@ -328,65 +328,6 @@ class MaintenanceScheduler {
     // EMERGENCY: Temporarily disable maintenance scheduler due to CCXT throttling crisis
     console.log('[メンテナンス] ⚠️ 緊急: CCXTスロットリング問題のため、メンテナンススケジュールを一時的に無効化');
     return;
-
-    console.log('[メンテナンス] 自動メンテナンススケジュールを初期化中...');
-
-    // 1. ポジション整合性チェック（2時間間隔）
-    this.schedulingManager.scheduleIntervalTask(
-      'position-consistency-check',
-      () => this.runPositionConsistencyCheck(),
-      120, // 2時間 = 120分
-      { description: 'ポジション整合性チェック（2時間間隔）' }
-    );
-
-    // 2. 残高整合性チェック（1時間間隔）
-    this.schedulingManager.scheduleIntervalTask(
-      'balance-consistency-check',
-      () => this.runBalanceConsistencyCheck(),
-      60, // 1時間 = 60分
-      { description: '残高整合性チェック（1時間間隔）' }
-    );
-
-    // 3. 取引所残高比較（3時間間隔）
-    this.schedulingManager.scheduleIntervalTask(
-      'exchange-balance-comparison',
-      () => this.runExchangeBalanceComparison(),
-      180, // 3時間 = 180分
-      { description: '取引所残高比較（3時間間隔）' }
-    );
-
-    // 4. ゴーストポジション削除（6時間間隔）
-    this.schedulingManager.scheduleIntervalTask(
-      'ghost-position-cleanup',
-      () => this.runGhostPositionCleanup(),
-      360, // 6時間 = 360分
-      { description: 'ゴーストポジション削除（6時間間隔）' }
-    );
-
-    // 5. 週次包括メンテナンス（毎週日曜日 3:00 AM）
-    this.schedulingManager.scheduleCustomTask(
-      'weekly-maintenance',
-      '0 0 3 * * 0', // 毎週日曜日の午前3時
-      () => this.runWeeklyMaintenance(),
-      { description: '週次包括メンテナンス（毎週日曜日3:00AM）' }
-    );
-
-    this.isInitialized = true;
-    console.log('[メンテナンス] 自動メンテナンススケジュール初期化完了');
-
-    // 初期化完了通知
-    setTimeout(async () => {
-      const message = '🤖 **自動メンテナンスシステム起動**\n' +
-                     '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                     '📋 **スケジュール登録完了**:\n' +
-                     '• ポジション整合性チェック (2時間間隔)\n' +
-                     '• 残高整合性チェック (1時間間隔)\n' +
-                     '• 取引所残高比較 (3時間間隔)\n' +
-                     '• ゴーストポジション削除 (6時間間隔)\n' +
-                     '• 週次包括メンテナンス (日曜3:00AM)\n\n' +
-                     `⏰ ${new Date().toLocaleString('ja-JP')}`;
-      await postOrderToDiscord(message);
-    }, 5000);
   }
 
   /**

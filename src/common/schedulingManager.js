@@ -5,6 +5,7 @@
 
 const cron = require('node-cron');
 const { getValidatedConfig } = require('./balanceCheckerConfig');
+const { postErrorToDiscord } = require('./notifications');
 
 class SchedulingManager {
   constructor() {
