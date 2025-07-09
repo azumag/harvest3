@@ -112,6 +112,16 @@ npm run test:coverage
 
 ## ⚙️ 設定
 
+### EXCHANGE_SETTINGS 参考値
+以下は現在の設定値です：
+
+```javascript
+RATE_LIMIT: 15000               // API制限間隔（ミリ秒）
+TIMEOUT: 60000                  // タイムアウト時間（ミリ秒）
+MAX_THROTTLE_QUEUE_SIZE: 5000   // 最大キュー数
+MAX_CONCURRENT_PAIRS: 1         // 同時処理ペア数
+```
+
 ### 環境変数
 ```env
 # 取引所APIキー
