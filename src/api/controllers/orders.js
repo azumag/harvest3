@@ -11,13 +11,23 @@ async function getOrders(req, res) {
     const { exchange, symbol, side, startDate, endDate } = req.query;
 
     const filter = {};
-    if (exchange) filter.exchange = exchange;
-    if (symbol) filter.symbol = symbol;
-    if (side) filter.side = side;
+    if (exchange) {
+      filter.exchange = exchange;
+    }
+    if (symbol) {
+      filter.symbol = symbol;
+    }
+    if (side) {
+      filter.side = side;
+    }
     if (startDate || endDate) {
       filter.timestamp = {};
-      if (startDate) filter.timestamp.$gte = new Date(startDate).getTime();
-      if (endDate) filter.timestamp.$lte = new Date(endDate).getTime();
+      if (startDate) {
+        filter.timestamp.$gte = new Date(startDate).getTime();
+      }
+      if (endDate) {
+        filter.timestamp.$lte = new Date(endDate).getTime();
+      }
     }
 
     // listOrders関数を呼び出し
@@ -31,5 +41,5 @@ async function getOrders(req, res) {
 }
 
 module.exports = {
-  getOrders,
+  getOrders
 };

@@ -3,7 +3,7 @@ class Logger {
   constructor(context = 'General') {
     this.context = context;
     this.logLevel = process.env.HFT_LOG_LEVEL || process.env.LOG_LEVEL || 'INFO';
-    
+
     // 色設定
     this.colors = {
       reset: '\x1b[0m',
@@ -44,7 +44,7 @@ class Logger {
       'WARN': this.colors.yellow,
       'ERROR': this.colors.red
     };
-    
+
     const color = colors[level.toUpperCase()] || this.colors.white;
     return `${color}${this.colors.bright}${level.toUpperCase().padEnd(5)}${this.colors.reset}`;
   }
@@ -54,16 +54,18 @@ class Logger {
   }
 
   log(level, message, ...args) {
-    if (!this.shouldLog(level)) return;
+    if (!this.shouldLog(level)) {
+      return;
+    }
 
     const timestamp = this.formatTimestamp();
     const levelStr = this.formatLevel(level);
     const context = this.formatContext();
-    
+
     // メッセージの整形
     let formattedMessage = message;
     if (args.length > 0) {
-      const argsStr = args.map(arg => 
+      const argsStr = args.map(arg =>
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
       ).join(' ');
       formattedMessage = `${message} ${argsStr}`;

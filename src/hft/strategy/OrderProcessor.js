@@ -30,7 +30,7 @@ class OrderProcessor {
         pair: pair,
         side: 'buy',
         price: price,
-        amount: amount,
+        amount: amount
         // その他の注文情報
       };
 
@@ -64,7 +64,7 @@ class OrderProcessor {
         pair: pair,
         side: 'sell',
         price: price,
-        amount: amount,
+        amount: amount
         // その他の注文情報
       };
 

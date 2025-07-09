@@ -1,31 +1,33 @@
 services:
 
-  reporter:
-    image: harvest3-bot-image
-    container_name: harvest3-reporter
-    restart: always
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run reporter
-    environment:
-      - REDIS_URL=redis://redis:6379
-    networks:
-      - harvest-network
-    depends_on:
-      - redis
-      - mongodb
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "1m"
-        max-file: "1"
+  # reporter:
+  #   image: harvest3-bot-image
+  #   container_name: harvest3-reporter
+  #   restart: always
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./src:/usr/src/app/src
+  #     - ./scripts:/usr/src/app/scripts
+  #     - ./test:/usr/src/app/test
+  #   command: npm run reporter
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #     - MONGODB_URL=mongodb://mongodb:27017
+  #     - MONGODB_DB_NAME=harvest3
+  #   networks:
+  #     - harvest-network
+  #   depends_on:
+  #     - redis
+  #     - mongodb
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "1m"
+  #       max-file: "1"
 
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
     container_name: harvest3-redis
     command: redis-server --save 900 1 --save 300 10 --save 60 10000
     ports:
@@ -35,6 +37,20 @@ services:
     restart: always
     networks:
       - harvest-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: '2G'
+        reservations:
+          cpus: '0.25'
+          memory: '512M'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -51,6 +67,20 @@ services:
     restart: always
     networks:
       - harvest-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: '4G'
+        reservations:
+          cpus: '0.5'
+          memory: '1G'
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
@@ -59,26 +89,40 @@ services:
 
   bot:
     image: harvest3-bot-image
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
     container_name: strategy-runner
-    restart: always
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./strategies:/usr/src/app/strategies
-      - ./scripts:/usr/src/app/scripts
-      - ./test:/usr/src/app/test
-      - ./data:/usr/src/app/data  # データベースファイル用のボリューム
-      - ./bot.js:/usr/src/app/bot.js
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
-    command: npm run start
+    restart: on-failure:5
+    env_file:
+      - .env
     environment:
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
+    volumes:
+      - ./src:/usr/src/app/src:cached
+      - ./strategies:/usr/src/app/strategies:cached  
+      - ./scripts:/usr/src/app/scripts:cached
+      - ./test:/usr/src/app/test:cached
+      - ./data:/usr/src/app/data:cached
+      - ./entrypoint.sh:/usr/src/app/entrypoint.sh:ro
+    entrypoint: ["/usr/src/app/entrypoint.sh"]
+    # env_fileで.envから読み込み
     networks:
       - harvest-network
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const options = { host: 'localhost', port: 3000, path: '/api/health', timeout: 2000 }; const req = http.request(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
@@ -89,18 +133,23 @@ services:
     image: harvest3-bot-image
     container_name: hft
     restart: unless-stopped
+    env_file:
+      - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
+      - ./src:/usr/src/app/src:cached
     command: npm run start-hft
     environment:
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
     networks:
       - harvest-network
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -112,18 +161,36 @@ services:
     container_name: backtest
     restart: always
     volumes:
-      - ./src:/usr/src/app/src
-      - ./package.json:/usr/src/app/package.json
-      - .env:/usr/src/app/.env
+      - ./src:/usr/src/app/src:cached
+      - ./data:/usr/src/app/data:cached
     command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
+      - BACKTEST_MODE=true
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
+      - STRATEGY_BOLLINGER_BANDS_ENABLED=true
+      - STRATEGY_MARKET_MAKING_ENABLED=true
+      - STRATEGY_MA_ENABLED=true
+      - STRATEGY_MEAN_REVERSION_ENABLED=true
+      - STRATEGY_HIGH_FREQUENCY_ENABLED=true
+      - STRATEGY_SCALPING_ENABLED=true
+      - STRATEGY_RSI_ENABLED=true
+      - STRATEGY_ARBITRAGE_ENABLED=true
+      - STRATEGY_MULTI_INDICATOR_ENABLED=true
+      - STRATEGY_MACD_ENABLED=true
+      - STRATEGY_TREND_FOLLOWING_ENABLED=true
+      - STRATEGY_INYO_ENABLED=true
+      - STRATEGY_OSCILLATOR_ENABLED=true
     networks:
       - harvest-network
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -160,20 +227,24 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     volumes:
-      - ./src:/usr/src/app/src
-      - ./data:/usr/src/app/data
-      - ./package.json:/usr/src/app/package.json
-      - ./package-lock.json:/usr/src/app/package-lock.json
-      - .env:/usr/src/app/.env
+      - ./src:/usr/src/app/src:cached
+      - ./data:/usr/src/app/data:cached
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3000
       - ENABLE_REALTIME=true
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://mongodb:27017/harvest3
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=harvest3
     networks:
       - harvest-network
     command: npm run start-web

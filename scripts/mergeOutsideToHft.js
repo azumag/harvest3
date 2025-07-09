@@ -1,6 +1,6 @@
 /**
  * OUTSIDEからHFTへのマージスクリプト
- * 
+ *
  * 戦略キーがOUTSIDEのfilled summaryデータをHFT戦略にマージします
  */
 
@@ -29,7 +29,7 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
   const symbol = outsideSummary.symbol;
 
   console.log(`[${exchangeId}][${symbol}] OUTSIDE→HFTマージを実行中`);
-  
+
   // マージするデータを準備
   const mergedSummary = {
     buyAmount: parseFloat(hftSummary.buyAmount || 0) + parseFloat(outsideSummary.buyAmount || 0),
@@ -55,7 +55,7 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
   }
 
   // マージ結果をログ出力
-  console.log(`  マージ内容:`);
+  console.log('  マージ内容:');
   console.log(`  - buyAmount: ${hftSummary.buyAmount || 0} + ${outsideSummary.buyAmount || 0} = ${mergedSummary.buyAmount}`);
   console.log(`  - sellAmount: ${hftSummary.sellAmount || 0} + ${outsideSummary.sellAmount || 0} = ${mergedSummary.sellAmount}`);
   console.log(`  - netPosition: ${hftSummary.netPosition || 0} + ${outsideSummary.netPosition || 0} = ${mergedSummary.netPosition}`);
@@ -64,7 +64,7 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
   const outsideKey = `summary:trade:${outsideSummary.exchangeId}:${outsideSummary.symbol}:OUTSIDE`;
 
 
-  
+
   // HFTサマリーを更新
   // Redisに保存する前にfloat値を小数点以下8桁に丸める
   const dataToSave = {
@@ -80,12 +80,12 @@ async function mergeOutsideToHft(outsideSummary, hftSummary) {
   };
 
   await client.hSet(hftKey, dataToSave);
-  
+
   // OUTSIDEサマリーを削除
   await client.del(outsideKey);
-  
-  console.log(`  → マージ完了、OUTSIDEデータを削除しました`);
-  
+
+  console.log('  → マージ完了、OUTSIDEデータを削除しました');
+
   return { merged: true, mergedSummary };
 }
 
@@ -99,7 +99,7 @@ async function main() {
     for (const exchange of exchanges) {
       processedExchanges++;
       const summaries = await getTradeSummaries(exchange.id);
-      
+
       // 各通貨ペアの処理
       for (const summary of summaries) {
         processedSymbols++;
@@ -109,7 +109,7 @@ async function main() {
             if (targSummary.strategyKey === 'HFT' && targSummary.symbol === summary.symbol) {
               // OUTSIDEからHFTにマージ
               const result = await mergeOutsideToHft(summary, targSummary);
-              
+
               if (result.merged) {
                 mergedSummaries++;
               } else {
@@ -120,8 +120,8 @@ async function main() {
         }
       }
     }
-    console.log(`\n処理完了`);
-    
+    console.log('\n処理完了');
+
   } catch (error) {
     console.error('処理エラー:', error);
   } finally {

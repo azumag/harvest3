@@ -22,18 +22,18 @@ class HFTStrategy {
   async processMarketData(dataType, data) {
     // デバッグ用ログ
     this.logger.debug(`Processing ${dataType} data for ${this.pair}`);
-    
+
     try {
       switch (dataType) {
-        case 'orderBook':
-          await this.processOrderBook(data);
-          break;
-        case 'ticker':
-          await this.processTicker(data);
-          break;
+      case 'orderBook':
+        await this.processOrderBook(data);
+        break;
+      case 'ticker':
+        await this.processTicker(data);
+        break;
         // TODO: transactions などの他のデータタイプに対応
-        default:
-          this.logger.warn(`Unknown data type received: ${dataType}`);
+      default:
+        this.logger.warn(`Unknown data type received: ${dataType}`);
       }
     } catch (error) {
       this.logger.error(`Error processing market data for ${this.pair}:`, error);

@@ -13,19 +13,19 @@ describe('Utils module', () => {
     test('calculates weighted average correctly', () => {
       const prices = [100, 200, 300];
       const amounts = [1, 2, 1];
-      
+
       // Expected result: (100*1 + 200*2 + 300*1) / (1+2+1) = 800/4 = 200
       const result = utils.weightedAverage(prices, amounts);
-      
+
       expect(result).toBe(200);
     });
 
     test('handles single item arrays', () => {
       const prices = [150];
       const amounts = [3];
-      
+
       const result = utils.weightedAverage(prices, amounts);
-      
+
       expect(result).toBe(150);
     });
   });
@@ -61,11 +61,11 @@ describe('Utils module', () => {
     test('sleeps for approximately the given time', async () => {
       const sleepTime = 100; // 100ms
       const start = Date.now();
-      
+
       await utils.sleep(sleepTime);
-      
+
       const elapsed = Date.now() - start;
-      
+
       // Allow for some timing variation but ensure it's at least close to the expected time
       expect(elapsed).toBeGreaterThanOrEqual(sleepTime - 10);
     });
@@ -82,7 +82,7 @@ describe('Utils module', () => {
       };
 
       const result = await utils.fetchTotal(mockExchange, 'BTC/JPY');
-      
+
       // Buy: 100 * 2 + 10 = 210
       // Sell: 120 * 2 - 10 = 230
       // Total P/L: 230 - 210 = 20
@@ -100,7 +100,7 @@ describe('Utils module', () => {
       };
 
       const result = await utils.fetchTotal(mockExchange, 'BTC/JPY');
-      
+
       // Buy: 100 * (2 - 0.1) = 100 * 1.9 = 190
       // Sell: 120 * (2 - 0.1) = 120 * 1.9 = 228
       // Total P/L: 228 - 190 = 38
@@ -117,7 +117,7 @@ describe('Utils module', () => {
       };
 
       const result = await utils.fetchTotal(mockExchange, 'BTC/JPY');
-      
+
       // Buy: 100 * 2 = 200
       // Sell: 120 * 2 = 240
       // Total P/L: 240 - 200 = 40
@@ -131,7 +131,7 @@ describe('Utils module', () => {
       };
 
       const result = await utils.fetchTotal(mockExchange, 'BTC/JPY');
-      
+
       expect(result).toBe(0);
     });
   });

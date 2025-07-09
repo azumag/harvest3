@@ -1,2 +1,2 @@
 // src/bot.jsをインポートして実行
-require('./src/bot');
+require('./src/bot.js');

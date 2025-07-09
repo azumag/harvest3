@@ -6,9 +6,9 @@ const { clearPositionMarket } = require('../src/strategies/utils/common');
 
 async function testClearPositionMarket() {
   // 有効な通貨ペア（DOT/JPY）と無効な通貨ペア（BNB/JPY）でテスト
-  const validSymbol = 'BTC/JPY'; 
+  const validSymbol = 'BTC/JPY';
   const invalidSymbol = 'BNB/JPY';
-  
+
   console.log('修正されたclearPositionMarket関数のテスト');
   console.log('='.repeat(50));
 

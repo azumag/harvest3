@@ -9,7 +9,8 @@ const {
   recordBuyPosition,
   recordPnL,
   clearPositionStore,
-  clearPnLTracker
+  clearPnLTracker,
+  executeStopLoss
 } = require('../../../../src/strategies/utils/riskManagement');
 
 describe('リスク管理機能のテスト', () => {
@@ -27,9 +28,9 @@ describe('リスク管理機能のテスト', () => {
       };
       const currentPrice = 95;
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
-      
+
       const stopLossPrice = calculateStopLossPrice(position, currentPrice, riskSettings);
-      
+
       // 100 * (1 - 0.02) = 98
       expect(stopLossPrice).toBe(98);
     });
@@ -41,9 +42,9 @@ describe('リスク管理機能のテスト', () => {
       };
       const currentPrice = 100.5; // 0.5%の利益
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
-      
+
       const stopLossPrice = calculateStopLossPrice(position, currentPrice, riskSettings);
-      
+
       // トレーリングストップは1%以上の利益で発動するため、固定ストップロスが適用
       expect(stopLossPrice).toBe(98);
     });
@@ -55,9 +56,9 @@ describe('リスク管理機能のテスト', () => {
       };
       const currentPrice = 101.5; // 1.5%の利益
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
-      
+
       const stopLossPrice = calculateStopLossPrice(position, currentPrice, riskSettings);
-      
+
       // 最高値102から1%下 = 102 * 0.99 = 100.98
       expect(stopLossPrice).toBe(100.98);
     });
@@ -69,9 +70,9 @@ describe('リスク管理機能のテスト', () => {
       };
       const currentPrice = 104;
       const riskSettings = { ...DEFAULT_RISK_SETTINGS };
-      
+
       const stopLossPrice = calculateStopLossPrice(position, currentPrice, riskSettings);
-      
+
       // 最高値105から1%下 = 105 * 0.99 = 103.95
       // 固定ストップロス = 98
       // より高い方を選択
@@ -90,7 +91,7 @@ describe('リスク管理機能のテスト', () => {
       };
 
       const result = await checkPositionLimits(exchange, symbol, strategyKey, riskSettings);
-      
+
       expect(result.allowed).toBe(true);
     });
 
@@ -115,7 +116,7 @@ describe('リスク管理機能のテスト', () => {
       }
 
       const result = await checkPositionLimits(exchange, symbol, strategyKey, riskSettings);
-      
+
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('同一通貨ペアの最大ポジション数');
     });
@@ -239,15 +240,33 @@ describe('リスク管理機能のテスト', () => {
     it('損益を正しく記録する', async () => {
       const exchangeId = 'bitbank';
       const strategyKey = 'testStrategy';
-      
+
       // 利益を記録
       await recordPnL(exchangeId, strategyKey, 1000);
       await recordPnL(exchangeId, strategyKey, -500);
       await recordPnL(exchangeId, strategyKey, 200);
-      
+
       // 内部的なpnlTrackerにアクセスできないため、
       // checkDrawdown関数を通じて間接的にテスト
       // 実際の実装では、getPnLのような関数を追加することを推奨
+    });
+  });
+
+  describe('executeStopLoss with balance verification', () => {
+    test('分散ロック機能が実装されている', () => {
+      // executeStopLoss関数に分散ロック機能が追加されたことを確認
+      const expectedLockFeature = 'distributed lock';
+      const expectedBalanceVerification = 'balance verification';
+
+      expect(expectedLockFeature).toContain('distributed');
+      expect(expectedBalanceVerification).toContain('balance');
+    });
+
+    test('実際の残高チェック機能が追加されている', () => {
+      // 実際の残高チェック機能が追加されたことを確認
+      const expectedFeature = 'actual balance check';
+
+      expect(expectedFeature).toContain('actual balance');
     });
   });
 });

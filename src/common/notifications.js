@@ -1,6 +1,10 @@
 const axios = require('axios');
 const dotenv = require('dotenv');
+const rateLimiter = require('./discordRateLimiter');
+const crypto = require('crypto');
 dotenv.config();
+
+// 残高チェック機能は balanceChecker.js に分離
 
 const discordErrorWebhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL; // Discord Webhook URL
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL; // Discord Webhook URL
@@ -9,85 +13,80 @@ const discordWebWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL; // Discord Web
 const discordBacktestURL = process.env.DISCORD_BACKTEST_WEBHOOK_URL; // Discord Webhook URL
 
 /**
- * エラーメッセージをDiscordに投稿する関数
- * @param {String} message - 投稿するメッセージ
+ * MongoDB接続エラーをDiscordに通知する関数
+ * @param {String} errorMessage - エラーメッセージ
+ * @param {String} mongoUrl - MongoDB接続URL
  */
-async function postErrorToDiscord(message) {
-  if (discordErrorWebhookUrl) {
-    try {
-      await axios.post(discordErrorWebhookUrl, { content: message });
-    } catch (error) {
-      console.error('Discordへの通知に失敗しました: ', error);
-    }
-  } else {
-    console.error('Discord Webhook URLが設定されていません');
-  }
+async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
+  const message = `🚨 **MongoDB接続エラー**\n\`\`\`\nエラー: ${errorMessage}\n接続先: ${mongoUrl}\n時刻: ${new Date().toISOString()}\n\`\`\``;
+
+  // 重複防止のためのキーを生成
+  const deduplicationKey = crypto.createHash('sha256').update(`mongodb_error_${errorMessage}_${mongoUrl}`).digest('hex');
+
+  await rateLimiter.send(discordErrorWebhookUrl, message, {
+    priority: rateLimiter.notificationPriorities.CRITICAL,
+    deduplicationKey,
+    deduplicationWindow: 1800000 // 30分間の重複防止
+  });
 }
 
 /**
- * 注文情報をDiscordに投稿する関数（レートリミット対応）
+ * エラーメッセージをDiscordに投稿する関数（統一レートリミット対応）
  * @param {String} message - 投稿するメッセージ
- * @param {number} [maxRetries=3] - 最大リトライ回数
+ * @param {Object} options - 通知オプション
  */
-async function postOrderToDiscord(message, maxRetries = 3) {
+async function postErrorToDiscord(message, options = {}) {
+  if (!discordErrorWebhookUrl) {
+    console.error('Discord Webhook URLが設定されていません');
+    return;
+  }
+
+  // メッセージから重複防止キーを生成
+  const deduplicationKey = options.deduplicationKey ||
+    crypto.createHash('sha256').update(message.substring(0, 200)).digest('hex');
+
+  await rateLimiter.send(discordErrorWebhookUrl, message, {
+    priority: options.priority || rateLimiter.notificationPriorities.WARNING,
+    deduplicationKey,
+    deduplicationWindow: options.deduplicationWindow || 3600000, // 1時間
+    maxRetries: options.maxRetries || 3
+  });
+}
+
+/**
+ * 注文情報をDiscordに投稿する関数（統一レートリミット対応）
+ * @param {String} message - 投稿するメッセージ
+ * @param {Object} options - 通知オプション
+ */
+async function postOrderToDiscord(message, options = {}) {
   if (!discordOrderWebhookUrl) {
     console.error('Discord Webhook URLが設定されていません');
     return;
   }
 
-  let retries = 0;
-  while (retries <= maxRetries) {
-    try {
-      await axios.post(discordOrderWebhookUrl, { content: message });
-      return; // 成功したら終了
-    } catch (error) {
-      // Axiosエラーかつレートリミット(429)の場合のみリトライ
-      if (axios.isAxiosError(error) && error.response && error.response.status === 429) {
-        retries++;
-        if (retries > maxRetries) {
-          console.error(`Discordへの通知に失敗しました: ${maxRetries}回リトライしましたが、レートリミットが解消されません。`, error.response.data);
-          break; // リトライ上限に達したらループを抜ける
-        }
+  // 注文情報の重複防止キーを生成
+  const deduplicationKey = options.deduplicationKey ||
+    crypto.createHash('sha256').update(`order_${message.substring(0, 100)}`).digest('hex');
 
-        // retry_afterヘッダーまたはデータから待機時間を取得 (秒単位)
-        // エラーログから data.retry_after が小数で返ることを確認したので、そちらを優先
-        const retryAfterSeconds = error.response.data?.retry_after || parseInt(error.response.headers['retry-after'], 10) || 1; // デフォルト1秒
-        // ミリ秒に変換し、少し余裕を持たせる (最低1秒は待つ)
-        const waitTime = Math.max(Math.ceil(retryAfterSeconds * 1000) + 500, 1000);
-
-        console.warn(`Discordレートリミット: ${waitTime / 1000}秒待機してリトライします (${retries}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      } else {
-        // レートリミット以外のエラー、またはAxiosエラーでない場合
-        console.error('Discordへの通知に失敗しました: ', error.message || error);
-        if (error.response) {
-          // エラーレスポンスの詳細を出力
-          console.error('エラーレスポンス Status:', error.response.status);
-          console.error('エラーレスポンス Data:', error.response.data);
-        } else if (error.request) {
-          // リクエストは行われたがレスポンスがない場合
-          console.error('エラーリクエスト:', error.request);
-        } else {
-          // リクエスト設定時のエラー
-          console.error('設定エラー:', error.message);
-        }
-        break; // リトライせずにループを抜ける
-      }
-    }
-  }
+  await rateLimiter.send(discordOrderWebhookUrl, message, {
+    priority: options.priority || rateLimiter.notificationPriorities.WARNING,
+    deduplicationKey,
+    deduplicationWindow: options.deduplicationWindow || 600000, // 10分間
+    maxRetries: options.maxRetries || 3
+  });
 }
 
 /**
- * 結果情報をDiscordに投稿する関数（2000文字制限対応）
+ * 結果情報をDiscordに投稿する関数（2000文字制限対応、統一レートリミット使用）
  * @param {String} message - 投稿するメッセージ
+ * @param {String} discordWebhookURL - Webhook URL
+ * @param {Object} options - 通知オプション
  */
-async function postResultToDiscord(message, discordWebhookURL = discordResultWebhookUrl) {
+async function postResultToDiscord(message, discordWebhookURL = discordResultWebhookUrl, options = {}) {
   if (!discordWebhookURL) {
     console.error('Discord Webhook URLが設定されていません');
     return;
   }
-
-  await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待機
 
   const MAX_LENGTH = 2000;
   const chunks = [];
@@ -127,21 +126,27 @@ async function postResultToDiscord(message, discordWebhookURL = discordResultWeb
     chunks.push(currentChunk);
   }
 
-  // 各チャンクを順番に送信
-  for (const chunk of chunks) {
-    try {
-      // Discord APIのレート制限を考慮して少し待機（必要に応じて調整）
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await axios.post(discordWebhookURL, { content: chunk });
-    } catch (error) {
-      console.error(`Discordへの通知チャンク送信に失敗しました: ${error.message}`);
-      // エラーが発生しても次のチャンクの送信を試みる
-    }
+  // 各チャンクを統一レートリミッターで順番に送信
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkDeduplicationKey = options.deduplicationKey ?
+      `${options.deduplicationKey}_chunk_${i}` :
+      crypto.createHash('sha256').update(`result_${chunk.substring(0, 100)}_${i}`).digest('hex');
+
+    await rateLimiter.send(discordWebhookURL, chunk, {
+      priority: options.priority || rateLimiter.notificationPriorities.INFO,
+      deduplicationKey: chunkDeduplicationKey,
+      deduplicationWindow: options.deduplicationWindow || 1800000, // 30分間
+      maxRetries: options.maxRetries || 3
+    });
   }
 }
 
+// 残高チェック機能は balanceChecker.js に分離されました
+
 module.exports = {
   postErrorToDiscord,
+  postMongoConnectionErrorToDiscord,
   postOrderToDiscord,
   postResultToDiscord,
   discordWebWebhookUrl,

@@ -25,46 +25,46 @@ class StreamConnectionTester {
 
   async runTest(mockMode = false) {
     this.logger.info('🧪 Starting HFT Stream Connection Test');
-    this.logger.info(`📋 Test Configuration:`);
+    this.logger.info('📋 Test Configuration:');
     this.logger.info(`   - Duration: ${TEST_DURATION / 1000} seconds`);
     this.logger.info(`   - Pairs: ${TEST_PAIRS.join(', ')}`);
     this.logger.info(`   - Mode: ${mockMode ? 'MOCK' : 'REAL'}`);
-    
+
     // コンフィグ設定
     const testConfig = {
       ...config,
       mockMode: mockMode
     };
-    
+
     // PublicStreamClientを作成
     this.client = new PublicStreamClient(
       mockMode ? 'mock://localhost' : 'wss://stream.bitbank.cc',
       testConfig,
       this.dataStore
     );
-    
+
     // イベントリスナーを設定
     this._setupEventListeners();
-    
+
     try {
       // 接続
       await this.client.connect();
       this.logger.success('✅ WebSocket connection established');
-      
+
       // 通貨ペアを購読
       for (const pair of TEST_PAIRS) {
         this.client.subscribePair(pair);
         this.logger.info(`📡 Subscribed to ${pair}`);
       }
-      
+
       // 定期的な統計表示
       this.statsInterval = setInterval(() => this._displayStats(), 5000);
-      
+
       // テスト期間が終了したら終了
       setTimeout(() => {
         this._finishTest();
       }, TEST_DURATION);
-      
+
     } catch (error) {
       this.logger.error('❌ Failed to connect:', error.message);
       process.exit(1);
@@ -85,7 +85,7 @@ class StreamConnectionTester {
         last: data.last
       });
     });
-    
+
     // 約定履歴更新
     this.dataStore.on('transactionsUpdate', (pair, transactions) => {
       this.messageCount.transactions++;
@@ -95,7 +95,7 @@ class StreamConnectionTester {
       };
       this.logger.debug(`💰 ${transactions.length} new transactions for ${pair}`);
     });
-    
+
     // 注文板更新
     this.dataStore.on('orderBookUpdate', (pair, orderBook) => {
       this.messageCount.orderBook++;
@@ -109,31 +109,31 @@ class StreamConnectionTester {
         asks: orderBook.asks.length
       });
     });
-    
+
     // 再接続イベント
     this.client.client.on('reconnected', (attempts) => {
       this.messageCount.reconnects++;
       this.logger.warn(`🔄 Reconnected after ${attempts} attempts`);
     });
-    
+
     // エラーイベント
     this.client.client.on('error', (error) => {
       this.messageCount.errors++;
-      this.logger.error(`❌ WebSocket error:`, error.message);
+      this.logger.error('❌ WebSocket error:', error.message);
     });
   }
 
   _displayStats() {
     const stats = this.dataStore.getStats();
     this.logger.info('📊 Current Statistics:');
-    this.logger.info(`   - Messages received:`);
+    this.logger.info('   - Messages received:');
     this.logger.info(`     • Ticker: ${this.messageCount.ticker}`);
     this.logger.info(`     • Transactions: ${this.messageCount.transactions}`);
     this.logger.info(`     • Order Book: ${this.messageCount.orderBook}`);
     this.logger.info(`   - Errors: ${this.messageCount.errors}`);
     this.logger.info(`   - Reconnections: ${this.messageCount.reconnects}`);
     this.logger.info(`   - Active pairs: ${stats.pairs}`);
-    
+
     // 各ペアの最新データ状況
     for (const pair of TEST_PAIRS) {
       const pairStats = stats.dataByPair[pair];
@@ -148,26 +148,26 @@ class StreamConnectionTester {
 
   _finishTest() {
     clearInterval(this.statsInterval);
-    
+
     this.logger.info('🏁 Test completed!');
     this.logger.info('📈 Final Results:');
     this._displayStats();
-    
+
     // データ受信の成功率を計算
     const totalExpectedMessages = TEST_PAIRS.length * 3; // ticker, transactions, orderbook
     const totalReceivedMessages = this.messageCount.ticker + this.messageCount.transactions + this.messageCount.orderBook;
-    
+
     this.logger.info('📊 Summary:');
     this.logger.info(`   - Total messages received: ${totalReceivedMessages}`);
     this.logger.info(`   - Average messages per second: ${(totalReceivedMessages / (TEST_DURATION / 1000)).toFixed(2)}`);
-    
+
     // 最後に受信したデータのタイムスタンプを表示
     this.logger.info('⏰ Last data received:');
     for (const [key, value] of Object.entries(this.lastData)) {
       const age = new Date() - value.timestamp;
       this.logger.info(`   - ${key}: ${age}ms ago`);
     }
-    
+
     // テスト結果の判定
     if (this.messageCount.errors > 0) {
       this.logger.warn(`⚠️ Test completed with ${this.messageCount.errors} errors`);
@@ -176,7 +176,7 @@ class StreamConnectionTester {
     } else {
       this.logger.success('✅ Test passed successfully!');
     }
-    
+
     // 切断してプロセスを終了
     this.client.disconnect();
     process.exit(this.messageCount.errors > 0 || totalReceivedMessages === 0 ? 1 : 0);

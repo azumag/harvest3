@@ -20,14 +20,14 @@ async function verifyFix() {
     apiKey,
     secret,
     enableRateLimit: true,
-    timeout: 30000,
+    timeout: 30000
   });
 
   try {
     // サポートされているマーケットの取得
     console.log('\n2. サポートされているマーケット一覧を取得中...');
     await exchange.loadMarkets();
-    
+
     const supportedMarkets = Object.keys(exchange.markets).sort();
     console.log(`サポートされているマーケット数: ${supportedMarkets.length}`);
     console.log(`例: ${supportedMarkets.slice(0, 5).join(', ')}...`);
@@ -36,7 +36,7 @@ async function verifyFix() {
     console.log('\n3. 有効なシンボル (BTC/JPY) でclearPositionMarketをテスト...');
     const validSymbol = 'BTC/JPY';
     console.log(`${validSymbol}は${exchange.markets[validSymbol] ? '有効' : '無効'}なシンボルです`);
-    
+
     try {
       const validResult = await clearPositionMarket(exchange, validSymbol, 'TEST_STRATEGY');
       console.log(`有効なシンボルでの結果: ${JSON.stringify(validResult)}`);
@@ -49,11 +49,11 @@ async function verifyFix() {
     console.log('\n4. 無効なシンボル (BNB/JPY) でclearPositionMarketをテスト...');
     const invalidSymbol = 'BNB/JPY';
     console.log(`${invalidSymbol}は${exchange.markets[invalidSymbol] ? '有効' : '無効'}なシンボルです`);
-    
+
     try {
       const invalidResult = await clearPositionMarket(exchange, invalidSymbol, 'TEST_STRATEGY');
       console.log(`無効なシンボルでの結果: ${JSON.stringify(invalidResult)}`);
-      
+
       if (invalidResult && invalidResult.success === false && invalidResult.reason === 'unsupported symbol') {
         console.log('✅ 無効なシンボルに対するテストは正常に完了しました (エラーは適切に処理されました)');
       } else {

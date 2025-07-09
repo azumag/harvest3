@@ -2,50 +2,69 @@
  * 逆張り戦略
  */
 const {
+  extractConfigParameters,
+  determineSignalType,
+  createStrategyResults,
+  createStandardLogFormat,
+  safePercentageFormat
+} = require('../common/tradingUtils');
+
+const {
   calculateSMA,
-  calculateRSI,
+  calculateRSI
 } = require('./utils/indicators');
 
-const { 
-  fetchAndValidateOHLCVData, 
-  handleStrategySignals, 
+const {
+  fetchAndValidateOHLCVData,
+  handleStrategySignals,
+  handleStrategyError,
+  getCurrentPrice,
+  saveStrategySignal,
+  createLogInfoBase,
+  fetchAndValidateOHLCVWithBacktestSetup,
+  executeStrategyTemplate
 } = require('./utils/common');
 
-const { addSignal, fetchTicker } = require('../database/manager');
 const { postErrorToDiscord } = require('../common/notifications');
+
+// 削除: addSignal, fetchTicker は共通関数でラップされるため不要
 
 /**
  * 平均回帰戦略
  * 価格が移動平均線から大きく乖離した場合に、平均に戻ると予測して取引
  */
 async function meanReversionStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
+  return await executeStrategyTemplate(async () => {
+    const { period, deviationThreshold, ohlcvInterval } = extractConfigParameters(config, {
+      period: 20,
+      deviationThreshold: 3,
+      ohlcvInterval: undefined
+    });
 
-  const { period = 20, deviationThreshold = 3, ohlcvInterval } = config;
-
-  try {
-    // OHLCVデータを取得して検証
-    const validatedData = await fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, postErrorToDiscord, strategyKey, options);
-    if (!validatedData) return;
-    const { ohlcv, closes } = validatedData;
-
-    if (options.backtest) {
-      // バックテストの場合、OHLCVデータをオプションに追加
-      options.backtest.ohlcvData = ohlcv; // オプションにOHLCVデータを追加
+    // 共通化されたOHLCVデータ取得
+    const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
+      exchange, symbol, ohlcvInterval, period, '平均回帰戦略', options
+    );
+    if (!validatedData) {
+      return;
     }
+    const { ohlcv, closes } = validatedData;
 
     // シグナル計算
     const signalResult = await calculateMeanReversionSignals(
-      closes, 
-      period, 
-      deviationThreshold, 
-      exchange, 
-      symbol, 
+      closes,
+      period,
+      deviationThreshold,
+      exchange,
+      symbol,
       strategyKey,
       options
     );
 
-    if (!signalResult) return;
-    
+    if (!signalResult) {
+      return;
+    }
+
     // シグナルによって売買
     return await handleStrategySignals(
       exchange,
@@ -57,20 +76,16 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
       '平均回帰戦略',
       'Mean Reversion',
       formatMeanReversionLogInfo,
-      options
+      options,
+      options.config
     );
-    
-  } catch (error) {
-    console.error(`平均回帰戦略でエラーが発生しました: ${symbol}`, error);
-    if (postErrorToDiscord) {
-      postErrorToDiscord(`[平均回帰戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'Mean Reversion',
-      symbol,
-      error: error.message
-    };
-  }
+
+  }, {
+    exchange,
+    symbol,
+    strategyName: '平均回帰戦略',
+    strategyId: 'Mean Reversion'
+  });
 }
 
 /**
@@ -78,74 +93,65 @@ async function meanReversionStrategy(exchange, symbol, strategyKey, config, mark
  * RSIが極端な値を示した場合に、反転を予測して取引
  */
 async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketParameters, options = {}) {
-  
-  const { period = 14, oversoldThreshold = 20, overboughtThreshold = 80, ohlcvInterval } = config;
+  return await executeStrategyTemplate(async () => {
+    const { period, oversoldThreshold, overboughtThreshold, ohlcvInterval } = extractConfigParameters(config, {
+      period: 14,
+      oversoldThreshold: 20,
+      overboughtThreshold: 80,
+      ohlcvInterval: undefined
+    });
 
-  try {
-    // OHLCVデータを取得して検証
-    const validatedData = await fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period, postErrorToDiscord, strategyKey, options);
-    if (!validatedData) return;
-    
+    // 共通化されたOHLCVデータ取得
+    const validatedData = await fetchAndValidateOHLCVWithBacktestSetup(
+      exchange, symbol, ohlcvInterval, period, 'オシレーター戦略', options
+    );
+    if (!validatedData) {
+      return;
+    }
+
     const { closes, ohlcv } = validatedData;
 
-    if(!closes) return;
-
-    if (options.backtest) {
-      options.backtest.ohlcvData = ohlcv;
+    if (!closes) {
+      return;
     }
 
     // RSIシグナル計算
-    try {
-      const signalResult = await calculateOscillatorSignals(
-        closes,
-        period,
-        oversoldThreshold,
-        overboughtThreshold,
-        exchange,
-        symbol,
-        strategyKey,
-        options
-      );
-
-      // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
-      if (!signalResult) return;
-
-      // シグナル処理
-      return await handleStrategySignals(
-        exchange,
-        symbol,
-        strategyKey,
-        config,
-        marketParameters,
-        signalResult,
-        'オシレーター戦略',
-        'Oscillator',
-        formatOscillatorLogInfo,
-        options
-      );
-
-    } catch (error) {
-      console.error(`オシレーター戦略でエラーが発生しました: ${symbol}`, error);
-      if (postErrorToDiscord) {
-        // await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-      }
-      return {
-        strategy: 'Oscillator',
-        symbol,
-        error: error.message
-      };
-    }
-  } catch (error) {
-    console.error(`オシレーター戦略でエラーが発生しました: ${symbol}`, error);
-    if (postErrorToDiscord) {
-      // await postErrorToDiscord(`[オシレーター戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return {
-      strategy: 'Oscillator',
+    const signalResult = await calculateOscillatorSignals(
+      closes,
+      period,
+      oversoldThreshold,
+      overboughtThreshold,
+      exchange,
       symbol,
-      error: error.message
-    };
-  }
+      strategyKey,
+      options
+    );
+
+    // シグナル計算でエラーが発生した場合や無効な結果の場合は終了
+    if (!signalResult) {
+      return;
+    }
+
+    // シグナル処理
+    return await handleStrategySignals(
+      exchange,
+      symbol,
+      strategyKey,
+      config,
+      marketParameters,
+      signalResult,
+      'オシレーター戦略',
+      'Oscillator',
+      formatOscillatorLogInfo,
+      options,
+      options.config
+    );
+  }, {
+    exchange,
+    symbol,
+    strategyName: 'オシレーター戦略',
+    strategyId: 'Oscillator'
+  });
 }
 
 /**
@@ -162,7 +168,7 @@ async function oscillatorStrategy(exchange, symbol, strategyKey, config, marketP
 async function calculateOscillatorSignals(closes, period, oversoldThreshold, overboughtThreshold, exchange, symbol, strategyKey, options = {}) {
   // RSIを計算
   const rsiValues = calculateRSI(closes, period);
-  
+
   // RSI値の検証
   if (!rsiValues || rsiValues.length === 0 || rsiValues[rsiValues.length - 1] === undefined) {
     console.log(`オシレーター戦略: ${symbol} - RSI計算結果が無効です`);
@@ -171,13 +177,9 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
     }
     return null;
   }
-  
+
   // 最新のRSI値を取得
   const currentRSI = rsiValues[rsiValues.length - 1];
-
-  // 現在の価格を取得
-  const ticker = await fetchTicker(exchange, symbol, options);
-  const currentPrice = ticker.last;
 
   // 買いシグナル: RSIが極端に低い（売られすぎ）
   const buySignal = currentRSI <= oversoldThreshold;
@@ -185,38 +187,16 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
   // 売りシグナル: RSIが極端に高い（買われすぎ）
   const sellSignal = currentRSI >= overboughtThreshold;
 
-  // シグナルタイプを決定
-  const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-  
   // 戦略固有の計算結果
   const strategyResults = {
     rsi: currentRSI,
     oversoldThreshold,
     overboughtThreshold
   };
-  
-  // シグナルがある場合のみ保存
-  if (signalType !== 'none') {
-    // 戦略シグナルを保存
-    addSignal(
-      exchange,
-      symbol,
-      strategyKey,
-      signalType,
-      currentPrice,
-      strategyResults,
-      options // optionsを追加
-    );
-  }
-  
-  return {
-    currentPrice,
-    currentRSI,
-    signalType,
-    buySignal,
-    sellSignal,
-    strategyResults
-  };
+
+  return await processSignalCalculation(
+    buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
+  );
 }
 
 /**
@@ -225,16 +205,20 @@ async function calculateOscillatorSignals(closes, period, oversoldThreshold, ove
  * @returns {Object} フォーマットされたログ情報
  */
 function formatMeanReversionLogInfo(signalResult) {
-  const { currentPrice, currentSMA, deviation } = signalResult;
-  const deviationFormatted = deviation;
-  
-  return {
-    buy: `価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviationFormatted}%`,
-    sell: `価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviationFormatted}%`,
-    none: `価格: ${currentPrice}, SMA: ${currentSMA}, 乖離率: ${deviationFormatted}%`,
-    orderInfo: { sma: currentSMA, deviation: deviationFormatted },
-    result: { price: currentPrice, sma: currentSMA, deviation }
-  };
+  return createStandardLogFormat(
+    signalResult,
+    {
+      buy: (data) => `価格: ${data.currentPrice}, SMA: ${data.currentSMA}, 乖離率: ${data.deviationFormatted}%`,
+      sell: (data) => `価格: ${data.currentPrice}, SMA: ${data.currentSMA}, 乖離率: ${data.deviationFormatted}%`,
+      none: (data) => `価格: ${data.currentPrice}, SMA: ${data.currentSMA}, 乖離率: ${data.deviationFormatted}%`
+    },
+    (sr) => ({
+      currentPrice: sr.currentPrice,
+      currentSMA: sr.currentSMA,
+      deviation: sr.deviation,
+      deviationFormatted: safePercentageFormat(sr.deviation, 2)
+    })
+  );
 }
 
 /**
@@ -243,16 +227,22 @@ function formatMeanReversionLogInfo(signalResult) {
  * @returns {Object} フォーマットされたログ情報
  */
 function formatOscillatorLogInfo(signalResult) {
-  const { currentPrice, currentRSI, strategyResults } = signalResult;
-  const { oversoldThreshold, overboughtThreshold } = strategyResults;
-  
-  return {
-    buy: `RSI: ${currentRSI} (閾値: ${oversoldThreshold})`,
-    sell: `RSI: ${currentRSI} (閾値: ${overboughtThreshold})`,
-    none: `RSI: ${currentRSI}`,
-    orderInfo: { rsi: currentRSI, threshold: currentRSI <= oversoldThreshold ? oversoldThreshold : overboughtThreshold },
-    result: { rsi: currentRSI, currentPrice }
-  };
+  return createStandardLogFormat(
+    signalResult,
+    {
+      buy: (data) => `RSI: ${data.currentRSI} (閾値: ${data.oversoldThreshold})`,
+      sell: (data) => `RSI: ${data.currentRSI} (閾値: ${data.overboughtThreshold})`,
+      none: (data) => `RSI: ${data.currentRSI}`
+    },
+    (sr) => ({
+      currentPrice: sr.currentPrice,
+      currentRSI: sr.currentRSI,
+      oversoldThreshold: sr.strategyResults.oversoldThreshold,
+      overboughtThreshold: sr.strategyResults.overboughtThreshold,
+      rsi: sr.currentRSI,
+      threshold: sr.currentRSI <= sr.strategyResults.oversoldThreshold ? sr.strategyResults.oversoldThreshold : sr.strategyResults.overboughtThreshold
+    })
+  );
 }
 
 /**
@@ -270,9 +260,8 @@ async function calculateMeanReversionSignals(closes, period, deviationThreshold,
   const sma = calculateSMA(closes, period);
   const currentSMA = sma[sma.length - 1];
 
-  // 現在の価格を取得
-  const ticker = await fetchTicker(exchange, symbol, options);
-  const currentPrice = ticker.last;
+  // 共通化された価格取得
+  const currentPrice = await getCurrentPrice(exchange, symbol, options);
 
   // 乖離率を計算（%）
   const deviation = ((currentPrice - currentSMA) / currentSMA) * 100;
@@ -283,40 +272,51 @@ async function calculateMeanReversionSignals(closes, period, deviationThreshold,
   // 売りシグナル: 価格が移動平均線から上に大きく乖離
   const sellSignal = deviation >= deviationThreshold;
 
-  // シグナルタイプを決定
-  const signalType = buySignal ? 'buy' : (sellSignal ? 'sell' : 'none');
-  
   // 戦略固有の計算結果
   const strategyResults = {
     sma: currentSMA,
-    deviation
+    deviation,
+    currentPrice
   };
-  
-  // シグナルがある場合のみ保存
-  if (signalType !== 'none') {
-    // 戦略シグナルを保存
-    addSignal(
-      exchange,
-      symbol,
-      strategyKey,
-      signalType,
-      currentPrice,
-      strategyResults
-    );
-  }
-  
+
+  return await processSignalCalculation(
+    buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options
+  );
+}
+
+/**
+ * 共通のシグナル計算処理
+ * @param {boolean} buySignal 買いシグナル
+ * @param {boolean} sellSignal 売りシグナル
+ * @param {Object} strategyResults 戦略固有の計算結果
+ * @param {Object} exchange 取引所インスタンス
+ * @param {string} symbol 通貨ペア
+ * @param {string} strategyKey 戦略キー
+ * @param {Object} options オプション
+ * @returns {Object} 処理結果
+ */
+async function processSignalCalculation(buySignal, sellSignal, strategyResults, exchange, symbol, strategyKey, options = {}) {
+  // 共通化された価格取得
+  const currentPrice = await getCurrentPrice(exchange, symbol, options);
+
+  // シグナルタイプを決定
+  const signalType = determineSignalType(buySignal, sellSignal);
+
+  // 戦略固有の計算結果を含む最終結果オブジェクト
+  const finalStrategyResults = createStrategyResults(strategyResults);
+
+  // 共通化されたシグナル保存
+  await saveStrategySignal(exchange, symbol, strategyKey, signalType, currentPrice, finalStrategyResults, options);
+
   return {
     currentPrice,
-    currentSMA,
-    deviation,
     signalType,
     buySignal,
     sellSignal,
-    strategyResults
+    strategyResults: finalStrategyResults,
+    ...strategyResults
   };
 }
-
-
 
 module.exports = {
   meanReversionStrategy,

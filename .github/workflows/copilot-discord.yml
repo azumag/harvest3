@@ -1,0 +1,98 @@
+name: Discord Notification for Copilot Reviews
+on:
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if Copilot review
+        id: check-copilot
+        run: |
+          # Copilotのコメントかどうかを判定（複数パターンに対応）
+          USER_LOGIN=""
+          if [[ "${{ github.event_name }}" == "pull_request_review_comment" ]]; then
+            USER_LOGIN="${{ github.event.comment.user.login }}"
+          elif [[ "${{ github.event_name }}" == "pull_request_review" ]]; then
+            USER_LOGIN="${{ github.event.review.user.login }}"
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            USER_LOGIN="${{ github.event.comment.user.login }}"
+          fi
+          
+          echo "User login: $USER_LOGIN"
+          
+          # Copilotの可能性があるユーザー名をチェック
+          if [[ "$USER_LOGIN" == "copilot-pull-request-reviewer" ]] || 
+             [[ "$USER_LOGIN" == "github-advanced-security[bot]" ]] ||
+             [[ "$USER_LOGIN" == "github-actions[bot]" ]] ||
+             [[ "$USER_LOGIN" =~ ^copilot.* ]]; then
+            echo "is_copilot=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_copilot=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send to Discord
+        if: steps.check-copilot.outputs.is_copilot == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          # レビューコメントの内容を取得
+          COMMENT=""
+          URL=""
+          TITLE=""
+          
+          if [[ "${{ github.event_name }}" == "pull_request_review_comment" ]]; then
+            COMMENT="${{ github.event.comment.body }}"
+            URL="${{ github.event.comment.html_url }}"
+            TITLE="PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+          elif [[ "${{ github.event_name }}" == "pull_request_review" ]]; then
+            COMMENT="${{ github.event.review.body }}"
+            URL="${{ github.event.review.html_url }}"
+            TITLE="PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]] && [[ "${{ github.event.issue.pull_request }}" != "" ]]; then
+            COMMENT="${{ github.event.comment.body }}"
+            URL="${{ github.event.comment.html_url }}"
+            TITLE="PR #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+          fi
+
+          # コメントが空の場合はスキップ
+          if [[ -z "$COMMENT" ]] || [[ "$COMMENT" == "null" ]]; then
+            echo "No comment content found, skipping notification"
+            exit 0
+          fi
+
+          # Copilotレビューの特徴的な文字列をチェック
+          if [[ "$COMMENT" != *"Copilot reviewed"* ]] && [[ "$COMMENT" != *"Pull Request Overview"* ]]; then
+            echo "This doesn't appear to be a Copilot review, skipping"
+            exit 0
+          fi
+
+          # JSONエスケープ処理
+          COMMENT_ESCAPED=$(echo "$COMMENT" | sed 's/"/\\"/g' | sed 's/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+          
+          # Discord Webhookに送信
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{
+                 \"content\": \"🤖 GitHub Copilot Review Alert\",
+                 \"embeds\": [{
+                   \"title\": \"$TITLE\",
+                   \"description\": \"$COMMENT_ESCAPED\",
+                   \"url\": \"$URL\",
+                   \"color\": 5814783,
+                   \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",
+                   \"author\": {
+                     \"name\": \"GitHub Copilot\",
+                     \"icon_url\": \"https://github.githubassets.com/avatars/in/15368?s=64&v=4\"
+                   },
+                   \"footer\": {
+                     \"text\": \"Repository: ${{ github.repository }}\"
+                   }
+                 }]
+               }" \
+               "$DISCORD_WEBHOOK"

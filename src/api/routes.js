@@ -12,6 +12,8 @@ const signalsController = require('./controllers/signals');
 const { getStrategiesList } = require('./controllers/strategies');
 const parametersController = require('./controllers/parameters'); // コントローラー全体をインポート
 const riskManagementController = require('./controllers/riskManagement');
+const errorStatsController = require('./controllers/errorStats');
+const systemHealthController = require('./controllers/systemHealth');
 
 const { getOhlcv } = require('./controllers/ohlcv');
 
@@ -73,10 +75,18 @@ router.get('/all-parameters', parametersController.getAllParameters); // 新し�
 // リスク管理API
 router.get('/risk-positions', riskManagementController.getRiskPositions);
 router.get('/risk-stats', riskManagementController.getRiskStats);
+router.get('/filled-positions', riskManagementController.getFilledPositions);
+
+// エラー統計API
+router.get('/error-stats', errorStatsController.getErrorStats);
+router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
 // ヘルスチェックAPI
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', database: 'redis' });
 });
+
+// システムヘルスAPI (Phase 3: リアルタイム監視システム)
+router.get('/system-health', systemHealthController.getSystemHealth);
 
 module.exports = router;

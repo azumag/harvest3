@@ -33,7 +33,7 @@ async function verifyCcxtCompatibility() {
     console.log(`\n3. OHLCVデータ取得テスト (${symbol})`);
     const ohlcvData = await exchangeBB.fetchOHLCV(symbol, '1h', undefined, 5);
     console.log(`✅ OHLCV取得成功 (${ohlcvData.length}件のデータポイント)`);
-    
+
     // テスト4: 残高取得
     console.log('\n4. アカウント残高取得テスト');
     try {
@@ -66,7 +66,7 @@ async function verifyCcxtCompatibility() {
     const btcJpyMarket = exchangeBB.markets[symbol];
     console.log('マーケット情報の重要なプロパティ:');
     const criticalProps = ['id', 'symbol', 'base', 'quote', 'baseId', 'quoteId', 'active', 'limits', 'precision'];
-    
+
     let structureChanged = false;
     for (const prop of criticalProps) {
       if (prop in btcJpyMarket) {
@@ -76,7 +76,7 @@ async function verifyCcxtCompatibility() {
         structureChanged = true;
       }
     }
-    
+
     if (!structureChanged) {
       console.log('✅ マーケットオブジェクト構造に互換性の問題は見つかりませんでした');
     } else {

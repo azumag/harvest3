@@ -69,12 +69,12 @@ class PublicStreamClient {
   _setupEventHandlers() {
     // WebSocketの標準イベント
     this.client.on('message', (data) => {
-      this.logger.debug(`📨 Message received`);
+      this.logger.debug('📨 Message received');
       this._handleMessage(data);
     });
 
     this.client.on('disconnect', (data) => {
-      this.logger.warn(`🔌 WebSocket disconnected:`, data);
+      this.logger.warn('🔌 WebSocket disconnected:', data);
     });
   }
 
@@ -97,7 +97,7 @@ class PublicStreamClient {
         this._processRoomMessage(message.room_name, message.message);
         return;
       }
-      
+
       // 配列形式にも対応（後方互換性のため）
       if (Array.isArray(message) && message.length === 2 && message[0] === 'message') {
         const messageData = message[1];
@@ -107,7 +107,7 @@ class PublicStreamClient {
           return;
         }
       }
-      
+
       // どちらの形式にも該当しない場合
       this.logger.warn('Unexpected message format:', JSON.stringify(message).substring(0, 200));
     } catch (error) {
@@ -142,24 +142,24 @@ class PublicStreamClient {
     this.logger.debug(`${emoji} Processing ${dataType} data for ${pair.toUpperCase()}`);
 
     switch (dataType) {
-      case 'ticker':
-        if (messageData.data) {
-          this.dataStore.updateTicker(pair, messageData.data);
-        }
-        break;
-      case 'transactions':
-        if (messageData.data && messageData.data.transactions) {
-          this.dataStore.addTransactions(pair, messageData.data.transactions);
-        }
-        break;
-      case 'depth':
-        // depth_whole または depth_diff
-        if (messageData.data) {
-          this.dataStore.updateOrderBook(pair, messageData.data);
-        }
-        break;
-      default:
-        this.logger.debug(`Received message from unhandled data type room: ${roomName}`);
+    case 'ticker':
+      if (messageData.data) {
+        this.dataStore.updateTicker(pair, messageData.data);
+      }
+      break;
+    case 'transactions':
+      if (messageData.data && messageData.data.transactions) {
+        this.dataStore.addTransactions(pair, messageData.data.transactions);
+      }
+      break;
+    case 'depth':
+      // depth_whole または depth_diff
+      if (messageData.data) {
+        this.dataStore.updateOrderBook(pair, messageData.data);
+      }
+      break;
+    default:
+      this.logger.debug(`Received message from unhandled data type room: ${roomName}`);
     }
   }
 

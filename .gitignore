@@ -1,6 +1,12 @@
 # .gitignore
 .env
 node_modules
-data/
+/data/
 .DS_Store
 coverage/
+bin/
+tools/
+.env.bu
+.ccc.env
+settings.local.json
+.tmp/

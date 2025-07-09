@@ -1,6 +1,6 @@
 /**
  * CCXT 取引所実装の詳細分析
- * 
+ *
  * このスクリプトは、CCXT の Bitbank 実装の内部詳細を検査し、
  * アプリケーションで使用されている API の違いを確認します
  */
@@ -9,7 +9,7 @@ const ccxt = require('ccxt');
 
 // Bitbank 取引所実装の詳細を調査
 const exchange = new ccxt.bitbank({
-  enableRateLimit: true,
+  enableRateLimit: true
 });
 
 // API URLを確認
@@ -49,26 +49,26 @@ function inspectMethod(exchange, methodName) {
     console.log(`${methodName}: 未実装`);
     return;
   }
-  
+
   const method = exchange[methodName];
   try {
     const methodStr = method.toString();
-    
+
     // APIエンドポイントの抽出を試みる
     const apiEndpointMatch = methodStr.match(/url\s*=\s*['"](.*?)['"]/);
     const apiEndpoint = apiEndpointMatch ? apiEndpointMatch[1] : 'エンドポイント検出不能';
-    
+
     // メソッドタイプ（GET/POST）の抽出を試みる
     const methodTypeMatch = methodStr.match(/method\s*=\s*['"](.*?)['"]/);
     const methodType = methodTypeMatch ? methodTypeMatch[1] : '検出不能';
-    
+
     console.log(`${methodName}:`);
     console.log(`  エンドポイント: ${apiEndpoint}`);
     console.log(`  メソッド: ${methodType}`);
-    
+
     // 認証が必要かどうかを推測
-    const requiresAuth = methodStr.includes('this.apiKey') || 
-                        methodStr.includes('this.secret') || 
+    const requiresAuth = methodStr.includes('this.apiKey') ||
+                        methodStr.includes('this.secret') ||
                         methodStr.includes('this.checkRequiredCredentials');
     console.log(`  認証が必要: ${requiresAuth ? 'はい' : 'いいえ'}`);
   } catch (e) {

@@ -12,11 +12,11 @@ const getStrategiesList = (req, res) => {
   try {
     // config.jsのstrategiesオブジェクトからキーを取得
     const strategies = Object.keys(config.strategies);
-    
+
     // 有効な戦略のみをフィルタリング（必要に応じて）
     // const enabledStrategies = strategies.filter(strategy => config.strategies[strategy].enabled);
     console.log(strategies);
-    
+
     // すべての戦略を返す（UIでは無効な戦略も表示可能にする）
     res.json(strategies);
   } catch (error) {

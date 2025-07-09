@@ -69,7 +69,7 @@ class DiscrepancyAnalyzer {
       let recentOrders = [];
       try {
         recentOrders = await exchange.fetchOrders(caseInfo.symbol, undefined, 50);
-        recentOrders = recentOrders.filter(order => 
+        recentOrders = recentOrders.filter(order =>
           order.timestamp > (Date.now() - 7 * 24 * 60 * 60 * 1000) // 過去7日
         ).sort((a, b) => b.timestamp - a.timestamp);
       } catch (error) {
@@ -122,8 +122,8 @@ class DiscrepancyAnalyzer {
   async printDetailedAnalysis(analysis) {
     console.log(`📈 ${analysis.symbol} (${analysis.strategy}) 詳細分析結果:`);
     console.log(`   問題: ${analysis.issue}`);
-    
-    console.log(`\n💰 実残高:`);
+
+    console.log('\n💰 実残高:');
     console.log(`   Free: ${analysis.actualBalance.free}`);
     console.log(`   Used: ${analysis.actualBalance.used}`);
     console.log(`   Total: ${analysis.actualBalance.total}`);
@@ -131,32 +131,32 @@ class DiscrepancyAnalyzer {
     console.log(`\n📊 Redisポジション (${analysis.redisPositions.count}件):`);
     console.log(`   合計: ${analysis.redisPositions.total}`);
     if (analysis.redisPositions.positions.length > 0) {
-      console.log(`   詳細:`);
+      console.log('   詳細:');
       for (const pos of analysis.redisPositions.positions) {
         console.log(`     - 注文ID ${pos.orderId}: ${pos.amount} @ ${pos.entryPrice} (作成: ${pos.createdAt}, 経過: ${pos.ageHours}時間)`);
       }
     }
 
     if (analysis.tradeSummary) {
-      console.log(`\n📋 取引サマリー:`);
+      console.log('\n📋 取引サマリー:');
       console.log(`   総取引数: ${analysis.tradeSummary.totalTrades}`);
       console.log(`   総取引量: ${analysis.tradeSummary.totalVolume}`);
       console.log(`   平均利益: ${analysis.tradeSummary.averageProfit}%`);
       console.log(`   最終取引: ${analysis.tradeSummary.lastTradeDate}`);
     }
 
-    console.log(`\n📝 最近の注文履歴 (上位10件):`);
+    console.log('\n📝 最近の注文履歴 (上位10件):');
     if (analysis.recentOrders.length > 0) {
       for (const order of analysis.recentOrders) {
         console.log(`   - [${order.timestamp}] ${order.side.toUpperCase()} ${order.amount} @ ${order.price} (${order.status})`);
       }
     } else {
-      console.log(`   注文履歴なし`);
+      console.log('   注文履歴なし');
     }
 
     // 原因推定
     const causes = this.estimateCauses(analysis);
-    console.log(`\n🔍 推定原因:`);
+    console.log('\n🔍 推定原因:');
     for (const cause of causes) {
       console.log(`   • ${cause}`);
     }
@@ -170,7 +170,7 @@ class DiscrepancyAnalyzer {
   estimateCauses(analysis) {
     const causes = [];
     const discrepancy = Math.abs(analysis.actualBalance.used - analysis.redisPositions.total);
-    const discrepancyPercent = analysis.actualBalance.used > 0 ? 
+    const discrepancyPercent = analysis.actualBalance.used > 0 ?
       (discrepancy / analysis.actualBalance.used) * 100 : 0;
 
     // ポジション残存、実残高ゼロ
@@ -178,7 +178,7 @@ class DiscrepancyAnalyzer {
       causes.push('手動売却またはストップロス実行済みだがRedisポジションが残存');
       causes.push('他システム・戦略による決済');
       causes.push('取引所での強制ロスカット');
-      
+
       // ポジション経過時間チェック
       if (analysis.redisPositions.positions.length > 0) {
         const oldestAge = Math.max(...analysis.redisPositions.positions.map(p => parseFloat(p.ageHours)));
@@ -208,7 +208,7 @@ class DiscrepancyAnalyzer {
     } else {
       const recentSells = analysis.recentOrders.filter(o => o.side === 'sell');
       const recentBuys = analysis.recentOrders.filter(o => o.side === 'buy');
-      
+
       if (recentSells.length > recentBuys.length) {
         causes.push('最近の売却活動が活発 - 決済による不整合');
       }
@@ -237,9 +237,9 @@ class DiscrepancyAnalyzer {
           positionSurplus: 0
         };
       }
-      
+
       strategyPatterns[issue.strategy].count++;
-      
+
       if (issue.actualBalance.total === 0 && issue.redisPositions.total > 0) {
         strategyPatterns[issue.strategy].zeroBalanceWithPositions++;
       } else if (issue.actualBalance.used > issue.redisPositions.total) {
@@ -273,7 +273,7 @@ class DiscrepancyAnalyzer {
     console.log(`📅 調査日時: ${new Date().toLocaleString('ja-JP')}`);
 
     console.log('\n📊 主要な問題パターン:');
-    
+
     const zeroBalanceCases = this.criticalIssues.filter(i => i.actualBalance.total === 0 && i.redisPositions.total > 0);
     const surplusCases = this.criticalIssues.filter(i => i.actualBalance.used > i.redisPositions.total);
     const deficitCases = this.criticalIssues.filter(i => i.redisPositions.total > i.actualBalance.used);
@@ -297,7 +297,7 @@ class DiscrepancyAnalyzer {
     }
 
     console.log('\n🚨 緊急対応が必要な案件:');
-    const urgentCases = this.criticalIssues.filter(i => 
+    const urgentCases = this.criticalIssues.filter(i =>
       i.actualBalance.total === 0 && i.redisPositions.total > 0
     );
     for (const urgent of urgentCases) {
@@ -320,14 +320,14 @@ class DiscrepancyAnalyzer {
  */
 async function main() {
   const analyzer = new DiscrepancyAnalyzer();
-  
+
   try {
     console.log('Redis接続を初期化中...');
     await initRedisClient();
     console.log('Redis接続完了\n');
 
     await analyzer.investigateCriticalDiscrepancies();
-    
+
   } catch (error) {
     console.error('調査実行エラー:', error);
     process.exit(1);
