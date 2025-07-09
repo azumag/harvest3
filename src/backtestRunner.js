@@ -678,12 +678,10 @@ function generateParameterCombinations(defaultConfig, numericKeys, n = 0.5, step
   const defaultValue = defaultConfig[currentKey];
 
   // パラメータに応じた範囲を設定
-  let paramMin, paramMax, paramStep;
-
   // パラメータは 元の値の±N*100%程度の範囲で組み合わせを考える
-  paramMin = Math.max(1, Math.floor(defaultValue * (1 - n)));
-  paramMax = Math.ceil(defaultValue * (1 + n));
-  paramStep = Math.max(1, Math.floor((paramMax - paramMin) / step)); // 段階に分割
+  const paramMin = Math.max(1, Math.floor(defaultValue * (1 - n)));
+  const paramMax = Math.ceil(defaultValue * (1 + n));
+  const paramStep = Math.max(1, Math.floor((paramMax - paramMin) / step)); // 段階に分割
   // paramMin = Math.max(1, Math.floor(defaultValue * 0.9));
   // paramMax = Math.ceil(defaultValue * 1.1);
   // paramStep = Math.max(1, Math.floor((paramMax - paramMin) / 3)); // 3段階程度に分割

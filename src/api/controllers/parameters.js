@@ -9,7 +9,8 @@ const { getStrategyParameters, saveStrategyParameters, getAllStrategyParameters 
  * @param {Object} res - レスポンスオブジェクト
  */
 async function getParameters(req, res) {
-  let { exchangeId, symbol, strategyKey } = req.query;
+  const { exchangeId, symbol: symbolParam, strategyKey } = req.query;
+  let symbol = symbolParam;
 
   // 必須パラメータのチェック
   if (!exchangeId || !symbol || !strategyKey) {
@@ -54,7 +55,8 @@ async function getParameters(req, res) {
  * @param {Object} res - レスポンスオブジェクト
  */
 async function updateParameters(req, res) {
-  let { exchangeId, symbol, strategyKey, params } = req.body;
+  const { exchangeId, symbol: symbolParam, strategyKey, params } = req.body;
+  let symbol = symbolParam;
 
   // 必須パラメータのチェック
   if (!exchangeId || !symbol || !strategyKey || !params || typeof params !== 'object') {

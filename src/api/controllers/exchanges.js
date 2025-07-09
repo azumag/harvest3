@@ -22,13 +22,13 @@ async function getExchanges(req, res) {
  * @param {Object} res - Express response object
  */
 async function getSymbols(req, res) {
+  const { exchange } = req.query;
+
+  if (!exchange) {
+    return res.status(400).json({ error: 'Exchange parameter is required' });
+  }
+
   try {
-    const { exchange } = req.query;
-
-    if (!exchange) {
-      return res.status(400).json({ error: 'Exchange parameter is required' });
-    }
-
     // configから該当する取引所のインスタンスを取得
     const exchangeConfig = config.exchanges[exchange];
     if (!exchangeConfig || !exchangeConfig.instance) {
