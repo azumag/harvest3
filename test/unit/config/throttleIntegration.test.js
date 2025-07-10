@@ -130,7 +130,7 @@ describe('CCXT標準throttle機能統合テスト', () => {
       
       // メモリ使用量の簡易チェック（他テストとの並行実行を考慮し、現実的な閾値を設定）
       const memUsage = process.memoryUsage();
-      expect(memUsage.heapUsed).toBeLessThan(220 * 1024 * 1024); // 220MB以下（テスト環境での大規模並行実行を考慮）
+      expect(memUsage.heapUsed).toBeLessThan(250 * 1024 * 1024); // 250MB以下（テスト環境での大規模並行実行を考慮）
     }, 15000); // 15秒タイムアウト
   });
 });

@@ -224,6 +224,55 @@ describe('SchedulingManager', () => {
     });
   });
 
+  describe('_executeTask', () => {
+    it('非同期関数を正常に実行', async () => {
+      const mockTask = jest.fn().mockResolvedValue('success');
+      await schedulingManager._executeTask(mockTask, 'test-task');
+      expect(mockTask).toHaveBeenCalled();
+    });
+
+    it('同期関数を正常に実行（Promiseではない戻り値）', async () => {
+      const mockTask = jest.fn().mockReturnValue('sync result');
+      await schedulingManager._executeTask(mockTask, 'test-task');
+      expect(mockTask).toHaveBeenCalled();
+    });
+
+    it('同期関数のエラーを適切に処理', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const mockTask = jest.fn().mockImplementation(() => {
+        throw new Error('Test error');
+      });
+
+      await schedulingManager._executeTask(mockTask, 'test-task');
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[スケジューラー] test-task 実行エラー:', 
+        'Test error'
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('非同期関数のエラーを適切に処理', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const mockTask = jest.fn().mockRejectedValue(new Error('Async error'));
+
+      await schedulingManager._executeTask(mockTask, 'test-task');
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[スケジューラー] test-task 実行エラー:', 
+        'Async error'
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('関数以外が渡された場合は何もしない', async () => {
+      await schedulingManager._executeTask('not-a-function', 'test-task');
+      await schedulingManager._executeTask(null, 'test-task');
+      await schedulingManager._executeTask(undefined, 'test-task');
+      // エラーが発生しないことを確認
+    });
+  });
+
   describe('エラーハンドリング', () => {
     it('タスク実行エラーの適切な処理', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -236,7 +285,7 @@ describe('SchedulingManager', () => {
       await taskWrapper();
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[スケジューラー] error-task エラー:'),
+        expect.stringContaining('[スケジューラー] error-task 実行エラー:'),
         'Task error'
       );
 

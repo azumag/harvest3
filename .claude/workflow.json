@@ -8,10 +8,18 @@
     },
     {
       "launch": "WORKFLOW_TESTED",
+      "prompt": "git diff を確認し、readme.md を適切に更新せよ。readme.md の更新が完了したら WORKFLOW_README_UPDATED とだけ表示せよ。"
+    },
+    {
+      "launch": "WORKFLOW_README_UPDATED",
       "prompt": "## Most Important: When modifications based on the review are complete, do not write WORKFLOW_REVIEWED. Instead, provide a report of the work.  Only if the review concludes that there are no issues, output a single line that says only WORKFLOW_REVIEWED — no other information should be included. ## Review: Assign the task of a strict review to the Review SubAgent, and make necessary corrections based on the results.  Understand the changes yourself by checking git diff or commit history.  ## Perspectives: - YAGNI: Don’t implement features that aren’t needed right now - DRY: Don’t repeat yourself - KISS: Keep it simple, stupid t-wada - TDD: Test-Driven Development inspired by t-wada. ## Work Report: $WORK_SUMMARY "
     },
     {
       "launch": "WORKFLOW_REVIEWED",
+      "prompt": "# 原則 - Gemini のレビュー内容を受けて行動せよ. ただし盲信はしないこと - 改善点を指摘された場合は、その改善点に従って修正せよ  - レビュー内容に問題がなく、改善点がすべてクリアになった場合のみ「WORKFLOW_GEMINI_REVIEW_COMPLETED」とだけ発言せよ - レビュー内容が空、もしくは rate limit の場合も、「WORKFLOW_GEMINI_REVIEW_COMPLETED」とだけ発言せよ。 - git diff と commit history を確認し、変更内容をgemini に理解させること。 - 以下作業内容を gemini に伝えること: $WORK_SUMMARY"
+    },
+    {
+      "launch": "WORKFLOW_GEMINI_REVIEW_COMPLETED",
       "prompt": "git commit を実行してください。 コミットメッセージには、作業内容の要約を含めてください。作業が完了したら WORKFLOW_COMMITTED とだけ表示せよ。"
     },
     {
@@ -34,7 +42,12 @@
     },
     {
       "launch": "WORKFLOW_CLAUDE_RECALL",
-      "prompt": "/orchestrator 必要に応じて think せよ。 github の issue を確認し、必要な場合は新しい issue を作成せよ。特に、技術的負債の解消、取引所とBOT管理残高の整合性チェックを最優先に、収益を上げる手段を考慮して対策を講じることを考えよ。そして、既存の issue の内容を確認し、解決済みであると判断した場合は解決済みラベルをつけよ。解決済みラベルがついていない issue について、解決を試みよ。"
+      "prompt": "github の issue を確認し、必要な場合は新しい issue を作成せよ。解決済みと思われるものは「解決済み」ラベルをつけよ。特に技術的負債の解消、取引所とBOT管理残高の整合性チェックを最優先に、収益を上げる手段を考慮して対策を講じることを考えよ。終わったら WORKFLOW_ISSUE_CHECKED とだけ表示せよ。"
+    },
+    {
+      "launch": "WORKFLOW_ISSUE_CHECKED",
+      "path":"/Users/azumag/work/cc-hooks-workflow/workflow.sh",
+      "args": ["--stop"]
     }
   ]
 }
