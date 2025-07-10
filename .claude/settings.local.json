@@ -54,17 +54,12 @@
       "Bash(ls:*)",
       "Bash(npm install)",
       "Bash(npm audit:*)",
-      "Bash(make:*)",
-      "Bash(dtruss:*)",
-      "Bash(sandbox-exec:*)",
-      "Bash(sandbox-simplify:*)",
-      "Bash(sandbox-check:*)"
+      "Bash(make:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)"
     ]
   },
-  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "gemini-cli"
   ],
