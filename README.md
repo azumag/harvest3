@@ -283,6 +283,7 @@ Claude Code Actionを使用したIssue自動解決システムを導入してい
 - **API呼び出しの堅牢性強化**: 再試行ロジックと詳細エラー分類の実装
 - **API機能復元**: summary.jsのcalculateAvailableAmounts機能復活とエラーハンドリング強化
 - **CI/CDエラー修正**: multiIndicator.test.jsの構文エラー解消とテスト安定化
+- **テスト品質向上**: スキップされたテストに詳細理由を明記、Jest実行時間改善対応
 
 #### テストの安定化とCI/CD改善
 - 不安定なテストアサーションの修正

@@ -49,7 +49,7 @@ jest.mock('../../../src/common/schedulingManager', () => ({
 const { MaintenanceScheduler, getMaintenanceScheduler } = require('../../../src/common/maintenanceScheduler');
 
 // スキップ理由: MaintenanceSchedulerのテストは、child_process.spawnとタイマー機能の複雑な非同期処理が必要
-// CI環境でのプロセス権限とタイムアウト処理の安定性確保が完了次第、テストを有効化予定  
+// CI環境でのプロセス権限とタイムアウト処理の安定性確保が完了次第、テストを有効化予定
 // 対応方針: Dockerコンテナ内での安定したプロセス実行環境構築後に再有効化
 describe.skip('MaintenanceScheduler', () => {
   let scheduler;
