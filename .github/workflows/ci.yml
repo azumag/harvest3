@@ -69,6 +69,13 @@ jobs:
         netstat -tulpn | grep -E ':(6379|27017)'
         echo "=== Starting integration tests ==="
         npm run test:integration
+        
+    - name: Cleanup temp directories after integration tests
+      if: always()
+      run: |
+        echo "=== Cleaning up temp directories after integration tests ==="
+        npm run cleanup-temp
+        echo "=== Integration test cleanup completed ==="
       
     - name: Run full test suite with coverage and connection monitoring
       run: |
@@ -89,6 +96,13 @@ jobs:
         kill $MONITOR_PID 2>/dev/null || true
         
         exit $TEST_RESULT
+    
+    - name: Cleanup temp directories after tests
+      if: always()
+      run: |
+        echo "=== Cleaning up temp directories using cleanup script ==="
+        npm run cleanup-temp-verbose
+        echo "=== Temp directories cleanup completed ==="
       
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

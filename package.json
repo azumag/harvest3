@@ -34,7 +34,10 @@
     "generate-config-docs": "bash scripts/generate-config-docs.sh",
     "sync-docs": "npm run generate-config-docs && npm run validate-config",
     "load-test": "node scripts/load-test-data-collection.js",
-    "test-enhanced": "jest test/monitoring/realDataCollectorEnhanced.test.js"
+    "test-enhanced": "jest test/monitoring/realDataCollectorEnhanced.test.js",
+    "cleanup-temp": "node scripts/cleanup-temp-directories.js",
+    "cleanup-temp-dry": "node scripts/cleanup-temp-directories.js --dry-run",
+    "cleanup-temp-verbose": "node scripts/cleanup-temp-directories.js --verbose"
   },
   "dependencies": {
     "axios": "^1.7.7",
