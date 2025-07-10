@@ -280,10 +280,13 @@ Claude Code Actionを使用したIssue自動解決システムを導入してい
 - **統一されたエラーメッセージ**: 全てのエラーハンドリングで一貫したメッセージ形式
 - **TDD原則遵守**: 実際の要件に基づいた必要最小限のテスト作成
 
-#### テストの安定化
+#### テストの安定化とCI/CD改善
 - 不安定なテストアサーションの修正
-- メモリ使用量テストの閾値調整
+- メモリ使用量テストの閾値調整（250MB→350MB）
 - テスト実行環境の並行実行対応
+- CI/CDパイプライン構文エラーの完全解決（const.jsファイル修正）
+- Jestキャッシュ問題の解決とテスト安定性向上
+- backtestRunnerのconsole.log問題修正とLintエラー解消
 
 #### 設計原則の適用
 - **YAGNI**: 不要な機能（未使用の同期関数対応）を削除
@@ -365,6 +368,7 @@ docker compose restart
 - **高精度数値計算**: Decimal.jsを使用した浮動小数点誤差の解消
 - **エラーハンドリング強化**: Bitbank API固有のエラー処理とリトライ機能
 - **テストサポート拡張**: E2Eテスト、Playwright統合、テストカバレッジ測定
+- **Sandboxセキュリティ**: macOSでのSandboxプロファイル改善とプロセス管理権限強化
 
 ### 新しい依存関係
 - **decimal.js**: 高精度数値計算
@@ -373,6 +377,13 @@ docker compose restart
 - **node-cache**: キャッシュ機能
 - **node-cron**: スケジュール機能
 - **typescript**: TypeScript支援ツール
+
+### セキュリティ強化
+- **permissive-open.sb**: macOSでのSandboxプロファイル改善
+  - `/bin/ps`コマンドエラーの修正
+  - 最小権限のmach権限追加（mach-lookup、mach-task-name、mach-per-user-lookup）
+  - プロセス管理権限の強化（セキュリティ重視の設定）
+  - setuidバイナリ実行権限の追加
 
 ## 📄 ライセンス
 

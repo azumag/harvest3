@@ -283,7 +283,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, retryCount, allExchangeSymbolPairs) {
   const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
 
-  // バックテスト開始
+  console.log(`バックテスト開始: ${symbol} - ${strategyKey}`);
 
   // 全タイムフレームの結果を保存する配列
   let allTimeframeResults = [];
@@ -355,7 +355,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         tradePercentage: config.global.tradePercentage
       };
 
-      // パラメータ組み合わせでバックテスト実行
+      console.log(`パラメータテスト: ${JSON.stringify(paramCombination)}`);
 
       const options = {
         backtest: {
@@ -603,7 +603,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - スコア: ${selectedResult.finalBaseFund.toFixed(2)} ${selectionReason} - タイムフレーム: ${selectedResult.timeframe} - ${JSON.stringify(selectedResult.parameters)}`, discordBacktestURL);
   }
 
-  // バックテスト完了
+  console.log(`バックテスト完了: ${symbol} - ${strategyKey}`);
   return { shouldRetry: false };
 }
 

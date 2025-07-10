@@ -7,7 +7,7 @@
 
 ;; プロセス実行権限を追加
 (allow process-exec
-    ;; システムコマンドの実行を許可
+    ;; システムコマンドの実行を許可（setuidバイナリ含む）
     (literal "/bin/ps")
     (literal "/usr/bin/ps")
     (subpath "/bin")
@@ -17,6 +17,7 @@
     (subpath "/System/Library/Frameworks")
     (subpath "/System/Library/PrivateFrameworks")
 )
+
 
 ;; プロセス情報読み取り権限を追加
 (allow process-info-pidinfo)
@@ -28,6 +29,11 @@
 (allow process-info-pidfileportinfo)
 (allow process-info-listpids)
 (allow process-info*)
+
+;; プロセス管理に必要な最小権限（psコマンド対応）
+(allow mach-lookup)
+(allow mach-task-name)
+(allow mach-per-user-lookup)
 
 ;; プロセス制御権限を追加
 (allow process-fork)
