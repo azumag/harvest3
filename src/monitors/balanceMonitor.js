@@ -153,9 +153,11 @@ class BalanceMonitor {
    * 監視チェックの実行
    */
   async performMonitoringCheck() {
-    // 同時実行数の制限
+    // 同時実行数の制限 - キューイングシステムで待機
     if (this.currentlyRunning.size >= this.config.realTimeMonitoring.maxConcurrentChecks) {
-      console.log('⚠️ 最大同時実行数に達しているため、チェックをスキップします');
+      console.log('⚠️ 最大同時実行数に達しています。キューに追加して待機します...');
+      // 短時間待機後に再試行
+      setTimeout(() => this.performMonitoringCheck(), 1000);
       return;
     }
 

@@ -12,22 +12,27 @@ async function getTradeSummary(req, res) {
     // サマリー情報を取得
     const summaryData = await getAllTradeSummaries();
 
-    // 緊急対応：calculateAvailableAmountsを一時的に無効化
-    // const availableAmounts = await calculateAvailableAmounts(summaryData);
+    // 利用可能残高の計算（有効化）
+    let availableAmounts = null;
+    try {
+      availableAmounts = await calculateAvailableAmounts(summaryData);
+    } catch (error) {
+      console.warn('利用可能残高の計算に失敗しました。基本サマリーのみ返します:', error.message);
+    }
 
     // サマリーデータがオブジェクトか配列かを判定
     let enhancedSummaryData;
     if (Array.isArray(summaryData)) {
       // 配列の場合はオブジェクトでラップ
       enhancedSummaryData = {
-        positions: summaryData
-        // availableAmounts  // 一時的にコメントアウト
+        positions: summaryData,
+        ...(availableAmounts && { availableAmounts })
       };
     } else {
       // オブジェクトの場合はそのまま返す
       enhancedSummaryData = {
-        ...summaryData
-        // availableAmounts  // 一時的にコメントアウト
+        ...summaryData,
+        ...(availableAmounts && { availableAmounts })
       };
     }
 

@@ -270,26 +270,48 @@ class BalanceIntegrityService {
       }
     }
 
-    try {
-      const exchange = config.exchanges.bitbank.instance;
-      const balance = await exchange.fetchBalance();
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const exchange = config.exchanges.bitbank.instance;
+        const balance = await exchange.fetchBalance();
 
-      const currencyBalance = {
-        free: balance.free[currency] || 0,
-        used: balance.used[currency] || 0,
-        total: balance.total[currency] || 0,
-        timestamp: new Date()
-      };
+        const currencyBalance = {
+          free: balance.free[currency] || 0,
+          used: balance.used[currency] || 0,
+          total: balance.total[currency] || 0,
+          timestamp: new Date()
+        };
 
-      this.dataCache.set(cacheKey, {
-        data: currencyBalance,
-        timestamp: Date.now()
-      });
+        this.dataCache.set(cacheKey, {
+          data: currencyBalance,
+          timestamp: Date.now()
+        });
 
-      return currencyBalance;
-    } catch (error) {
-      console.error(`取引所 ${currency} 残高取得エラー:`, error);
-      return null;
+        return currencyBalance;
+      } catch (error) {
+        retryCount++;
+        const isLastRetry = retryCount >= maxRetries;
+        
+        console.error(`取引所 ${currency} 残高取得エラー (試行 ${retryCount}/${maxRetries}):`, error.message);
+        
+        if (isLastRetry) {
+          // 最終試行失敗時は詳細なエラー情報を記録
+          console.error(`全ての再試行が失敗しました。エラー詳細:`, {
+            currency,
+            errorCode: error.code,
+            errorMessage: error.message,
+            stack: error.stack
+          });
+          return null;
+        }
+        
+        // 指数バックオフで再試行
+        const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
 
@@ -703,7 +725,12 @@ class BalanceIntegrityService {
       multi.hSet(key, 'updated_at', new Date().toISOString());
       multi.hSet(key, 'correction_reason', 'integrity_check_auto_correction');
 
-      await multi.exec();
+      const results = await multi.exec();
+      
+      // Redis操作の結果をチェック
+      if (!results || results.some(result => result[0] !== null)) {
+        throw new Error(`Redis操作が失敗しました: ${JSON.stringify(results)}`);
+      }
 
       // 戦略別残高もリセット（取引所残高に基づいて再配分）
       await this.redistributeStrategyBalances(currency, exchangeBalance);

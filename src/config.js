@@ -396,7 +396,7 @@ const config = {
     // 高頻度取引戦略 (bitbank WebSocket)
     HFT: {
       type: 'high_frequency',
-      enabled: false, // *** EMERGENCY SHUTDOWN: CATASTROPHIC SYSTEM FAILURE ***
+      enabled: process.env.STRATEGY_HFT_ENABLED === 'true' || false, // 環境変数で制御（デフォルト無効）
       function: require('./hft').startHFTStrategy,
       atomicExec: true,
       exchanges: [exchangeBB]

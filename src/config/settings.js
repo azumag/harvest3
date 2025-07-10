@@ -64,7 +64,9 @@ const DATABASE_SETTINGS = {
     RETRY_DELAY_MAX: parseEnvInt('REDIS_RETRY_DELAY_MAX', 3000, 1000), // 3秒
     CONNECTION_TIMEOUT: parseEnvInt('REDIS_CONNECTION_TIMEOUT', 3600000, 60000), // 1時間
     RECONNECTION_INTERVAL: parseEnvInt('REDIS_RECONNECTION_INTERVAL', 5000, 1000), // 5秒
-    DEFAULT_URL: process.env.REDIS_URL || 'redis://localhost:6379'
+    DEFAULT_URL: process.env.NODE_ENV === 'production' 
+      ? process.env.REDIS_URL // 本番環境では環境変数必須
+      : (process.env.REDIS_URL || 'redis://localhost:6379') // 開発環境のみデフォルト値許可
   },
 
   // MongoDB設定
