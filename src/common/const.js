@@ -1,4 +1,3 @@
-
 // Bitbankでサポートされているタイムフレームのみを使用
 // 4h, 8h, 12h, 1d, 1wはBitbank APIでサポートされていないため除外
 const OHLCVTimeFrames = ['1m', '5m', '15m', '30m', '1h'];
@@ -122,4 +121,3 @@ module.exports = {
   NOTIFICATION_SETTINGS,
   STRATEGY_SETTINGS
 };
-
