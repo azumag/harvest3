@@ -11,8 +11,6 @@ const { checkAllExchangeBalances } = require('../../common/balanceChecker');
  */
 async function getSystemHealth(req, res) {
   try {
-    console.log('システムヘルス情報を取得中...');
-
     // 並列でデータ取得
     const [
       positionsData,

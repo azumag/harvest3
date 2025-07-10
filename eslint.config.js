@@ -94,6 +94,12 @@ module.exports = [
     }
   },
   {
+    files: ['src/api/**/*.js'],
+    rules: {
+      'no-console': ['warn', { allow: ['error'] }] // APIファイルではconsole.errorのみ許可
+    }
+  },
+  {
     files: ['scripts/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,

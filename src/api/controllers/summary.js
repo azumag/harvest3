@@ -45,7 +45,7 @@ async function getTradeSummary(req, res) {
  * 各通貨ペアの購入可能額を計算
  * @param {Array|Object} summaryData - 事前に取得されたサマリーデータ
  */
-async function calculateAvailableAmounts(summaryData) {
+async function calculateAvailableAmounts(_summaryData) {
   try {
     const availableAmounts = {};
     // configからbitbankインスタンスを使用
@@ -58,7 +58,7 @@ async function calculateAvailableAmounts(summaryData) {
     const strategyPnLMap = {};
 
     // summaryDataが配列の場合とオブジェクトの場合の両方に対応
-    const positions = Array.isArray(summaryData) ? summaryData : summaryData.positions;
+    const positions = Array.isArray(_summaryData) ? _summaryData : _summaryData.positions;
 
     // 戦略・通貨ペアごとの実現損益をマップに格納
     if (positions && Array.isArray(positions)) {

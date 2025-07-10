@@ -2,7 +2,7 @@
  * リスク管理API コントローラー
  */
 const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis, getAllPendingOrdersRedis } = require('../../database/redisDatabase');
-const { getTradeSummary, listTrades, listFilledPositions, getOrderStrategyKeyByOrderId } = require('../../database/manager');
+const { listFilledPositions, getOrderStrategyKeyByOrderId } = require('../../database/manager');
 const ccxt = require('ccxt');
 
 /**
@@ -42,9 +42,7 @@ async function getRiskPositions(req, res) {
           orderStatus: order.status,
           orderType: order.orderType
         }));
-        console.log(`[INFO] Redis から ${openOrderPositions.length} 件の未約定注文を取得しました`);
       } else {
-        console.log('[INFO] Redis に未約定注文なし、取引所APIフォールバックを実行します');
         useExchangeAPIFallback = true;
       }
     } catch (redisError) {
@@ -326,7 +324,6 @@ async function getFilledPositions(req, res) {
     // Redisから全ての未売却ポジション（アクティブポジション）を取得
     const allActivePositions = await getAllPositionsRedis();
 
-    console.log(`getFilledPositions received ${allActivePositions.length} active positions from Redis`);
 
     // フィルタ条件を適用
     let filteredPositions = allActivePositions;

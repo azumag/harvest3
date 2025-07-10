@@ -11,7 +11,6 @@ const {
   getAllTradeSummaries
 } = require('../database/redisDatabase');
 const {
-  getAllTradeSummaries: getAllTradeSummariesFromDB,
   getTradeCurrentPosition
 } = require('../database/manager');
 const { getBalanceCheckEligibleStrategies } = require('./strategyUtils');
@@ -91,7 +90,7 @@ async function getBotManagedBalance() {
  * @param {string} exchangeId - 取引所ID
  * @param {number} thresholdPercent - 許容誤差（パーセント）- 完全一致チェックのため0
  */
-async function compareBalances(exchangeId, thresholdPercent = 0) {
+async function compareBalances(exchangeId, _thresholdPercent = 0) {
   try {
     console.log(`残高比較開始: ${exchangeId}`);
 
