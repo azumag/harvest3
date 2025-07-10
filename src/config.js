@@ -309,7 +309,7 @@ const config = {
         maxConcurrentChecks: 3,
         timeout: 30000 // 30秒タイムアウト
       },
-      
+
       // 不整合閾値設定
       thresholds: {
         absoluteThreshold: 0.001, // 0.001以上の絶対差
@@ -317,7 +317,7 @@ const config = {
         warningThreshold: 0.5,    // 0.5%以上で警告
         criticalThreshold: 5.0    // 5%以上で重要アラート
       },
-      
+
       // 自動修正設定
       autoCorrection: {
         enabled: true,
@@ -326,7 +326,7 @@ const config = {
         maxAutoCorrections: 3,             // 1日の最大自動修正回数
         requireManualApproval: true        // 手動承認必須
       },
-      
+
       // 取引停止設定
       tradingHalt: {
         enabled: true,
@@ -334,7 +334,7 @@ const config = {
         maxConsecutiveFailures: 3,         // 連続失敗回数
         cooldownPeriod: 300000            // 5分間のクールダウン
       },
-      
+
       // 監査ログ設定
       auditLog: {
         enabled: true,
@@ -343,7 +343,7 @@ const config = {
         includeSnapshots: true,           // 残高スナップショット含める
         compressionEnabled: true          // ログ圧縮有効
       },
-      
+
       // 通知設定
       notifications: {
         discord: {
@@ -359,7 +359,7 @@ const config = {
           criticalOnly: true
         }
       },
-      
+
       // データソース設定
       dataSources: {
         exchange: {
@@ -378,7 +378,7 @@ const config = {
           cacheTTL: 300000              // 5分キャッシュ
         }
       },
-      
+
       // パフォーマンス設定
       performance: {
         batchSize: 50,                   // バッチ処理サイズ

@@ -43,27 +43,27 @@ describe('CCXT標準throttle機能統合テスト', () => {
 
     it('CCXT標準throttle機能が正常に動作する', async () => {
       const startTime = Date.now();
-      
+
       // 連続でthrottle呼び出し
       await exchangeBB.throttle(1);
       await exchangeBB.throttle(1);
-      
+
       const endTime = Date.now();
       const elapsedTime = endTime - startTime;
-      
+
       // rate limitが適用されているかを確認（最低1秒間隔）
       expect(elapsedTime).toBeGreaterThanOrEqual(900); // 余裕を持って900ms
     });
 
     it('cost引数による制御が機能する', async () => {
       const startTime = Date.now();
-      
+
       // 高コストのAPI呼び出しをシミュレート
       await exchangeBB.throttle(2); // コスト2
-      
+
       const endTime = Date.now();
       const elapsedTime = endTime - startTime;
-      
+
       // コストに応じた制御が適用されているか確認
       expect(elapsedTime).toBeGreaterThanOrEqual(0);
     });
@@ -80,10 +80,10 @@ describe('CCXT標準throttle機能統合テスト', () => {
       // テスト環境ではrequire.cacheのクリアが影響しないため、
       // 設定が正しく読み込まれることを確認するテストに変更
       expect(SETTINGS.EXCHANGE.BITBANK_RATE_LIMIT).toBe(1000);
-      
+
       // 環境変数での上書き機能自体はparseEnvInt関数で実装済み
       // 実際の環境変数テストは設定ファイルの単体テストで実行済み
-      expect(typeof process.env.BITBANK_RATE_LIMIT === 'undefined' || 
+      expect(typeof process.env.BITBANK_RATE_LIMIT === 'undefined' ||
              parseInt(process.env.BITBANK_RATE_LIMIT) >= 500).toBe(true);
     });
   });
@@ -109,14 +109,14 @@ describe('CCXT標準throttle機能統合テスト', () => {
     it('複数回のthrottle呼び出しが効率的', async () => {
       const startTime = Date.now();
       const iterations = 3;
-      
+
       for (let i = 0; i < iterations; i++) {
         await exchangeBB.throttle(1);
       }
-      
+
       const endTime = Date.now();
       const elapsedTime = endTime - startTime;
-      
+
       // 各回につき約1秒なので、3回で約3秒
       expect(elapsedTime).toBeGreaterThanOrEqual(2000); // 2秒以上
       expect(elapsedTime).toBeLessThanOrEqual(5000); // 5秒以下
@@ -127,7 +127,7 @@ describe('CCXT標準throttle機能統合テスト', () => {
       for (let i = 0; i < 10; i++) {
         await exchangeBB.throttle(1);
       }
-      
+
       // メモリ使用量の簡易チェック（他テストとの並行実行を考慮し、現実的な閾値を設定）
       const memUsage = process.memoryUsage();
       expect(memUsage.heapUsed).toBeLessThan(250 * 1024 * 1024); // 250MB以下（テスト環境での大規模並行実行を考慮）

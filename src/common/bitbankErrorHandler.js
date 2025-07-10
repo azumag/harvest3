@@ -85,8 +85,8 @@ function handleBitbankError(error, exchangeId, operation, symbol = '') {
   }
 
   // レート制限エラーの処理
-  if (isBitbankError(error, BITBANK_ERRORS.RATE_LIMIT_EXCEEDED) || 
-      errorMessage.includes('rate limit') || 
+  if (isBitbankError(error, BITBANK_ERRORS.RATE_LIMIT_EXCEEDED) ||
+      errorMessage.includes('rate limit') ||
       errorMessage.includes('429')) {
     console.warn(`[BitbankErrorHandler] レート制限エラー: ${exchangeId} ${contextInfo}`);
     return {
@@ -127,26 +127,26 @@ function handleBitbankError(error, exchangeId, operation, symbol = '') {
  */
 function getFallbackResult(operation) {
   switch (operation) {
-    case 'fetchBalance':
-      return { total: {}, free: {}, used: {} };
-    
-    case 'fetchMyTrades':
-      return [];
-    
-    case 'fetchOrders':
-      return [];
-    
-    case 'fetchOrder':
-      return null;
-    
-    case 'fetchTicker':
-      return null;
-    
-    case 'fetchOHLCV':
-      return [];
-    
-    default:
-      return null;
+  case 'fetchBalance':
+    return { total: {}, free: {}, used: {} };
+
+  case 'fetchMyTrades':
+    return [];
+
+  case 'fetchOrders':
+    return [];
+
+  case 'fetchOrder':
+    return null;
+
+  case 'fetchTicker':
+    return null;
+
+  case 'fetchOHLCV':
+    return [];
+
+  default:
+    return null;
   }
 }
 
@@ -163,12 +163,12 @@ async function withBitbankErrorHandling(apiCall, exchangeId, operation, symbol =
     return await apiCall();
   } catch (error) {
     const result = handleBitbankError(error, exchangeId, operation, symbol);
-    
+
     if (result.handled) {
       if (result.shouldRetry && result.retryDelay) {
         console.log(`[BitbankErrorHandler] ${result.retryDelay}ms後にリトライします...`);
         await new Promise(resolve => setTimeout(resolve, result.retryDelay));
-        
+
         // リトライ実行
         try {
           return await apiCall();
@@ -181,12 +181,12 @@ async function withBitbankErrorHandling(apiCall, exchangeId, operation, symbol =
           throw retryError;
         }
       }
-      
+
       if (result.shouldIgnore) {
         return result.fallbackResult;
       }
     }
-    
+
     // 処理されなかったエラーは再スロー
     throw error;
   }

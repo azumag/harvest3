@@ -1,6 +1,6 @@
 /**
  * 残高整合性サービス - issue #215
- * 
+ *
  * 取引所残高とBOT管理残高の整合性を包括的にチェックし、
  * 不整合の自動修正、監査ログ、リアルタイム監視を提供する。
  */
@@ -10,17 +10,17 @@ const { getCollectionRef, ensureConnection } = require('../database/manager');
 const { getStrategyPositionsRedis, getRedisClient } = require('../database/redisDatabase');
 const { postErrorToDiscord, postOrderToDiscord } = require('../common/notifications');
 const { formatJST } = require('../common/utils');
-const { 
-  toDecimal, 
-  compareBalance, 
-  sumBalances, 
+const {
+  toDecimal,
+  compareBalance,
+  sumBalances,
   toNumber,
-  validateBalance 
+  validateBalance
 } = require('../common/decimalUtils');
-const { 
+const {
   TIME_CONSTANTS,
   SYSTEM_LIMITS,
-  STRING_CONSTANTS 
+  STRING_CONSTANTS
 } = require('../common/constants');
 const { SETTINGS } = require('../config/settings');
 
@@ -109,14 +109,16 @@ class BalanceIntegrityService {
     }
 
     this.monitoringInterval = setInterval(async () => {
-      if (!this.isRunning) return;
+      if (!this.isRunning) {
+        return;
+      }
 
       try {
         await this.performRealTimeCheck();
       } catch (error) {
         console.error('リアルタイム監視中にエラーが発生:', error);
         this.consecutiveFailures++;
-        
+
         if (this.consecutiveFailures >= this.config.tradingHalt.maxConsecutiveFailures) {
           await this.initiateEmergencyHalt();
         }
@@ -136,13 +138,13 @@ class BalanceIntegrityService {
     try {
       // 全取引所の残高を取得
       const exchangeBalances = await this.getAllExchangeBalances();
-      
+
       // 全戦略のRedis残高を取得
       const redisBalances = await this.getAllRedisBalances();
-      
+
       // MongoDB約定履歴から計算残高を取得
       const mongoBalances = await this.getMongoCalculatedBalances();
-      
+
       // 3つのデータソースを照合
       const discrepancies = await this.compareAllDataSources(
         exchangeBalances,
@@ -170,7 +172,7 @@ class BalanceIntegrityService {
       console.error('完全チェック中にエラーが発生:', error);
       this.metrics.failedChecks++;
       this.consecutiveFailures++;
-      
+
       await this.logAuditRecord('FULL_CHECK', {
         error: error.message,
         checkTime: Date.now() - startTime,
@@ -186,7 +188,7 @@ class BalanceIntegrityService {
    */
   async performRealTimeCheck() {
     const startTime = Date.now();
-    
+
     try {
       // 重要通貨のみをチェック
       const importantCurrencies = SETTINGS.TRADING.IMPORTANT_CURRENCIES;
@@ -224,19 +226,19 @@ class BalanceIntegrityService {
     try {
       const exchangeBalance = await this.getExchangeBalance(currency);
       const redisBalance = await this.getRedisBalance(currency);
-      
+
       if (!exchangeBalance || !redisBalance) {
         return null;
       }
 
       const discrepancy = Math.abs(exchangeBalance.used - redisBalance.total);
-      const discrepancyPercent = exchangeBalance.used > 0 ? 
+      const discrepancyPercent = exchangeBalance.used > 0 ?
         (discrepancy / exchangeBalance.used) * 100 : 0;
 
       // 閾値チェック
       if (discrepancy > this.config.thresholds.absoluteThreshold &&
           discrepancyPercent > this.config.thresholds.percentageThreshold) {
-        
+
         return {
           currency,
           exchangeBalance,
@@ -260,7 +262,7 @@ class BalanceIntegrityService {
    */
   async getExchangeBalance(currency) {
     const cacheKey = `exchange_balance_${currency}`;
-    
+
     if (this.dataCache.has(cacheKey)) {
       const cached = this.dataCache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.config.dataSources.exchange.cacheTTL) {
@@ -271,7 +273,7 @@ class BalanceIntegrityService {
     try {
       const exchange = config.exchanges.bitbank.instance;
       const balance = await exchange.fetchBalance();
-      
+
       const currencyBalance = {
         free: balance.free[currency] || 0,
         used: balance.used[currency] || 0,
@@ -296,7 +298,7 @@ class BalanceIntegrityService {
    */
   async getRedisBalance(currency) {
     const cacheKey = `redis_balance_${currency}`;
-    
+
     if (this.dataCache.has(cacheKey)) {
       const cached = this.dataCache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.config.dataSources.redis.cacheTTL) {
@@ -316,7 +318,7 @@ class BalanceIntegrityService {
         const positions = await getStrategyPositionsRedis('bitbank', symbol, strategyKey);
         const openPositions = positions.filter(pos => pos.status === 'open' && pos.side === 'buy');
         const strategyAmount = openPositions.reduce((sum, pos) => sum + pos.amount, 0);
-        
+
         if (strategyAmount > 0) {
           totalAmount += strategyAmount;
           strategyBreakdown[strategyKey] = strategyAmount;
@@ -348,7 +350,7 @@ class BalanceIntegrityService {
     try {
       const exchange = config.exchanges.bitbank.instance;
       const balance = await exchange.fetchBalance();
-      
+
       return {
         bitbank: balance,
         timestamp: new Date()
@@ -388,7 +390,7 @@ class BalanceIntegrityService {
     try {
       await ensureConnection();
       const tradesCollection = getCollectionRef('trades');
-      
+
       const pipeline = [
         {
           $match: {
@@ -420,7 +422,7 @@ class BalanceIntegrityService {
       ];
 
       const results = await tradesCollection.aggregate(pipeline).toArray();
-      
+
       const mongoBalances = {};
       for (const result of results) {
         if (result.netPosition > 0) {
@@ -459,7 +461,7 @@ class BalanceIntegrityService {
       const exchangeRedisComparison = compareBalance(exchangeUsed, redisTotal, currency);
       const exchangeMongoComparison = compareBalance(exchangeUsed, mongoNet, currency);
       const redisMongoComparison = compareBalance(redisTotal, mongoNet, currency);
-      
+
       const exchangeRedisDiscrepancy = exchangeRedisComparison.absoluteDifference;
       const exchangeMongoDiscrepancy = exchangeMongoComparison.absoluteDifference;
       const redisMongoDiscrepancy = redisMongoComparison.absoluteDifference;
@@ -471,7 +473,7 @@ class BalanceIntegrityService {
       );
 
       if (maxDiscrepancy > this.config.thresholds.absoluteThreshold) {
-        const maxDiscrepancyPercent = toNumber(exchangeUsed) > 0 ? 
+        const maxDiscrepancyPercent = toNumber(exchangeUsed) > 0 ?
           (maxDiscrepancy / toNumber(exchangeUsed)) * 100 : 0;
 
         if (maxDiscrepancyPercent > this.config.thresholds.percentageThreshold) {
@@ -530,7 +532,7 @@ class BalanceIntegrityService {
    */
   async processIndividualDiscrepancy(discrepancy) {
     console.log(`📊 不整合処理: ${discrepancy.currency} (${discrepancy.severity})`);
-    
+
     // 監査ログ記録
     await this.logAuditRecord('DISCREPANCY_DETECTED', discrepancy);
 
@@ -585,20 +587,20 @@ class BalanceIntegrityService {
   async attemptAutoCorrection(discrepancy) {
     try {
       console.log(`🔧 自動修正を試行: ${discrepancy.currency}`);
-      
+
       // 修正前のスナップショットを記録
       const beforeSnapshot = await this.createBalanceSnapshot(discrepancy.currency);
-      
+
       // 修正ロジック（例：Redis残高を取引所残高に合わせる）
       const correctionResult = await this.performCorrection(discrepancy);
-      
+
       if (correctionResult.success) {
         this.dailyAutoCorrections++;
         this.metrics.autoCorrections++;
-        
+
         // 修正後のスナップショットを記録
         const afterSnapshot = await this.createBalanceSnapshot(discrepancy.currency);
-        
+
         await this.logAuditRecord('AUTO_CORRECTION', {
           currency: discrepancy.currency,
           beforeSnapshot,
@@ -607,7 +609,7 @@ class BalanceIntegrityService {
         });
 
         console.log(`✅ 自動修正完了: ${discrepancy.currency}`);
-        
+
         // 修正通知
         await this.sendCorrectionNotification(discrepancy, correctionResult);
       } else {
@@ -641,7 +643,7 @@ class BalanceIntegrityService {
       }
 
       const { currency, exchangeBalance, redisBalance } = discrepancy;
-      
+
       // 取引所残高を信頼できるソースとして使用
       const validationResult = validateBalance(exchangeBalance, currency);
       if (!validationResult.valid) {
@@ -686,21 +688,21 @@ class BalanceIntegrityService {
       // 自動修正の実行（Redis残高を取引所残高に合わせる）
       const redisClient = await getRedisClient();
       const key = `balance:${currency}`;
-      
+
       // トランザクションで安全に更新
       const multi = redisClient.multi();
-      
+
       // 既存のRedis残高をバックアップ
       const backupKey = `balance_backup:${currency}:${Date.now()}`;
       multi.hSet(backupKey, 'amount', redisBalance.toString());
       multi.hSet(backupKey, 'timestamp', new Date().toISOString());
       multi.expire(backupKey, 86400 * 7); // 7日間保持
-      
+
       // 新しい残高を設定
       multi.hSet(key, 'amount', exchangeBalance.toString());
       multi.hSet(key, 'updated_at', new Date().toISOString());
       multi.hSet(key, 'correction_reason', 'integrity_check_auto_correction');
-      
+
       await multi.exec();
 
       // 戦略別残高もリセット（取引所残高に基づいて再配分）
@@ -731,7 +733,7 @@ class BalanceIntegrityService {
     try {
       const redisClient = await getRedisClient();
       const strategies = config.strategies;
-      
+
       // 各戦略のキーを削除してリセット
       for (const strategyKey of Object.keys(strategies)) {
         const key = `strategyPositions:${strategyKey}:${currency}`;
@@ -740,7 +742,7 @@ class BalanceIntegrityService {
 
       // 総残高を0に設定（取引によって再計算される）
       console.log(`✅ ${currency}の戦略別残高をリセットしました`);
-      
+
     } catch (error) {
       console.error('戦略別残高の再配分中にエラー:', error);
       throw error;
@@ -753,7 +755,7 @@ class BalanceIntegrityService {
   async createBalanceSnapshot(currency) {
     const exchangeBalance = await this.getExchangeBalance(currency);
     const redisBalance = await this.getRedisBalance(currency);
-    
+
     return {
       currency,
       timestamp: new Date(),
@@ -828,10 +830,10 @@ class BalanceIntegrityService {
     this.metrics.totalChecks++;
     this.metrics.discrepanciesFound += discrepancies.length;
     this.metrics.lastCheckTime = new Date();
-    
+
     const checkTime = Date.now() - startTime;
-    this.metrics.averageCheckTime = 
-      (this.metrics.averageCheckTime * (this.metrics.totalChecks - 1) + checkTime) / 
+    this.metrics.averageCheckTime =
+      (this.metrics.averageCheckTime * (this.metrics.totalChecks - 1) + checkTime) /
       this.metrics.totalChecks;
   }
 
@@ -847,7 +849,7 @@ class BalanceIntegrityService {
     };
 
     this.auditLog.push(record);
-    
+
     // MongoDBに記録
     try {
       await ensureConnection();
@@ -868,7 +870,7 @@ class BalanceIntegrityService {
    */
   async sendCriticalAlert(discrepancies) {
     let message = '🚨 **重要な残高不整合が検出されました**\n\n';
-    
+
     for (const discrepancy of discrepancies.slice(0, 5)) {
       message += `**${discrepancy.currency}**\n`;
       message += `- 取引所残高: ${discrepancy.exchangeBalance}\n`;
@@ -891,7 +893,7 @@ class BalanceIntegrityService {
    */
   async sendWarningAlert(discrepancies) {
     let message = '⚠️ **残高不整合の警告**\n\n';
-    
+
     for (const discrepancy of discrepancies.slice(0, 3)) {
       message += `${discrepancy.currency}: ${discrepancy.discrepancyPercent.toFixed(2)}%乖離\n`;
     }
@@ -910,7 +912,7 @@ class BalanceIntegrityService {
    * 修正通知送信
    */
   async sendCorrectionNotification(discrepancy, correctionResult) {
-    let message = `🔧 **自動修正実行**\n\n`;
+    let message = '🔧 **自動修正実行**\n\n';
     message += `通貨: ${discrepancy.currency}\n`;
     message += `修正前乖離: ${discrepancy.discrepancyPercent.toFixed(2)}%\n`;
     message += `修正結果: ${correctionResult.success ? '成功' : '失敗'}\n`;
@@ -927,8 +929,8 @@ class BalanceIntegrityService {
    * 緊急停止通知送信
    */
   async sendEmergencyHaltNotification() {
-    const message = `🚨 **緊急停止が実行されました**\n\n` +
-      `理由: 重大な残高不整合\n` +
+    const message = '🚨 **緊急停止が実行されました**\n\n' +
+      '理由: 重大な残高不整合\n' +
       `連続失敗回数: ${this.consecutiveFailures}\n` +
       `クールダウン期間: ${this.config.tradingHalt.cooldownPeriod / TIME_CONSTANTS.SECOND}秒\n` +
       `\n🕐 実行時刻: ${formatJST(new Date())}`;

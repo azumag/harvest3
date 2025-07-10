@@ -658,7 +658,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       console.log(`[約定更新] API呼び出し開始: ${exchange.id} ${symbol}`);
     }
     const apiStart = Date.now();
-    
+
     // withBitbankErrorHandlingを使用してAPI呼び出しを実行
     const trades = await withBitbankErrorHandling(
       () => exchange.fetchMyTrades(symbol, lastCheckTime),
@@ -666,7 +666,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       'fetchMyTrades',
       symbol
     );
-    
+
     // 空の配列が返された場合は処理を終了
     if (!trades || trades.length === 0) {
       const totalTime = Date.now() - startTime;
@@ -675,7 +675,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       }
       return 0;
     }
-    
+
     const apiTime = Date.now() - apiStart;
 
     if (!isBacktest) {

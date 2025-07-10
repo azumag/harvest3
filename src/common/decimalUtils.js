@@ -1,6 +1,6 @@
 /**
  * 高精度数値計算ユーティリティ
- * 
+ *
  * 残高計算における浮動小数点誤差を解消するため、
  * Decimal.jsを使用した高精度計算機能を提供
  */
@@ -38,11 +38,11 @@ function toDecimal(value) {
   if (value === null || value === undefined) {
     return new Decimal(0);
   }
-  
+
   if (value instanceof Decimal) {
     return value;
   }
-  
+
   // 文字列または数値をDecimalに変換
   try {
     return new Decimal(value.toString());
@@ -58,7 +58,7 @@ function toDecimal(value) {
 function roundByCurrency(value, currency) {
   const decimal = toDecimal(value);
   const precision = CURRENCY_PRECISION[currency] || 8;
-  
+
   return decimal.toDecimalPlaces(precision, Decimal.ROUND_DOWN);
 }
 
@@ -91,11 +91,11 @@ function multiplyBalance(balance, multiplier, currency) {
  */
 function divideBalance(balance, divisor, currency) {
   const div = toDecimal(divisor);
-  
+
   if (div.isZero()) {
     throw new Error('ゼロ除算エラー');
   }
-  
+
   const quotient = toDecimal(balance).dividedBy(div);
   return roundByCurrency(quotient, currency);
 }
@@ -106,13 +106,13 @@ function divideBalance(balance, divisor, currency) {
 function compareBalance(balance1, balance2, currency) {
   const b1 = roundByCurrency(balance1, currency);
   const b2 = roundByCurrency(balance2, currency);
-  
+
   const difference = b1.minus(b2);
   const absoluteDifference = difference.abs();
-  const percentageDifference = b2.isZero() 
-    ? new Decimal(100) 
+  const percentageDifference = b2.isZero()
+    ? new Decimal(100)
     : absoluteDifference.dividedBy(b2).times(100);
-  
+
   return {
     difference: difference.toNumber(),
     absoluteDifference: absoluteDifference.toNumber(),
@@ -129,7 +129,7 @@ function sumBalances(balances, currency) {
   const sum = balances.reduce((acc, balance) => {
     return acc.plus(toDecimal(balance));
   }, new Decimal(0));
-  
+
   return roundByCurrency(sum, currency);
 }
 
@@ -158,30 +158,30 @@ function toString(decimalValue, currency) {
 function updateBalance(currentBalance, change, operation, currency) {
   const current = toDecimal(currentBalance);
   const changeAmount = toDecimal(change);
-  
+
   let newBalance;
   switch (operation) {
-    case 'add':
-    case 'increment':
-      newBalance = current.plus(changeAmount);
-      break;
-    case 'subtract':
-    case 'decrement':
-      newBalance = current.minus(changeAmount);
-      break;
-    case 'set':
-      newBalance = changeAmount;
-      break;
-    default:
-      throw new Error(`不明な操作: ${operation}`);
+  case 'add':
+  case 'increment':
+    newBalance = current.plus(changeAmount);
+    break;
+  case 'subtract':
+  case 'decrement':
+    newBalance = current.minus(changeAmount);
+    break;
+  case 'set':
+    newBalance = changeAmount;
+    break;
+  default:
+    throw new Error(`不明な操作: ${operation}`);
   }
-  
+
   // 負の残高を防ぐ
   if (newBalance.isNegative()) {
     console.warn(`警告: 負の残高が検出されました。ゼロに設定します。currency: ${currency}, current: ${current}, change: ${change}, operation: ${operation}`);
     newBalance = new Decimal(0);
   }
-  
+
   return roundByCurrency(newBalance, currency);
 }
 
@@ -191,7 +191,7 @@ function updateBalance(currentBalance, change, operation, currency) {
 function validateBalance(balance, currency) {
   try {
     const decimal = toDecimal(balance);
-    
+
     // 負の値チェック
     if (decimal.isNegative()) {
       return {
@@ -199,7 +199,7 @@ function validateBalance(balance, currency) {
         error: '残高は負の値にできません'
       };
     }
-    
+
     // 無限大チェック
     if (!decimal.isFinite()) {
       return {
@@ -207,14 +207,14 @@ function validateBalance(balance, currency) {
         error: '無効な数値です'
       };
     }
-    
+
     // 最大値チェック（各通貨の現実的な最大値）
     const maxValues = {
       BTC: 21000000,  // BTCの最大供給量
       ETH: 1000000000, // 現実的な最大値
       JPY: 1000000000000 // 1兆円
     };
-    
+
     const maxValue = maxValues[currency] || 1000000000;
     if (decimal.greaterThan(maxValue)) {
       return {
@@ -222,7 +222,7 @@ function validateBalance(balance, currency) {
         error: `${currency}の最大値を超えています`
       };
     }
-    
+
     return {
       valid: true,
       value: roundByCurrency(decimal, currency).toNumber()

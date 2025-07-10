@@ -32,14 +32,14 @@ async function getExchangeBalance(exchangeId) {
     }
 
     const exchange = exchangeConfig.instance;
-    
+
     // withBitbankErrorHandlingを使用してAPI呼び出しを実行
     const balance = await withBitbankErrorHandling(
       () => exchange.fetchBalance(),
       exchangeId,
       'fetchBalance'
     );
-    
+
     console.log(`取引所残高取得完了: ${exchangeId}`);
     return balance;
   } catch (error) {

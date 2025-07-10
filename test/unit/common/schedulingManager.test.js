@@ -244,9 +244,9 @@ describe('SchedulingManager', () => {
       });
 
       await schedulingManager._executeTask(mockTask, 'test-task');
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[スケジューラー] test-task 実行エラー:', 
+        '[スケジューラー] test-task 実行エラー:',
         'Test error'
       );
       consoleSpy.mockRestore();
@@ -257,9 +257,9 @@ describe('SchedulingManager', () => {
       const mockTask = jest.fn().mockRejectedValue(new Error('Async error'));
 
       await schedulingManager._executeTask(mockTask, 'test-task');
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
-        '[スケジューラー] test-task 実行エラー:', 
+        '[スケジューラー] test-task 実行エラー:',
         'Async error'
       );
       consoleSpy.mockRestore();

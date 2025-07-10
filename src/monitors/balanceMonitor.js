@@ -1,6 +1,6 @@
 /**
  * リアルタイム残高監視システム - issue #215
- * 
+ *
  * 1分間隔での残高監視、異常検知、自動対応を行う
  */
 
@@ -119,7 +119,9 @@ class BalanceMonitor {
     }
 
     this.monitoringInterval = setInterval(async () => {
-      if (!this.isRunning) return;
+      if (!this.isRunning) {
+        return;
+      }
 
       await this.performMonitoringCheck();
     }, this.config.realTimeMonitoring.interval);
@@ -137,7 +139,9 @@ class BalanceMonitor {
 
     // 設定値によるヘルスチェック間隔
     this.healthCheckInterval = setInterval(async () => {
-      if (!this.isRunning) return;
+      if (!this.isRunning) {
+        return;
+      }
 
       await this.performHealthCheck();
     }, SETTINGS.MONITORING.BALANCE_CHECK_INTERVAL);
@@ -164,7 +168,7 @@ class BalanceMonitor {
     try {
       // タイムアウト制御
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Monitoring check timeout')), 
+        setTimeout(() => reject(new Error('Monitoring check timeout')),
           this.config.realTimeMonitoring.timeout);
       });
 
@@ -192,7 +196,7 @@ class BalanceMonitor {
       await this.sendErrorNotification(error);
     } finally {
       this.currentlyRunning.delete(checkId);
-      
+
       // 統計更新
       const responseTime = Date.now() - startTime;
       this.updatePerformanceStats(responseTime, success);
@@ -282,7 +286,7 @@ class BalanceMonitor {
     }
 
     // 取引停止の検討
-    const majorDiscrepancies = discrepancies.filter(d => 
+    const majorDiscrepancies = discrepancies.filter(d =>
       d.discrepancies.max >= this.config.tradingHalt.majorDiscrepancyThreshold
     );
 
@@ -351,7 +355,7 @@ class BalanceMonitor {
     console.log('🛑 緊急停止を実行します');
 
     const message = '🚨 **緊急停止が実行されました**\n\n' +
-      `重大な残高不整合により取引を停止します\n` +
+      '重大な残高不整合により取引を停止します\n' +
       `不整合件数: ${discrepancies.length}件\n` +
       `最大乖離率: ${Math.max(...discrepancies.map(d => d.discrepancyPercent)).toFixed(2)}%\n` +
       `\n実行時刻: ${formatJST(new Date())}\n` +
@@ -369,8 +373,8 @@ class BalanceMonitor {
    */
   async sendEmergencyNotification(discrepancies) {
     let message = '🚨 **緊急事態発生**\n\n';
-    message += `重大な残高不整合が検出されました\n`;
-    message += `即座の対応が必要です\n\n`;
+    message += '重大な残高不整合が検出されました\n';
+    message += '即座の対応が必要です\n\n';
 
     for (const discrepancy of discrepancies) {
       message += `**${discrepancy.currency}**\n`;
@@ -379,7 +383,7 @@ class BalanceMonitor {
     }
 
     message += `🕐 検出時刻: ${formatJST(new Date())}\n`;
-    message += `📊 システム状態: 緊急事態`;
+    message += '📊 システム状態: 緊急事態';
 
     try {
       await postErrorToDiscord(message);
@@ -397,10 +401,10 @@ class BalanceMonitor {
     if (this.consecutiveFailures >= SETTINGS.MONITORING.FAILURE_ALERT_THRESHOLD) {
       const message = '🚨 **監視システム異常**\n\n' +
         `連続失敗回数: ${this.consecutiveFailures}回\n` +
-        `最終成功時刻: ${this.performanceStats.lastSuccessTime ? 
+        `最終成功時刻: ${this.performanceStats.lastSuccessTime ?
           formatJST(this.performanceStats.lastSuccessTime) : 'なし'}\n` +
         `最終失敗時刻: ${formatJST(this.performanceStats.lastFailureTime)}\n` +
-        `\n監視システムの確認が必要です`;
+        '\n監視システムの確認が必要です';
 
       try {
         await postErrorToDiscord(message);
@@ -445,21 +449,21 @@ class BalanceMonitor {
     this.lastSummaryTime = now;
 
     const integrityMetrics = balanceIntegrityService.getMetrics();
-    
+
     let message = '📊 **残高監視システム サマリー**\n\n';
-    message += `**監視統計**\n`;
+    message += '**監視統計**\n';
     message += `- 総チェック数: ${this.performanceStats.totalChecks}\n`;
     message += `- 成功率: ${((this.performanceStats.successfulChecks / this.performanceStats.totalChecks) * 100).toFixed(1)}%\n`;
     message += `- 平均応答時間: ${this.performanceStats.averageResponseTime.toFixed(0)}ms\n`;
     message += `- 最終チェック: ${formatJST(this.performanceStats.lastCheckTime)}\n\n`;
 
-    message += `**不整合統計**\n`;
+    message += '**不整合統計**\n';
     message += `- 総アラート数: ${this.alertStats.totalAlerts}\n`;
     message += `- 重要アラート: ${this.alertStats.criticalAlerts}\n`;
     message += `- 警告アラート: ${this.alertStats.warningAlerts}\n`;
     message += `- 自動修正数: ${integrityMetrics.autoCorrections}\n\n`;
 
-    message += `**システム状態**\n`;
+    message += '**システム状態**\n';
     message += `- 監視システム: ${this.isRunning ? '✅ 稼働中' : '❌ 停止中'}\n`;
     message += `- 取引状態: ${integrityMetrics.tradingHalted ? '🛑 停止中' : '✅ 正常'}\n`;
     message += `- 連続失敗: ${this.consecutiveFailures}回\n`;
@@ -511,13 +515,21 @@ class BalanceMonitor {
     let score = 1.0;
 
     // システム状態
-    if (!health.system.monitoring) score -= 0.4;
-    if (!health.system.integrity) score -= 0.3;
-    if (!health.system.trading) score -= 0.2;
+    if (!health.system.monitoring) {
+      score -= 0.4;
+    }
+    if (!health.system.integrity) {
+      score -= 0.3;
+    }
+    if (!health.system.trading) {
+      score -= 0.2;
+    }
 
     // パフォーマンス
     const successRate = health.performance.successfulChecks / health.performance.totalChecks;
-    if (successRate < 0.9) score -= (0.9 - successRate) * 0.3;
+    if (successRate < 0.9) {
+      score -= (0.9 - successRate) * 0.3;
+    }
 
     // 連続失敗
     if (this.consecutiveFailures > 0) {
@@ -560,7 +572,7 @@ class BalanceMonitor {
 
     // 平均応答時間の更新
     const totalChecks = this.performanceStats.totalChecks;
-    this.performanceStats.averageResponseTime = 
+    this.performanceStats.averageResponseTime =
       (this.performanceStats.averageResponseTime * (totalChecks - 1) + responseTime) / totalChecks;
   }
 

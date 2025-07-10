@@ -10,9 +10,9 @@ const {
   safeValidatePendingOrderData,
   safeValidateStrategyParametersData
 } = require('./schemas');
-const { 
-  toDecimal, 
-  addBalance, 
+const {
+  toDecimal,
+  addBalance,
   subtractBalance,
   toNumber,
   toString,
@@ -123,19 +123,19 @@ async function updateTradeSummary(trade) {
 
   // 約定サマリーを更新（高精度計算）
   const currency = validatedTrade.symbol.split('/')[0]; // BTC/JPY -> BTC
-  
+
   if (trade.side === 'buy') {
     // 買い注文の場合
     const currentBuyAmount = toDecimal(await client.hGet(summaryKey, 'buyAmount') || 0);
     const currentBuyCost = toDecimal(await client.hGet(summaryKey, 'totalBuyCost') || 0);
     const currentNetPosition = toDecimal(await client.hGet(summaryKey, 'netPosition') || 0);
     const currentTotalFee = toDecimal(await client.hGet(summaryKey, 'totalFee') || 0);
-    
+
     const newBuyAmount = addBalance(currentBuyAmount, trade.amount, currency);
     const newBuyCost = addBalance(currentBuyCost, trade.value, 'JPY');
     const newNetPosition = addBalance(currentNetPosition, trade.amount, currency);
     const newTotalFee = addBalance(currentTotalFee, trade.fee, 'JPY');
-    
+
     await client.hSet(summaryKey, 'buyAmount', toString(newBuyAmount, currency));
     await client.hSet(summaryKey, 'totalBuyCost', toString(newBuyCost, 'JPY'));
     await client.hSet(summaryKey, 'netPosition', toString(newNetPosition, currency));
@@ -146,12 +146,12 @@ async function updateTradeSummary(trade) {
     const currentSellValue = toDecimal(await client.hGet(summaryKey, 'totalSellValue') || 0);
     const currentNetPosition = toDecimal(await client.hGet(summaryKey, 'netPosition') || 0);
     const currentTotalFee = toDecimal(await client.hGet(summaryKey, 'totalFee') || 0);
-    
+
     const newSellAmount = addBalance(currentSellAmount, trade.amount, currency);
     const newSellValue = addBalance(currentSellValue, trade.value, 'JPY');
     const newNetPosition = subtractBalance(currentNetPosition, trade.amount, currency);
     const newTotalFee = addBalance(currentTotalFee, trade.fee, 'JPY');
-    
+
     await client.hSet(summaryKey, 'sellAmount', toString(newSellAmount, currency));
     await client.hSet(summaryKey, 'totalSellValue', toString(newSellValue, 'JPY'));
     await client.hSet(summaryKey, 'netPosition', toString(newNetPosition, currency));

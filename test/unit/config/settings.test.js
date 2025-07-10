@@ -17,11 +17,11 @@ describe('設定外部化システム', () => {
       expect(SETTINGS.DATABASE).toBeDefined();
       expect(SETTINGS.DATABASE.REDIS).toBeDefined();
       expect(SETTINGS.DATABASE.MONGODB).toBeDefined();
-      
+
       // Redis設定
       expect(SETTINGS.DATABASE.REDIS.RECONNECT_DELAY).toBeGreaterThan(0);
       expect(SETTINGS.DATABASE.REDIS.CONNECTION_TIMEOUT).toBeGreaterThan(0);
-      
+
       // MongoDB設定
       expect(SETTINGS.DATABASE.MONGODB.MAX_POOL_SIZE).toBeGreaterThanOrEqual(1);
       expect(SETTINGS.DATABASE.MONGODB.MIN_POOL_SIZE).toBeGreaterThanOrEqual(1);
@@ -59,16 +59,16 @@ describe('設定外部化システム', () => {
       // 設定ファイルを再読み込み
       delete require.cache[require.resolve('../../../src/config/settings')];
       const { SETTINGS: freshSettings } = require('../../../src/config/settings');
-      
+
       expect(freshSettings.EXCHANGE.BITFLYER_RATE_LIMIT).toBe(1000); // デフォルト値
     });
 
     it('無効な環境変数はデフォルト値にフォールバック', () => {
       process.env.BITFLYER_RATE_LIMIT = 'invalid';
-      
+
       delete require.cache[require.resolve('../../../src/config/settings')];
       const { SETTINGS: freshSettings } = require('../../../src/config/settings');
-      
+
       expect(freshSettings.EXCHANGE.BITFLYER_RATE_LIMIT).toBe(1000); // デフォルト値
     });
   });
@@ -108,7 +108,7 @@ describe('設定外部化システム', () => {
     it('すべての必要なカテゴリが存在する', () => {
       const requiredCategories = [
         'EXCHANGE',
-        'DATABASE', 
+        'DATABASE',
         'MONITORING',
         'RISK_MANAGEMENT',
         'PERFORMANCE',
@@ -138,7 +138,7 @@ describe('設定外部化システム', () => {
     it('既存の設定ファイルから値を正しく読み込む', () => {
       // 既存設定との互換性確認
       const { EXCHANGE_SETTINGS } = require('../../../src/common/const');
-      
+
       // 既存設定値が利用可能であることを確認
       expect(EXCHANGE_SETTINGS.RATE_LIMIT).toBeDefined();
       expect(EXCHANGE_SETTINGS.TIMEOUT).toBeDefined();

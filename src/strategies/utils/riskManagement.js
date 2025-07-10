@@ -1090,7 +1090,7 @@ async function getCurrentBalance(exchange) {
       exchange.id,
       'fetchBalance'
     );
-    
+
     let totalJPY = 0;
 
     // JPY残高を加算

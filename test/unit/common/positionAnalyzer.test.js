@@ -18,7 +18,7 @@ describe('PositionAnalyzer', () => {
   beforeEach(() => {
     // デフォルト設定でアナライザーを初期化
     analyzer = new PositionAnalyzer();
-    
+
     // モック取引所の設定
     mockExchange = {
       fetchBalance: jest.fn()
@@ -45,7 +45,7 @@ describe('PositionAnalyzer', () => {
         logLevel: 'debug',
         includeZeroPositions: true
       };
-      
+
       const customAnalyzer = new PositionAnalyzer(customOptions);
       expect(customAnalyzer.options.toleranceThreshold).toBe(0.001);
       expect(customAnalyzer.options.logLevel).toBe('debug');
@@ -64,7 +64,7 @@ describe('PositionAnalyzer', () => {
       mockExchange.fetchBalance.mockResolvedValue(mockBalances);
 
       const result = await analyzer.getExchangeBalances(mockExchange);
-      
+
       expect(result).toEqual(mockBalances);
       expect(mockExchange.fetchBalance).toHaveBeenCalledTimes(1);
     });
@@ -73,7 +73,7 @@ describe('PositionAnalyzer', () => {
       mockExchange.fetchBalance.mockRejectedValue(new Error('API Error'));
 
       const result = await analyzer.getExchangeBalances(mockExchange);
-      
+
       expect(result).toBe(null);
     });
   });
@@ -90,7 +90,7 @@ describe('PositionAnalyzer', () => {
       mockGetAllTradeSummaries.mockResolvedValue(mockTradeSummaries);
 
       const result = await analyzer.aggregateNetPositionsBySymbol('bitbank');
-      
+
       expect(result).toEqual({
         'BTC/JPY': {
           totalNetPosition: 2.0,
@@ -117,7 +117,7 @@ describe('PositionAnalyzer', () => {
       mockGetAllTradeSummaries.mockResolvedValue(mockTradeSummaries);
 
       const result = await analyzer.aggregateNetPositionsBySymbol('bitbank');
-      
+
       expect(result).toEqual({
         'BTC/JPY': {
           totalNetPosition: 1.5,
@@ -157,14 +157,14 @@ describe('PositionAnalyzer', () => {
       };
 
       const proposal = analyzer.createFixProposal('bitbank', inconsistency);
-      
+
       expect(proposal.actions).toContainEqual(
         expect.objectContaining({
           type: 'backup_data',
           description: '修復前のデータバックアップ'
         })
       );
-      
+
       expect(proposal.actions).toContainEqual(
         expect.objectContaining({
           type: 'reduce_redis_position',
@@ -183,7 +183,7 @@ describe('PositionAnalyzer', () => {
       };
 
       const proposal = analyzer.createFixProposal('bitbank', inconsistency);
-      
+
       expect(proposal.actions).toContainEqual(
         expect.objectContaining({
           type: 'investigate_missing_trades',
@@ -201,7 +201,7 @@ describe('PositionAnalyzer', () => {
       ];
 
       const recommendations = analyzer.generateRecommendations();
-      
+
       expect(recommendations).toContainEqual(
         expect.objectContaining({
           priority: 'high',
@@ -214,7 +214,7 @@ describe('PositionAnalyzer', () => {
       analyzer.inconsistencies = new Array(15).fill({ severity: 'minor' });
 
       const recommendations = analyzer.generateRecommendations();
-      
+
       expect(recommendations).toContainEqual(
         expect.objectContaining({
           priority: 'medium',
@@ -227,7 +227,7 @@ describe('PositionAnalyzer', () => {
       analyzer.inconsistencies = [];
 
       const recommendations = analyzer.generateRecommendations();
-      
+
       expect(recommendations).toContainEqual(
         expect.objectContaining({
           priority: 'low',
@@ -242,7 +242,7 @@ describe('PositionAnalyzer', () => {
       mockGetAllTradeSummaries.mockRejectedValue(new Error('Redis connection failed'));
 
       const result = await analyzer.aggregateNetPositionsBySymbol('bitbank');
-      
+
       expect(result).toEqual({});
     });
   });

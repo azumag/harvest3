@@ -84,7 +84,7 @@ describe('BalanceIntegrityService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Redisクライアントのモック
     mockRedisClient = {
       hGetAll: jest.fn(),
@@ -93,14 +93,14 @@ describe('BalanceIntegrityService', () => {
       multi: jest.fn(),
       del: jest.fn()
     };
-    
+
     const mockMulti = {
       hSet: jest.fn().mockReturnThis(),
       expire: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([])
     };
     mockRedisClient.multi.mockReturnValue(mockMulti);
-    
+
     // 取引所インスタンスのモック
     mockExchange = config.exchanges.bitbank.instance;
     mockExchange.fetchBalance.mockResolvedValue({
@@ -108,7 +108,7 @@ describe('BalanceIntegrityService', () => {
       free: { BTC: 0.5, ETH: 5.0 },
       used: { BTC: 0.5, ETH: 5.0 }
     });
-    
+
     // MongoDBコレクションのモック
     mockCollection = {
       aggregate: jest.fn().mockReturnValue({
@@ -116,14 +116,14 @@ describe('BalanceIntegrityService', () => {
       }),
       insertOne: jest.fn().mockResolvedValue({ acknowledged: true })
     };
-    
+
     const { getRedisClient, getStrategyPositionsRedis } = require('../../../src/database/redisDatabase');
     const { getCollectionRef } = require('../../../src/database/manager');
-    
+
     getRedisClient.mockResolvedValue(mockRedisClient);
     getCollectionRef.mockReturnValue(mockCollection);
     getStrategyPositionsRedis.mockResolvedValue([]);
-    
+
     service = new BalanceIntegrityService();
   });
 
@@ -335,7 +335,7 @@ describe('BalanceIntegrityService', () => {
       await service.considerTradingHalt(discrepancy);
 
       expect(service.tradingHalted).toBe(true);
-      
+
       // タイマーをスキップして即座に実行
       jest.runAllTimers();
     });
