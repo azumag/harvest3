@@ -52,6 +52,7 @@ jest.mock('./src/database/redisDatabase', () => {
     }),
     getStrategyPositionsRedis: jest.fn().mockImplementation((exchangeId, symbol, strategyKey) => {
       const positions = [];
+      // eslint-disable-next-line no-unused-vars
       for (const [_key, position] of mockTestPositionStore.entries()) {
         if (position.exchangeId === exchangeId &&
             position.symbol === symbol &&
@@ -123,4 +124,6 @@ if (process.env.CI) {
   });
 }
 
-console.log('Jest setup completed - Redis mocked with stateful behavior for test environment');
+if (!process.env.CI) {
+  console.log('Jest setup completed - Redis mocked with stateful behavior for test environment');
+}
