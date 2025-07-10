@@ -58,6 +58,9 @@ const {
   getValidatedStrategyKey
 } = require('../../../src/database/redisDatabase');
 
+// スキップ理由: Redis整合性チェック機能のテストは、Redis実際接続とアトミック操作のテストが必要
+// CI環境でのRedis設定とトランザクションテスト環境構築が完了次第、テストを有効化予定
+// 対応方針: Redis Clusterモードでのテスト環境構築後に再有効化
 describe.skip('redisDatabase - 整合性チェック機能', () => {
   beforeEach(() => {
     jest.clearAllMocks();

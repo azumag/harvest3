@@ -125,5 +125,5 @@ if (process.env.CI) {
 }
 
 if (!process.env.CI) {
-  console.log('Jest setup completed - Redis mocked with stateful behavior for test environment');
+  // Jest setup completed - Redis mocked with stateful behavior for test environment (verbose logging disabled for performance)
 }
