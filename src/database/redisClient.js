@@ -3,11 +3,12 @@
  * SQLiteからRedisへの移行の一部として実装
  */
 const redis = require('redis');
+const { SETTINGS } = require('../config/settings');
 const { MONITORING_SETTINGS } = require('../common/const');
 
 // 環境変数からRedis接続URLを取得、または既定値を使用
 // Docker環境では適切なサービス名を使用
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const REDIS_URL = SETTINGS.DATABASE.REDIS.DEFAULT_URL;
 
 // Redis接続の無効化フラグ
 const DISABLE_REDIS = process.env.DISABLE_REDIS === 'true';
@@ -19,20 +20,20 @@ const client = redis.createClient({
     connectTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
     commandTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
     // 再接続の設定
-    reconnectDelay: 1000,
+    reconnectDelay: SETTINGS.DATABASE.REDIS.RECONNECT_DELAY,
     lazyConnect: true
   },
   // 接続エラー時の再試行設定
   retry_strategy: (options) => {
     if (options.error && options.error.code === 'ECONNREFUSED') {
       console.error('Redis接続が拒否されました。再接続を試みます...');
-      return Math.min(options.attempt * 100, 3000);
+      return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
     }
-    if (options.total_retry_time > 1000 * 60 * 60) {
+    if (options.total_retry_time > SETTINGS.DATABASE.REDIS.CONNECTION_TIMEOUT) {
       console.error('Redis接続のタイムアウトに達しました。');
       return new Error('Redis接続のタイムアウトに達しました。');
     }
-    return Math.min(options.attempt * 100, 3000);
+    return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
   }
 });
 
@@ -42,12 +43,12 @@ client.on('error', (err) => {
     console.error('Redisエラー:', err);
     // 接続エラーの場合は再接続を試みる
     if (err.code === 'ECONNREFUSED') {
-      console.log('Redis接続が拒否されました。5秒後に再接続を試みます...');
+      console.log(`Redis接続が拒否されました。${SETTINGS.DATABASE.REDIS.RECONNECTION_INTERVAL}ms後に再接続を試みます...`);
       setTimeout(() => {
         if (!client.isReady && !client.isOpen) {
           reconnect();
         }
-      }, 5000);
+      }, SETTINGS.DATABASE.REDIS.RECONNECTION_INTERVAL);
     }
   }
 });
@@ -151,9 +152,18 @@ async function closeRedisClient() {
   }
 }
 
+/**
+ * Redisクライアントを取得する関数
+ * @returns {Object} Redis クライアント
+ */
+function getClient() {
+  return client;
+}
+
 // モジュールのエクスポート
 module.exports = {
   client,
+  getClient,
   initRedisClient,
   closeRedisClient,
   reconnect

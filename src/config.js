@@ -1,6 +1,7 @@
 const ccxt = require('ccxt');
 const dotenv = require('dotenv');
 const { EXCHANGE_SETTINGS, TRADING_SETTINGS, BITFLYER_MIN_TRADE_AMOUNTS, ORDER_MANAGEMENT_SETTINGS } = require('./common/const');
+const { SETTINGS } = require('./config/settings');
 dotenv.config(); // .envファイルから環境変数を読み込む
 
 // strategies
@@ -37,44 +38,22 @@ const exchangeBB = new ccxt.bitbank({
   }
 });
 
-// 緊急対応: throttle機能を完全に無効化してAPI制限を回避
-// CCXTのthrottle機能が正常に動作しないため、独自制御に切り替え
-console.log('[緊急対応] CCXTのthrottle機能を無効化');
-exchangeBB.enableRateLimit = false;
-exchangeBB.rateLimit = 0;
+// Issue #210対応: CCXT標準rate limiting機能への移行
+// bitbank API制限: 取得系 10回/秒、更新系 6回/秒
+// 安全な設定: 1000ms間隔（1回/秒）で安定運用
+console.log('[Issue #210] CCXT標準rate limitingへ移行');
+exchangeBB.enableRateLimit = true;
+exchangeBB.rateLimit = SETTINGS.EXCHANGE.BITBANK_RATE_LIMIT; // 設定ファイルから取得
+exchangeBB.timeout = EXCHANGE_SETTINGS.TIMEOUT;
 
-// 独自のAPI制限機能を実装
-// TODO: 項目15対応 - CCXT標準機能への移行が完了するまでの一時的な実装
-let lastApiCall = 0;
-const originalThrottle = exchangeBB.throttle.bind(exchangeBB);
-exchangeBB.throttle = async function(cost = 1) {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastApiCall;
-  // cost引数を考慮: コストが高いほど長く待機（緊急対応中は保守的に設定）
-  const baseDelay = EXCHANGE_SETTINGS.RATE_LIMIT;
-  const requiredDelay = baseDelay * Math.max(1, cost * 0.5); // costに比例して調整
-
-  if (timeSinceLastCall < requiredDelay) {
-    const sleepTime = requiredDelay - timeSinceLastCall;
-    console.log(`[独自throttle] cost=${cost}, ${sleepTime}ms待機中...`);
-    await new Promise(resolve => setTimeout(resolve, sleepTime));
-  }
-
-  lastApiCall = Date.now();
-  return Promise.resolve();
-};
-
-// 設定確認ログ（シンプル化）
-console.log('[緊急対応] 独自throttle制御実装完了');
-console.log('  - enableRateLimit: false (CCXT throttle無効化)');
-console.log('  - 独自制御間隔: ' + EXCHANGE_SETTINGS.RATE_LIMIT + 'ms');
-console.log('  - timeout: ' + EXCHANGE_SETTINGS.TIMEOUT + 'ms');
+// CCXT標準機能の設定確認
+console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rateLimit: ${exchangeBB.rateLimit}ms, timeout: ${exchangeBB.timeout}ms`);
 
 const exchangeBF = new ccxt.bitflyer({
   apiKey: BFApiKey,
   secret: BFApiSecret,
   enableRateLimit: true,
-  rateLimit: 1000 // 1リクエストあたり1000ミリ秒（1秒）の制限
+  rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT // 設定ファイルから取得
 });
 
 const bitflyerMinTradeAmounts = BITFLYER_MIN_TRADE_AMOUNTS;
@@ -131,7 +110,7 @@ const config = {
       // パフォーマンス調整設定
       performanceAdjustment: {
         enabled: true,
-        lookbackDays: 30,
+        lookbackDays: SETTINGS.PERFORMANCE.LOOKBACK_DAYS,
         loss: {
           factor: 2,              // 損失率に対する調整係数
           maxReductionRatio: 0.7  // 最大削減率（70%）
@@ -147,7 +126,7 @@ const config = {
     backtest: {
       dynamicPeriods: {
         enabled: true,
-        bufferPercent: 0.3,        // 30%バッファ
+        bufferPercent: SETTINGS.PERFORMANCE.BUFFER_PERCENT,        // 設定ファイルから取得
         minBuffer: 50,             // 最小バッファ
         maxBuffer: 500,            // 最大バッファ
         cacheDuration: 300000      // 5分間キャッシュ
@@ -191,9 +170,9 @@ const config = {
         iceberg: {
           enabled: true,
           largeOrderThreshold: {
-            'BTC': 0.1,
-            'ETH': 1.0,
-            'default': 10.0
+            'BTC': SETTINGS.TRADING.ICEBERG_THRESHOLDS.BTC,
+            'ETH': SETTINGS.TRADING.ICEBERG_THRESHOLDS.ETH,
+            'default': SETTINGS.TRADING.ICEBERG_THRESHOLDS.DEFAULT
           }
         }
       }
@@ -252,10 +231,10 @@ const config = {
 
       // フォールバック戦略
       fallbackStrategy: 'rule_based', // rule_based, static, conservative
-      maxCalculationTime: 5000, // 5秒タイムアウト
+      maxCalculationTime: SETTINGS.PERFORMANCE.MAX_CALCULATION_TIME, // 設定ファイルから取得
       enableAutoOptimization: true,
       enableRealTimeAdaptation: true,
-      optimizationInterval: 24 * 60 * 60 * 1000, // 24時間
+      optimizationInterval: SETTINGS.PERFORMANCE.OPTIMIZATION_INTERVAL, // 設定ファイルから取得
       adaptationThreshold: 0.05, // 5%改善閾値
 
       // 基本動的urgency設定（フォールバック用）
@@ -309,7 +288,7 @@ const config = {
       // A/Bテスト設定
       abTesting: {
         enabled: true,
-        testDuration: 7 * 24 * 60 * 60 * 1000, // 7日間
+        testDuration: SETTINGS.PERFORMANCE.TEST_DURATION, // 設定ファイルから取得
         minSampleSize: 50,
         significanceLevel: 0.05, // 5%
         trafficAllocation: {
@@ -318,6 +297,95 @@ const config = {
           mlBased: 0.25,          // 機械学習ベース
           multiTimeframe: 0.2     // マルチタイムフレーム
         }
+      }
+    },
+
+    // 残高整合性チェック設定（issue #215）
+    balanceIntegritySystem: {
+      enabled: true,
+      realTimeMonitoring: {
+        enabled: true,
+        interval: 60000, // 1分間隔
+        maxConcurrentChecks: 3,
+        timeout: 30000 // 30秒タイムアウト
+      },
+      
+      // 不整合閾値設定
+      thresholds: {
+        absoluteThreshold: 0.001, // 0.001以上の絶対差
+        percentageThreshold: 1.0, // 1%以上の相対差
+        warningThreshold: 0.5,    // 0.5%以上で警告
+        criticalThreshold: 5.0    // 5%以上で重要アラート
+      },
+      
+      // 自動修正設定
+      autoCorrection: {
+        enabled: true,
+        minorDiscrepancyThreshold: 0.01,  // 0.01以下は軽微として自動修正
+        majorDiscrepancyThreshold: 0.1,   // 0.1以上は重大として手動確認
+        maxAutoCorrections: 3,             // 1日の最大自動修正回数
+        requireManualApproval: true        // 手動承認必須
+      },
+      
+      // 取引停止設定
+      tradingHalt: {
+        enabled: true,
+        majorDiscrepancyThreshold: 0.1,    // 10%以上で取引停止
+        maxConsecutiveFailures: 3,         // 連続失敗回数
+        cooldownPeriod: 300000            // 5分間のクールダウン
+      },
+      
+      // 監査ログ設定
+      auditLog: {
+        enabled: true,
+        retentionDays: 90,                // 90日間保持
+        detailedLogging: true,            // 詳細ログ有効
+        includeSnapshots: true,           // 残高スナップショット含める
+        compressionEnabled: true          // ログ圧縮有効
+      },
+      
+      // 通知設定
+      notifications: {
+        discord: {
+          enabled: true,
+          warningChannel: process.env.DISCORD_WARNING_WEBHOOK_URL,
+          criticalChannel: process.env.DISCORD_ERROR_WEBHOOK_URL,
+          summaryChannel: process.env.DISCORD_ORDER_WEBHOOK_URL,
+          summaryInterval: 3600000         // 1時間毎のサマリー
+        },
+        email: {
+          enabled: false,
+          recipients: [],
+          criticalOnly: true
+        }
+      },
+      
+      // データソース設定
+      dataSources: {
+        exchange: {
+          enabled: true,
+          priority: 1,
+          cacheTTL: 30000               // 30秒キャッシュ
+        },
+        redis: {
+          enabled: true,
+          priority: 2,
+          cacheTTL: 60000               // 1分キャッシュ
+        },
+        mongodb: {
+          enabled: true,
+          priority: 3,
+          cacheTTL: 300000              // 5分キャッシュ
+        }
+      },
+      
+      // パフォーマンス設定
+      performance: {
+        batchSize: 50,                   // バッチ処理サイズ
+        maxConcurrentQueries: 5,         // 最大並行クエリ数
+        queryTimeout: 15000,             // クエリタイムアウト
+        enableMetrics: true,             // メトリクス収集
+        metricsRetention: 86400000      // 24時間保持
       }
     }
   },

@@ -2,6 +2,7 @@ const { postResultToDiscord, postErrorToDiscord } = require('./common/notificati
 const { exchangeBB, exchangeBF } = require('./config');
 const { getTradeSummaries } = require('./database/manager');
 const { initializeDB } = require('./database/manager');
+const { TIME_CONSTANTS } = require('./common/constants');
 
 // レポートを投稿するためのタイマー設定
 setInterval(() => {
@@ -9,7 +10,7 @@ setInterval(() => {
   if (now.getMinutes() === 0) { // 時間ごと
     main();
   }
-}, 60000);
+}, TIME_CONSTANTS.MINUTE);
 
 async function main() {
   // 初期レポートを投稿

@@ -1,7 +1,9 @@
 const { getTradeCurrentPosition, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
+const { SETTINGS } = require('../../config/settings');
 const { errorHandler } = require('../../common/errorHandler');
 const marketDataProvider = require('../../data/marketDataProvider');
+const { withBitbankErrorHandling } = require('../../common/bitbankErrorHandler');
 const {
   savePositionRedis,
   getPositionRedis,
@@ -23,15 +25,15 @@ const {
  */
 const DEFAULT_RISK_SETTINGS = {
   // ストップロス設定
-  fixedStopLossPercent: 0.02, // 2%の固定ストップロス
-  trailingStopTriggerPercent: 0.01, // 1%の利益でトレーリングストップ発動
+  fixedStopLossPercent: SETTINGS.RISK_MANAGEMENT.FIXED_STOP_LOSS_PERCENT, // 設定ファイルから取得
+  trailingStopTriggerPercent: SETTINGS.RISK_MANAGEMENT.TRAILING_STOP_TRIGGER_PERCENT, // 設定ファイルから取得
   trailingStopDistancePercent: 0.01, // 最高値から1%下でトレーリング
   timeBasedStopHours: 24, // 24時間でタイムストップ
 
   // ドローダウン制御
-  dailyMaxLossPercent: 0.05, // 日次最大損失5%
-  weeklyMaxLossPercent: 0.10, // 週次最大損失10%
-  monthlyMaxLossPercent: 0.15, // 月次最大損失15%
+  dailyMaxLossPercent: SETTINGS.RISK_MANAGEMENT.DAILY_MAX_LOSS_PERCENT, // 設定ファイルから取得
+  weeklyMaxLossPercent: SETTINGS.RISK_MANAGEMENT.WEEKLY_MAX_LOSS_PERCENT, // 設定ファイルから取得
+  monthlyMaxLossPercent: SETTINGS.RISK_MANAGEMENT.MONTHLY_MAX_LOSS_PERCENT, // 設定ファイルから取得
 
   // ポジション管理
   maxPositionsPerPair: 3, // 同一通貨ペアの最大ポジション数
@@ -188,8 +190,8 @@ async function checkStopLoss(exchange, symbol, strategyKey, currentPrice, riskSe
       if (profitPercent >= riskSettings.trailingStopTriggerPercent) {
         const priceIncrease = ((currentPrice - previousHighest) / previousHighest * 100);
 
-        // 大幅な価格上昇時（1%以上）のみ通知
-        if (priceIncrease >= 1.0) {
+        // 大幅な価格上昇時のみ通知
+        if (priceIncrease >= SETTINGS.RISK_MANAGEMENT.SIGNIFICANT_PRICE_INCREASE_THRESHOLD) {
           const message = '📈 [リスク管理] トレーリングストップ更新 📈\n' +
                          `取引所: ${exchange.id}\n` +
                          `通貨ペア: ${symbol}\n` +
@@ -1082,7 +1084,13 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
  */
 async function getCurrentBalance(exchange) {
   try {
-    const balance = await exchange.fetchBalance();
+    // withBitbankErrorHandlingを使用してAPI呼び出しを実行
+    const balance = await withBitbankErrorHandling(
+      () => exchange.fetchBalance(),
+      exchange.id,
+      'fetchBalance'
+    );
+    
     let totalJPY = 0;
 
     // JPY残高を加算

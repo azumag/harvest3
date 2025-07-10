@@ -9,6 +9,7 @@
 - Docker & Docker Compose
 - Redis
 - MongoDB
+- Playwright（ブラウザ自動化テスト用）
 
 ### インストール
 
@@ -41,6 +42,8 @@ open http://localhost:3000
 
 ### システム機能
 - **リアルタイム監視**: WebUIでの状態確認
+- **残高監視システム**: 自動残高監視と異常検知
+- **残高整合性サービス**: 3つのデータソースの照合と自動修正
 - **Discord通知**: エラー、注文、損益レポート
 - **データ永続化**: Redis（リアルタイム）+ MongoDB（履歴）
 - **バックテスト**: 戦略の事前検証
@@ -61,6 +64,9 @@ npm run start-web
 
 # バックテスト実行
 npm run backtest
+
+# レポート生成
+npm run reporter
 ```
 
 ### 分析・監視
@@ -68,14 +74,44 @@ npm run backtest
 # 残高整合性チェック
 npm run check-balance
 
+# 残高シンボル別チェック
+npm run check-balance-symbol
+
+# 残高比較（取引所 vs サマリー）
+npm run compare-balance
+
+# ポジション整合性チェック
+npm run check-position-consistency
+
+# ポジション不整合修正
+npm run fix-position-inconsistencies
+
+# ポジション不整合修正（ドライラン）
+npm run fix-position-inconsistencies-dry
+
 # リアルデータ収集
 npm run collect-real-data
+
+# リアルデータ収集（拡張）
+npm run collect-real-data-enhanced
 
 # データ分析
 npm run analyze-real-data
 
+# 負荷テスト
+npm run load-test
+
 # 設定値検証
 npm run validate-config
+
+# 設定値構造検証
+npm run validate-config-structural
+
+# 設定ドキュメント生成
+npm run generate-config-docs
+
+# 設定の同期
+npm run sync-docs
 ```
 
 ### テスト
@@ -91,6 +127,21 @@ npm run test:integration
 
 # カバレッジ測定
 npm run test:coverage
+
+# CI用テスト
+npm run test:ci
+
+# E2Eテスト
+npm run test:e2e
+
+# E2Eデータ整合性テスト
+npm run test:e2e-integrity
+
+# E2Eポジションサイジングテスト
+npm run test:e2e-position-sizing
+
+# 拡張データ収集テスト
+npm run test-enhanced
 ```
 
 ## 🎯 アーキテクチャ
@@ -108,6 +159,10 @@ npm run test:coverage
 - **src/api/**: WebUI用APIサーバー
 - **src/database/**: データベース管理
 - **src/monitoring/**: システム監視
+- **src/monitors/**: 残高監視システム
+- **src/services/**: 残高整合性サービス
+- **src/config/**: 設定管理（settings.js）
+- **src/common/**: 共通ユーティリティ
 - **src/hft/**: 高頻度取引機能
 
 ## ⚙️ 設定
@@ -141,6 +196,39 @@ STRATEGY_MACD_ENABLED=false
 STRATEGY_RSI_ENABLED=true
 ```
 
+### 設定管理システム
+`src/config/settings.js`でシステム全体の設定を統一管理しています：
+
+#### 設定カテゴリ
+- **取引所設定**: APIキー、レート制限、タイムアウト
+- **データベース設定**: Redis、MongoDB接続情報
+- **監視設定**: ヘルスチェック間隔、アラート闾値
+- **リスク管理**: ポジションサイズ制限、ストップロス
+- **パフォーマンス**: ログレベル、メトリクス設定
+
+#### 設定検証
+```bash
+# 設定値検証とバリデーション
+npm run validate-config
+```
+
+### 共通ユーティリティ
+コードの品質と信頼性を向上させるためのユーティリティを提供：
+
+#### エラーハンドリング
+- **bitbankErrorHandler.js**: Bitbank API固有のエラー処理
+- エラーコード別の自動リトライ機能
+- フォールバック結果の提供
+
+#### 高精度計算
+- **decimalUtils.js**: Decimal.jsを使用した浮動小数点誤差の解消
+- 通貨ごとの精度設定
+- 残高計算の安全な実行
+
+#### システム定数
+- **constants.js**: システム全体で使用する定数の統一管理
+- 時間、数値精度、API関連、通貨ペア等の定数
+
 ## 🔧 開発
 
 ### テスト駆動開発
@@ -160,6 +248,25 @@ test/integration/    # 統合テスト
 - DRY: コードの重複を避ける
 - KISS: シンプルに保つ
 - 一時ファイルは`.tmp`ディレクトリに作成
+
+### 残高整合性サービス
+残高の信頼性を高めるためのサービスで、以下の機能を提供します：
+
+#### データソース照合
+- **取引所残高**: APIから取得した実際の残高
+- **Redis残高**: リアルタイムデータから計算した残高
+- **MongoDB残高**: 取引履歴から計算した残高
+
+#### 自動修正機能
+- 不整合極初の自動修正（1日最大3回まで）
+- 異常レベル別の対応（critical、warning、minor）
+- 緊急停止機能
+
+#### 監視・監査
+- リアルタイム監視（1分間隔）
+- 詳細な監査ログ記録
+- Discord通知連携
+- パフォーマンス統計とヘルスチェック
 
 ## 📊 監視とメンテナンス
 
@@ -206,6 +313,25 @@ docker compose restart
 - 実運用前に必ずバックテストを実行
 - APIキーは厳重に管理
 - 損失について当方は一切の責任を負いません
+
+## 📝 リリース情報
+
+### 最新の新機能（v1.0.0）
+
+- **残高監視システム**: リアルタイム残高監視と異常検知機能
+- **残高整合性サービス**: 3つのデータソースからの残高照合と自動修正
+- **設定管理システム**: 環境変数ベースの設定管理と検証機能
+- **高精度数値計算**: Decimal.jsを使用した浮動小数点誤差の解消
+- **エラーハンドリング強化**: Bitbank API固有のエラー処理とリトライ機能
+- **テストサポート拡張**: E2Eテスト、Playwright統合、テストカバレッジ測定
+
+### 新しい依存関係
+- **decimal.js**: 高精度数値計算
+- **zod**: データ検証ライブラリ
+- **playwright**: ブラウザ自動化テスト
+- **node-cache**: キャッシュ機能
+- **node-cron**: スケジュール機能
+- **typescript**: TypeScript支援ツール
 
 ## 📄 ライセンス
 

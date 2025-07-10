@@ -78,6 +78,7 @@ const { getOHLCVQueue } = require('./ohlcvQueue');
 const { getOHLCVCacheManager } = require('./ohlcvCache');
 
 const { sleep, timeframeToMs, isBacktestMode } = require('../common/utils');
+const { withBitbankErrorHandling } = require('../common/bitbankErrorHandler');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
 // また、取引所APIを通じて得る記録なども同列に外部DBとして取り扱います。
@@ -657,14 +658,16 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       console.log(`[約定更新] API呼び出し開始: ${exchange.id} ${symbol}`);
     }
     const apiStart = Date.now();
-    const trades = await exchange.fetchMyTrades(symbol, lastCheckTime);
-    const apiTime = Date.now() - apiStart;
-
-    if (!isBacktest) {
-      console.log(`[約定更新] API呼び出し完了: ${exchange.id} ${symbol} (${apiTime}ms, ${trades ? trades.length : 0}件)`);
-    }
-
-    // 約定がない場合は早期リターン
+    
+    // withBitbankErrorHandlingを使用してAPI呼び出しを実行
+    const trades = await withBitbankErrorHandling(
+      () => exchange.fetchMyTrades(symbol, lastCheckTime),
+      exchange.id,
+      'fetchMyTrades',
+      symbol
+    );
+    
+    // 空の配列が返された場合は処理を終了
     if (!trades || trades.length === 0) {
       const totalTime = Date.now() - startTime;
       if (!isBacktest) {
@@ -672,6 +675,13 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
       }
       return 0;
     }
+    
+    const apiTime = Date.now() - apiStart;
+
+    if (!isBacktest) {
+      console.log(`[約定更新] API呼び出し完了: ${exchange.id} ${symbol} (${apiTime}ms, ${trades ? trades.length : 0}件)`);
+    }
+
 
     // 戦略キーを一括取得してキャッシュ
     if (!isBacktest) {
@@ -936,8 +946,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis Prepare
-    const { getClient: getRedisClient } = require('./redisDatabase');
-    const redisClient = getRedisClient();
+    const redisDatabase = require('./redisDatabase');
+    const redisClient = redisDatabase.getClient();
     redisTransaction = redisClient.multi();
 
     try {
@@ -1030,8 +1040,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
  */
 async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
   try {
-    const { getClient: getRedisClient } = require('./redisDatabase');
-    const redisClient = getRedisClient();
+    const redisDatabase = require('./redisDatabase');
+    const redisClient = redisDatabase.getClient();
     const lockKey = `lock:trade:${exchange}:${symbol}:${tradeId}`;
     const lockValue = `${Date.now()}_${Math.random()}`;
 
@@ -1054,8 +1064,8 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
  */
 async function releaseDistributedLock(lockInfo) {
   try {
-    const { getClient: getRedisClient } = require('./redisDatabase');
-    const redisClient = getRedisClient();
+    const redisDatabase = require('./redisDatabase');
+    const redisClient = redisDatabase.getClient();
 
     // Lua script for atomic lock release
     const script = `
@@ -1137,23 +1147,23 @@ async function prepareRedisOperations(transaction, trade) {
   const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
   if (trade.side === 'buy') {
-    transaction.hincrbyfloat(summaryKey, 'netPosition', trade.amount);
-    transaction.hincrbyfloat(summaryKey, 'buyAmount', trade.amount);
-    transaction.hincrbyfloat(summaryKey, 'totalBuyCost', trade.value);
+    transaction.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+    transaction.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
+    transaction.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
   } else if (trade.side === 'sell') {
-    transaction.hincrbyfloat(summaryKey, 'netPosition', -trade.amount);
-    transaction.hincrbyfloat(summaryKey, 'sellAmount', trade.amount);
-    transaction.hincrbyfloat(summaryKey, 'totalSellRevenue', trade.value);
+    transaction.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+    transaction.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
+    transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', trade.value);
   }
 
   // 未約定注文削除をトランザクションに追加
   if (trade.orderId && trade.strategy !== 'OUTSIDE') {
     const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-    transaction.hdel(pendingKey, trade.orderId);
+    transaction.hDel(pendingKey, trade.orderId);
   }
 
   // タイムスタンプ更新
-  transaction.hset(summaryKey, 'updatedAt', Date.now());
+  transaction.hSet(summaryKey, 'updatedAt', Date.now());
 }
 
 /**
@@ -1161,21 +1171,21 @@ async function prepareRedisOperations(transaction, trade) {
  */
 async function executeRedisCompensation(trade) {
   try {
-    const { getClient: getRedisClient } = require('./redisDatabase');
-    const redisClient = getRedisClient();
+    const redisDatabase = require('./redisDatabase');
+    const redisClient = redisDatabase.getClient();
     const compensation = redisClient.multi();
 
     const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
     // 逆操作を実行
     if (trade.side === 'buy') {
-      compensation.hincrbyfloat(summaryKey, 'netPosition', -trade.amount);
-      compensation.hincrbyfloat(summaryKey, 'buyAmount', -trade.amount);
-      compensation.hincrbyfloat(summaryKey, 'totalBuyCost', -trade.value);
+      compensation.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+      compensation.hIncrByFloat(summaryKey, 'buyAmount', -trade.amount);
+      compensation.hIncrByFloat(summaryKey, 'totalBuyCost', -trade.value);
     } else if (trade.side === 'sell') {
-      compensation.hincrbyfloat(summaryKey, 'netPosition', trade.amount);
-      compensation.hincrbyfloat(summaryKey, 'sellAmount', -trade.amount);
-      compensation.hincrbyfloat(summaryKey, 'totalSellRevenue', -trade.value);
+      compensation.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+      compensation.hIncrByFloat(summaryKey, 'sellAmount', -trade.amount);
+      compensation.hIncrByFloat(summaryKey, 'totalSellRevenue', -trade.value);
     }
 
     await compensation.exec();
@@ -2086,8 +2096,8 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
 
     // Redisに再計算結果を保存
     const summaryKey = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
-    const { getClient } = require('./redisDatabase');
-    const client = getClient();
+    const redisDatabase = require('./redisDatabase');
+    const client = redisDatabase.getClient();
 
     // ⚠️ 危険: netPositionを0に補正すると戦略間データ損失が発生
     // 一時的に無効化 - より安全なアプローチが必要

@@ -15,6 +15,7 @@ const {
   getTradeCurrentPosition
 } = require('../database/manager');
 const { getBalanceCheckEligibleStrategies } = require('./strategyUtils');
+const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 
 // 設定の取得
 const BALANCE_CONFIG = getValidatedConfig();
@@ -32,8 +33,14 @@ async function getExchangeBalance(exchangeId) {
     }
 
     const exchange = exchangeConfig.instance;
-    const balance = await exchange.fetchBalance();
-
+    
+    // withBitbankErrorHandlingを使用してAPI呼び出しを実行
+    const balance = await withBitbankErrorHandling(
+      () => exchange.fetchBalance(),
+      exchangeId,
+      'fetchBalance'
+    );
+    
     console.log(`取引所残高取得完了: ${exchangeId}`);
     return balance;
   } catch (error) {

@@ -1,5 +1,6 @@
 // モジュールのインポート
 const { config } = require('./config');
+const { SETTINGS } = require('./config/settings');
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { checkAllExchangeBalances } = require('./common/balanceChecker');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
@@ -33,12 +34,12 @@ const lastCleanupTime = {}; // exchangeId -> timestamp
 const globalOrderManagers = {}; // exchangeId -> PendingOrderLimitManager
 const globalOrderValidators = {}; // exchangeId -> OrderValidation
 
-// 包括的クリーンアップの実行間隔 (10分)
-const COMPREHENSIVE_CLEANUP_INTERVAL = 10 * 60 * 1000;
+// 包括的クリーンアップの実行間隔
+const COMPREHENSIVE_CLEANUP_INTERVAL = SETTINGS.MONITORING.COMPREHENSIVE_CLEANUP_INTERVAL;
 let lastComprehensiveCleanupTime = 0;
 
-// 自己修復システムの実行間隔 (30分)
-const SELF_HEALING_INTERVAL = 30 * 60 * 1000;
+// 自己修復システムの実行間隔
+const SELF_HEALING_INTERVAL = SETTINGS.MONITORING.SELF_HEALING_INTERVAL;
 let lastSelfHealingTime = 0;
 
 // 残高整合性チェック設定を取得

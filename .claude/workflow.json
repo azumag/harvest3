@@ -26,9 +26,7 @@
     },
     {
       "launch": "WORKFLOW_CI_CHECKED",
-      "path": "/Users/azumag/work/harvest3/.claude/hooks/restart_docker.sh",
-      "handling": "pass",
-      "next": "WORKFLOW_DOCKER_RESTARTED"
+      "prompt": "docker compose down && docker compose up bot backtest -d を実行してください。再起動が完了したら WORKFLOW_DOCKER_RESTARTED とだけ表示せよ。"
     },
     {
       "launch": "WORKFLOW_DOCKER_RESTARTED",

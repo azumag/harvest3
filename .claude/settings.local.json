@@ -60,6 +60,9 @@
       "Bash(rm -rf:*)"
     ]
   },
+  "enabledMcpjsonServers": [
+    "gemini-cli"
+  ],
   "hooks": {
     "Stop": [
       {
@@ -82,5 +85,6 @@
         ]
       }
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true
 }

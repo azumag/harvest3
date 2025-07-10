@@ -5,14 +5,15 @@
 
 const fs = require('fs');
 const path = require('path');
+const { TIME_CONSTANTS } = require('../common/constants');
 
 class RealDataCollector {
   constructor(options = {}) {
     this.options = {
-      collectionInterval: options.collectionInterval || 60000, // 1分間隔
-      dataRetention: options.dataRetention || 30 * 24 * 60 * 60 * 1000, // 30日
+      collectionInterval: options.collectionInterval || TIME_CONSTANTS.DATA_COLLECTION_INTERVAL, // 1分間隔
+      dataRetention: options.dataRetention || TIME_CONSTANTS.DATA_RETENTION_PERIOD, // 30日
       dataFile: options.dataFile || path.join(__dirname, '../../data/real-performance-data.json'),
-      backupInterval: options.backupInterval || 24 * 60 * 60 * 1000, // 24時間
+      backupInterval: options.backupInterval || TIME_CONSTANTS.BACKUP_INTERVAL, // 24時間
       maxFileSize: options.maxFileSize || 50 * 1024 * 1024, // 50MB
       ...options
     };
@@ -69,7 +70,7 @@ class RealDataCollector {
 
     console.log('[RealDataCollector] 実データ収集開始');
     console.log(`収集対象: ${exchanges.length}個の取引所`);
-    console.log(`収集間隔: ${this.options.collectionInterval / 1000}秒`);
+    console.log(`収集間隔: ${this.options.collectionInterval / TIME_CONSTANTS.SECOND}秒`);
     console.log(`保存先: ${this.options.dataFile}`);
 
     // 即座に初回収集
@@ -269,7 +270,7 @@ class RealDataCollector {
           version: '1.0.0',
           collectionStarted: this.isCollecting,
           totalMeasurements: this.collectedData.length,
-          dataRetentionDays: this.options.dataRetention / (24 * 60 * 60 * 1000),
+          dataRetentionDays: this.options.dataRetention / TIME_CONSTANTS.DAY,
           lastUpdated: new Date().toISOString()
         },
         measurements: this.collectedData
