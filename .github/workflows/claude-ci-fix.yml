@@ -12,12 +12,11 @@ jobs:
     name: Fix CI Failures with Claude Code
     runs-on: ubuntu-latest
     
-    # PRのCIが失敗した場合のみ実行（botによる変更は除外）
+    # PRのCIが失敗した場合のみ実行
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.draft == false && 
-       github.event.pull_request.user.login != 'github-actions[bot]' && 
-       !endsWith(github.event.pull_request.user.login, '[bot]'))
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+       
     
     timeout-minutes: 30
     

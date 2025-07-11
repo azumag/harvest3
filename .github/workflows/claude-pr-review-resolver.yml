@@ -9,15 +9,10 @@ jobs:
     name: Resolve PR Review Comments with Claude Code
     runs-on: ubuntu-latest
     
-    # PRレビューでchanges_requestedが提出された場合のみ実行（特定のClaude botは許可）
+    # PRレビューでchanges_requestedまたはcommentedが提出された場合のみ実行
     if: |
-      github.event.review.state == 'changes_requested' && 
-      (github.event.review.user.type == 'User' || 
-       github.event.review.user.login == 'claude-bot' || 
-       github.event.review.user.login == 'claude-ai[bot]' ||
-       github.event.review.user.login == 'claude-code-bot') &&
-      !startsWith(github.event.review.user.login, 'github-actions') &&
-      !contains(github.event.pull_request.labels.*.name, 'claude-processing')
+      (github.event.review.state == 'changes_requested' || github.event.review.state == 'commented') && 
+      (github.event.review.user.type == 'User')
     
     timeout-minutes: 30
     
