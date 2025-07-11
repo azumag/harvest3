@@ -11,295 +11,50 @@ permissions:
   issues: write
 
 jobs:
-  review-diff:
-    name: Commit Diff Review with Claude Code  
+  claude-commit-review:
+    name: Commit Review with Claude Code
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: |
-      !contains(github.event.pull_request.labels.*.name, 'claude-commit-review') &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
+    
+    timeout-minutes: 20
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
     
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
+      - name: Review Commits with Claude Code
+        id: claude-commit-review
+        uses: anthropics/claude-code-action@beta
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Add review label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: ['claude-commit-review']
-            });
-
-      - name: Get commit diff
-        id: get-diff
-        run: |
-          # PRの最新コミットと直前のコミットの差分を取得
-          LATEST_COMMIT="${{ github.event.pull_request.head.sha }}"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           
-          # PR内での前のコミットを取得（より安全な方法）
-          git fetch origin ${{ github.event.pull_request.base.ref }}
+          # Optional: Specify model (defaults to Claude Sonnet 4)
+          # model: "claude-opus-4-20250514"
           
-          # PR内のコミット数を確認
-          COMMIT_COUNT=$(git rev-list --count origin/${{ github.event.pull_request.base.ref }}..$LATEST_COMMIT)
-          echo "Total commits in PR: $COMMIT_COUNT"
+          # Allow specific tools for CI fixing
+          allowed_tools: "Bash,Read,Write,Edit,MultiEdit,Grep,Glob,LS"
           
-          if [ "$COMMIT_COUNT" -gt 1 ]; then
-            # 複数コミットの場合は、最新コミットと直前のコミットの差分
-            PREVIOUS_COMMIT=$(git rev-parse $LATEST_COMMIT~1)
-            echo "Comparing latest commit with previous commit in PR"
-          else
-            # 単一コミットの場合は、ベースブランチとの差分
-            PREVIOUS_COMMIT="origin/${{ github.event.pull_request.base.ref }}"
-            echo "Comparing with base branch (single commit PR)"
-          fi
-          
-          echo "Latest commit: $LATEST_COMMIT"
-          echo "Previous commit: $PREVIOUS_COMMIT"
-          
-          # 差分を取得
-          git diff $PREVIOUS_COMMIT $LATEST_COMMIT > commit_diff.txt
-          
-          # 差分のサイズを確認
-          DIFF_SIZE=$(wc -c < commit_diff.txt)
-          echo "diff-size=$DIFF_SIZE" >> $GITHUB_OUTPUT
-          
-          if [ $DIFF_SIZE -gt 50000 ]; then
-            echo "差分が大きすぎるため、ファイルリストのみを取得します"
-            git diff --name-status $PREVIOUS_COMMIT $LATEST_COMMIT > commit_diff.txt
-            echo "truncated=true" >> $GITHUB_OUTPUT
-          else
-            echo "truncated=false" >> $GITHUB_OUTPUT
-          fi
-          
-          # コミットメッセージを取得
-          git log -1 --pretty=format:"%s%n%n%b" > commit_message.txt
-
-        if: steps.get-diff.outputs['diff-size'] != '0'
-        if: steps.get-diff.outputs.diff-size != '0'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          # レビュープロンプトを作成
-          cat > review_prompt.txt << 'EOF'
-          以下は最新コミットの差分です。このコミットの変更内容をレビューしてください。
-
-          コミットメッセージ:
-          $(cat commit_message.txt)
-
-          差分:
-          $(cat commit_diff.txt)
-
-          レビューのポイント:
-          1. コミットメッセージと実際の変更内容の整合性
-          2. コードの品質と保守性
-          3. 潜在的なバグやセキュリティの問題
-          4. パフォーマンスへの影響
-          5. テストの充実度
-
-          フィードバックは具体的で建設的なものにしてください。
-          問題がある場合は、具体的な改善案を提示してください。
-          EOF
-
-          # Claude APIを呼び出してレビュー（エラーハンドリング強化）
-          if ! curl -X POST https://api.anthropic.com/v1/messages \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -d @- << EOF > claude_response.json 2> curl_error.log
-          {
-            "model": "claude-3-5-sonnet-20241022",
-            "max_tokens": 4096,
-            "messages": [
-              {
-                "role": "user",
-                "content": "$(cat review_prompt.txt | jq -Rs .)"
-              }
-            ],
-            "temperature": 0.3
-          }
-          EOF
-          then
-            echo "❌ Claude API呼び出しに失敗しました"
-            cat curl_error.log
-            echo "review_failed=true" >> $GITHUB_OUTPUT
-            echo "API呼び出しエラーのため、レビューをスキップします。" > review_result.txt
-            exit 0
-          fi
-
-          # レスポンスの検証とコンテンツ抽出
-          if ! jq -e '.content[0].text' claude_response.json > /dev/null 2>&1; then
-            echo "❌ Claude APIレスポンスの解析に失敗しました"
-            cat claude_response.json
-            echo "review_failed=true" >> $GITHUB_OUTPUT
-            echo "APIレスポンス解析エラーのため、レビューをスキップします。" > review_result.txt
-            exit 0
-          fi
-
-          # レスポンスからコンテンツを抽出
-          jq -r '.content[0].text' claude_response.json > review_result.txt
-          echo "review_failed=false" >> $GITHUB_OUTPUT
-
-      - name: Post review comment
-        if: steps.get-diff.outputs.diff-size != '0'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const reviewContent = fs.readFileSync('review_result.txt', 'utf8');
-            const truncated = '${{ steps.get-diff.outputs.truncated }}' === 'true';
-            const reviewFailed = '${{ steps.get-diff.outputs.review_failed }}' === 'true';
+          # CI修正のプロンプト
+          direct_prompt: |
+            このPull Requestのコミット差分をレビューしてください。
             
-            let comment = `## 🤖 Claude Commit Diff Review\n\n`;
-            comment += `**対象コミット**: ${{ github.event.pull_request.head.sha }}\n\n`;
+            分析すべき内容：
+            1. **コミットメッセージ**: 意図が明確で一貫性があるか
+            2. **コード変更**: 機能追加、バグ修正、リファクタリングの適切な実装か
+            3. **テスト**: 新しい機能に対するテストが存在するか
+            4. **ドキュメント**: 必要なドキュメントが更新されているか
+            5. 使われていないコードやコメントアウトされたコードがないか
             
-            if (reviewFailed) {
-              comment += `> ❌ レビュー処理中にエラーが発生しました。詳細はワークフローログを確認してください。\n\n`;
-            } else if (truncated) {
-              comment += `> ⚠️ 差分が大きすぎるため、ファイルリストのみをレビューしました。\n\n`;
-            }
+            このリポジトリの開発ガイドライン：
+            - YAGNI（You Aren't Gonna Need It）の原則に従う
+            - DRY（Don't Repeat Yourself）の原則に従う
+            - KISS（Keep It Simple Stupid）の原則に従う
+            - 機能を作成する場合は必ず単体テストをセットで作成する
             
-            comment += reviewContent;
-            comment += `\n\n---\n`;
-            comment += `*このレビューは最新コミットの差分のみを対象としています。*`;
+            CLAUDE.mdの要件を確認し、プロジェクトのコーディング規約に従ってください。
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: comment
-            });
-
-      - name: Apply automatic improvements
-        id: apply-improvements
-        if: steps.get-diff.outputs.diff-size != '0' && steps.get-diff.outputs.truncated == 'false' && steps.get-diff.outputs.review_failed == 'false'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          # 自動改善のプロンプトを作成
-          cat > improvement_prompt.txt << 'EOF'
-          以下の差分に対して、自動的に適用可能な改善を実施してください。
-
-          差分:
-          $(cat commit_diff.txt)
-
-          改善の基準:
-          1. 明らかな文法エラーやタイポの修正
-          2. インポートの整理
-          3. 未使用変数の削除
-          4. 簡単なリファクタリング
-
-          重要: 機能を変更しないでください。コードの品質向上のみを行ってください。
-          改善が必要な場合は、具体的な変更内容をJSON形式で出力してください。
-
-          出力形式:
-          {
-            "improvements": [
-              {
-                "file": "ファイルパス",
-                "line": 行番号,
-                "original": "元のコード",
-                "improved": "改善後のコード",
-                "reason": "改善理由"
-              }
-            ]
-          }
-
-          改善が不要な場合は、{"improvements": []} を返してください。
-          EOF
-
-          # Claude APIを呼び出して改善案を取得（エラーハンドリング強化）
-          if ! curl -X POST https://api.anthropic.com/v1/messages \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -d @- << EOF > improvements_response.json 2> improvement_error.log
-          {
-            "model": "claude-3-5-sonnet-20241022",
-            "max_tokens": 4096,
-            "messages": [
-              {
-                "role": "user",
-                "content": "$(cat improvement_prompt.txt | jq -Rs .)"
-              }
-            ],
-            "temperature": 0.1
-          }
-          EOF
-          then
-            echo "❌ 改善案取得のためのClaude API呼び出しに失敗しました"
-            cat improvement_error.log
-            echo '{"improvements": []}' > improvements.json
-            echo "improvement-count=0" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # 改善案を抽出（エラーハンドリング強化）
-          if ! jq -r '.content[0].text' improvements_response.json > improvement_text.txt 2>/dev/null; then
-            echo "❌ 改善案レスポンスの解析に失敗しました"
-            cat improvements_response.json
-            echo '{"improvements": []}' > improvements.json
-            echo "improvement-count=0" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # JSON部分を抽出
-          grep -o '{.*}' improvement_text.txt | jq '.' > improvements.json 2>/dev/null || echo '{"improvements": []}' > improvements.json
-
-          # 改善が必要かチェック
-          IMPROVEMENT_COUNT=$(jq '.improvements | length' improvements.json 2>/dev/null || echo "0")
-          echo "improvement-count=$IMPROVEMENT_COUNT" >> $GITHUB_OUTPUT
-
-      - name: Create improvement commit
-        if: steps.apply-improvements.outputs.improvement-count != '0'
-        run: |
-          # Git設定
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+            レビュー結果を簡潔にまとめてください。 
           
-          # 改善内容をドキュメントとして記録
-          echo "# Automated improvements by Claude" > .tmp/IMPROVEMENTS.md
-          echo "" >> .tmp/IMPROVEMENTS.md
-          echo "## 改善内容" >> .tmp/IMPROVEMENTS.md
-          echo "" >> .tmp/IMPROVEMENTS.md
-          jq -r '.improvements[] | "### \(.file) (Line \(.line))\n- **理由**: \(.reason)\n- **変更前**: `\(.original)`\n- **変更後**: `\(.improved)`\n"' improvements.json >> .tmp/IMPROVEMENTS.md
-          
-          # 実際の改善適用は将来の拡張として、まずはドキュメント化のみ
-          echo "## 注意" >> .tmp/IMPROVEMENTS.md
-          echo "この改善案は自動生成されたものです。実際の適用には人間による確認が必要です。" >> .tmp/IMPROVEMENTS.md
-          
-          # 変更があればコミット
-          if [ -f .tmp/IMPROVEMENTS.md ]; then
-            git add .tmp/IMPROVEMENTS.md
-            git commit -m "docs: Claude による自動改善案を追加
-
-🤖 Generated improvements based on commit diff review of ${{ github.event.pull_request.head.sha }}
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-            git push origin HEAD
-          else
-            echo "No improvements to document"
-          fi
-
-      - name: Remove review label on completion
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'claude-commit-review'
-              });
-            } catch (error) {
-              console.log('Label might not exist or already removed');
-            }
+          # Optional: Allow specific tools for testing and linting
+          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
