@@ -36,6 +36,14 @@ jobs:
       
     - name: Run unit tests
       run: npm test
+
+    - name: Discord notification on failure
+      if: failure()
+      uses: Ilshidur/action-discord@master
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      with:
+        args: '🚨 CI Failed in ${{ github.repository }} on branch ${{ github.ref_name }}'
       
     # Temporarily disable E2E tests to isolate unit test issues
     # - name: Start services for E2E tests
