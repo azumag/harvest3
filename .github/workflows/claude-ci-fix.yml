@@ -23,6 +23,11 @@ jobs:
       actions: read
     
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Fix CI failures with Claude Code
         id: claude-fix
         uses: anthropics/claude-code-action@beta
@@ -38,12 +43,6 @@ jobs:
           # CI修正のプロンプト
           direct_prompt: |
             このPull RequestのCI/CDが失敗しています。失敗を修正してください。
-            
-            分析すべき内容：
-            1. **失敗したワークフロー**: ${{ github.event.workflow_run.name }}
-            2. **失敗したコミット**: ${{ github.event.workflow_run.head_sha }}
-            3. **ブランチ**: ${{ github.event.workflow_run.head_branch }}
-            4. **実行URL**: ${{ github.event.workflow_run.html_url }}
             
             修正ガイドライン：
             - **テスト失敗**: 失敗したテストを修正するか、実装変更に合わせてテストを更新
