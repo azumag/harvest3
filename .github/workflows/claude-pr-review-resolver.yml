@@ -3,16 +3,18 @@ name: Claude PR Review Resolver
 on:
   pull_request_review:
     types: [submitted]
+  issue_comment:
+    types: [created]
 
 jobs:
   resolve-review:
     name: Resolve PR Review Comments with Claude Code
     runs-on: ubuntu-latest
     
-    # PRレビューでchanges_requestedまたはcommentedが提出された場合のみ実行
+    # PRのコメントまたはレビューのみを処理
     if: |
-      (github.event.review.state == 'changes_requested' || github.event.review.state == 'commented') && 
-      (github.event.review.user.type == 'User')
+      (github.event_name == 'pull_request_review') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
     
     timeout-minutes: 30
     
@@ -28,10 +30,19 @@ jobs:
       - name: Get PR information
         id: pr-info
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            # issue_comment の場合
+            PR_NUMBER="${{ github.event.issue.number }}"
+            # PR情報を取得
+            HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq .headRefName)
+          fi
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout PR branch
         run: |
@@ -56,11 +67,22 @@ jobs:
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
           mkdir -p .tmp
           
-          # 現在のレビューコメントを収集
+          # レビューコメントやコメントを収集
           echo "# PR Review Comments Summary" > .tmp/review_summary.md
           echo "" >> .tmp/review_summary.md
-          echo "## Latest Review:" >> .tmp/review_summary.md
-          echo "${{ github.event.review.body }}" >> .tmp/review_summary.md
+          
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "## Latest Review:" >> .tmp/review_summary.md
+            echo "${{ github.event.review.body }}" >> .tmp/review_summary.md
+          else
+            echo "## Latest Comment:" >> .tmp/review_summary.md
+            echo "${{ github.event.comment.body }}" >> .tmp/review_summary.md
+          fi
+          
+          # 既存のレビューコメントも取得
+          echo "" >> .tmp/review_summary.md
+          echo "## All Review Comments:" >> .tmp/review_summary.md
+          gh pr view $PR_NUMBER --json reviews --jq '.reviews[] | "### " + .author.login + " - " + .state + "\n" + .body + "\n"' >> .tmp/review_summary.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
