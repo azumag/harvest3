@@ -1,16 +1,20 @@
 name: Claude PR Review Resolver
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   resolve-review:
     name: Resolve PR Review Comments with Claude Code
     runs-on: ubuntu-latest
     
-    # PRの「@claude-resolver」メンションがある場合のみ実行
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude-resolver')
+    # PRレビューでchanges_requestedが提出された場合のみ実行（botからのレビューは除外）
+    if: |
+      github.event.review.state == 'changes_requested' && 
+      github.event.review.user.type == 'User' &&
+      !startsWith(github.event.review.user.login, 'github-actions') &&
+      !endsWith(github.event.review.user.login, '[bot]')
     
     timeout-minutes: 30
     
@@ -27,12 +31,10 @@ jobs:
       - name: Get PR information
         id: pr-info
         run: |
-          PR_NUMBER="${{ github.event.issue.number }}"
-          HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout PR branch
         run: |
