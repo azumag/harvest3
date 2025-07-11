@@ -18,12 +18,10 @@ const { backtestCreateLimitSellOrder,
 
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { OHLCVTimeFrames } = require('./common/const');
-const { sleep, timeframeToMs } = require('./common/utils');
+const { timeframeToMs } = require('./common/utils');
 const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
-const { WalkForwardAnalysis, TimeSeriesCrossValidator, FinancialTimeSeriesValidator } = require('./strategies/utils/walkForwardAnalysis');
-const { TimeSeriesCrossValidator: TSCV, FinancialTimeSeriesValidator: FTSV } = require('./strategies/utils/timeSeriesCrossValidation');
-const { MonteCarloBootstrapping } = require('./strategies/utils/monteCarloBootstrapping');
+const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -32,28 +30,10 @@ const autoUpdate = args.includes('--auto-update'); // auto-update フラグを�
 const gridSearch = args.includes('--grid-search'); // grid-search フラグを検出
 const enableMonteCarlo = args.includes('--monte-carlo'); // monte-carlo フラグを検出
 const enableWalkForward = args.includes('--walk-forward'); // walk-forward フラグを検出
-const enableTimeSeriesCV = args.includes('--timeseries-cv'); // timeseries-cv フラグを検出
-const enableOverfittingDetection = args.includes('--overfitting-detection'); // オーバーフィッティング検出フラグ
 const strategySpecify = args.find(arg => arg.startsWith('--strategy'))?.split('=')[1]; // --strategy=<戦略名> フラグを検出
 
 // 引数の説明を表示
 if (args.includes('--help') || args.includes('-h')) {
-  console.log(`
-使用方法: node backtestRunner.js [シンボル] [オプション]
-
-引数:
-  シンボル       - バックテスト対象の通貨ペア (例: BTC/USDT)。省略すると全シンボルが対象。
-  
-オプション:
-  --auto-update  - 最適なパラメータで設定ファイルを自動更新する
-  --grid-search  - グリッドサーチを実行する
-  --monte-carlo  - Monte Carlo Bootstrapping統計分析を有効化する
-  --walk-forward - Walk-Forward Analysis時系列分析を有効化する
-  --timeseries-cv - Time Series Cross-Validation分析を有効化する
-  --overfitting-detection - オーバーフィッティング検出アルゴリズムを有効化する
-  --strategy <戦略名> - 特定の戦略を指定してバックテストを実行する
-  --help, -h     - このヘルプを表示
-  `);
   process.exit(0);
 }
 
@@ -65,15 +45,15 @@ if (args.includes('--help') || args.includes('-h')) {
 async function runBacktest(targetSymbol, autoUpdate = false) {
   try {
     // バックテストの主要なロジックをここに実装
-    console.log('バックテストを開始します...');
+    // console.log('バックテストを開始します...');
     if (targetSymbol) {
-      console.log(`対象シンボル: ${targetSymbol}`);
+      // console.log(`対象シンボル: ${targetSymbol}`);
     } else {
-      console.log('対象シンボル: すべて');
+      // 対象シンボル: すべて
     }
 
     if (autoUpdate) {
-      console.log('自動更新モード: 有効 (最適なパラメータで設定を更新します)');
+      // 自動更新モード: 有効
     }
 
     initializeDB(); // データベースの初期化
@@ -108,7 +88,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // 設定された期間で、すべてのシンボルのOHLCVデータを取得して更新
     for (const exchange of Object.keys(symbolsByExchange)) {
-      console.log(`=== ${exchange} のOHLCVデータを取得 ===`);
+      // OHLCVデータを取得
       const exchangeInstance = config.exchanges[exchange].instance;
       const symbols = symbolsByExchange[exchange].sort();
       for (const symbol of symbols) {
@@ -125,13 +105,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
           const currentTimestamp = Date.now();
           let daysToFetch = days; // Default to the days variable defined earlier
 
-          console.log(`Last data for ${symbol}/${timeframe} is from ${lastTimestamp ? new Date(lastTimestamp).toISOString() : 'N/A'}`);
-
           if (lastTimestamp) {
             // Calculate difference in milliseconds and convert to days
             const timeDiffInDays = (currentTimestamp - lastTimestamp) / (1000 * 60 * 60 * 24);
             daysToFetch = Math.ceil(timeDiffInDays);
-            console.log(`fetching ${daysToFetch} days of data`);
           }
 
           const limit = calculateLimit(timeframe, daysToFetch) + 20;
@@ -142,7 +119,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // すべてのシンボルのOHLCVデータをREDISにロード
     for (const exchange of Object.keys(symbolsByExchange)) {
-      console.log(`=== ${exchange} のOHLCVデータをREDISにロード ===`);
+      // OHLCVデータをREDISにロード
       const exchangeInstance = config.exchanges[exchange].instance;
       const symbols = symbolsByExchange[exchange].sort();
       for (const symbol of symbols) {
@@ -164,11 +141,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               if (maxPeriod > 0) {
                 const options = config.global.backtest.dynamicPeriods;
                 dynamicBuffer = calculateDynamicLimit(timeframe, days, maxPeriod, options);
-                console.log(`[Dynamic Period] ${symbol}/${timeframe}: maxPeriod=${maxPeriod}, buffer=${dynamicBuffer}`);
               }
             }
-          } catch (error) {
-            console.warn(`[Dynamic Period] 計算エラー、フォールバック値使用: ${error.message}`);
+          } catch {
+            // Dynamic Period計算エラー時はフォールバック値を使用
           }
 
           const limit = calculateLimit(timeframe, days) + dynamicBuffer;
@@ -180,18 +156,16 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     // runBacktest関数内の戦略処理部分
     for (const strategyKey of Object.keys(config.strategies)) {
       if (strategySpecify && strategySpecify !== strategyKey) {
-        console.log(`戦略 ${strategyKey} はスキップされました`);
         continue; // 指定された戦略以外はスキップ
       }
 
       const strategy = config.strategies[strategyKey];
       // atomicExec指定の場合はスキップ
       if (strategy.atomicExec) {
-        console.log(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
         continue;
       }
 
-      console.log(`戦略 ${strategyKey} の処理を開始します...`);
+      // 戦略処理開始
 
       for (const exchange of strategy.exchanges) {
         const exchangeId = exchange.id;
@@ -210,7 +184,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
           // シンボルをMAX_CONCURRENT_SYMBOLS個ずつ処理
           for (let i = 0; i < symbols.length; i += MAX_CONCURRENT_SYMBOLS) {
             const currentBatch = symbols.slice(i, i + MAX_CONCURRENT_SYMBOLS);
-            console.log(`${strategyKey}: バッチ ${i/MAX_CONCURRENT_SYMBOLS + 1}/${Math.ceil(symbols.length/MAX_CONCURRENT_SYMBOLS)} (${currentBatch.join(', ')}) の処理を開始`);
+            // バッチ処理開始
 
             const symbolPromises = currentBatch.map(symbol => {
               return (async () => {
@@ -234,7 +208,6 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                   shouldRetry = result.shouldRetry;
                   retryCount++;
                   if (retryCount > 5) {
-                    console.log(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`);
                     postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のバックテストが5回失敗しました。処理を終了します`, discordBacktestURL);
                     try {
                       if (autoUpdate) {
@@ -243,7 +216,6 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                         await clearPositionMarket(exchange, symbol, strategyKey);
                       }
                     } catch (error) {
-                      console.error(`戦略 ${strategyKey} の ${symbol} disabling エラーが発生しました: ${error.message}`);
                       postErrorToDiscord(`戦略 ${strategyKey} の ${symbol} disabling 中にエラーが発生しました: ${error.message}`);
                     } finally {
                       break;
@@ -257,7 +229,6 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
             // 各バッチ処理後にガベージコレクションを促す
             if (global.gc) {
-              console.log('メモリクリーンアップ実行中...');
               global.gc();
             }
           }
@@ -266,7 +237,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         await processSymbols(symbols, exchange, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, allExchangeSymbolPairs);
       }
 
-      console.log(`戦略 ${strategyKey} の処理が完了しました`);
+      // 戦略処理完了
       // return { strategyKey, completed: true }; <- このreturnを削除
     }
 
@@ -284,10 +255,9 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     //   console.log('処理対象の戦略がありません');
     // }
 
-    console.log('バックテストが完了しました。');
-  } catch (error) {
-    const errorMessage = `バックテスト実行中にエラーが発生しました: ${error.message}`;
-    console.error(errorMessage, error);
+    // バックテスト完了
+  } catch {
+    // エラーログを記録
     // await postErrorToDiscord(errorMessage);
   } finally {
     // バックテスト終了後の処理
@@ -313,7 +283,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, retryCount, allExchangeSymbolPairs) {
   const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
 
-  console.log(`${symbol} のバックテストを開始...`);
+  console.log(`バックテスト開始: ${symbol} - ${strategyKey}`);
 
   // 全タイムフレームの結果を保存する配列
   let allTimeframeResults = [];
@@ -324,13 +294,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     // 注：BCH/JPYの特別なスキップロジックは不要（OHLCVTimeFramesでサポート対象のみ定義済み）
     const timeframeMs = timeframeToMs('1m'); // 常に1分刻みでバックテスト
 
-    console.log(`  ${timeframe} タイムフレームのバックテストを開始...`);
     const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
     const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
 
     // 数値パラメータのキーを抽出
     const numericParameterKeys = extractNumericParameterKeys(dbParams);
-    console.log(`数値パラメータ: ${numericParameterKeys.join(', ')}`);
 
     let parameterCombinations = null;
 
@@ -338,7 +306,6 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     // リトライが多いほどパラメータの変動幅を広げる
     if (gridSearch) {
       // グリッドサーチを実行
-      console.log(`${timeframe}: グリッドサーチを実行します...`);
       parameterCombinations = generateParameterCombinations(
         dbParams,
         numericParameterKeys,
@@ -346,7 +313,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         10 // ステップ数
       );
     } else {
-      console.log(`${timeframe}: 正規乱数を使ったランダムサーチを実行します`);
+      // 正規乱数を使ったランダムサーチを実行
       parameterCombinations = generateRandomParameterCombinations(
         dbParams, numericParameterKeys,
         10 + (retryCount*10), // パラメータのパターン数
@@ -356,7 +323,6 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
     // 重複排除
     if (parameterCombinations) {
-      const originalCount = parameterCombinations.length;
       const uniqueCombinationsMap = new Map();
 
       parameterCombinations.forEach(combo => {
@@ -372,10 +338,10 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       });
 
       parameterCombinations = Array.from(uniqueCombinationsMap.values());
-      console.log(`${timeframe}: 重複排除: ${originalCount} 組み合わせから ${parameterCombinations.length} 組み合わせに削減されました`);
+      // 重複排除処理完了
     }
 
-    console.log(`${timeframe}: テスト対象の組み合わせ数: ${parameterCombinations.length}`);
+    // パラメータ組み合わせ生成完了
 
     // 各組み合わせの結果を保存する配列
     const testResults = [];
@@ -389,7 +355,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         tradePercentage: config.global.tradePercentage
       };
 
-      console.log(`  ${timeframe}: パラメータ組み合わせをテスト: ${JSON.stringify(paramCombination)}`);
+      console.log(`パラメータテスト: ${JSON.stringify(paramCombination)}`);
 
       const options = {
         backtest: {
@@ -425,32 +391,28 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         options.referenceSymbols = sameExchangeSymbols;
       }
 
-      const totalIterations = Math.floor((endDate.getTime() - startDate.getTime()) / timeframeMs) + 1;
-      let currentIteration = 0;
-
       for (let timestamp = startDate.getTime(); timestamp <= endDate.getTime(); timestamp += timeframeMs) {
-        currentIteration++;
         options.backtest.timestamp = timestamp;
 
         try {
           await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);
         } catch (error) {
-          console.error(`${timeframe}: バックテスト中にエラーが発生しました: ${error.message}`);
+          // バックテスト実行エラー
           postErrorToDiscord(`[バックテスト] エラー: ${exchange.id} - ${symbol} - ${error.message}`);
         }
       }
 
       if (options.backtest.lastSignal === 'buy') {
-        const sellResult = await backtestCreateLimitSellOrder(
+        await backtestCreateLimitSellOrder(
           symbol,
           options.backtest.currentAmount,
           options.backtest.currentPrice,
           options
         );
-        console.log(`  ${timeframe}: 最後のシグナルが買いでした。売り注文を実行: ${JSON.stringify(sellResult)}`);
+        // 最後のシグナルが買いの場合に売り注文を実行
       }
 
-      console.log(`${timeframe}: バックテスト完了: 全${totalIterations}回の処理を実行しました`);
+      // バックテスト完了
 
       const result = {
         parameters: paramCombination,
@@ -458,7 +420,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         timeframe: timeframe
       };
 
-      console.log(`  ${timeframe}: 結果: ${options.backtest.baseFund}, buySignalCount: ${options.backtest.buySignalCount}, sellSignalCount: ${options.backtest.sellSignalCount} buyOrderCount: ${options.backtest.buyOrderCount}, sellOrderCount: ${options.backtest.sellOrderCount}`);
+      // バックテスト結果
       testResults.push(result);
     }
 
@@ -466,8 +428,6 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     const rankedResults = rankResults(testResults);
 
     // ランキング結果を表示
-    const rankingTitle = `===== ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果 =====`;
-    console.log(rankingTitle);
 
     // Discord用に整形した文字列を作成
     const resultSrtArr = [`## ${symbol} (${timeframe}) ${strategyKey} パラメータ最適化結果`];
@@ -475,7 +435,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
     for (let index = 0; index < Math.min(rankedResults.length, 10); index++) {
       const result = rankedResults[index];
-      console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - パラメータ: ${JSON.stringify(result.parameters)}`);
+      // ランキング結果の処理
 
       const paramStr = Object.entries(result.parameters)
         .map(([key, value]) => `${key}: ${value}`)
@@ -499,8 +459,6 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   const rankedAllTimeframeResults = rankResults(allTimeframeResults);
 
   // ランキング結果を表示
-  const allTimeframeRankingTitle = `===== ${symbol} ${strategyKey} パラメータ最適化結果 =====`;
-  console.log(allTimeframeRankingTitle);
 
   // Discord用に整形した文字列を作成
   const allResultsArr = [`## ${symbol} ${strategyKey} パラメータ最適化結果`];
@@ -508,7 +466,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
   for (let index = 0; index < Math.min(rankedAllTimeframeResults.length, 10); index++) {
     const result = rankedAllTimeframeResults[index];
-    console.log(`${index + 1}位: ${result.finalBaseFund.toFixed(2)} - タイムフレーム: ${result.timeframe} - パラメータ: ${JSON.stringify(result.parameters)}`);
+    // 全タイムフレーム結果の処理
 
     const paramStr = Object.entries(result.parameters)
       .map(([key, value]) => `${key}: ${value}`)
@@ -522,7 +480,6 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
   // Monte Carlo Bootstrapping分析（有効化されている場合）
   if (enableMonteCarlo && rankedAllTimeframeResults.length > 0) {
-    console.log('🔬 Monte Carlo Bootstrapping分析を実行中...');
     try {
       const backtestEnhancer = new BacktestEnhancer({
         iterations: 2000, // バックテスト用に軽量化
@@ -533,18 +490,18 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       const enhancedResults = await backtestEnhancer.enhanceBacktestResults(rankedAllTimeframeResults);
       const mcReport = backtestEnhancer.generateDiscordReport(enhancedResults);
 
-      console.log('✅ Monte Carlo分析完了');
+      // Monte Carlo分析完了
       await postResultToDiscord(`\n${mcReport}`, discordBacktestURL);
 
     } catch (mcError) {
-      console.error('❌ Monte Carlo分析エラー:', mcError.message);
+      // Monte Carlo分析エラー
       await postResultToDiscord(`❌ **Monte Carlo分析エラー**\n\`\`\`\n${mcError.message}\n\`\`\``, discordBacktestURL);
     }
   }
 
   // Walk-Forward Analysis時系列分析（有効化されている場合）
   if (enableWalkForward && rankedAllTimeframeResults.length > 0) {
-    console.log('🔬 Walk-Forward Analysis時系列分析を実行中...');
+    // Walk-Forward Analysis時系列分析を実行
     try {
       // 時系列データの作成（バックテストの結果からOHLCVデータを再構築）
       const timeSeriesData = await reconstructTimeSeriesData(exchange, symbol, startDate, endDate);
@@ -584,11 +541,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       // レポート作成
       const wfReport = generateWalkForwardReport(performanceMetrics, riskAdjustedMetrics, robustnessResults, wfResults);
 
-      console.log('✅ Walk-Forward Analysis完了');
+      // Walk-Forward Analysis完了
       await postResultToDiscord(`\n${wfReport}`, discordBacktestURL);
 
     } catch (wfError) {
-      console.error('❌ Walk-Forward Analysis エラー:', wfError.message);
+      // Walk-Forward Analysis エラー
       await postResultToDiscord(`❌ **Walk-Forward Analysis エラー**\n\`\`\`\n${wfError.message}\n\`\`\``, discordBacktestURL);
     }
   }
@@ -613,16 +570,16 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
     if (shouldRetry) {
       if (topScore <= initialBaseFund) {
-        console.log(`最高スコア(${topScore.toFixed(2)})が初期資金(${initialBaseFund})以下のため、より広いパラメータ範囲でループをやり直します`);
+        // 最高スコアが初期資金以下のため再試行
         await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果が利益を出せていないため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       } else {
-        console.log(`スコアの差が0.1%未満 (${(scoreDifference * 100).toFixed(4)}%) のため、より広いパラメータ範囲でループをやり直します`);
+        // スコアの差が0.1%未満のため再試行
         await postResultToDiscord(`${strategyKey} の ${symbol} - (${retryCount}) すべての結果のスコア差が0.1%未満のため、より広いパラメータ範囲で再試行します。`, discordBacktestURL);
       }
       return { shouldRetry };
     }
 
-    console.log(`トップスコア(${topScore.toFixed(2)})に近い${eligibleResults.length}個の結果から最適なタイムフレームを選択します`);
+    // 最適なタイムフレームを選択
 
     // 単純に最高スコアの結果を選択（すでにrankedAllTimeframeResultsがスコア順にソートされているため）
     const selectedResult = eligibleResults[0];
@@ -642,11 +599,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       ? '（最高スコア）'
       : `（スコア差: ${(topScore - selectedResult.finalBaseFund).toFixed(2)}, より短いタイムフレームを優先）`;
 
-    console.log(`${strategyKey} の ${symbol} 設定を更新しました: スコア: ${selectedResult.finalBaseFund.toFixed(2)} ${selectionReason} - タイムフレーム: ${selectedResult.timeframe}`);
+    // 設定を更新
     await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - スコア: ${selectedResult.finalBaseFund.toFixed(2)} ${selectionReason} - タイムフレーム: ${selectedResult.timeframe} - ${JSON.stringify(selectedResult.parameters)}`, discordBacktestURL);
   }
 
-  console.log(`${symbol} のバックテスト完了`);
+  console.log(`バックテスト完了: ${symbol} - ${strategyKey}`);
   return { shouldRetry: false };
 }
 
@@ -788,8 +745,8 @@ async function reconstructTimeSeriesData(exchange, symbol, startDate, endDate) {
       close: candle.close,
       volume: candle.volume
     }));
-  } catch (error) {
-    console.error('時系列データ再構築エラー:', error.message);
+  } catch {
+    // 時系列データ再構築エラー
     // フォールバック：ランダムデータを生成
     const data = [];
     const timeStep = 60 * 60 * 1000; // 1時間
@@ -829,11 +786,11 @@ async function runWalkForwardBacktest(exchange, symbol, strategy, strategyKey, m
   const periodResults = [];
   let cumulativeReturn = 0;
 
-  console.log(`Walk-Forward分析: ${splits.length}個の期間で実行中...`);
+  // Walk-Forward分析開始
 
   for (let i = 0; i < splits.length; i++) {
     const split = splits[i];
-    console.log(`期間 ${i + 1}/${splits.length}: 訓練期間 ${split.trainData.length}個, テスト期間 ${split.testData.length}個`);
+    // 分割期間の処理
 
     // テストデータでバックテストを実行
     const strategyConfig = {
@@ -882,8 +839,8 @@ async function runWalkForwardBacktest(exchange, symbol, strategy, strategyKey, m
 
       try {
         await strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);
-      } catch (error) {
-        console.error(`Walk-Forward期間 ${i + 1} でエラー:`, error.message);
+      } catch {
+        // Walk-Forward期間でエラー
       }
     }
 
@@ -922,7 +879,7 @@ async function runWalkForwardBacktest(exchange, symbol, strategy, strategyKey, m
 
     periodResults.push(periodResult);
 
-    console.log(`期間 ${i + 1} 完了: リターン ${(periodReturn * 100).toFixed(2)}%, 累積リターン ${(cumulativeReturn * 100).toFixed(2)}%`);
+    // 期間完了
   }
 
   return {
@@ -1021,7 +978,7 @@ function calculateLimit(timeframe, days) {
     // 週単位の場合、日数を7で割って切り上げ
     return Math.ceil(days / 7);
   default:
-    console.warn(`未知のタイムフレーム: ${timeframe}`);
+    // 未知のタイムフレーム
     return 0;
   }
 }

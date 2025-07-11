@@ -7,8 +7,6 @@ const { initializeDB } = require('../database/manager');
 const router = require('./routes');
 
 require('dotenv').config();
-console.log('環境変数 USE_LOCALTUNNEL:', process.env.USE_LOCALTUNNEL);
-console.log('localtunnelモジュールを読み込む前...');
 
 // localtunnelモジュールをグローバルスコープで宣言
 // Note: localtunnelは削除されました（セキュリティ脆弱性のため）
@@ -44,34 +42,38 @@ app.get('/analysis', (req, res) => {
 
 // サーバー起動
 app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`API & Web Server running on port ${PORT}`);
+  // サーバー起動ログはconsole.errorを使用
+  console.error(`API & Web Server running on port ${PORT}`);
 
   // データベースの初期化
   try {
     await initializeDB();
-    console.log('データベースが正常に初期化されました');
+    // データベース初期化成功ログはconsole.errorを使用
+    console.error('データベースが正常に初期化されました');
   } catch (error) {
     console.error('データベース初期化エラー:', error);
   }
 
   if (process.env.USE_LOCALTUNNEL === 'true') {
-    console.log('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
-    console.log('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
+    // localtunnel無効化通知ログはconsole.errorを使用
+    console.error('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
+    console.error('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
     // localtunnelは削除されたため、この機能は無効です
     if (false) {
       try {
         const tunnel = await localtunnel({ port: PORT });
-        console.log(`Localtunnel URL: ${tunnel.url}`);
+        // Localtunnel URLログはconsole.errorを使用
+        console.error(`Localtunnel URL: ${tunnel.url}`);
 
         // エラーイベントのハンドリングを追加
         tunnel.on('error', (err) => {
           console.error('Localtunnelエラー:', err.message);
-          console.log('Localtunnelエラーが発生しましたが、サーバーは引き続き実行されます');
+          console.error('Localtunnelエラーが発生しましたが、サーバーは引き続き実行されます');
         });
 
         // 接続が閉じられたときのハンドリング
         tunnel.on('close', () => {
-          console.log('Localtunnel が閉じられました');
+          console.error('Localtunnel が閉じられました');
         });
 
         // Discord への投稿処理
@@ -90,7 +92,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             });
 
             if (response.ok) {
-              console.log('Discord に投稿しました');
+              console.error('Discord に投稿しました');
             } else {
               console.error('Discord への投稿に失敗しました:', await response.text());
             }
@@ -98,17 +100,17 @@ app.listen(PORT, '0.0.0.0', async () => {
             console.error('Discord への投稿エラー:', fetchError.message);
           }
         } else {
-          console.warn('DISCORD_RESULT_WEBHOOK_URL が設定されていません');
+          console.error('DISCORD_RESULT_WEBHOOK_URL が設定されていません');
         }
       } catch (tunnelError) {
         console.error('Localtunnelの作成に失敗しました:', tunnelError.message);
-        console.log('Localtunnelは使用できませんが、サーバーは引き続き実行されます');
+        console.error('Localtunnelは使用できませんが、サーバーは引き続き実行されます');
       }
     } else {
-      console.log('localtunnel機能は無効になっています');
+      console.error('localtunnel機能は無効になっています');
     }
   } else {
-    console.log('localtunnel機能は無効になっています');
+    console.error('localtunnel機能は無効になっています');
   }
 });
 

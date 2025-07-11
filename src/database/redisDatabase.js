@@ -2,7 +2,7 @@
  * Redisデータベースモジュール
  * SQLiteからRedisへの移行の一部として実装
  */
-const { client, initRedisClient } = require('./redisClient');
+const { client, getClient: getRedisClientInternal, initRedisClient } = require('./redisClient');
 const { errorHandler } = require('../common/errorHandler');
 const {
   safeValidateTradeSummaryData,
@@ -10,6 +10,14 @@ const {
   safeValidatePendingOrderData,
   safeValidateStrategyParametersData
 } = require('./schemas');
+const {
+  toDecimal,
+  addBalance,
+  subtractBalance,
+  toNumber,
+  toString,
+  validateBalance
+} = require('../common/decimalUtils');
 
 // 初期化関数
 async function initialize() {
@@ -113,19 +121,41 @@ async function updateTradeSummary(trade) {
     });
   }
 
-  // 約定サマリーを更新
+  // 約定サマリーを更新（高精度計算）
+  const currency = validatedTrade.symbol.split('/')[0]; // BTC/JPY -> BTC
+
   if (trade.side === 'buy') {
     // 買い注文の場合
-    await client.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
-    await client.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
-    await client.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
-    await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
+    const currentBuyAmount = toDecimal(await client.hGet(summaryKey, 'buyAmount') || 0);
+    const currentBuyCost = toDecimal(await client.hGet(summaryKey, 'totalBuyCost') || 0);
+    const currentNetPosition = toDecimal(await client.hGet(summaryKey, 'netPosition') || 0);
+    const currentTotalFee = toDecimal(await client.hGet(summaryKey, 'totalFee') || 0);
+
+    const newBuyAmount = addBalance(currentBuyAmount, trade.amount, currency);
+    const newBuyCost = addBalance(currentBuyCost, trade.value, 'JPY');
+    const newNetPosition = addBalance(currentNetPosition, trade.amount, currency);
+    const newTotalFee = addBalance(currentTotalFee, trade.fee, 'JPY');
+
+    await client.hSet(summaryKey, 'buyAmount', toString(newBuyAmount, currency));
+    await client.hSet(summaryKey, 'totalBuyCost', toString(newBuyCost, 'JPY'));
+    await client.hSet(summaryKey, 'netPosition', toString(newNetPosition, currency));
+    await client.hSet(summaryKey, 'totalFee', toString(newTotalFee, 'JPY'));
   } else if (trade.side === 'sell') {
     // 売り注文の場合
-    await client.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
-    await client.hIncrByFloat(summaryKey, 'totalSellValue', trade.value);
-    await client.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
-    await client.hIncrByFloat(summaryKey, 'totalFee', trade.fee);
+    const currentSellAmount = toDecimal(await client.hGet(summaryKey, 'sellAmount') || 0);
+    const currentSellValue = toDecimal(await client.hGet(summaryKey, 'totalSellValue') || 0);
+    const currentNetPosition = toDecimal(await client.hGet(summaryKey, 'netPosition') || 0);
+    const currentTotalFee = toDecimal(await client.hGet(summaryKey, 'totalFee') || 0);
+
+    const newSellAmount = addBalance(currentSellAmount, trade.amount, currency);
+    const newSellValue = addBalance(currentSellValue, trade.value, 'JPY');
+    const newNetPosition = subtractBalance(currentNetPosition, trade.amount, currency);
+    const newTotalFee = addBalance(currentTotalFee, trade.fee, 'JPY');
+
+    await client.hSet(summaryKey, 'sellAmount', toString(newSellAmount, currency));
+    await client.hSet(summaryKey, 'totalSellValue', toString(newSellValue, 'JPY'));
+    await client.hSet(summaryKey, 'netPosition', toString(newNetPosition, currency));
+    await client.hSet(summaryKey, 'totalFee', toString(newTotalFee, 'JPY'));
 
     // 実現損益を計算（売りの場合のみ更新）- 数値精度安全化
     const currentBuyAmount = parseFloat(await client.hGet(summaryKey, 'buyAmount') || 0);
@@ -183,12 +213,12 @@ async function validateAndFixTradeSummary(summaryKey, options = {}) {
       actions: []
     };
 
-    // データを数値に変換
-    const buyAmount = parseFloat(summary.buyAmount || 0);
-    const sellAmount = parseFloat(summary.sellAmount || 0);
-    const netPosition = parseFloat(summary.netPosition || 0);
-    const totalBuyCost = parseFloat(summary.totalBuyCost || 0);
-    const totalSellValue = parseFloat(summary.totalSellValue || 0);
+    // データを数値に変換（高精度計算のため必要時にコンバート）
+    const buyAmount = toNumber(toDecimal(summary.buyAmount || 0));
+    const sellAmount = toNumber(toDecimal(summary.sellAmount || 0));
+    const netPosition = toNumber(toDecimal(summary.netPosition || 0));
+    const totalBuyCost = toNumber(toDecimal(summary.totalBuyCost || 0));
+    const totalSellValue = toNumber(toDecimal(summary.totalSellValue || 0));
     const realizedPnL = parseFloat(summary.realizedPnL || 0);
 
     // 基本的な整合性チェック

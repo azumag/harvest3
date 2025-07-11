@@ -1,187 +1,141 @@
 name: Claude CI Fix
 
 on:
-  issue_comment:
-    types: [created]
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
 
 jobs:
-  fix-ci-failure:
+  claude-ci-fix:
     name: Fix CI Failures with Claude Code
     runs-on: ubuntu-latest
     
-    # PRの「@claude-fix-ci」メンションがある場合のみ実行
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude-fix-ci')
+    # CIが失敗した場合のみ実行
+    if: |
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
     
     timeout-minutes: 30
     
     permissions:
       contents: write
-      issues: write
       pull-requests: write
+      actions: read
+      id-token: write
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Get PR information
         id: pr-info
         run: |
-          PR_NUMBER="${{ github.event.issue.number }}"
-          HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+          # Pull request情報を取得
+          PR_NUMBER=$(gh api repos/${{ github.repository }}/pulls \
+            --jq '.[] | select(.head.sha == "${{ github.event.workflow_run.head_sha }}") | .number' 2>/dev/null || echo "")
+          
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
+            echo "Could not find PR for commit, skipping workflow"
+            echo "skip_workflow=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+          echo "skip_workflow=false" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout PR branch
-        run: |
-          git fetch origin ${{ steps.pr-info.outputs.head_branch }}
-          git checkout ${{ steps.pr-info.outputs.head_branch }}
+      - name: Checkout repository
+        if: steps.pr-info.outputs.skip_workflow != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
 
       - name: Setup Node.js
+        if: steps.pr-info.outputs.skip_workflow != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '18.x'
           cache: 'npm'
 
-      - name: Create CI failure summary
-        run: |
-          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          HEAD_BRANCH="${{ steps.pr-info.outputs.head_branch }}"
-          
-          # 一時ディレクトリを作成
-          mkdir -p .tmp
-          
-          # CI失敗情報を収集
-          echo "# CI Failure Analysis" > .tmp/ci_failure_summary.md
-          echo "" >> .tmp/ci_failure_summary.md
-          echo "## Request:" >> .tmp/ci_failure_summary.md
-          echo "$COMMENT_BODY" >> .tmp/ci_failure_summary.md
-          echo "" >> .tmp/ci_failure_summary.md
-          echo "## Recent CI Failures:" >> .tmp/ci_failure_summary.md
-          
-          # 詳細な失敗情報を収集
-          gh run list --branch "$HEAD_BRANCH" --status failure --limit 3 --json displayTitle,conclusion,url | jq -r '.[] | "### \(.displayTitle)\n- Status: \(.conclusion)\n- URL: \(.url)\n"' >> .tmp/ci_failure_summary.md || echo "Failed to get recent runs" >> .tmp/ci_failure_summary.md
-          
-          # 最新の失敗ログを取得してみる
-          LATEST_FAILED_RUN=$(gh run list --branch "$HEAD_BRANCH" --status failure --limit 1 --json databaseId --jq '.[0].databaseId')
-          if [ -n "$LATEST_FAILED_RUN" ]; then
-            echo "" >> .tmp/ci_failure_summary.md
-            echo "## Latest Failure Log:" >> .tmp/ci_failure_summary.md
-            gh run view $LATEST_FAILED_RUN --log-failed | tail -100 >> .tmp/ci_failure_summary.md || echo "Could not retrieve failure logs" >> .tmp/ci_failure_summary.md
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-
       - name: Install dependencies
-        run: |
-          npm ci || {
-            echo "Cache may be corrupted, clearing and retrying..."
-            npm cache clean --force
-            npm ci
-          }
+        if: steps.pr-info.outputs.skip_workflow != 'true'
+        run: npm ci
 
       - name: Fix CI failures with Claude Code
+        if: steps.pr-info.outputs.skip_workflow != 'true'
+        id: claude-fix
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          
+          # Optional: Specify model (defaults to Claude Sonnet 4)
+          # model: "claude-opus-4-20250514"
+          
+          # Allow specific tools for CI fixing
+          allowed_tools: "Bash,Read,Write,Edit,MultiEdit,Grep,Glob,LS"
+          
+          # CI修正のプロンプト
           direct_prompt: |
-            Pull RequestのCI/CD失敗を修正してください。
+            このPull RequestのCI/CDが失敗しています。失敗を修正してください。
             
-            '.tmp/ci_failure_summary.md'ファイルのCI失敗情報を分析し、すべての失敗を修正するために必要な変更を行ってください。
+            分析すべき内容：
+            1. **失敗したワークフロー**: ${{ github.event.workflow_run.name }}
+            2. **失敗したコミット**: ${{ github.event.workflow_run.head_sha }}
+            3. **ブランチ**: ${{ github.event.workflow_run.head_branch }}
+            4. **実行URL**: ${{ github.event.workflow_run.html_url }}
             
-            よくあるCI失敗とその解決方法:
-            1. **テスト失敗**: 失敗したテストを修正するか、実装が変更された場合はテストを更新
-            2. **Lintエラー**: コードスタイルの問題、未使用変数、フォーマットの問題を修正
-            3. **型エラー**: TypeScript/Flow型エラーを修正
-            4. **ビルドエラー**: importの問題、依存関係の不足、構文エラーを修正
-            5. **依存関係不足**: package.jsonに必要なパッケージを追加
+            修正ガイドライン：
+            - **テスト失敗**: 失敗したテストを修正するか、実装変更に合わせてテストを更新
+            - **Lintエラー**: コードスタイル、未使用変数、フォーマットの問題を修正
+            - **型エラー**: TypeScript/Flow型エラーを修正
+            - **ビルドエラー**: import問題、依存関係不足、構文エラーを修正
+            - **依存関係**: package.jsonに必要なパッケージを追加
             
-            ガイドライン:
-            1. エラーメッセージを慎重に読み、何が失敗しているかを理解する
-            2. 問題を修正するために必要最小限の変更を行う
-            3. 失敗の原因でない限り、機能を変更しない
-            4. 変更後にすべてのテストが通ることを確認する
-            5. プロジェクトのコーディング規約に従う（CLAUDE.mdを確認）
-            6. 依存関係のインストールが必要な場合は、package.jsonを適切に更新する
-            
-            このリポジトリの開発ガイドライン:
+            このリポジトリの開発ガイドライン：
             - YAGNI（You Aren't Gonna Need It）の原則に従う
             - DRY（Don't Repeat Yourself）の原則に従う
             - KISS（Keep It Simple Stupid）の原則に従う
             - 機能を作成する場合は必ず単体テストをセットで作成する
             - 一時的なファイルは.tmpディレクトリに作成する
             
-            変更を行った後、以下の簡潔な要約を提供してください:
-            - 何が失敗していたか、その理由
-            - 修正するために行った変更
-            - 追加で必要な手順があるか
-
-      - name: Run tests after fix
-        run: |
-          echo "=== CI修正後のテスト実行 ==="
-          if ! npm run lint; then
-            echo "Linting failed - stopping workflow"
-            exit 1
-          fi
-          if ! npm run test:unit; then
-            echo "Unit tests failed - stopping workflow"
-            exit 1
-          fi
-          echo "=== テスト完了 ==="
-
-      - name: Commit changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          if [ -n "$(git status --porcelain)" ]; then
-            # リモートの最新状態を確認
-            git fetch origin ${{ steps.pr-info.outputs.head_branch }}
-            git rebase origin/${{ steps.pr-info.outputs.head_branch }} || {
-              echo "Rebase failed, trying merge instead"
-              git merge origin/${{ steps.pr-info.outputs.head_branch }}
-            }
+            CLAUDE.mdの要件を確認し、プロジェクトのコーディング規約に従ってください。
             
-            git add .
-            git commit -m "fix: CI失敗の修正" \
-                       -m "🤖 Generated with Claude Code Action" \
-                       -m "Co-Authored-By: Claude <noreply@anthropic.com>"
-            git push origin ${{ steps.pr-info.outputs.head_branch }}
-          else
-            echo "No changes to commit"
-          fi
+            修正が完了したら、何を修正したかの簡潔な要約を提供してください。
+          
+          # Optional: Allow specific tools for testing and linting
+          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
 
-      - name: Comment on PR
-        if: success()
+      - name: Create summary comment
+        if: steps.pr-info.outputs.skip_workflow != 'true'
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
           
-          gh pr comment $PR_NUMBER --body "✅ Claude Code ActionがCI失敗を修正しました。
-
-          変更内容を確認して、CI/CDが正常に動作するかチェックしてください。
-
-          問題が解決されない場合は、@claude-fix-ciメンションでコメントしてください。"
+          # CI修正の結果をコメント
+          gh pr comment $PR_NUMBER --body "🔧 **Claude Code Action - CI修正実行**
+          
+          **修正対象**: CI失敗 (${{ github.event.workflow_run.name }})
+          **実行時刻**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          **コミット**: ${{ github.event.workflow_run.head_sha }}
+          
+          Claude Code Actionがこの Failed: ${{ github.event.workflow_run.html_url }}
+          
+          修正内容を確認して、CI/CDが正常に動作するかチェックしてください。
+          
+          問題が解決されない場合は、新しいレビューを実施してください。"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Handle failure
-        if: failure()
+      - name: Handle workflow failure
+        if: failure() && steps.pr-info.outputs.skip_workflow != 'true'
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
           
-          gh pr comment $PR_NUMBER --body "❌ Claude Code ActionでのCI失敗修正に失敗しました。
-
-          エラーの詳細は[こちらのワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})をご確認ください。
-
-          手動での修正が必要な可能性があります。再試行するには@claude-fix-ciメンションでコメントしてください。"
+          gh pr comment $PR_NUMBER --body "❌ **Claude Code Action - CI修正失敗**
+          
+          **失敗したワークフロー**: ${{ github.event.workflow_run.name }}
+          **エラー詳細**: [ワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          手動での修正が必要な可能性があります。"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cleanup temporary files
-        if: always()
-        run: |
-          rm -rf .tmp

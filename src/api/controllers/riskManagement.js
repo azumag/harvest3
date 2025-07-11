@@ -2,7 +2,7 @@
  * リスク管理API コントローラー
  */
 const { getAllPositionsRedis, calculatePeriodPnLRedis, getTickerRedis, getAllPendingOrdersRedis } = require('../../database/redisDatabase');
-const { getTradeSummary, listTrades, listFilledPositions, getOrderStrategyKeyByOrderId } = require('../../database/manager');
+const { getOrderStrategyKeyByOrderId } = require('../../database/manager');
 const ccxt = require('ccxt');
 
 /**
@@ -42,13 +42,11 @@ async function getRiskPositions(req, res) {
           orderStatus: order.status,
           orderType: order.orderType
         }));
-        console.log(`[INFO] Redis から ${openOrderPositions.length} 件の未約定注文を取得しました`);
       } else {
-        console.log('[INFO] Redis に未約定注文なし、取引所APIフォールバックを実行します');
         useExchangeAPIFallback = true;
       }
     } catch (redisError) {
-      console.warn('Redis からの未約定注文取得に失敗、取引所APIにフォールバック:', redisError.message);
+      console.error('Redis からの未約定注文取得に失敗、取引所APIにフォールバック:', redisError.message);
       useExchangeAPIFallback = true;
     }
 
@@ -64,7 +62,7 @@ async function getRiskPositions(req, res) {
           // 取引所インスタンスを作成
           const exchangeClass = ccxt[exchangeId];
           if (!exchangeClass) {
-            console.warn(`Exchange ${exchangeId} not found in ccxt`);
+            console.error(`Exchange ${exchangeId} not found in ccxt`);
             continue;
           }
 
@@ -117,7 +115,7 @@ async function getRiskPositions(req, res) {
             });
           }
         } catch (error) {
-          console.warn(`Failed to fetch open orders for ${exchangeId}:${symbol}:`, error.message);
+          console.error(`Failed to fetch open orders for ${exchangeId}:${symbol}:`, error.message);
         }
       }
     }
@@ -151,7 +149,7 @@ async function getRiskPositions(req, res) {
               currentPrice = ticker.last;
             }
           } catch (tickerError) {
-            console.warn(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
+            console.error(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
             // フォールバック値を使用
           }
 
@@ -262,7 +260,7 @@ async function getRiskStats(req, res) {
       const pendingOrders = await getAllPendingOrdersRedis();
       pendingOrdersCount = pendingOrders.length;
     } catch (error) {
-      console.warn('Failed to get pending orders for risk stats:', error.message);
+      console.error('Failed to get pending orders for risk stats:', error.message);
       // フォールバック: 取引所APIから取得する処理は省略（パフォーマンス考慮）
     }
 
@@ -326,7 +324,6 @@ async function getFilledPositions(req, res) {
     // Redisから全ての未売却ポジション（アクティブポジション）を取得
     const allActivePositions = await getAllPositionsRedis();
 
-    console.log(`getFilledPositions received ${allActivePositions.length} active positions from Redis`);
 
     // フィルタ条件を適用
     let filteredPositions = allActivePositions;
@@ -354,7 +351,7 @@ async function getFilledPositions(req, res) {
               currentPrice = ticker.last;
             }
           } catch (tickerError) {
-            console.warn(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
+            console.error(`Failed to get ticker for ${position.exchange}:${position.symbol}:`, tickerError.message);
           }
 
           const entryPrice = position.entryPrice || 0;

@@ -59,7 +59,7 @@ describe('MongoDB Connection Configuration', () => {
 
       // 各必要オプションが存在することを確認
       expectedOptions.forEach(option => {
-        expect(mongoDbSource).toMatch(new RegExp(`${option}:\\s*\\d+|${option}:\\s*true|${option}:\\s*\\[`));
+        expect(mongoDbSource).toMatch(new RegExp(`${option}:\\s*(\\d+|true|\\[|SETTINGS\\.DATABASE\\.MONGODB\\.[A-Z_]+)`));
       });
 
       // 削除されたオプションが存在しないことを確認

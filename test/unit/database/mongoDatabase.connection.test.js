@@ -47,6 +47,10 @@ const {
   closeDB
 } = require('../../../src/database/mongoDatabase');
 
+// スキップ理由: MongoDB接続改善機能のテストは、実際のMongoDB接続が必要なため
+// CI環境でのMongoDB設定が完了次第、テストを有効化予定  
+// 対応方針: Docker ComposeでのMongoDB環境構築後に再有効化
+// 現在の問題: 実際のMongoDBクライアントが必要だが、テストではモックを使用しているため機能しない
 describe.skip('mongoDatabase - 接続改善機能', () => {
   beforeEach(() => {
     jest.clearAllMocks();

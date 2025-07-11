@@ -1,5 +1,6 @@
 const { MongoClient, ObjectId } = require('mongodb');
 const dotenv = require('dotenv');
+const { SETTINGS } = require('../config/settings');
 const {
   safeValidateTradeData,
   safeValidateOrderData
@@ -13,17 +14,17 @@ const mongoDbName = process.env.MONGO_DB_NAME;
 // MongoDB接続オプションを追加 - 本番環境向けに最適化
 // レビュー対応: 非対応オプションを削除し、安定した接続設定に変更
 const mongoOptions = {
-  serverSelectionTimeoutMS: 30000, // 30秒に延長
-  connectTimeoutMS: 15000,          // CI/CD安定性のため15秒に延長
-  socketTimeoutMS: 45000,           // 45秒に設定
-  maxPoolSize: 10,                  // CI/CD環境のためプールサイズを適正化
-  minPoolSize: 2,                   // 最小プールサイズを設定
-  maxIdleTimeMS: 30000,             // アイドル接続のタイムアウト
+  serverSelectionTimeoutMS: SETTINGS.DATABASE.MONGODB.SERVER_SELECTION_TIMEOUT,
+  connectTimeoutMS: SETTINGS.DATABASE.MONGODB.CONNECT_TIMEOUT,
+  socketTimeoutMS: SETTINGS.DATABASE.MONGODB.SOCKET_TIMEOUT,
+  maxPoolSize: SETTINGS.DATABASE.MONGODB.MAX_POOL_SIZE,
+  minPoolSize: SETTINGS.DATABASE.MONGODB.MIN_POOL_SIZE,
+  maxIdleTimeMS: SETTINGS.DATABASE.MONGODB.MAX_IDLE_TIME,
   retryWrites: true,                // 書き込み再試行を有効化
-  heartbeatFrequencyMS: 10000,      // ハートビート間隔
+  heartbeatFrequencyMS: SETTINGS.DATABASE.MONGODB.HEARTBEAT_FREQUENCY,
   // bufferMaxEntries: 削除（新しいドライバでは非対応）
   compressors: ['zlib'],            // データ圧縮を有効化
-  maxConnecting: 5                  // CI/CD環境のため同時接続数を適正化
+  maxConnecting: SETTINGS.DATABASE.MONGODB.MAX_CONNECTING
 };
 
 let client;
@@ -922,8 +923,17 @@ async function listFilledPositions(filter = {}, limit = 1000) {
   }
 }
 
+/**
+ * MongoDBクライアントを取得する関数
+ * @returns {Object} MongoDB クライアント
+ */
+function getClient() {
+  return client;
+}
+
 // モジュールエクスポートに追加
 module.exports = {
+  getClient,
   connectDB,
   closeDB,
   isConnected,

@@ -1,6 +1,8 @@
 name: Claude PR Review Resolver
 
 on:
+  pull_request_review:
+    types: [submitted]
   issue_comment:
     types: [created]
 
@@ -9,14 +11,15 @@ jobs:
     name: Resolve PR Review Comments with Claude Code
     runs-on: ubuntu-latest
     
-    # PRの「@claude-resolver」メンションがある場合のみ実行
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude-resolver')
+    # PRのコメントまたはレビューのみを処理
+    if: |
+      (github.event_name == 'pull_request_review') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
     
     timeout-minutes: 30
     
     permissions:
       contents: write
-      issues: write
       pull-requests: write
     steps:
       - name: Checkout repository
@@ -27,8 +30,15 @@ jobs:
       - name: Get PR information
         id: pr-info
         run: |
-          PR_NUMBER="${{ github.event.issue.number }}"
-          HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            # issue_comment の場合
+            PR_NUMBER="${{ github.event.issue.number }}"
+            # PR情報を取得
+            HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq .headRefName)
+          fi
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
         env:
@@ -45,32 +55,39 @@ jobs:
           node-version: '18.x'
           cache: 'npm'
 
+      - name: Add processing label
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --add-label "claude-processing"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create review summary
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          
-          # 一時ディレクトリを作成
           mkdir -p .tmp
           
-          # 現在のレビューコメントを収集
+          # レビューコメントやコメントを収集
           echo "# PR Review Comments Summary" > .tmp/review_summary.md
           echo "" >> .tmp/review_summary.md
-          echo "## Latest Comment:" >> .tmp/review_summary.md
-          echo "$COMMENT_BODY" >> .tmp/review_summary.md
+          
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "## Latest Review:" >> .tmp/review_summary.md
+            echo "${{ github.event.review.body }}" >> .tmp/review_summary.md
+          else
+            echo "## Latest Comment:" >> .tmp/review_summary.md
+            echo "${{ github.event.comment.body }}" >> .tmp/review_summary.md
+          fi
+          
+          # 既存のレビューコメントも取得
           echo "" >> .tmp/review_summary.md
-          echo "## Recent Reviews:" >> .tmp/review_summary.md
-          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews --jq '.[0:5] | .[] | select(.state == "CHANGES_REQUESTED") | .body' >> .tmp/review_summary.md || true
+          echo "## All Review Comments:" >> .tmp/review_summary.md
+          gh pr view $PR_NUMBER --json reviews --jq '.reviews[] | "### " + .author.login + " - " + .state + "\n" + .body + "\n"' >> .tmp/review_summary.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
 
       - name: Install dependencies
-        run: |
-          npm ci || {
-            echo "Cache may be corrupted, clearing and retrying..."
-            npm cache clean --force
-            npm ci
-          }
+        run: npm ci
 
       - name: Resolve review comments with Claude Code
         uses: anthropics/claude-code-action@beta
@@ -114,17 +131,10 @@ jobs:
 
       - name: Commit changes
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           
           if [ -n "$(git status --porcelain)" ]; then
-            # リモートの最新状態を確認
-            git fetch origin ${{ steps.pr-info.outputs.head_branch }}
-            git rebase origin/${{ steps.pr-info.outputs.head_branch }} || {
-              echo "Rebase failed, trying merge instead"
-              git merge origin/${{ steps.pr-info.outputs.head_branch }}
-            }
-            
             git add .
             git commit -m "fix: レビューコメントの対応" \
                        -m "🤖 Generated with Claude Code Action" \
@@ -143,7 +153,7 @@ jobs:
 
           変更内容をレビューして、適切に対応されているかご確認ください。
 
-          追加の変更が必要な場合は、@claude-resolverメンションでコメントしてください。"
+          追加の変更が必要な場合は、新しいレビューを実施してください。"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -157,6 +167,14 @@ jobs:
           エラーの詳細は[こちらのワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})をご確認ください。
 
           手動での対応が必要な可能性があります。"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove processing label
+        if: always()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --remove-label "claude-processing" || echo "Failed to remove processing label"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

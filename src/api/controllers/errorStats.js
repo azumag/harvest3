@@ -44,7 +44,6 @@ function recordError(type, message, details = '') {
     errorStats.lastErrors = errorStats.lastErrors.slice(0, 10);
   }
 
-  console.log(`[ErrorStats] ${type}エラーを記録: ${message}`);
 }
 
 /**

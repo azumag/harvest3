@@ -1,14 +1,9 @@
 /**
  * マルチ指標戦略のテスト
  */
-const {
-  calculateADX
-} = require('../../src/strategies/utils/indicators');
+const { calculateADX } = require('../../src/strategies/utils/indicators');
 
-const {
-  confirmMultipleIndicators,
-  identifyMarketEnvironment
-} = require('../../src/strategies/utils/common');
+const { confirmMultipleIndicators, identifyMarketEnvironment } = require('../../src/strategies/utils/common');
 
 describe('ADX指標テスト', () => {
   test('ADXが正しく計算される', () => {

@@ -38,12 +38,8 @@ async function getSymbols(req, res) {
     const exchangeInstance = exchangeConfig.instance;
 
     // 取引所から銘柄リストを取得
-    console.log(`Fetching markets for exchange: ${exchangeInstance.id}`); // ログ追加
     const markets = await exchangeInstance.fetchMarkets();
-    console.log(`Markets fetched for ${exchangeInstance.id}:`, markets); // ログ追加
-
     const symbols = markets.map(market => market.symbol);
-    console.log(`Symbols extracted for ${exchangeInstance.id}:`, symbols); // ログ追加
 
     res.json(symbols);
   } catch (error) {

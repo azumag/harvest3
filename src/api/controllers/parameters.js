@@ -70,7 +70,7 @@ async function updateParameters(req, res) {
     // JSON内のデータではエンコードされていない可能性が高いが、念のため処理を追加
     try {
       symbol = decodeURIComponent(symbol);
-    } catch (e) {
+    } catch {
       // すでにデコードされている場合はエラーになる可能性があるため、無視
     }
 

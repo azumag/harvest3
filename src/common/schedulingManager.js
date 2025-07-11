@@ -15,6 +15,24 @@ class SchedulingManager {
   }
 
   /**
+   * タスクを安全に実行するヘルパーメソッド
+   * @param {Function} taskFunction - 実行する関数
+   * @param {string} taskName - タスク名
+   */
+  async _executeTask(taskFunction, taskName) {
+    if (typeof taskFunction === 'function') {
+      try {
+        const result = taskFunction();
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+      } catch (error) {
+        console.error(`[スケジューラー] ${taskName} 実行エラー:`, error.message);
+      }
+    }
+  }
+
+  /**
    * 毎時0分実行のタスクをスケジュール
    * @param {string} taskName - タスク名
    * @param {Function} taskFunction - 実行する関数
@@ -41,7 +59,7 @@ class SchedulingManager {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
-        await taskFunction();
+        await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
@@ -68,10 +86,8 @@ class SchedulingManager {
     // 初回実行オプション
     if (runOnInit && typeof taskFunction === 'function') {
       console.log(`[スケジューラー] ${taskName} 初回実行中...`);
-      setTimeout(() => {
-        if (typeof taskFunction === 'function') {
-          taskFunction().catch(console.error);
-        }
+      setTimeout(async () => {
+        await this._executeTask(taskFunction, taskName);
       }, 1000);
     }
 
@@ -106,7 +122,7 @@ class SchedulingManager {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
-        await taskFunction();
+        await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
@@ -133,10 +149,8 @@ class SchedulingManager {
     // 初回実行オプション
     if (runOnInit && typeof taskFunction === 'function') {
       console.log(`[スケジューラー] ${taskName} 初回実行中...`);
-      setTimeout(() => {
-        if (typeof taskFunction === 'function') {
-          taskFunction().catch(console.error);
-        }
+      setTimeout(async () => {
+        await this._executeTask(taskFunction, taskName);
       }, 1000);
     }
 
@@ -168,7 +182,7 @@ class SchedulingManager {
         console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
-        await taskFunction();
+        await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
         console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);

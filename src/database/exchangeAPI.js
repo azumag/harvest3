@@ -32,9 +32,10 @@ async function waitForAPILimit(waitTime = 100) {
   return new Promise(resolve => setTimeout(resolve, waitTime));
 }
 
-// Bitbank APIレートリミット管理
+// Bitbank Public APIレートリミット管理（CCXT経由ではないPublic API用）
+// Issue #210: CCXT標準機能を使用し、Public API用は最小限の制御のみ
 let lastBitbankRequestTime = 0;
-const BITBANK_RATE_LIMIT_MS = 120; // 10回/秒 = 100ms間隔に安全マージン追加
+const BITBANK_RATE_LIMIT_MS = 120; // Public API用の最小制御
 
 /**
  * Bitbank APIのレートリミットを管理しながら実行する
