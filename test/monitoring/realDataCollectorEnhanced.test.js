@@ -342,7 +342,7 @@ describe('RealDataCollectorEnhanced', () => {
 
       collector.startCollection(exchanges);
       await new Promise(resolve => setTimeout(resolve, 2000)); // 待機時間を延長
-      
+
       collector.stopCollection(); // 明示的に停止
 
       collector.saveErrorLog();
@@ -351,7 +351,7 @@ describe('RealDataCollectorEnhanced', () => {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const errorLogPath = path.join(tempDir, 'test-errors.json');
-      
+
       // より堅牢なファイル存在チェック
       let fileExists = false;
       for (let i = 0; i < 10; i++) {
@@ -361,7 +361,7 @@ describe('RealDataCollectorEnhanced', () => {
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       expect(fileExists).toBe(true);
 
       if (fileExists) {

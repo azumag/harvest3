@@ -1034,7 +1034,7 @@ async function executeRiskManagementCheck() {
 async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol, options) {
   try {
 
-    // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
+    // パフォーマンス向上: キャッシュメカニズムを使用してループの最適化を実現
     const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
 
     if (!strategyConfig || strategyConfig.enabled === false) {

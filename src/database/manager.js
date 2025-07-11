@@ -1709,10 +1709,16 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
 }
 
 async function getStrategyConfig(exchange, symbol, strategyKey, config) {
-  // 統一化された戦略管理モジュールを使用
+  // パフォーマンス向上: キャッシュメカニズムを使用
+  const { getCachedStrategyConfig } = require('../utils/performanceCache');
   const { getUnifiedStrategyConfig } = require('../config/strategyManager');
 
-  return await getUnifiedStrategyConfig(config, exchange.id, symbol, strategyKey);
+  return await getCachedStrategyConfig(
+    exchange.id,
+    symbol,
+    strategyKey,
+    () => getUnifiedStrategyConfig(config, exchange.id, symbol, strategyKey)
+  );
 }
 
 /**

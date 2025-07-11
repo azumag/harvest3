@@ -35,7 +35,7 @@ describe('Emergency Balance Fix', () => {
     it('残高修正が正常に完了する', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 100.0;
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -55,7 +55,7 @@ describe('Emergency Balance Fix', () => {
     it('乖離がない場合は正常と判定する', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 100.0;
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -74,7 +74,7 @@ describe('Emergency Balance Fix', () => {
   describe('異常系', () => {
     it('取引所API エラー時に適切にエラーハンドリングする', async () => {
       mockExchange.fetchBalance.mockRejectedValue(new Error('API Connection Failed'));
-      
+
       await expect(emergencyBalanceFix()).rejects.toThrow();
     });
 
@@ -83,7 +83,7 @@ describe('Emergency Balance Fix', () => {
         free: { JPY: 100.0 }
       });
       require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(null);
-      
+
       await expect(emergencyBalanceFix()).rejects.toThrow('Redis接続失敗');
     });
   });
@@ -92,7 +92,7 @@ describe('Emergency Balance Fix', () => {
     it('乖離が存在する場合は警告を表示する', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 50.0; // 50円の乖離
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });

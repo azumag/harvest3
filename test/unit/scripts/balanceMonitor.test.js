@@ -44,7 +44,7 @@ describe('Balance Monitor', () => {
     it('正常な監視処理を実行する', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 100.0;
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -60,7 +60,7 @@ describe('Balance Monitor', () => {
     it('閾値内の乖離では警告を出さない', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 99.5; // 0.5の乖離（閾値1.0未満）
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -80,7 +80,7 @@ describe('Balance Monitor', () => {
     it('閾値を超える乖離を検出する', async () => {
       const exchangeBalance = 100.0;
       const redisBalance = 98.0; // 2.0の乖離（閾値1.0超過）
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -97,10 +97,10 @@ describe('Balance Monitor', () => {
     it('Discord通知が設定されている場合に通知を送信する', async () => {
       const originalEnv = process.env.DISCORD_WEBHOOK_URL;
       process.env.DISCORD_WEBHOOK_URL = 'https://example.com/webhook';
-      
+
       const exchangeBalance = 100.0;
       const redisBalance = 97.0; // 3.0の乖離
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: exchangeBalance }
       });
@@ -129,7 +129,7 @@ describe('Balance Monitor', () => {
   describe('異常系', () => {
     it('取引所API エラー時に適切にエラーハンドリングする', async () => {
       mockExchange.fetchBalance.mockRejectedValue(new Error('Network Error'));
-      
+
       await expect(balanceMonitor()).rejects.toThrow();
     });
 
@@ -138,7 +138,7 @@ describe('Balance Monitor', () => {
         free: { JPY: 100.0 }
       });
       require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(null);
-      
+
       await balanceMonitor();
 
       // Redis接続失敗時は管理残高が0となり、乖離が検出されることを確認
@@ -146,7 +146,7 @@ describe('Balance Monitor', () => {
         expect.any(String),
         expect.stringContaining('乖離: 100.0000')
       );
-      
+
       // アラートログにも記録されることを確認
       expect(mockFs.appendFileSync).toHaveBeenCalledWith(
         expect.any(String),
@@ -159,7 +159,7 @@ describe('Balance Monitor', () => {
     it('ログファイルが1000行を超えた場合にローテーションする', async () => {
       const mockLines = Array(1001).fill('log line').join('\n');
       mockFs.readFileSync.mockReturnValue(mockLines);
-      
+
       mockExchange.fetchBalance.mockResolvedValue({
         free: { JPY: 100.0 }
       });

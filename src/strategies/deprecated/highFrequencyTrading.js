@@ -42,9 +42,14 @@ async function highFrequencyTrading(exchange, symbol, strategyKey, config, marke
 
     try {
 
-      // 注文ブックを取得
-      // TODO: ループの先頭で取得してメモリから復元するようにする (performance向上)
-      const orderBook = await exchange.fetchOrderBook(symbol, orderBookDepth);
+      // 注文ブックを取得（パフォーマンス向上: キャッシュメカニズムを使用）
+      const { getCachedOrderBook } = require('../../utils/performanceCache');
+      const orderBook = await getCachedOrderBook(
+        exchange.id,
+        symbol,
+        orderBookDepth,
+        () => exchange.fetchOrderBook(symbol, orderBookDepth)
+      );
       const bids = orderBook.bids; // 買い注文
       const asks = orderBook.asks; // 売り注文
 

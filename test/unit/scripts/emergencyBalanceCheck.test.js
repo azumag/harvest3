@@ -54,7 +54,7 @@ describe('Emergency Balance Check', () => {
   describe('異常系', () => {
     it('取引所API エラー時に適切にエラーハンドリングする', async () => {
       mockExchange.fetchBalance.mockRejectedValue(new Error('API Error'));
-      
+
       await expect(emergencyBalanceCheck()).rejects.toThrow();
     });
 
@@ -64,10 +64,10 @@ describe('Emergency Balance Check', () => {
         free: { JPY: 100.0 },
         total: { JPY: 100.0 }
       });
-      
+
       // Redis接続は失敗
       require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(null);
-      
+
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       await emergencyBalanceCheck();
