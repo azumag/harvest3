@@ -48,6 +48,7 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           additional_permissions: |
             actions: read
@@ -57,6 +58,6 @@ jobs:
             - ワークフロー結果を確認し、失敗の原因を分析してください
             - 必要な修正を行ってください
             - 修正後は適切なテストを実行してください
-            - 修正が完了したら ci-failure ラベルを削除してください
+            - 修正が完了したら ci-passed ラベルをつけてください
 
       

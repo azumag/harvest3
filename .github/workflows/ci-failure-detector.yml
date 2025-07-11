@@ -49,5 +49,20 @@ jobs:
               issue_number: prNumber,
               labels: ['ci-failure']
             });
+
+            // ci-passedとreview-fixedラベルを削除
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              name: 'ci-passed'
+            }).catch(e => console.log('ci-passed label not found or already removed'));
+
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              name: 'review-fixed'
+            }).catch(e => console.log('review-fixed label not found or already removed'));
             
             console.log(`Added ci-failure label to PR #${prNumber}`);
