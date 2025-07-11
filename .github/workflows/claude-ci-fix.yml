@@ -1,0 +1,161 @@
+name: Claude CI Fix
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  fix-ci-failure:
+    name: Fix CI Failures with Claude Code
+    runs-on: ubuntu-latest
+    
+    # PRの「@claude-fix-ci」メンションがある場合のみ実行
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude-fix-ci')
+    
+    timeout-minutes: 30
+    
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Get PR information
+        id: pr-info
+        run: |
+          PR_NUMBER="${{ github.event.issue.number }}"
+          HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR branch
+        run: |
+          git fetch origin ${{ steps.pr-info.outputs.head_branch }}
+          git checkout ${{ steps.pr-info.outputs.head_branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Create CI failure summary
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          HEAD_BRANCH="${{ steps.pr-info.outputs.head_branch }}"
+          
+          # CI失敗情報を収集
+          echo "# CI Failure Analysis" > ci_failure_summary.md
+          echo "" >> ci_failure_summary.md
+          echo "## Request:" >> ci_failure_summary.md
+          echo "${{ github.event.comment.body }}" >> ci_failure_summary.md
+          echo "" >> ci_failure_summary.md
+          echo "## Recent CI Failures:" >> ci_failure_summary.md
+          gh run list --branch "$HEAD_BRANCH" --status failure --limit 3 --json displayTitle,conclusion >> ci_failure_summary.md || echo "Failed to get recent runs" >> ci_failure_summary.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fix CI failures with Claude Code
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            Pull RequestのCI/CD失敗を修正してください。
+            
+            'ci_failure_summary.md'ファイルのCI失敗情報を分析し、すべての失敗を修正するために必要な変更を行ってください。
+            
+            よくあるCI失敗とその解決方法:
+            1. **テスト失敗**: 失敗したテストを修正するか、実装が変更された場合はテストを更新
+            2. **Lintエラー**: コードスタイルの問題、未使用変数、フォーマットの問題を修正
+            3. **型エラー**: TypeScript/Flow型エラーを修正
+            4. **ビルドエラー**: importの問題、依存関係の不足、構文エラーを修正
+            5. **依存関係不足**: package.jsonに必要なパッケージを追加
+            
+            ガイドライン:
+            1. エラーメッセージを慎重に読み、何が失敗しているかを理解する
+            2. 問題を修正するために必要最小限の変更を行う
+            3. 失敗の原因でない限り、機能を変更しない
+            4. 変更後にすべてのテストが通ることを確認する
+            5. プロジェクトのコーディング規約に従う（CLAUDE.mdを確認）
+            6. 依存関係のインストールが必要な場合は、package.jsonを適切に更新する
+            
+            このリポジトリの開発ガイドライン:
+            - YAGNI（You Aren't Gonna Need It）の原則に従う
+            - DRY（Don't Repeat Yourself）の原則に従う
+            - KISS（Keep It Simple Stupid）の原則に従う
+            - 機能を作成する場合は必ず単体テストをセットで作成する
+            - 一時的なファイルは.tmpディレクトリに作成する
+            
+            変更を行った後、以下の簡潔な要約を提供してください:
+            - 何が失敗していたか、その理由
+            - 修正するために行った変更
+            - 追加で必要な手順があるか
+
+      - name: Run tests after fix
+        run: |
+          echo "=== CI修正後のテスト実行 ==="
+          if ! npm run lint; then
+            echo "Linting failed - stopping workflow"
+            exit 1
+          fi
+          if ! npm run test:unit; then
+            echo "Unit tests failed - stopping workflow"
+            exit 1
+          fi
+          echo "=== テスト完了 ==="
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: CI失敗の修正" \
+                       -m "🤖 Generated with Claude Code Action" \
+                       -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+            git push origin ${{ steps.pr-info.outputs.head_branch }}
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Comment on PR
+        if: success()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          
+          gh pr comment $PR_NUMBER --body "✅ Claude Code ActionがCI失敗を修正しました。
+
+          変更内容を確認して、CI/CDが正常に動作するかチェックしてください。
+
+          問題が解決されない場合は、@claude-fix-ciメンションでコメントしてください。"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle failure
+        if: failure()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          
+          gh pr comment $PR_NUMBER --body "❌ Claude Code ActionでのCI失敗修正に失敗しました。
+
+          エラーの詳細は[こちらのワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})をご確認ください。
+
+          手動での修正が必要な可能性があります。再試行するには@claude-fix-ciメンションでコメントしてください。"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          rm -f ci_failure_summary.md
