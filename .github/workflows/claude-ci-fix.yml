@@ -2,15 +2,17 @@ name: Claude CI Fix
 
 on:
   pull_request:
-    types: [synchronize]
+    types: [synchronize, labeled]
 
 jobs:
   claude-ci-fix:
     name: Claude CI Fix
     runs-on: ubuntu-latest
     
-    # ci-failure ラベルが付いている場合のみ実行
-    if: contains(github.event.pull_request.labels.*.name, 'ci-failure')
+    # ci-failure ラベルが付けられた時、またはci-failureラベル付きPRが更新された時のみ実行
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'ci-failure') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ci-failure'))
     
     permissions:
       contents: read
