@@ -8,6 +8,7 @@ permissions:
   contents: write
   pull-requests: write
   actions: read
+  issues: write
 
 jobs:
   review-diff:
@@ -81,7 +82,7 @@ jobs:
           # コミットメッセージを取得
           git log -1 --pretty=format:"%s%n%n%b" > commit_message.txt
 
-      - name: Review with Claude
+        if: steps.get-diff.outputs['diff-size'] != '0'
         if: steps.get-diff.outputs.diff-size != '0'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

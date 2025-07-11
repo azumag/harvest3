@@ -185,7 +185,7 @@ jobs:
         if: always()
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          gh pr edit $PR_NUMBER --remove-label "claude-initial-review" || echo "Failed to remove processing label"
+          gh pr edit $PR_NUMBER --remove-label "claude-initial-review" || echo "Failed to remove 'claude-initial-review' label"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
