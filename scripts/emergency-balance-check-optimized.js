@@ -50,12 +50,20 @@ async function emergencyBalanceCheck() {
     try {
       // database/manager.jsの関数が重い場合があるため、直接Redisから確認
       if (redis) {
-        const keys = await redis.keys('position:*:JPY');
+        let keys = [];
+        let cursor = '0';
+        do {
+          const [newCursor, batchKeys] = await redis.scan(cursor, 'MATCH', 'position:*:JPY', 'COUNT', 100);
+          cursor = newCursor;
+          keys = keys.concat(batchKeys);
+        } while (cursor !== '0');
+        
         console.log('JPYポジション数:', keys.length);
         
-        // 合計計算（最初の10件のみ）
+        // 合計計算（設定可能な制限値）
+        const POSITION_LIMIT = process.env.POSITION_CHECK_LIMIT || 100;
         let jpyTotal = 0;
-        const limitedKeys = keys.slice(0, 10);
+        const limitedKeys = keys.slice(0, POSITION_LIMIT);
         for (const key of limitedKeys) {
           const positionData = await redis.get(key);
           if (positionData) {
@@ -67,10 +75,10 @@ async function emergencyBalanceCheck() {
             }
           }
         }
-        console.log('ポジション合計 JPY (最初の10件):', jpyTotal);
+        console.log(`ポジション合計 JPY (最初の${POSITION_LIMIT}件):`, jpyTotal);
         
-        if (keys.length > 10) {
-          console.log('※ 10件以上のポジションが存在します。詳細確認が必要です。');
+        if (keys.length > POSITION_LIMIT) {
+          console.log('※ 設定制限以上のポジションが存在します。詳細確認が必要です。');
         }
       } else {
         console.log('Redis接続なし - ポジション確認不可');

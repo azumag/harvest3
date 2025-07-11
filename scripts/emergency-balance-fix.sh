@@ -40,8 +40,8 @@ const { initRedisClient } = require('./src/database/redisClient');
   try {
     const redis = await initRedisClient();
     if (redis) {
-      await redis.set('balance:bitbank:JPY', '$REAL_BALANCE');
-      console.log('Redis残高を $REAL_BALANCE に更新');
+      await redis.set('balance:bitbank:JPY', '${REAL_BALANCE}');
+      console.log('Redis残高を ${REAL_BALANCE} に更新');
     } else {
       console.error('Redis接続失敗');
       process.exit(1);
@@ -66,7 +66,7 @@ const { updateBalance } = require('./src/database/manager');
   try {
     // updateBalance関数が存在するか確認
     if (typeof updateBalance === 'function') {
-      await updateBalance('bitbank', 'JPY', $REAL_BALANCE);
+      await updateBalance('bitbank', 'JPY', ${REAL_BALANCE});
       console.log('データベース残高更新完了');
     } else {
       console.log('updateBalance関数が見つかりません。スキップします。');

@@ -1,7 +1,7 @@
 #!/bin/bash
 # scripts/balance-monitor.sh
 # Issue #234: 残高整合性予防監視 スクリプト
-# crontab: */5 * * * * /Users/azumag/work/harvest3/scripts/balance-monitor.sh
+# crontab: */5 * * * * $(pwd)/scripts/balance-monitor.sh
 
 # 設定
 THRESHOLD=1.0  # 1JPY以上の乖離で警告
@@ -47,6 +47,16 @@ const { initRedisClient } = require('./src/database/redisClient');
   }
 })();
 " 2>/dev/null)
+
+# MANAGED_BALANCEの検証
+if ! [[ "$MANAGED_BALANCE" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+  MANAGED_BALANCE="0"
+fi
+
+# REAL_BALANCEの検証
+if ! [[ "$REAL_BALANCE" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+  REAL_BALANCE="0"
+fi
 
 # 乖離計算
 DIFF=$(echo "scale=4; $REAL_BALANCE - $MANAGED_BALANCE" | bc 2>/dev/null || echo "0")

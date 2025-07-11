@@ -63,16 +63,19 @@ async function emergencyBalanceFix() {
     
     // 乖離計算
     const exchangeBalance = verifyBalance.free.JPY || 0;
-    const managedBalance = parseFloat(redisBalance) || 0;
-    const diff = Math.abs(exchangeBalance - managedBalance);
+    const managedBalance = isNaN(parseFloat(redisBalance)) ? 0 : parseFloat(redisBalance);
+    if (isNaN(managedBalance)) {
+      console.warn('Invalid Redis balance value:', redisBalance);
+    }
+    const balanceDiscrepancy = Math.abs(exchangeBalance - managedBalance);
     
     console.log('');
     console.log('乖離状況:');
     console.log('- 取引所:', exchangeBalance, 'JPY');
     console.log('- 管理値:', managedBalance, 'JPY');
-    console.log('- 乖離:', diff.toFixed(4), 'JPY');
+    console.log('- 乖離:', balanceDiscrepancy.toFixed(4), 'JPY');
     
-    if (diff < 0.01) {
+    if (balanceDiscrepancy < 0.01) {
       console.log('✅ 残高整合性が正常に修正されました');
     } else {
       console.log('⚠️ 残高乖離が残っています。追加確認が必要です。');

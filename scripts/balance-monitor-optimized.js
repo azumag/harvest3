@@ -4,7 +4,7 @@
  * Issue #234: 残高整合性予防監視 (最適化版)
  * 
  * 使用方法: node scripts/balance-monitor-optimized.js
- * crontab: 毎5分実行 /usr/bin/node /Users/azumag/work/harvest3/scripts/balance-monitor-optimized.js
+ * crontab: 毎5分実行 /usr/bin/node $PROJECT_DIR/scripts/balance-monitor-optimized.js
  */
 
 const { exchangeBB } = require('../src/config');
@@ -58,12 +58,21 @@ async function balanceMonitor() {
       // Discord通知（環境変数があれば）
       if (process.env.DISCORD_WEBHOOK_URL) {
         try {
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+          
+          // URL検証とHTTPS強制
+          if (!webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+            console.warn('Invalid Discord webhook URL format');
+            return;
+          }
+          
           const webhookData = {
             content: `🚨 **残高乖離アラート**\n残高乖離: ${diff.toFixed(4)} JPY\n取引所残高: ${realBalance} JPY\n管理残高: ${managedBalance} JPY\n時刻: ${timestamp}`
           };
           
           // Discord通知は非同期で送信（エラーでも続行）
-          require('https').request(process.env.DISCORD_WEBHOOK_URL, {
+          const webhookUrlObj = new URL(webhookUrl);
+          require('https').request(webhookUrlObj, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
