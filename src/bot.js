@@ -6,6 +6,7 @@ const { checkAllExchangeBalances } = require('./common/balanceChecker');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
 const { errorHandler } = require('./common/errorHandler');
 const { sleep } = require('./common/utils');
+const Logger = require('./hft/utils/Logger');
 const {
   initializeDB,
   updateFilledTrades,
@@ -47,6 +48,9 @@ const BALANCE_CONFIG = getValidatedConfig();
 const BALANCE_CHECK_INTERVAL = BALANCE_CONFIG.intervals.lightweightCheck;
 let lastBalanceCheckTime = 0;
 const lastRobustBalanceCheckTime = 0;
+
+// Logger instance for bot operations
+const logger = new Logger('Bot');
 
 /**
  * 強化版未約定注文クリーンアップ機能
@@ -776,7 +780,7 @@ async function executeRiskManagementCheck() {
 
                     availableToSell = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
                   } catch (availableError) {
-                    console.warn(`[DEBUG] availableToSell取得失敗 ${symbol}: ${availableError.message}`);
+                    logger.debug(`availableToSell取得失敗 ${symbol}: ${availableError.message}`);
                     availableToSell = 0;
                   }
 
@@ -982,17 +986,17 @@ async function executeRiskManagementCheck() {
                   if (result.success) {
                     totalStopLossExecuted++;
                     if (result.reason === 'auto_cleanup') {
-                      console.log(`[リスク管理] 自動修復完了: ${symbol} - ${result.message}`);
+                      logger.info(`[リスク管理] 自動修復完了: ${symbol} - ${result.message}`);
                     } else {
-                      console.log(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
+                      logger.info(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
                     }
                   } else {
-                    console.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.message || result.error}`);
+                    logger.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.message || result.error}`);
                   }
                 } catch (stopLossError) {
-                  console.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
-                  console.error('[DEBUG] ストップロスエラー詳細:', stopLossError.stack);
-                  console.error('[DEBUG] エラー発生時のパラメータ:', {
+                  logger.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
+                  logger.debug('ストップロスエラー詳細:', stopLossError.stack);
+                  logger.debug('エラー発生時のパラメータ:', {
                     symbol,
                     strategyKey: position.strategyKey,
                     positionAmount: position.amount

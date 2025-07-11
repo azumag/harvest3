@@ -3,6 +3,10 @@ const { postErrorToDiscord } = require('../common/notifications');
 const { recordError } = require('../api/controllers/errorStats');
 const { isBacktestMode } = require('../common/utils');
 const { throttleMonitor } = require('../common/throttleMonitor');
+const Logger = require('../hft/utils/Logger');
+
+// Logger instance for exchange API operations
+const logger = new Logger('ExchangeAPI');
 
 // Bitbank API関連の定数
 const BITBANK_PUBLIC_API_URL = 'https://public.bitbank.cc';
@@ -323,9 +327,9 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
 
     // デバッグ情報をログに出力
     if (!isBacktest) {
-      console.log(`[DEBUG] Error details for ${exchange.id} ${symbol} ${timeframe}:`);
-      console.log(`[DEBUG] error.message: ${error.message}`);
-      console.log(`[DEBUG] error.message includes '10000': ${error.message.includes('10000')}`);
+      logger.debug(`Error details for ${exchange.id} ${symbol} ${timeframe}:`);
+      logger.debug(`error.message: ${error.message}`);
+      logger.debug(`error.message includes '10000': ${error.message.includes('10000')}`);
     }
 
     // Bitbankのエラーコード10000（サポートされていないタイムフレーム）の場合
@@ -367,15 +371,15 @@ async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 10
   const isBacktest = isBacktestMode();
 
   if (!isBacktest) {
-    console.log(`[BACKTEST] fetchOHLCVDataAPI呼び出し: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
-    console.log(`[DEBUG] exchange.id: ${exchange.id}, timeframe: ${timeframe}, mapping: ${TIMEFRAME_TO_CANDLE_TYPE[timeframe]}`);
+    logger.debug(`fetchOHLCVDataAPI呼び出し: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+    logger.debug(`exchange.id: ${exchange.id}, timeframe: ${timeframe}, mapping: ${TIMEFRAME_TO_CANDLE_TYPE[timeframe]}`);
   }
 
   // Bitbankの特定のtimeframeの場合は専用APIを使用（エラー時は標準APIにフォールバック）
   if (exchange.id === 'bitbank' && TIMEFRAME_TO_CANDLE_TYPE[timeframe]) {
     try {
       if (!isBacktest) {
-        console.log('[BACKTEST] Bitbank専用API使用');
+        logger.debug('Bitbank専用API使用');
       }
 
       // シンボルをBitbank APIで使用する形式に変換（BTC/JPY → btc_jpy）

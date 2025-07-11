@@ -28,6 +28,10 @@ const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
 const { DynamicUrgencyCalculator } = require('./dynamicUrgencyCalculator');
+const Logger = require('../../hft/utils/Logger');
+
+// Logger instance for strategy utilities
+const logger = new Logger('StrategyUtils');
 
 // ==================== 共通ユーティリティ関数 ====================
 
@@ -563,7 +567,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     const safeAvailableFunds = availableFunds !== null && availableFunds !== undefined ? availableFunds : 0;
     const safeTradePercentage = config.tradePercentage !== null && config.tradePercentage !== undefined ? config.tradePercentage : 0;
     const safeCalculated = (safeAvailableFunds * safeTradePercentage).toFixed(2);
-    console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${safeAvailableFunds}円, tradePercentage=${safeTradePercentage}, 制限後=${safeCalculated}円`);
+    logger.debug(`[資金DEBUG] ${symbol}: 利用可能資金=${safeAvailableFunds}円, tradePercentage=${safeTradePercentage}, 制限後=${safeCalculated}円`);
   }
 
   // 損益を取得

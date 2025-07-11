@@ -21,6 +21,10 @@ const {
 
 const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
+const Logger = require('../hft/utils/Logger');
+
+// Logger instance for database operations
+const logger = new Logger('DatabaseManager');
 
 // フォールバック定数
 const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
@@ -1340,9 +1344,9 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
     // デバッグログ: 売却量計算の詳細
     if (!options.backtest) {
-      console.log(`[売却量DEBUG] ${exchange.id} ${symbol} ${strategyKey}:`);
-      console.log(`  ネットポジション: ${netPosition}`);
-      console.log(`  未約定売り注文量: ${totalSellOrderAmount}`);
+      logger.debug(`[売却量DEBUG] ${exchange.id} ${symbol} ${strategyKey}:`);
+      logger.debug(`  ネットポジション: ${netPosition}`);
+      logger.debug(`  未約定売り注文量: ${totalSellOrderAmount}`);
     }
 
     // 利用可能量 = ネットポジション - 未約定売り注文量
@@ -1552,12 +1556,12 @@ async function getAvailableFund(exchange, symbol, options = {}) {
     // デバッグ: 残高情報をログ出力
     const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
     if (balance.free && balance.free[baseCurrency] !== undefined) {
-      console.log(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+      logger.debug(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
     }
 
     return balance;
   } catch (error) {
-    console.error(`Error fetching balance for ${exchange.id}:`, error);
+    logger.error(`Error fetching balance for ${exchange.id}:`, error);
     throw error;
   }
 }
