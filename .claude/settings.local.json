@@ -70,15 +70,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "afplay /System/Library/Sounds/Funk.aiff"
-          },
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-gc-review/hooks/notification.sh",
-            "timeout": 60
-          },
-          {
-            "type": "command",
             "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh",
             "timeout": 300
           }
