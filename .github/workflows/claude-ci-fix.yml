@@ -19,6 +19,11 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Get PR information
         id: pr-info
         run: |
@@ -28,11 +33,6 @@ jobs:
           echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Checkout PR branch
         run: |
@@ -50,19 +50,38 @@ jobs:
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
           HEAD_BRANCH="${{ steps.pr-info.outputs.head_branch }}"
           
+          # 一時ディレクトリを作成
+          mkdir -p .tmp
+          
           # CI失敗情報を収集
-          echo "# CI Failure Analysis" > ci_failure_summary.md
-          echo "" >> ci_failure_summary.md
-          echo "## Request:" >> ci_failure_summary.md
-          echo "${{ github.event.comment.body }}" >> ci_failure_summary.md
-          echo "" >> ci_failure_summary.md
-          echo "## Recent CI Failures:" >> ci_failure_summary.md
-          gh run list --branch "$HEAD_BRANCH" --status failure --limit 3 --json displayTitle,conclusion >> ci_failure_summary.md || echo "Failed to get recent runs" >> ci_failure_summary.md
+          echo "# CI Failure Analysis" > .tmp/ci_failure_summary.md
+          echo "" >> .tmp/ci_failure_summary.md
+          echo "## Request:" >> .tmp/ci_failure_summary.md
+          echo "$COMMENT_BODY" >> .tmp/ci_failure_summary.md
+          echo "" >> .tmp/ci_failure_summary.md
+          echo "## Recent CI Failures:" >> .tmp/ci_failure_summary.md
+          
+          # 詳細な失敗情報を収集
+          gh run list --branch "$HEAD_BRANCH" --status failure --limit 3 --json displayTitle,conclusion,url | jq -r '.[] | "### \(.displayTitle)\n- Status: \(.conclusion)\n- URL: \(.url)\n"' >> .tmp/ci_failure_summary.md || echo "Failed to get recent runs" >> .tmp/ci_failure_summary.md
+          
+          # 最新の失敗ログを取得してみる
+          LATEST_FAILED_RUN=$(gh run list --branch "$HEAD_BRANCH" --status failure --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$LATEST_FAILED_RUN" ]; then
+            echo "" >> .tmp/ci_failure_summary.md
+            echo "## Latest Failure Log:" >> .tmp/ci_failure_summary.md
+            gh run view $LATEST_FAILED_RUN --log-failed | tail -100 >> .tmp/ci_failure_summary.md || echo "Could not retrieve failure logs" >> .tmp/ci_failure_summary.md
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci || {
+            echo "Cache may be corrupted, clearing and retrying..."
+            npm cache clean --force
+            npm ci
+          }
 
       - name: Fix CI failures with Claude Code
         uses: anthropics/claude-code-action@beta
@@ -72,7 +91,7 @@ jobs:
           direct_prompt: |
             Pull RequestのCI/CD失敗を修正してください。
             
-            'ci_failure_summary.md'ファイルのCI失敗情報を分析し、すべての失敗を修正するために必要な変更を行ってください。
+            '.tmp/ci_failure_summary.md'ファイルのCI失敗情報を分析し、すべての失敗を修正するために必要な変更を行ってください。
             
             よくあるCI失敗とその解決方法:
             1. **テスト失敗**: 失敗したテストを修正するか、実装が変更された場合はテストを更新
@@ -116,10 +135,17 @@ jobs:
 
       - name: Commit changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           
           if [ -n "$(git status --porcelain)" ]; then
+            # リモートの最新状態を確認
+            git fetch origin ${{ steps.pr-info.outputs.head_branch }}
+            git rebase origin/${{ steps.pr-info.outputs.head_branch }} || {
+              echo "Rebase failed, trying merge instead"
+              git merge origin/${{ steps.pr-info.outputs.head_branch }}
+            }
+            
             git add .
             git commit -m "fix: CI失敗の修正" \
                        -m "🤖 Generated with Claude Code Action" \
@@ -158,4 +184,4 @@ jobs:
       - name: Cleanup temporary files
         if: always()
         run: |
-          rm -f ci_failure_summary.md
+          rm -rf .tmp

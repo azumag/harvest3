@@ -49,19 +49,28 @@ jobs:
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
           
+          # 一時ディレクトリを作成
+          mkdir -p .tmp
+          
           # 現在のレビューコメントを収集
-          echo "# PR Review Comments Summary" > review_summary.md
-          echo "" >> review_summary.md
-          echo "## Latest Comment:" >> review_summary.md
-          echo "${{ github.event.comment.body }}" >> review_summary.md
-          echo "" >> review_summary.md
-          echo "## Recent Reviews:" >> review_summary.md
-          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews --jq '.[] | select(.state == "CHANGES_REQUESTED") | .body' | head -5 >> review_summary.md || true
+          echo "# PR Review Comments Summary" > .tmp/review_summary.md
+          echo "" >> .tmp/review_summary.md
+          echo "## Latest Comment:" >> .tmp/review_summary.md
+          echo "$COMMENT_BODY" >> .tmp/review_summary.md
+          echo "" >> .tmp/review_summary.md
+          echo "## Recent Reviews:" >> .tmp/review_summary.md
+          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews --jq '.[0:5] | .[] | select(.state == "CHANGES_REQUESTED") | .body' >> .tmp/review_summary.md || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci || {
+            echo "Cache may be corrupted, clearing and retrying..."
+            npm cache clean --force
+            npm ci
+          }
 
       - name: Resolve review comments with Claude Code
         uses: anthropics/claude-code-action@beta
@@ -71,7 +80,7 @@ jobs:
           direct_prompt: |
             PRのレビューコメントを解決してください。
             
-            'review_summary.md'ファイルにレビューコメントの詳細があります。すべてのフィードバックに対処するために必要な変更を行ってください。
+            '.tmp/review_summary.md'ファイルにレビューコメントの詳細があります。すべてのフィードバックに対処するために必要な変更を行ってください。
             
             ガイドライン:
             1. 各レビューコメントを徹底的に対処する
@@ -105,10 +114,17 @@ jobs:
 
       - name: Commit changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           
           if [ -n "$(git status --porcelain)" ]; then
+            # リモートの最新状態を確認
+            git fetch origin ${{ steps.pr-info.outputs.head_branch }}
+            git rebase origin/${{ steps.pr-info.outputs.head_branch }} || {
+              echo "Rebase failed, trying merge instead"
+              git merge origin/${{ steps.pr-info.outputs.head_branch }}
+            }
+            
             git add .
             git commit -m "fix: レビューコメントの対応" \
                        -m "🤖 Generated with Claude Code Action" \
@@ -147,4 +163,4 @@ jobs:
       - name: Cleanup temporary files
         if: always()
         run: |
-          rm -f review_summary.md
+          rm -rf .tmp
