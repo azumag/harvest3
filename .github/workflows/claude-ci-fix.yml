@@ -33,12 +33,10 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           
-          # Claude がCI結果を読み取れるように追加権限を設定
           additional_permissions: |
             actions: read
           
-          # CI修正用のカスタム指示
-          custom_instructions: |
+          direct_prompt: |
             CIが失敗しています。以下の失敗を修正してください：
             - ワークフロー結果を確認し、失敗の原因を分析してください
             - 必要な修正を行ってください

@@ -36,20 +36,6 @@ jobs:
             Provide constructive feedback with specific suggestions for improvement.
             Use inline comments to highlight specific areas of concern.
           # allowed_tools: "mcp__github__create_pending_pull_request_review,mcp__github__add_pull_request_review_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff"
-      - name: Trigger Claude Fix
-        uses: actions/github-script@v7
-        with:
-          script: |
-            
-            const message = [
-              '@claude レビューコメントに従って、改善点があれば修正してください。',
-              '改善点がない場合は何もしなくてよいです。',
-            ].join('\n');
-            
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: message
-            });
+
 
             

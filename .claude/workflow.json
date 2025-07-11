@@ -44,11 +44,12 @@
       "prompt": "CLAUDE.md を再確認せよ。再確認後、 WORKFLOW_CLAUDE_RECALL とだけ表示せよ。"
     },
     {
-      "launch": "WORKFLOW_CLAUDE_RECALL",
+      "commentout": "WORKFLOW_CLAUDE_RECALL",
+      "launch": "DISABLED_TEMPORARY",
       "prompt": "github の issue を確認し、コードベース上の TODO や、問題点を解析して必要な場合は新しい issue を作成せよ。解決済みと思われるものは「解決済み」ラベルをつけよ。特に技術的負債の解消、取引所とBOT管理残高の整合性チェックを最優先に、収益を上げる手段を考慮して対策を講じることを考えよ。終わったら WORKFLOW_ISSUE_CHECKED とだけ表示せよ。"
     },
     {
-      "launch": "WORKFLOW_ISSUE_CHECKED",
+      "launch": "WORKFLOW_CLAUDE_RECALL",
       "path":"/Users/azumag/work/cc-hooks-workflow/workflow.sh",
       "args": ["--stop"]
     }
