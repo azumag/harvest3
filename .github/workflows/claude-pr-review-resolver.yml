@@ -9,18 +9,18 @@ jobs:
     name: Resolve PR Review Comments with Claude Code
     runs-on: ubuntu-latest
     
-    # PRレビューでchanges_requestedが提出された場合のみ実行（botからのレビューは除外）
+    # PRレビューでchanges_requestedが提出された場合のみ実行（botとclaude-processingラベル付きPRは除外）
     if: |
       github.event.review.state == 'changes_requested' && 
       github.event.review.user.type == 'User' &&
       !startsWith(github.event.review.user.login, 'github-actions') &&
-      !endsWith(github.event.review.user.login, '[bot]')
+      !endsWith(github.event.review.user.login, '[bot]') &&
+      !contains(github.event.pull_request.labels.*.name, 'claude-processing')
     
     timeout-minutes: 30
     
     permissions:
       contents: write
-      issues: write
       pull-requests: write
     steps:
       - name: Checkout repository
@@ -47,18 +47,23 @@ jobs:
           node-version: '18.x'
           cache: 'npm'
 
+      - name: Add processing label
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --add-label "claude-processing"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create review summary
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          mkdir -p .tmp
           
           # 現在のレビューコメントを収集
-          echo "# PR Review Comments Summary" > review_summary.md
-          echo "" >> review_summary.md
-          echo "## Latest Comment:" >> review_summary.md
-          echo "${{ github.event.comment.body }}" >> review_summary.md
-          echo "" >> review_summary.md
-          echo "## Recent Reviews:" >> review_summary.md
-          gh api repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews --jq '.[] | select(.state == "CHANGES_REQUESTED") | .body' | head -5 >> review_summary.md || true
+          echo "# PR Review Comments Summary" > .tmp/review_summary.md
+          echo "" >> .tmp/review_summary.md
+          echo "## Latest Review:" >> .tmp/review_summary.md
+          echo "${{ github.event.review.body }}" >> .tmp/review_summary.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -73,7 +78,7 @@ jobs:
           direct_prompt: |
             PRのレビューコメントを解決してください。
             
-            'review_summary.md'ファイルにレビューコメントの詳細があります。すべてのフィードバックに対処するために必要な変更を行ってください。
+            '.tmp/review_summary.md'ファイルにレビューコメントの詳細があります。すべてのフィードバックに対処するために必要な変更を行ってください。
             
             ガイドライン:
             1. 各レビューコメントを徹底的に対処する
@@ -146,7 +151,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Remove processing label
+        if: always()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --remove-label "claude-processing" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Cleanup temporary files
         if: always()
         run: |
-          rm -f review_summary.md
+          rm -rf .tmp
