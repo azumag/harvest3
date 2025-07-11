@@ -134,7 +134,7 @@ jobs:
 
           変更内容をレビューして、適切に対応されているかご確認ください。
 
-          追加の変更が必要な場合は、@claude-resolverメンションでコメントしてください。"
+          追加の変更が必要な場合は、新しいレビューを実施してください。"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -155,7 +155,7 @@ jobs:
         if: always()
         run: |
           PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          gh pr edit $PR_NUMBER --remove-label "claude-processing" || true
+          gh pr edit $PR_NUMBER --remove-label "claude-processing" || echo "Failed to remove processing label"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
