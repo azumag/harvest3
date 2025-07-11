@@ -112,6 +112,16 @@ npm run generate-config-docs
 
 # 設定の同期
 npm run sync-docs
+
+# 残高整合性緊急対応
+node scripts/emergency-balance-check-optimized.js     # 残高乖離状況の確認
+node scripts/emergency-balance-fix-optimized.js       # 残高乖離の緊急修正
+node scripts/balance-monitor-optimized.js             # 残高監視（手動実行）
+
+# 残高監視設定のカスタマイズ
+export BALANCE_THRESHOLD=2.0                          # 乖離閾値変更（デフォルト: 1.0）
+export BALANCE_LOG_FILE=/var/log/balance.log          # ログファイルパス変更
+export DISCORD_WEBHOOK_URL=your_webhook_url           # Discord通知設定
 ```
 
 ### テスト
@@ -357,6 +367,7 @@ docker compose ps
 | `throttle queue over maxCapacity` | `export EXCHANGE_RATE_LIMIT=15000` |
 | MongoDB接続エラー | `docker compose up -d mongo` |
 | Redis接続エラー | `docker compose up -d redis` |
+| 残高不整合・乖離エラー | `node scripts/emergency-balance-fix-optimized.js` |
 
 ### 緊急対応
 ```bash
@@ -368,6 +379,18 @@ npm run validate-config
 
 # 再起動
 docker compose restart
+
+# 残高整合性緊急対応（4日間の残高不整合など）
+node scripts/emergency-balance-check-optimized.js     # 1. 現状確認
+node scripts/emergency-balance-fix-optimized.js       # 2. 緊急修正（ロールバック機能付き）
+node scripts/balance-monitor-optimized.js             # 3. 監視確認
+
+# 定期監視設定（乖離予防）
+echo "*/5 * * * * /usr/bin/node $(pwd)/scripts/balance-monitor-optimized.js" | crontab -
+
+# 監視設定のカスタマイズ（必要に応じて）
+export BALANCE_THRESHOLD=2.0                          # 乖離閾値変更（デフォルト: 1.0）
+export DISCORD_WEBHOOK_URL=your_webhook_url           # Discord通知有効化
 ```
 
 ## ⚠️ 注意事項
@@ -383,6 +406,12 @@ docker compose restart
 
 - **残高監視システム**: リアルタイム残高監視と異常検知機能
 - **残高整合性サービス**: 3つのデータソースからの残高照合と自動修正
+- **残高整合性緊急解決スクリプト**: 残高不整合問題の即座解決ツール（Issue #234対応）
+  - 現状確認スクリプト: 取引所・Redis残高の乖離状況確認
+  - 即座修正スクリプト: 検出された乖離の自動修正（ロールバック機能付き）
+  - 予防監視スクリプト: 定期監視とアラート通知（設定外部化対応）
+  - 設定外部化: 環境変数による閾値・ログ・通知のカスタマイズ
+  - 単体テスト: 各スクリプトの品質保証と CI 統合
 - **設定管理システム**: 環境変数ベースの設定管理と検証機能
 - **高精度数値計算**: Decimal.jsを使用した浮動小数点誤差の解消
 - **エラーハンドリング強化**: Bitbank API固有のエラー処理とリトライ機能

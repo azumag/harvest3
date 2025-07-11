@@ -92,7 +92,12 @@ async function emergencyBalanceCheck() {
     
   } catch (error) {
     console.error('緊急チェック実行エラー:', error.message);
-    process.exit(1);
+    
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(1);
+    } else {
+      throw error;
+    }
   } finally {
     // Redis接続を明示的に閉じる
     if (redis) {
@@ -108,10 +113,16 @@ async function emergencyBalanceCheck() {
 // スクリプトとして実行された場合のみ実行
 if (require.main === module) {
   emergencyBalanceCheck()
-    .then(() => process.exit(0))
+    .then(() => {
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(0);
+      }
+    })
     .catch(error => {
       console.error('スクリプト実行エラー:', error.message);
-      process.exit(1);
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(1);
+      }
     });
 }
 

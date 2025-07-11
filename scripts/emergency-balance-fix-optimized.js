@@ -15,6 +15,7 @@ async function emergencyBalanceFix() {
   console.log('');
 
   let redis = null;
+  let originalBalance = null; // ロールバック用
   
   try {
     // 1. 取引所残高を取得
@@ -23,15 +24,27 @@ async function emergencyBalanceFix() {
     const realBalance = balance.free.JPY || 0;
     console.log('取得した残高:', realBalance, 'JPY');
     
-    // 2. Redis残高を更新
+    // バリデーション
+    if (realBalance < 0) {
+      throw new Error('無効な残高値: 負の値は処理できません');
+    }
+    
+    // 2. Redis残高を更新（トランザクション処理）
     console.log('2. Redis残高更新中...');
     redis = await initRedisClient();
-    if (redis) {
-      await redis.set('balance:bitbank:JPY', realBalance.toString());
-      console.log('Redis残高を', realBalance, 'に更新');
-    } else {
+    if (!redis) {
       throw new Error('Redis接続失敗');
     }
+    
+    // 現在の値を保存（ロールバック用）
+    originalBalance = await redis.get('balance:bitbank:JPY');
+    
+    // 更新実行
+    const updateResult = await redis.set('balance:bitbank:JPY', realBalance.toString());
+    if (updateResult !== 'OK') {
+      throw new Error('Redis更新失敗');
+    }
+    console.log('Redis残高を', realBalance, 'に更新');
     
     // 3. データベース残高を更新（機能があれば）
     console.log('3. データベース残高更新中...');
@@ -86,7 +99,23 @@ async function emergencyBalanceFix() {
     
   } catch (error) {
     console.error('❌ 緊急修正実行エラー:', error.message);
-    process.exit(1);
+    
+    // ロールバック処理
+    if (redis && originalBalance !== null) {
+      console.log('🔄 ロールバック実行中...');
+      try {
+        await redis.set('balance:bitbank:JPY', originalBalance);
+        console.log('✅ ロールバック完了');
+      } catch (rollbackError) {
+        console.error('❌ ロールバック失敗:', rollbackError.message);
+      }
+    }
+    
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(1);
+    } else {
+      throw error;
+    }
   } finally {
     // Redis接続を明示的に閉じる
     if (redis) {
@@ -102,10 +131,16 @@ async function emergencyBalanceFix() {
 // スクリプトとして実行された場合のみ実行
 if (require.main === module) {
   emergencyBalanceFix()
-    .then(() => process.exit(0))
+    .then(() => {
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(0);
+      }
+    })
     .catch(error => {
       console.error('スクリプト実行エラー:', error.message);
-      process.exit(1);
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(1);
+      }
     });
 }
 

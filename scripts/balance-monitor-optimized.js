@@ -13,9 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 // 設定
-const THRESHOLD = 1.0;  // 1JPY以上の乖離で警告
-const LOG_FILE = '/tmp/balance-monitor.log';
-const ALERT_LOG = '/tmp/balance-alert.log';
+const config = require('./config/balance-monitor.config');
 
 async function balanceMonitor() {
   const timestamp = new Date().toLocaleString();
@@ -24,18 +22,18 @@ async function balanceMonitor() {
   try {
     // ログファイルの準備
     const logEntry = `=== 残高監視 ${timestamp} ===\n`;
-    fs.appendFileSync(LOG_FILE, logEntry);
+    fs.appendFileSync(config.logFile, logEntry);
     
     // 取引所残高取得
     const balance = await exchangeBB.fetchBalance();
-    const realBalance = balance.free.JPY || 0;
+    const realBalance = balance.free[config.currency] || 0;
     
     // Redis残高取得
     redis = await initRedisClient();
     let managedBalance = 0;
     if (redis) {
-      const jpyBalance = await redis.get('balance:bitbank:JPY');
-      managedBalance = parseFloat(jpyBalance) || 0;
+      const balanceData = await redis.get(config.redis.key);
+      managedBalance = parseFloat(balanceData) || 0;
     }
     
     // 乖離計算
@@ -43,36 +41,27 @@ async function balanceMonitor() {
     const absDiff = Math.abs(diff);
     
     // ログ記録
-    const logDetails = `取引所残高: ${realBalance} JPY\n管理残高: ${managedBalance} JPY\n乖離: ${diff.toFixed(4)} JPY\n`;
-    fs.appendFileSync(LOG_FILE, logDetails);
+    const logDetails = `取引所残高: ${realBalance} ${config.currency}\n管理残高: ${managedBalance} ${config.currency}\n乖離: ${diff.toFixed(4)} ${config.currency}\n`;
+    fs.appendFileSync(config.logFile, logDetails);
     
     // 乖離チェック
-    if (absDiff > THRESHOLD) {
-      const alertMsg = `⚠️ 残高乖離検出: ${diff.toFixed(4)} JPY (閾値: ${THRESHOLD} JPY)`;
+    if (absDiff > config.threshold) {
+      const alertMsg = `⚠️ 残高乖離検出: ${diff.toFixed(4)} ${config.currency} (閾値: ${config.threshold} ${config.currency})`;
       
       // アラートログ記録
       const alertEntry = `${timestamp}: ${alertMsg}\n`;
-      fs.appendFileSync(ALERT_LOG, alertEntry);
-      fs.appendFileSync(LOG_FILE, alertEntry);
+      fs.appendFileSync(config.alertLog, alertEntry);
+      fs.appendFileSync(config.logFile, alertEntry);
       
-      // Discord通知（環境変数があれば）
-      if (process.env.DISCORD_WEBHOOK_URL) {
+      // Discord通知（設定されていれば）
+      if (config.discord.enabled) {
         try {
-          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-          
-          // URL検証とHTTPS強制
-          if (!webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
-            console.warn('Invalid Discord webhook URL format');
-            return;
-          }
-          
           const webhookData = {
             content: `🚨 **残高乖離アラート**\n残高乖離: ${diff.toFixed(4)} JPY\n取引所残高: ${realBalance} JPY\n管理残高: ${managedBalance} JPY\n時刻: ${timestamp}`
           };
           
           // Discord通知は非同期で送信（エラーでも続行）
-          const webhookUrlObj = new URL(webhookUrl);
-          require('https').request(webhookUrlObj, {
+          require('https').request(config.discord.webhookUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -96,28 +85,32 @@ async function balanceMonitor() {
       console.log('node scripts/emergency-balance-fix-optimized.js');
       
     } else {
-      const okMsg = `残高整合性OK: 乖離 ${diff.toFixed(4)} JPY\n`;
-      fs.appendFileSync(LOG_FILE, okMsg);
+      const okMsg = `残高整合性OK: 乖離 ${diff.toFixed(4)} ${config.currency}\n`;
+      fs.appendFileSync(config.logFile, okMsg);
     }
     
     // ログファイルのローテーション
-    if (fs.existsSync(LOG_FILE)) {
-      const stats = fs.statSync(LOG_FILE);
-      const lines = fs.readFileSync(LOG_FILE, 'utf8').split('\n').length;
-      if (lines > 1000) {
-        const allLines = fs.readFileSync(LOG_FILE, 'utf8').split('\n');
-        const lastLines = allLines.slice(-500);
-        fs.writeFileSync(LOG_FILE, lastLines.join('\n'));
+    if (fs.existsSync(config.logFile)) {
+      const lines = fs.readFileSync(config.logFile, 'utf8').split('\n').length;
+      if (lines > config.maxLogLines) {
+        const allLines = fs.readFileSync(config.logFile, 'utf8').split('\n');
+        const lastLines = allLines.slice(-Math.floor(config.maxLogLines / 2));
+        fs.writeFileSync(config.logFile, lastLines.join('\n'));
       }
     }
     
-    fs.appendFileSync(LOG_FILE, `完了: ${timestamp}\n---\n`);
+    fs.appendFileSync(config.logFile, `完了: ${timestamp}\n---\n`);
     
   } catch (error) {
     const errorMsg = `監視エラー: ${error.message}\n`;
-    fs.appendFileSync(LOG_FILE, errorMsg);
+    fs.appendFileSync(config.logFile, errorMsg);
     console.error('残高監視エラー:', error.message);
-    process.exit(1);
+    
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(1);
+    } else {
+      throw error;
+    }
   } finally {
     // Redis接続を明示的に閉じる
     if (redis) {
@@ -133,10 +126,16 @@ async function balanceMonitor() {
 // スクリプトとして実行された場合のみ実行
 if (require.main === module) {
   balanceMonitor()
-    .then(() => process.exit(0))
+    .then(() => {
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(0);
+      }
+    })
     .catch(error => {
       console.error('監視スクリプト実行エラー:', error.message);
-      process.exit(1);
+      if (process.env.NODE_ENV !== 'test') {
+        process.exit(1);
+      }
     });
 }
 

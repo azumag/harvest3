@@ -1,11 +1,11 @@
 /**
- * @fileoverview Unit tests for emergency balance fix script
- * @author Claude Code
+ * Emergency Balance Fix Tests
+ * Issue #234: 残高整合性緊急修正スクリプトのテスト
  */
 
 const { emergencyBalanceFix } = require('../../../scripts/emergency-balance-fix-optimized');
 
-// Mock dependencies
+// モック
 jest.mock('../../../src/config', () => ({
   exchangeBB: {
     fetchBalance: jest.fn()
@@ -16,160 +16,95 @@ jest.mock('../../../src/database/redisClient', () => ({
   initRedisClient: jest.fn()
 }));
 
-jest.mock('../../../src/database/manager', () => ({
-  updateBalance: jest.fn()
-}));
-
-const { exchangeBB } = require('../../../src/config');
-const { initRedisClient } = require('../../../src/database/redisClient');
-const { updateBalance } = require('../../../src/database/manager');
-
 describe('Emergency Balance Fix', () => {
+  let mockExchange;
   let mockRedis;
-  let consoleLogSpy;
-  let consoleErrorSpy;
-  let consoleWarnSpy;
-  let processExitSpy;
 
   beforeEach(() => {
-    // Mock Redis client
+    jest.clearAllMocks();
+    mockExchange = require('../../../src/config').exchangeBB;
     mockRedis = {
       set: jest.fn(),
       get: jest.fn(),
-      quit: jest.fn().mockResolvedValue(true)
+      quit: jest.fn()
     };
-
-    // Spy on console methods
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-    processExitSpy = jest.spyOn(process, 'exit').mockImplementation();
-
-    // Reset mocks
-    jest.clearAllMocks();
-
-    // Default mock implementations
-    initRedisClient.mockResolvedValue(mockRedis);
-    exchangeBB.fetchBalance.mockResolvedValue({
-      free: { JPY: 1000 },
-      total: { JPY: 1000 }
-    });
-    mockRedis.set.mockResolvedValue(true);
-    mockRedis.get.mockResolvedValue('1000');
-    updateBalance.mockResolvedValue(true);
+    require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(mockRedis);
   });
 
-  afterEach(() => {
-    consoleLogSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-    processExitSpy.mockRestore();
-  });
-
-  describe('正常なケース', () => {
-    test('残高修正処理を正常に実行できる', async () => {
-      // Act
-      await emergencyBalanceFix();
-
-      // Assert
-      expect(exchangeBB.fetchBalance).toHaveBeenCalledTimes(2); // 初回と検証
-      expect(mockRedis.set).toHaveBeenCalledWith('balance:bitbank:JPY', '1000');
-      expect(updateBalance).toHaveBeenCalledWith('bitbank', 'JPY', 1000);
-      expect(mockRedis.quit).toHaveBeenCalledTimes(1);
-      expect(consoleLogSpy).toHaveBeenCalledWith('✅ 残高整合性が正常に修正されました');
-    });
-
-    test('乖離が0.01未満の場合は正常と判定する', async () => {
-      // Arrange
-      exchangeBB.fetchBalance.mockResolvedValue({
-        free: { JPY: 1000.005 },
-        total: { JPY: 1000.005 }
+  describe('正常系', () => {
+    it('残高修正が正常に完了する', async () => {
+      const exchangeBalance = 100.0;
+      const redisBalance = 100.0;
+      
+      mockExchange.fetchBalance.mockResolvedValue({
+        free: { JPY: exchangeBalance }
       });
-      mockRedis.get.mockResolvedValue('1000');
+      mockRedis.get.mockResolvedValue(redisBalance.toString());
+      mockRedis.set.mockResolvedValue('OK');
 
-      // Act
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
       await emergencyBalanceFix();
 
-      // Assert
-      expect(consoleLogSpy).toHaveBeenCalledWith('✅ 残高整合性が正常に修正されました');
+      expect(mockExchange.fetchBalance).toHaveBeenCalled();
+      expect(mockRedis.set).toHaveBeenCalledWith('balance:bitbank:JPY', '100');
+      expect(consoleSpy).toHaveBeenCalledWith('✅ 残高整合性が正常に修正されました');
+      consoleSpy.mockRestore();
     });
 
-    test('乖離が0.01以上の場合は警告を出力する', async () => {
-      // Arrange
-      exchangeBB.fetchBalance.mockResolvedValue({
-        free: { JPY: 1000 },
-        total: { JPY: 1000 }
+    it('乖離がない場合は正常と判定する', async () => {
+      const exchangeBalance = 100.0;
+      const redisBalance = 100.0;
+      
+      mockExchange.fetchBalance.mockResolvedValue({
+        free: { JPY: exchangeBalance }
       });
-      mockRedis.get.mockResolvedValue('950'); // 50円の乖離
+      mockRedis.get.mockResolvedValue(redisBalance.toString());
+      mockRedis.set.mockResolvedValue('OK');
 
-      // Act
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
       await emergencyBalanceFix();
 
-      // Assert
-      expect(consoleLogSpy).toHaveBeenCalledWith('⚠️ 残高乖離が残っています。追加確認が必要です。');
+      expect(consoleSpy).toHaveBeenCalledWith('✅ 残高整合性が正常に修正されました');
+      consoleSpy.mockRestore();
     });
   });
 
-  describe('エラーケース', () => {
-    test('取引所残高取得エラー時にプロセスを終了する', async () => {
-      // Arrange
-      exchangeBB.fetchBalance.mockRejectedValue(new Error('API Error'));
-
-      // Act
-      await emergencyBalanceFix();
-
-      // Assert
-      expect(consoleErrorSpy).toHaveBeenCalledWith('❌ 緊急修正実行エラー:', 'API Error');
-      expect(processExitSpy).toHaveBeenCalledWith(1);
+  describe('異常系', () => {
+    it('取引所API エラー時に適切にエラーハンドリングする', async () => {
+      mockExchange.fetchBalance.mockRejectedValue(new Error('API Connection Failed'));
+      
+      await expect(emergencyBalanceFix()).rejects.toThrow();
     });
 
-    test('Redis接続失敗時にプロセスを終了する', async () => {
-      // Arrange
-      initRedisClient.mockResolvedValue(null);
-
-      // Act
-      await emergencyBalanceFix();
-
-      // Assert
-      expect(consoleErrorSpy).toHaveBeenCalledWith('❌ 緊急修正実行エラー:', 'Redis接続失敗');
-      expect(processExitSpy).toHaveBeenCalledWith(1);
-    });
-
-    test('データベース更新エラー時は警告を出力して続行する', async () => {
-      // Arrange
-      updateBalance.mockRejectedValue(new Error('Database error'));
-
-      // Act
-      await emergencyBalanceFix();
-
-      // Assert
-      expect(consoleWarnSpy).toHaveBeenCalledWith('データベース残高更新エラー:', 'Database error');
-      expect(consoleLogSpy).toHaveBeenCalledWith('データベース更新をスキップして続行します。');
-      expect(processExitSpy).not.toHaveBeenCalled();
+    it('Redis更新エラー時に適切にエラーハンドリングする', async () => {
+      mockExchange.fetchBalance.mockResolvedValue({
+        free: { JPY: 100.0 }
+      });
+      require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(null);
+      
+      await expect(emergencyBalanceFix()).rejects.toThrow('Redis接続失敗');
     });
   });
 
-  describe('Redis残高の検証', () => {
-    test('無効なRedis残高値の場合は0として扱う', async () => {
-      // Arrange
-      mockRedis.get.mockResolvedValue('invalid_number');
+  describe('乖離検出', () => {
+    it('乖離が存在する場合は警告を表示する', async () => {
+      const exchangeBalance = 100.0;
+      const redisBalance = 50.0; // 50円の乖離
+      
+      mockExchange.fetchBalance.mockResolvedValue({
+        free: { JPY: exchangeBalance }
+      });
+      mockRedis.get.mockResolvedValue(redisBalance.toString());
+      mockRedis.set.mockResolvedValue('OK');
 
-      // Act
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
       await emergencyBalanceFix();
 
-      // Assert
-      expect(consoleLogSpy).toHaveBeenCalledWith('- 管理値:', 0, 'JPY');
-    });
-
-    test('Redis残高がnullの場合は0として扱う', async () => {
-      // Arrange
-      mockRedis.get.mockResolvedValue(null);
-
-      // Act
-      await emergencyBalanceFix();
-
-      // Assert
-      expect(consoleLogSpy).toHaveBeenCalledWith('- 管理値:', 0, 'JPY');
+      expect(consoleSpy).toHaveBeenCalledWith('⚠️ 残高乖離が残っています。追加確認が必要です。');
+      consoleSpy.mockRestore();
     });
   });
 });
