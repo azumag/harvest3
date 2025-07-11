@@ -1,0 +1,60 @@
+name: Claude Review Fix
+
+on:
+  pull_request:
+    types: [synchronize, labeled]
+
+jobs:
+  claude-Review-fix:
+    name: Claude Review Fix
+    runs-on: ubuntu-latest
+    
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'reviewed') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'reviewed'))
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Remove Review Label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'reviewed'
+              });
+              console.log('Removed Review label');
+            } catch (error) {
+              console.log('Label Review not found or already removed');
+            }
+
+      - name: Run Claude Code for Review Fix
+        id: claude
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          
+          additional_permissions: |
+            actions: read
+          
+          direct_prompt: |
+            PRのレビューが完了しています。以下の点を確認してください：
+            - レビュー結果を確認し、必要な修正を行ってください
+            - 修正が必要ない場合は、review-fixed ラベルを追加してください
+
+      
