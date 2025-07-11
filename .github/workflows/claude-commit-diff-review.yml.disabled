@@ -1,0 +1,68 @@
+name: Claude Commit Diff Review
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  issues: write
+
+jobs:
+  claude-commit-review:
+    name: Commit Review with Claude Code
+    runs-on: ubuntu-latest
+    
+    timeout-minutes: 20
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      id-token: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Review Commits with Claude Code
+        id: claude-commit-review
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          
+          # Optional: Specify model (defaults to Claude Sonnet 4)
+          # model: "claude-opus-4-20250514"
+          
+          # Allow specific tools for CI fixing
+          allowed_tools: "Bash,Read,Write,Edit,MultiEdit,Grep,Glob,LS"
+          
+          # CI修正のプロンプト
+          direct_prompt: |
+            このPull Requestのコミット差分をレビューしてください。
+            
+            分析すべき内容：
+            1. **コミットメッセージ**: 意図が明確で一貫性があるか
+            2. **コード変更**: 機能追加、バグ修正、リファクタリングの適切な実装か
+            3. **テスト**: 新しい機能に対するテストが存在するか
+            4. **ドキュメント**: 必要なドキュメントが更新されているか
+            5. 使われていないコードやコメントアウトされたコードがないか
+            
+            このリポジトリの開発ガイドライン：
+            - YAGNI（You Aren't Gonna Need It）の原則に従う
+            - DRY（Don't Repeat Yourself）の原則に従う
+            - KISS（Keep It Simple Stupid）の原則に従う
+            - 機能を作成する場合は必ず単体テストをセットで作成する
+            
+            CLAUDE.mdの要件を確認し、プロジェクトのコーディング規約に従ってください。
+            
+            レビュー結果を簡潔にまとめてください。 
+          
+          # Optional: Allow specific tools for testing and linting
+          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"

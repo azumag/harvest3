@@ -1,0 +1,195 @@
+name: Claude PR Initial Review
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  initial-review:
+    name: Initial PR Review with Claude Code
+    runs-on: ubuntu-latest
+    
+    # PRが初回作成時のみ実行
+    if: github.event.action == 'opened'
+    
+    timeout-minutes: 20
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR information
+        id: pr-info
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+          echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout PR branch
+        run: |
+          git fetch origin ${{ steps.pr-info.outputs.head_branch }}
+          git checkout ${{ steps.pr-info.outputs.head_branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Add processing label
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --add-label "claude-initial-review"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR analysis summary
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          BASE_BRANCH="${{ steps.pr-info.outputs.base_branch }}"
+          mkdir -p .tmp
+          
+          # PR情報を収集
+          echo "# PR Initial Analysis Summary" > .tmp/pr_analysis.md
+          echo "" >> .tmp/pr_analysis.md
+          
+          # PR基本情報
+          echo "## PR Information:" >> .tmp/pr_analysis.md
+          echo "- PR Number: #$PR_NUMBER" >> .tmp/pr_analysis.md
+          echo "- Title: ${{ github.event.pull_request.title }}" >> .tmp/pr_analysis.md
+          echo "- Base Branch: $BASE_BRANCH" >> .tmp/pr_analysis.md
+          echo "- Head Branch: ${{ steps.pr-info.outputs.head_branch }}" >> .tmp/pr_analysis.md
+          echo "" >> .tmp/pr_analysis.md
+          
+          # PR説明
+          echo "## PR Description:" >> .tmp/pr_analysis.md
+          echo "${{ github.event.pull_request.body }}" >> .tmp/pr_analysis.md
+          echo "" >> .tmp/pr_analysis.md
+          
+          # 変更ファイル一覧
+          echo "## Changed Files:" >> .tmp/pr_analysis.md
+          gh pr diff $PR_NUMBER --name-only >> .tmp/pr_analysis.md
+          echo "" >> .tmp/pr_analysis.md
+          
+          # 差分統計
+          echo "## Changes Summary:" >> .tmp/pr_analysis.md
+          gh pr diff $PR_NUMBER --name-status >> .tmp/pr_analysis.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Perform initial PR review with Claude Code
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            新しく作成されたPRの包括的な初回レビューを実施してください。
+            
+            '.tmp/pr_analysis.md'ファイルにPR情報があります。このPRのすべての変更を分析し、以下の観点から包括的なレビューを実施してください。
+            
+            レビュー観点:
+            1. **コード品質**: 可読性、保守性、拡張性
+            2. **設計パターン**: アーキテクチャ、責務分離、依存関係
+            3. **テスト**: 単体テスト、統合テスト、テストカバレッジ
+            4. **パフォーマンス**: 効率性、スケーラビリティ
+            5. **セキュリティ**: 脆弱性、入力検証、認証・認可
+            6. **エラーハンドリング**: 例外処理、エラーメッセージ
+            7. **ドキュメント**: コメント、型定義、API仕様
+            
+            プロジェクトのガイドライン:
+            - YAGNI（You Aren't Gonna Need It）の原則に従う
+            - DRY（Don't Repeat Yourself）の原則に従う
+            - KISS（Keep It Simple Stupid）の原則に従う
+            - 機能を作成する場合は必ず単体テストをセットで作成する
+            - 一時的なファイルは.tmpディレクトリに作成する
+            
+            必要な改善点があれば実装してください。改善を行った場合は、何を改善したかの詳細な説明を提供してください。
+
+      - name: Run tests after initial review
+        run: |
+          echo "=== 初回レビュー後のテスト実行 ==="
+          if ! npm run lint; then
+            echo "Linting failed - stopping workflow"
+            exit 1
+          fi
+          if ! npm run test:unit; then
+            echo "Unit tests failed - stopping workflow"
+            exit 1
+          fi
+          echo "=== テスト完了 ==="
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "refactor: 初回レビューによるコード改善" \
+                       -m "🤖 Generated with Claude Code Action" \
+                       -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+            git push origin ${{ steps.pr-info.outputs.head_branch }}
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Comment on PR
+        if: success()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          
+          gh pr comment $PR_NUMBER --body "✅ Claude Code Actionによる初回レビューが完了しました。
+
+          このPRの包括的なレビューを実施し、以下の観点から分析を行いました：
+          - コード品質（可読性、保守性、拡張性）
+          - 設計パターン（アーキテクチャ、責務分離）
+          - テスト（単体テスト、カバレッジ）
+          - パフォーマンス・セキュリティ
+          - エラーハンドリング・ドキュメント
+
+          必要な改善があれば自動的に実装されています。変更内容をご確認ください。
+
+          追加のレビューが必要な場合は、人間のレビュアーによるレビューを実施してください。"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle failure
+        if: failure()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          
+          gh pr comment $PR_NUMBER --body "❌ **Claude Code Action - 初回レビュー失敗**
+
+          **エラー詳細**: [ワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          **実行時刻**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+          手動でのレビューを実施してください。"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove processing label
+        if: always()
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          gh pr edit $PR_NUMBER --remove-label "claude-initial-review" || echo "Failed to remove 'claude-initial-review' label"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          rm -rf .tmp

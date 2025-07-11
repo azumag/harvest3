@@ -2,7 +2,9 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [reopened]
+    # synchronizeは claude-commit-diff-review.yml が担当
+    # openedは claude-pr-review-resolver.yml が担当
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
@@ -12,6 +14,7 @@ on:
 
 jobs:
   claude-review:
+    name: PR Code Review with Claude Code
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -19,11 +22,11 @@ jobs:
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
     
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
-      id-token: write
     
     steps:
       - name: Checkout repository
@@ -75,4 +78,11 @@ jobs:
           # if: |
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
           #   !contains(github.event.pull_request.title, '[WIP]')
+
+      - name: Handle review failure
+        if: failure()
+        run: |
+          echo "❌ Claude Code Review failed"
+          echo "Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          exit 1
 

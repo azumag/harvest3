@@ -15,55 +15,20 @@ jobs:
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.event == 'pull_request'
     
-    timeout-minutes: 30
+    timeout-minutes: 20
     
     permissions:
       contents: write
       pull-requests: write
       actions: read
-      id-token: write
     
     steps:
-      - name: Get PR information
-        id: pr-info
-        run: |
-          # Pull request情報を取得
-          PR_NUMBER=$(gh api repos/${{ github.repository }}/pulls \
-            --jq '.[] | select(.head.sha == "${{ github.event.workflow_run.head_sha }}") | .number' 2>/dev/null || echo "")
-          
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
-            echo "Could not find PR for commit, skipping workflow"
-            echo "skip_workflow=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
-          echo "skip_workflow=false" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Checkout repository
-        if: steps.pr-info.outputs.skip_workflow != 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 1
 
-      - name: Setup Node.js
-        if: steps.pr-info.outputs.skip_workflow != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-
-      - name: Install dependencies
-        if: steps.pr-info.outputs.skip_workflow != 'true'
-        run: npm ci
-
       - name: Fix CI failures with Claude Code
-        if: steps.pr-info.outputs.skip_workflow != 'true'
         id: claude-fix
         uses: anthropics/claude-code-action@beta
         with:
@@ -105,37 +70,3 @@ jobs:
           
           # Optional: Allow specific tools for testing and linting
           # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-
-      - name: Create summary comment
-        if: steps.pr-info.outputs.skip_workflow != 'true'
-        run: |
-          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          
-          # CI修正の結果をコメント
-          gh pr comment $PR_NUMBER --body "🔧 **Claude Code Action - CI修正実行**
-          
-          **修正対象**: CI失敗 (${{ github.event.workflow_run.name }})
-          **実行時刻**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          **コミット**: ${{ github.event.workflow_run.head_sha }}
-          
-          Claude Code Actionがこの Failed: ${{ github.event.workflow_run.html_url }}
-          
-          修正内容を確認して、CI/CDが正常に動作するかチェックしてください。
-          
-          問題が解決されない場合は、新しいレビューを実施してください。"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Handle workflow failure
-        if: failure() && steps.pr-info.outputs.skip_workflow != 'true'
-        run: |
-          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
-          
-          gh pr comment $PR_NUMBER --body "❌ **Claude Code Action - CI修正失敗**
-          
-          **失敗したワークフロー**: ${{ github.event.workflow_run.name }}
-          **エラー詳細**: [ワークフロー実行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          
-          手動での修正が必要な可能性があります。"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
