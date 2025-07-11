@@ -724,8 +724,15 @@ async function getOHLCVRedis(exchangeId, symbol, timeframe) {
 async function updateOHLCVRedis(exchangeId, symbol, timeframe, ohlcvData) {
   const key = `ohlcv:data:${exchangeId}:${symbol}:${timeframe}`;
 
+  // Validate OHLCV data before storing
+  const validatedData = safeValidateOHLCVData(ohlcvData, 'updateOHLCVRedis');
+  if (!validatedData) {
+    console.error('OHLCV data validation failed, skipping storage');
+    return;
+  }
+
   // RedisにOHLCVデータを保存
-  await client.set(key, JSON.stringify(ohlcvData));
+  await client.set(key, JSON.stringify(validatedData));
 
   // タイムスタンプを更新
   updateOHLCVRedisTimestamp(exchangeId, symbol, timeframe);
@@ -738,7 +745,14 @@ async function getTickerRedis(exchangeId, symbol) {
   const data = await client.get(key);
 
   if (data) {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    // Validate ticker data when reading from Redis
+    const validatedData = safeValidateTickerData(parsed, 'getTickerRedis');
+    if (!validatedData) {
+      console.error('Ticker data validation failed when reading from Redis');
+      return null;
+    }
+    return validatedData;
   }
 
   return null;
@@ -747,8 +761,15 @@ async function getTickerRedis(exchangeId, symbol) {
 async function updateTickerRedis(exchangeId, symbol, tickerData) {
   const key = `ticker:${exchangeId}:${symbol}`;
 
+  // Validate ticker data before storing
+  const validatedData = safeValidateTickerData(tickerData, 'updateTickerRedis');
+  if (!validatedData) {
+    console.error('Ticker data validation failed, skipping storage');
+    return;
+  }
+
   // Redisにティッカーデータを保存
-  await client.set(key, JSON.stringify(tickerData));
+  await client.set(key, JSON.stringify(validatedData));
 
   // console.log(`ティッカーデータを更新しました: ${key}`);
 }
@@ -792,8 +813,12 @@ async function getBacktestOHLCVRedisByTimeRange(exchangeId, symbol, timeframe, s
   // 指定された範囲のスコア（タイムスタンプ）の要素を取得
   const result = await client.zRangeByScore(key, startTime, endTime);
 
-  // 結果をJSONとしてパース
-  return result.map(item => JSON.parse(item));
+  // 結果をJSONとしてパース with validation
+  return result.map(item => {
+    const parsed = JSON.parse(item);
+    const validated = safeValidateOHLCVData(parsed, 'getBacktestOHLCVRedisByTimeRange');
+    return validated !== null ? validated : parsed; // Fallback to original if validation fails
+  });
 }
 
 /**
@@ -805,8 +830,12 @@ async function getAllBacktestOHLCVRedisSortedSet(exchangeId, symbol, timeframe) 
   // すべての要素を取得
   const result = await client.zRange(key, 0, -1);
 
-  // 結果をJSONとしてパース
-  return result.map(item => JSON.parse(item));
+  // 結果をJSONとしてパース with validation
+  return result.map(item => {
+    const parsed = JSON.parse(item);
+    const validated = safeValidateOHLCVData(parsed, 'getAllBacktestOHLCVRedisSortedSet');
+    return validated !== null ? validated : parsed; // Fallback to original if validation fails
+  });
 }
 
 /**
@@ -836,8 +865,12 @@ async function getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timefram
     }
   );
 
-  // 結果をJSONとしてパース
-  return result.map(item => JSON.parse(item));
+  // 結果をJSONとしてパース with validation
+  return result.map(item => {
+    const parsed = JSON.parse(item);
+    const validated = safeValidateOHLCVData(parsed, 'getBacktestOHLCVRedisBeforeTimestamp');
+    return validated !== null ? validated : parsed; // Fallback to original if validation fails
+  });
 }
 
 /**

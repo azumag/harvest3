@@ -275,14 +275,8 @@ const SignalDataSchema = z.object({
 }).passthrough(); // Allow additional fields for signal-specific data
 
 // Parameter value schema (for parseParamValue function)
-const ParameterValueSchema = z.union([
-  z.null(),
-  z.boolean(),
-  z.number(),
-  z.string(),
-  z.array(z.any()),
-  z.record(z.any())
-]);
+// Very flexible schema to handle various Redis stored values
+const ParameterValueSchema = z.any();
 
 // Create validators for each schema
 const tradeValidator = createValidator(TradeSchema, 'Trade');
