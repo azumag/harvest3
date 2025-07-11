@@ -21,18 +21,21 @@ jobs:
       contents: write
       pull-requests: write
       actions: read
+      id-token: write
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Fix CI failures with Claude Code
         id: claude-fix
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           # Optional: Specify model (defaults to Claude Sonnet 4)
           # model: "claude-opus-4-20250514"
