@@ -72,6 +72,9 @@ jobs:
           # Optional: Specify model (defaults to Claude Sonnet 4)
           # model: "claude-opus-4-20250514"
           
+          # Allow specific tools for CI fixing
+          allowed_tools: "Bash,Read,Write,Edit,MultiEdit,Grep,Glob,LS"
+          
           # CI修正のプロンプト
           direct_prompt: |
             このPull RequestのCI/CDが失敗しています。失敗を修正してください。
