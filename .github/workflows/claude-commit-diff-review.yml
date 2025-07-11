@@ -21,13 +21,21 @@ jobs:
       contents: write
       pull-requests: write
       actions: read
+      id-token: write
     
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: Review Commits with Claude Code
         id: claude-commit-review
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           # Optional: Specify model (defaults to Claude Sonnet 4)
           # model: "claude-opus-4-20250514"
