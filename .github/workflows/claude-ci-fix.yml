@@ -1,19 +1,20 @@
 name: Claude CI Fix
 
 on:
-  workflow_run:
-    workflows: ["CI/CD Pipeline"]
-    types: [completed]
+  # Pull requestでのCI失敗を検知（commentで起動）
+  issue_comment:
+    types: [created]
 
 jobs:
   claude-ci-fix:
     name: Fix CI Failures with Claude Code
     runs-on: ubuntu-latest
     
-    # CIが失敗した場合のみ実行
+    # コメントで"@claude-fix"が含まれている場合のみ実行
     if: |
-      github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.event == 'pull_request'
+      github.event_name == 'issue_comment' && 
+      contains(github.event.comment.body, '@claude-fix') &&
+      github.event.issue.pull_request
     
     timeout-minutes: 20
     
@@ -21,18 +22,23 @@ jobs:
       contents: write
       pull-requests: write
       actions: read
+      id-token: write
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Pull requestのHEADブランチをチェックアウト
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
 
       - name: Fix CI failures with Claude Code
         id: claude-fix
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           # Optional: Specify model (defaults to Claude Sonnet 4)
           # model: "claude-opus-4-20250514"
@@ -45,10 +51,11 @@ jobs:
             このPull RequestのCI/CDが失敗しています。失敗を修正してください。
             
             分析すべき内容：
-            1. **失敗したワークフロー**: ${{ github.event.workflow_run.name }}
-            2. **失敗したコミット**: ${{ github.event.workflow_run.head_sha }}
-            3. **ブランチ**: ${{ github.event.workflow_run.head_branch }}
-            4. **実行URL**: ${{ github.event.workflow_run.html_url }}
+            1. **リポジトリ**: ${{ github.repository }}
+            2. **ブランチ**: ${{ github.head_ref || github.ref_name }}
+            3. **コミット**: ${{ github.sha }}
+            4. **Pull Request**: ${{ github.event.issue.number }}
+            5. **イベント種類**: ${{ github.event_name }}
             
             修正ガイドライン：
             - **テスト失敗**: 失敗したテストを修正するか、実装変更に合わせてテストを更新
