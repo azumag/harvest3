@@ -403,7 +403,3 @@ docker compose restart
   - 最小権限のmach権限追加（mach-lookup、mach-task-name、mach-per-user-lookup）
   - プロセス管理権限の強化（セキュリティ重視の設定）
   - setuidバイナリ実行権限の追加
-
-## 📄 ライセンス
-
-MIT License
