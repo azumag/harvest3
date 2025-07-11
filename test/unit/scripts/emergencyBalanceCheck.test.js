@@ -59,6 +59,13 @@ describe('Emergency Balance Check', () => {
     });
 
     it('Redis接続エラー時に適切にエラーハンドリングする', async () => {
+      // 取引所は正常に設定
+      mockExchange.fetchBalance.mockResolvedValue({
+        free: { JPY: 100.0 },
+        total: { JPY: 100.0 }
+      });
+      
+      // Redis接続は失敗
       require('../../../src/database/redisClient').initRedisClient.mockResolvedValue(null);
       
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();

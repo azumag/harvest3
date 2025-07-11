@@ -8,8 +8,8 @@ module.exports = {
   threshold: parseFloat(process.env.BALANCE_THRESHOLD) || 1.0,
   
   // ログファイルパス
-  logFile: process.env.BALANCE_LOG_FILE || '/tmp/balance-monitor.log',
-  alertLog: process.env.BALANCE_ALERT_LOG || '/tmp/balance-alert.log',
+  logFile: process.env.BALANCE_LOG_FILE || './logs/balance-monitor.log',
+  alertLog: process.env.BALANCE_ALERT_LOG || './logs/balance-alert.log',
   
   // ログローテーション設定
   maxLogLines: parseInt(process.env.BALANCE_MAX_LOG_LINES) || 1000,

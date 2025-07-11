@@ -157,7 +157,7 @@ describe('Balance Monitor', () => {
 
   describe('ログローテーション', () => {
     it('ログファイルが1000行を超えた場合にローテーションする', async () => {
-      const mockLines = Array(1001).fill('log line').join('\\n');
+      const mockLines = Array(1001).fill('log line').join('\n');
       mockFs.readFileSync.mockReturnValue(mockLines);
       
       mockExchange.fetchBalance.mockResolvedValue({

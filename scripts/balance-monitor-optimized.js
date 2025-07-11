@@ -37,16 +37,16 @@ async function balanceMonitor() {
     }
     
     // 乖離計算
-    const diff = realBalance - managedBalance;
-    const absDiff = Math.abs(diff);
+    const balanceDiscrepancy = realBalance - managedBalance;
+    const absBalanceDiscrepancy = Math.abs(balanceDiscrepancy);
     
     // ログ記録
-    const logDetails = `取引所残高: ${realBalance} ${config.currency}\n管理残高: ${managedBalance} ${config.currency}\n乖離: ${diff.toFixed(4)} ${config.currency}\n`;
+    const logDetails = `取引所残高: ${realBalance} ${config.currency}\n管理残高: ${managedBalance} ${config.currency}\n乖離: ${balanceDiscrepancy.toFixed(4)} ${config.currency}\n`;
     fs.appendFileSync(config.logFile, logDetails);
     
     // 乖離チェック
-    if (absDiff > config.threshold) {
-      const alertMsg = `⚠️ 残高乖離検出: ${diff.toFixed(4)} ${config.currency} (閾値: ${config.threshold} ${config.currency})`;
+    if (absBalanceDiscrepancy > config.threshold) {
+      const alertMsg = `⚠️ 残高乖離検出: ${balanceDiscrepancy.toFixed(4)} ${config.currency} (閾値: ${config.threshold} ${config.currency})`;
       
       // アラートログ記録
       const alertEntry = `${timestamp}: ${alertMsg}\n`;
@@ -56,36 +56,42 @@ async function balanceMonitor() {
       // Discord通知（設定されていれば）
       if (config.discord.enabled) {
         try {
-          const webhookData = {
-            content: `🚨 **残高乖離アラート**\n残高乖離: ${diff.toFixed(4)} JPY\n取引所残高: ${realBalance} JPY\n管理残高: ${managedBalance} JPY\n時刻: ${timestamp}`
-          };
-          
-          // Discord通知は非同期で送信（エラーでも続行）
-          require('https').request(config.discord.webhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }, (res) => {
-            // レスポンスは無視
-          }).on('error', (err) => {
-            console.warn('Discord通知エラー:', err.message);
-          }).end(JSON.stringify(webhookData));
-          
+          // Discord webhook URL の検証
+          const webhookUrl = config.discord.webhookUrl;
+          if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+            console.warn('Invalid Discord webhook URL format');
+          } else {
+            const webhookData = {
+              content: `🚨 **残高乖離アラート**\n残高乖離: ${balanceDiscrepancy.toFixed(4)} JPY\n取引所残高: ${realBalance} JPY\n管理残高: ${managedBalance} JPY\n時刻: ${timestamp}`
+            };
+            
+            // Discord通知は非同期で送信（エラーでも続行）
+            const webhookUrlObj = new URL(webhookUrl);
+            require('https').request(webhookUrlObj, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            }, (res) => {
+              // レスポンスは無視
+            }).on('error', (err) => {
+              console.warn('Discord通知エラー:', err.message);
+            }).end(JSON.stringify(webhookData));
+          }
         } catch (discordError) {
           console.warn('Discord通知失敗:', discordError.message);
         }
       }
       
       // コンソール出力（cron実行時はメール通知される）
-      console.log(`残高乖離アラート: ${diff.toFixed(4)} JPY`);
+      console.log(`残高乖離アラート: ${balanceDiscrepancy.toFixed(4)} JPY`);
       
       // 自動修正の提案
       console.log('自動修正を実行するには:');
       console.log('node scripts/emergency-balance-fix-optimized.js');
       
     } else {
-      const okMsg = `残高整合性OK: 乖離 ${diff.toFixed(4)} ${config.currency}\n`;
+      const okMsg = `残高整合性OK: 乖離 ${balanceDiscrepancy.toFixed(4)} ${config.currency}\n`;
       fs.appendFileSync(config.logFile, okMsg);
     }
     

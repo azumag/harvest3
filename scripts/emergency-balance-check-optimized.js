@@ -25,6 +25,9 @@ async function emergencyBalanceCheck() {
       console.log('bitbank JPY total:', balance.total.JPY || 0);
     } catch (error) {
       console.error('取引所残高取得エラー:', error.message);
+      if (process.env.NODE_ENV === 'test') {
+        throw error;
+      }
     }
     
     console.log('');
