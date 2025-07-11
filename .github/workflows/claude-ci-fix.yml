@@ -1,0 +1,61 @@
+name: Claude CI Fix
+
+on:
+  pull_request:
+    types: [synchronize]
+
+jobs:
+  claude-ci-fix:
+    name: Claude CI Fix
+    runs-on: ubuntu-latest
+    
+    # ci-failure ラベルが付いている場合のみ実行
+    if: contains(github.event.pull_request.labels.*.name, 'ci-failure')
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for CI Fix
+        id: claude
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          
+          # Claude がCI結果を読み取れるように追加権限を設定
+          additional_permissions: |
+            actions: read
+          
+          # CI修正用のカスタム指示
+          custom_instructions: |
+            CIが失敗しています。以下の失敗を修正してください：
+            - ワークフロー結果を確認し、失敗の原因を分析してください
+            - 必要な修正を行ってください
+            - 修正後は適切なテストを実行してください
+            - 修正が完了したら ci-failure ラベルを削除してください
+
+      - name: Remove CI Failure Label on Success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'ci-failure'
+              });
+              console.log('Removed ci-failure label after successful Claude fix');
+            } catch (error) {
+              console.log('Label ci-failure not found or already removed');
+            }
