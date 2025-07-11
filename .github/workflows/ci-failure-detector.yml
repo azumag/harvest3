@@ -50,7 +50,11 @@ jobs:
               `**Commit:** ${context.payload.workflow_run.head_sha}`,
               `**Workflow URL:** ${context.payload.workflow_run.html_url}`,
               '',
-              '@claude-fix - Starting automatic CI failure resolution...'
+              '@claude CIが失敗しました。以下の失敗を修正してください：',
+              `- ワークフロー: ${context.payload.workflow_run.name}`,
+              `- ワークフローURL: ${context.payload.workflow_run.html_url}`,
+              '',
+              '失敗の原因を分析し、必要な修正を行ってください。'
             ].join('\n');
             
             await github.rest.issues.createComment({
