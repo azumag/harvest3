@@ -51,6 +51,10 @@ jobs:
             
             Be constructive and helpful in your feedback.
 
+            while reviewing the code, please keep the following points in mind:
+              1. please label the PR with "claude-processing" during the review process.
+              2. when review is complete, please unlabel 'claude-processing' and label the PR with "claude-review-complete".
+
           # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
           # use_sticky_comment: true
           
