@@ -197,6 +197,93 @@ function createValidator(schema, schemaName) {
   };
 }
 
+/**
+ * Zod schema for Redis-specific data types
+ */
+
+// Order pair data schema (used in setCurrentOrderPairRedis/getCurrentOrderPairRedis)
+const OrderPairSchema = z.object({
+  pair: z.object({
+    buy: z.string().min(1, 'Buy order ID is required'),
+    sell: z.string().min(1, 'Sell order ID is required')
+  })
+});
+
+// Exchange data schema (used in caching exchanges)
+const ExchangeDataSchema = z.array(z.object({
+  id: z.string().min(1, 'Exchange ID is required'),
+  name: z.string().min(1, 'Exchange name is required'),
+  countries: z.array(z.string()).optional(),
+  urls: z.object({
+    api: z.string().url().optional(),
+    www: z.string().url().optional(),
+    doc: z.string().url().optional()
+  }).optional(),
+  fees: z.object({
+    trading: z.object({
+      percentage: z.boolean().optional(),
+      maker: z.number().optional(),
+      taker: z.number().optional()
+    }).optional()
+  }).optional()
+}).passthrough()); // Allow additional fields for exchange-specific data
+
+// OHLCV data schema (used in caching OHLCV data)
+const OHLCVDataSchema = z.array(z.tuple([
+  z.number(), // timestamp
+  z.number(), // open
+  z.number(), // high
+  z.number(), // low
+  z.number(), // close
+  z.number()  // volume
+]));
+
+// Ticker data schema (used in caching ticker data)
+const TickerDataSchema = z.object({
+  symbol: z.string().min(1, 'Symbol is required'),
+  timestamp: z.number().int().positive('Timestamp must be positive'),
+  datetime: z.string().optional(),
+  high: z.number().positive('High must be positive'),
+  low: z.number().positive('Low must be positive'),
+  bid: z.number().positive('Bid must be positive').optional(),
+  ask: z.number().positive('Ask must be positive').optional(),
+  vwap: z.number().positive('VWAP must be positive').optional(),
+  open: z.number().positive('Open must be positive').optional(),
+  close: z.number().positive('Close must be positive').optional(),
+  last: z.number().positive('Last must be positive').optional(),
+  previousClose: z.number().positive('Previous close must be positive').optional(),
+  change: z.number().optional(),
+  percentage: z.number().optional(),
+  average: z.number().positive('Average must be positive').optional(),
+  baseVolume: z.number().optional(),
+  quoteVolume: z.number().optional()
+}).passthrough(); // Allow additional fields for ticker-specific data
+
+// Signal data schema (used in various signal operations)
+const SignalDataSchema = z.object({
+  exchange: z.string().min(1, 'Exchange is required'),
+  symbol: z.string().min(1, 'Symbol is required'),
+  strategy: z.string().min(1, 'Strategy is required'),
+  signal: z.enum(['buy', 'sell', 'hold'], {
+    errorMap: () => ({ message: "Signal must be 'buy', 'sell', or 'hold'" })
+  }),
+  confidence: z.number().min(0).max(1, 'Confidence must be between 0 and 1'),
+  timestamp: z.number().int().positive('Timestamp must be positive'),
+  price: z.number().positive('Price must be positive').optional(),
+  volume: z.number().positive('Volume must be positive').optional(),
+  indicators: z.record(z.any()).optional() // Dynamic indicators object
+}).passthrough(); // Allow additional fields for signal-specific data
+
+// Parameter value schema (for parseParamValue function)
+const ParameterValueSchema = z.union([
+  z.null(),
+  z.boolean(),
+  z.number(),
+  z.string(),
+  z.array(z.any()),
+  z.record(z.any())
+]);
+
 // Create validators for each schema
 const tradeValidator = createValidator(TradeSchema, 'Trade');
 const orderValidator = createValidator(OrderSchema, 'Order');
@@ -204,6 +291,12 @@ const positionValidator = createValidator(PositionSchema, 'Position');
 const pendingOrderValidator = createValidator(PendingOrderSchema, 'PendingOrder');
 const tradeSummaryValidator = createValidator(TradeSummarySchema, 'TradeSummary');
 const strategyParametersValidator = createValidator(StrategyParametersSchema, 'StrategyParameters');
+const orderPairValidator = createValidator(OrderPairSchema, 'OrderPair');
+const exchangeDataValidator = createValidator(ExchangeDataSchema, 'ExchangeData');
+const ohlcvDataValidator = createValidator(OHLCVDataSchema, 'OHLCVData');
+const tickerDataValidator = createValidator(TickerDataSchema, 'TickerData');
+const signalDataValidator = createValidator(SignalDataSchema, 'SignalData');
+const parameterValueValidator = createValidator(ParameterValueSchema, 'ParameterValue');
 
 module.exports = {
   // Schemas
@@ -213,6 +306,12 @@ module.exports = {
   PendingOrderSchema,
   TradeSummarySchema,
   StrategyParametersSchema,
+  OrderPairSchema,
+  ExchangeDataSchema,
+  OHLCVDataSchema,
+  TickerDataSchema,
+  SignalDataSchema,
+  ParameterValueSchema,
 
   // Legacy validation functions (for backward compatibility)
   validateTradeData: tradeValidator.validate,
@@ -228,5 +327,19 @@ module.exports = {
   validateTradeSummaryData: tradeSummaryValidator.validate,
   safeValidateTradeSummaryData: tradeSummaryValidator.safeValidate,
   validateStrategyParametersData: strategyParametersValidator.validate,
-  safeValidateStrategyParametersData: strategyParametersValidator.safeValidate
+  safeValidateStrategyParametersData: strategyParametersValidator.safeValidate,
+  
+  // Redis-specific validation functions
+  validateOrderPairData: orderPairValidator.validate,
+  safeValidateOrderPairData: orderPairValidator.safeValidate,
+  validateExchangeData: exchangeDataValidator.validate,
+  safeValidateExchangeData: exchangeDataValidator.safeValidate,
+  validateOHLCVData: ohlcvDataValidator.validate,
+  safeValidateOHLCVData: ohlcvDataValidator.safeValidate,
+  validateTickerData: tickerDataValidator.validate,
+  safeValidateTickerData: tickerDataValidator.safeValidate,
+  validateSignalData: signalDataValidator.validate,
+  safeValidateSignalData: signalDataValidator.safeValidate,
+  validateParameterValue: parameterValueValidator.validate,
+  safeValidateParameterValue: parameterValueValidator.safeValidate
 };

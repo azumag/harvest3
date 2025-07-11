@@ -8,7 +8,13 @@ const {
   safeValidateTradeSummaryData,
   safeValidatePositionData,
   safeValidatePendingOrderData,
-  safeValidateStrategyParametersData
+  safeValidateStrategyParametersData,
+  safeValidateOrderPairData,
+  safeValidateExchangeData,
+  safeValidateOHLCVData,
+  safeValidateTickerData,
+  safeValidateSignalData,
+  safeValidateParameterValue
 } = require('./schemas');
 const {
   toDecimal,
@@ -41,8 +47,16 @@ async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
       return false;
     }
 
+    // Validate order pair data before storing
+    const orderPairData = { pair };
+    const validatedData = safeValidateOrderPairData(orderPairData, 'setCurrentOrderPairRedis');
+    if (!validatedData) {
+      console.error('Order pair validation failed, skipping storage');
+      return false;
+    }
+
     const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
-    return await client.set(key, JSON.stringify({ pair }));
+    return await client.set(key, JSON.stringify(validatedData));
   } catch (error) {
     console.error('setCurrentOrderPairRedis エラー:', error.message);
     return false;
@@ -60,7 +74,14 @@ async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
     const data = await client.get(key);
 
     if (data) {
-      return JSON.parse(data).pair;
+      const parsed = JSON.parse(data);
+      // Validate order pair data when reading from Redis
+      const validatedData = safeValidateOrderPairData(parsed, 'getCurrentOrderPairRedis');
+      if (!validatedData) {
+        console.error('Order pair validation failed when reading from Redis');
+        return null;
+      }
+      return validatedData.pair;
     }
 
     return null;
@@ -527,8 +548,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
   }
 }
 
-// 型変換用のヘルパー関数
-// TODO: use zod
+// 型変換用のヘルパー関数 - zod validation integrated
 function parseParamValue(value) {
   // null/undefined チェック
   if (value === null || value === undefined || value === 'null') {
@@ -552,14 +572,19 @@ function parseParamValue(value) {
   if ((value.startsWith('{') && value.endsWith('}')) ||
       (value.startsWith('[') && value.endsWith(']'))) {
     try {
-      return JSON.parse(value);
+      const parsed = JSON.parse(value);
+      // zod validation for parsed values
+      const validated = safeValidateParameterValue(parsed, 'parseParamValue');
+      return validated !== null ? validated : value;
     } catch (e) {
       // パースに失敗した場合は元の文字列を返す
+      console.warn(`[parseParamValue] JSON parse failed for value: ${value}, error: ${e.message}`);
     }
   }
 
-  // その他は文字列として扱う
-  return value;
+  // その他は文字列として扱う - zod validation
+  const validated = safeValidateParameterValue(value, 'parseParamValue');
+  return validated !== null ? validated : value;
 }
 
 async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
@@ -646,6 +671,13 @@ async function getTradeKeys() {
 
     console.log(exchanges);
 
+    // Validate exchange data before serializing
+    const validatedExchanges = safeValidateExchangeData(Object.values(exchanges), 'getTradeKeys');
+    if (!validatedExchanges) {
+      console.error('Exchange data validation failed, returning empty object');
+      return JSON.stringify({});
+    }
+
     return JSON.stringify(exchanges);
   } catch (error) {
     await errorHandler.handleError(error, '取引所情報の取得', true);
@@ -676,7 +708,14 @@ async function getOHLCVRedis(exchangeId, symbol, timeframe) {
   const data = await client.get(key);
 
   if (data) {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    // Validate OHLCV data when reading from Redis
+    const validatedData = safeValidateOHLCVData(parsed, 'getOHLCVRedis');
+    if (!validatedData) {
+      console.error('OHLCV data validation failed when reading from Redis');
+      return null;
+    }
+    return validatedData;
   }
 
   return null;
