@@ -15,3 +15,6 @@ lint や test エラーを一時的に回避した場合、github issue に登�
 
 ## ファイル作成ルール
 - セッション中に作成する中間ファイル・一時的なファイルは .tmp に作成すること
+
+# GitHub Actions
+- anthropics/claude-code-action@beta は、workflow_run に対応していません。

@@ -1,7 +1,8 @@
 {
   "hooks": [
     {
-      "launch": null,
+      "commentout": null,
+      "launch": "WORKFLOW_START",
       "path": "/Users/azumag/work/harvest3/.claude/hooks/test.sh",
       "next": "WORKFLOW_TESTED",
       "handling": "block"
@@ -20,8 +21,7 @@
       "prompt": "# 原則 - Gemini のレビュー内容を受けて行動せよ. ただし盲信はしないこと - 改善点を指摘された場合は、その改善点に従って修正せよ  - レビュー内容に問題がなく、改善点がすべてクリアになった場合のみ「WORKFLOW_GEMINI_REVIEW_COMPLETED」とだけ発言せよ - レビュー内容が空、もしくは rate limit の場合も、「WORKFLOW_GEMINI_REVIEW_COMPLETED」とだけ発言せよ。 - git diff と commit history を確認し、変更内容をgemini に理解させること。 - 以下作業内容を gemini に伝えること: $WORK_SUMMARY"
     },
     {
-      "commentout": null,
-      "launch": "WORKFLOW_GEMINI_REVIEW_COMPLETED",
+      "commentout": "WORKFLOW_GEMINI_REVIEW_COMPLETED",
       "prompt": "git commit を実行してください。 コミットメッセージには、作業内容の要約を含めてください。作業が完了したら WORKFLOW_COMMITTED とだけ表示せよ。"
     },
     {
@@ -29,7 +29,7 @@
       "prompt": "git pushを実行してください。pushが完了したら WORKFLOW_PUSHED とだけ表示せよ。"
     },
     {
-      "launch": "WORKFLOW_PUSHED",
+      "launch": null,
       "prompt": "CLAUDE.md を再確認せよ。再確認後、 WORKFLOW_CLAUDE_RECALL とだけ表示せよ。"
     },
     {

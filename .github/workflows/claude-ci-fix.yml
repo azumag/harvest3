@@ -1,51 +1,13 @@
 name: Claude CI Fix
 
 on:
-  pull_request:
-    types: [synchronize, labeled]
+  repository_dispatch:
+    types: [ci-failure]
 
 jobs:
-  remove-label:
-    name: Remove CI Failure Label
-    runs-on: ubuntu-latest
-    
-    # ci-failure ラベルが付けられた時、またはci-failureラベル付きPRが更新された時のみ実行
-    if: |
-      (github.event.action == 'labeled' && github.event.label.name == 'ci-failure') ||
-      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ci-failure'))
-    
-    permissions:
-      pull-requests: write
-      issues: write
-    
-    outputs:
-      pr-number: ${{ steps.get-pr.outputs.pr-number }}
-    
-    steps:
-      - name: Get PR Number
-        id: get-pr
-        run: echo "pr-number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-
-      - name: Remove CI Failure Label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                name: 'ci-failure'
-              });
-              console.log('Removed ci-failure label');
-            } catch (error) {
-              console.log('Label ci-failure not found or already removed');
-            }
-
   claude-ci-fix:
     name: Claude CI Fix
     runs-on: ubuntu-latest
-    needs: remove-label
     
     permissions:
       contents: read
@@ -58,21 +20,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          ref: ${{ github.event.client_payload.head_sha }}
+          fetch-depth: 0
+          
+      - name: Get PR details
+        id: pr-details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ github.event.client_payload.pr_number }};
+            console.log(`Processing CI fix for PR #${prNumber}`);
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            console.log(`PR branch: ${pr.head.ref}, base: ${pr.base.ref}`);
+            return { pr_number: prNumber, head_ref: pr.head.ref, base_ref: pr.base.ref };
 
       - name: Run Claude Code for CI Fix
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           additional_permissions: |
             actions: read
           
           direct_prompt: |
-            CIが失敗しています。以下の失敗を修正してください：
+            CIが失敗しました。PR #${{ github.event.client_payload.pr_number }} の CI 失敗を修正してください：
+            
             - ワークフロー結果を確認し、失敗の原因を分析してください
-            - 必要な修正を行ってください
-            - 修正後コミットしてください
-
-      
+            - 必要な修正を行ってください  
+            - 修正後は適切なテストを実行してください
+            - 修正が完了したらコミットしてください
