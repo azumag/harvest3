@@ -19,6 +19,10 @@ const {
   getTradeSummary,
   updateTradeSummary
 } = require('../../database/redisDatabase');
+const Logger = require('../../hft/utils/Logger');
+
+// Logger instance for risk management operations
+const logger = new Logger('RiskManagement');
 
 /**
  * リスク管理設定のデフォルト値
@@ -59,7 +63,7 @@ async function savePosition(positionKey, positionData) {
         ...positionData,
         updatedAt: Date.now()
       });
-      console.warn(`Redis保存失敗、メモリにフォールバック: ${positionKey}`);
+      logger.warn(`Redis保存失敗、メモリにフォールバック: ${positionKey}`);
     }
   } catch (error) {
     // Redis接続エラー時はメモリにフォールバック
@@ -67,7 +71,7 @@ async function savePosition(positionKey, positionData) {
       ...positionData,
       updatedAt: Date.now()
     });
-    console.warn(`Redis接続エラー、メモリにフォールバック: ${positionKey}`, error.message);
+    logger.warn(`Redis接続エラー、メモリにフォールバック: ${positionKey}`, error.message);
   }
 }
 
@@ -78,7 +82,7 @@ async function clearPositionStore() {
   try {
     await clearAllPositionsRedis();
   } catch (error) {
-    console.warn('Redis クリア失敗、メモリストレージのみクリア:', error.message);
+    logger.warn('Redis クリア失敗、メモリストレージのみクリア:', error.message);
   }
   fallbackPositionStore.clear();
 }
@@ -95,7 +99,7 @@ async function getPosition(positionKey) {
       return position;
     }
   } catch (error) {
-    console.warn(`Redis取得エラー、メモリにフォールバック: ${positionKey}`, error.message);
+    logger.warn(`Redis取得エラー、メモリにフォールバック: ${positionKey}`, error.message);
   }
 
   // Redis失敗時はメモリから取得
@@ -116,7 +120,7 @@ async function getStrategyPositions(exchangeId, symbol, strategyKey) {
       return positions;
     }
   } catch (error) {
-    console.warn(`Redis取得エラー、メモリにフォールバック: ${exchangeId}:${symbol}:${strategyKey}`, error.message);
+    logger.warn(`Redis取得エラー、メモリにフォールバック: ${exchangeId}:${symbol}:${strategyKey}`, error.message);
   }
 
   // Redis失敗時はメモリから取得
@@ -245,7 +249,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
   let baseAsset;
   let distributedLock = null;
 
-  console.log(`[DEBUG] executeStopLoss開始: ${symbol}, strategy: ${strategyKey}, availableToSell初期値: ${availableToSell}`);
+  logger.debug(` executeStopLoss開始: ${symbol}, strategy: ${strategyKey}, availableToSell初期値: ${availableToSell}`);
 
   try {
     const { amountPrecision, minTradeAmount } = marketParameters;
@@ -261,7 +265,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     distributedLock = await acquireDistributedLock(exchange.id, symbol, lockId, 30000); // 30秒のタイムアウト
 
     if (!distributedLock.acquired) {
-      console.warn(`[WARNING] Failed to acquire lock for stop-loss: ${symbol} - ${strategyKey}. Another process may be handling this.`);
+      logger.warn(` Failed to acquire lock for stop-loss: ${symbol} - ${strategyKey}. Another process may be handling this.`);
       return {
         success: false,
         reason: 'lock_failed',
@@ -269,14 +273,14 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       };
     }
 
-    console.log(`[DEBUG] Acquired distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
+    logger.debug(` Acquired distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
 
     // リスク管理実行前に約定情報を強制更新
     try {
-      console.log(`[DEBUG] Updating filled trades before stop-loss execution for ${symbol}`);
+      logger.debug(` Updating filled trades before stop-loss execution for ${symbol}`);
       await updateFilledTrades(exchange, symbol);
     } catch (updateError) {
-      console.warn(`[WARNING] Failed to update filled trades before stop-loss: ${updateError.message}`);
+      logger.warn(` Failed to update filled trades before stop-loss: ${updateError.message}`);
     }
 
     // ポジション不整合の事前チェック（売却可能量計算前に実行）
@@ -288,7 +292,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       const balance = await exchange.fetchBalance();
       actualBalance = balance.total[baseAsset] || 0;
     } catch (balanceError) {
-      console.warn(`[WARNING] Failed to fetch actual balance: ${balanceError.message}`);
+      logger.warn(` Failed to fetch actual balance: ${balanceError.message}`);
     }
 
     // 不整合ポジションの自動削除チェック
@@ -296,12 +300,12 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                                    (netPosition > 0 && actualBalance === 0 && position.amount > 0);
 
     if (isInconsistentPosition) {
-      console.warn(`[WARNING] Inconsistent position detected - auto cleanup: net=${netPosition}, actual=${actualBalance}, positionAmount=${position.amount}`);
+      logger.warn(` Inconsistent position detected - auto cleanup: net=${netPosition}, actual=${actualBalance}, positionAmount=${position.amount}`);
 
       try {
         // 不整合ポジションの自動削除
         await closeAndCleanupPosition(position.key);
-        console.log(`[INFO] Auto-cleaned inconsistent position: ${position.key}`);
+        logger.info(` Auto-cleaned inconsistent position: ${position.key}`);
 
         // Discord通知
         const cleanupMessage = `🧹 [自動修復] 不整合ポジションを削除: ${exchange.id} - ${symbol}\n` +
@@ -320,7 +324,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           message: `不整合ポジション ${strategyKey} を自動削除しました`
         };
       } catch (cleanupError) {
-        console.error(`[ERROR] Failed to auto-cleanup inconsistent position: ${cleanupError.message}`);
+        logger.error(` Failed to auto-cleanup inconsistent position: ${cleanupError.message}`);
       }
     }
 
@@ -331,13 +335,13 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                                      (Math.abs(netPosition - actualBalance) > 0.0001); // ポジションと残高の大きな差異
 
     if (shouldRepairPreemptively) {
-      console.warn(`[WARNING] Preemptive position repair needed: net=${netPosition}, actual=${actualBalance}, positionAmount=${position.amount}`);
+      logger.warn(` Preemptive position repair needed: net=${netPosition}, actual=${actualBalance}, positionAmount=${position.amount}`);
 
       try {
         await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
-        console.log('[INFO] Preemptive position repair completed');
+        logger.info('[INFO] Preemptive position repair completed');
       } catch (repairError) {
-        console.warn(`[WARNING] Preemptive position repair failed: ${repairError.message}`);
+        logger.warn(` Preemptive position repair failed: ${repairError.message}`);
       }
     }
 
@@ -346,7 +350,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     try {
       availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
     } catch (formattedError) {
-      console.error(`[ERROR] Failed to get formatted available amount: ${formattedError.message}`);
+      logger.error(` Failed to get formatted available amount: ${formattedError.message}`);
 
       // Discord通知
       const errorMessage = `🚨 [リスク管理] 売却可能量取得エラー: ${exchange.id} - ${symbol}\n` +
@@ -362,7 +366,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       // 実際の残高を使用してフォールバック
       if (actualBalance > 0) {
         availableToSell = Math.min(position.amount, actualBalance);
-        console.log(`[WARNING] Fallback to actual balance after error: ${availableToSell} ${baseAsset}`);
+        logger.info(`[WARNING] Fallback to actual balance after error: ${availableToSell} ${baseAsset}`);
       } else {
         // 重大エラーとして例外を発生
         throw new Error(`Failed to determine available amount for stop-loss: ${formattedError.message}`);
@@ -371,18 +375,18 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
     // 実際の残高がある場合の特別処理
     if (availableToSell <= 0 && actualBalance > 0) {
-      console.warn(`[WARNING] Available to sell is ${availableToSell} but actual balance is ${actualBalance}. Using actual balance.`);
+      logger.warn(` Available to sell is ${availableToSell} but actual balance is ${actualBalance}. Using actual balance.`);
       availableToSell = Math.min(position.amount, actualBalance);
-      console.log(`[INFO] Overriding with actual balance: ${availableToSell} ${baseAsset}`);
+      logger.info(` Overriding with actual balance: ${availableToSell} ${baseAsset}`);
     }
     let ordersCanceled = false; // 注文キャンセルが行われたかを追跡
 
-    console.log(`[DEBUG] Stop-loss for ${symbol}: Strategy ${strategyKey}`);
-    console.log(`[DEBUG] Position amount: ${position.amount}, Available to sell: ${availableToSell}`);
+    logger.debug(` Stop-loss for ${symbol}: Strategy ${strategyKey}`);
+    logger.debug(` Position amount: ${position.amount}, Available to sell: ${availableToSell}`);
 
     // 売却可能量がゼロまたはマイナスの場合、未約定の売り注文をキャンセルしてからリトライ
     if (availableToSell <= 0) {
-      console.log(`[INFO] Available to sell is ${availableToSell}, checking for open sell orders to cancel...`);
+      logger.info(` Available to sell is ${availableToSell}, checking for open sell orders to cancel...`);
 
       try {
         // 未約定の注文を取得
@@ -400,7 +404,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         }
 
         if (strategySellOrders.length > 0) {
-          console.log(`[INFO] Found ${strategySellOrders.length} open sell orders for strategy ${strategyKey}, canceling for stop-loss...`);
+          logger.info(` Found ${strategySellOrders.length} open sell orders for strategy ${strategyKey}, canceling for stop-loss...`);
 
           // 売り注文をキャンセル
           let canceledAmount = 0;
@@ -408,9 +412,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             try {
               await exchange.cancelOrder(order.id, symbol);
               canceledAmount += order.amount;
-              console.log(`[INFO] Canceled sell order ${order.id}: ${order.amount} ${baseAsset} for stop-loss`);
+              logger.info(` Canceled sell order ${order.id}: ${order.amount} ${baseAsset} for stop-loss`);
             } catch (cancelError) {
-              console.warn(`[WARNING] Failed to cancel order ${order.id}:`, cancelError.message);
+              logger.warn(` Failed to cancel order ${order.id}:`, cancelError.message);
             }
           }
 
@@ -422,12 +426,12 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
             try {
               availableToSell = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
-              console.log(`[INFO] After canceling orders, available to sell: ${availableToSell}`);
+              logger.info(` After canceling orders, available to sell: ${availableToSell}`);
             } catch (retryError) {
-              console.error(`[ERROR] Failed to get available amount after order cancellation: ${retryError.message}`);
+              logger.error(` Failed to get available amount after order cancellation: ${retryError.message}`);
               // フォールバック: キャンセルした分だけ利用可能とする
               availableToSell = Math.min(position.amount, canceledAmount);
-              console.log(`[INFO] Fallback after cancellation: using canceled amount ${availableToSell}`);
+              logger.info(` Fallback after cancellation: using canceled amount ${availableToSell}`);
             }
           }
         }
@@ -435,14 +439,14 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         // それでも売却可能量がない場合は詳細な残高確認を実行
         if (availableToSell <= 0) {
           const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-          console.log(`[INFO] Net position: ${netPosition}`);
+          logger.info(` Net position: ${netPosition}`);
 
           // 実際の取引所残高も確認
           let actualBalance = 0;
           try {
             const balance = await exchange.fetchBalance();
             actualBalance = balance.total[baseAsset] || 0;
-            console.log(`[INFO] Actual exchange balance for ${baseAsset}: ${actualBalance}`);
+            logger.info(` Actual exchange balance for ${baseAsset}: ${actualBalance}`);
           } catch (balanceError) {
             await errorHandler.handleError(balanceError, `残高取得 - ${baseAsset}`, false);
           }
@@ -456,7 +460,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                                (netPosition > 0 && actualBalance === 0);
 
           if (shouldRepair) {
-            console.warn(`[WARNING] Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
+            logger.warn(` Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
 
             // 不整合修復を試行
             try {
@@ -464,46 +468,46 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
               // 修復後に再計算
               const repairedNetPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
-              console.log(`[INFO] After repair - Net position: ${repairedNetPosition}`);
+              logger.info(` After repair - Net position: ${repairedNetPosition}`);
 
               try {
                 const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
-                console.log(`[INFO] After repair - Available: ${repairedAvailable}`);
+                logger.info(` After repair - Available: ${repairedAvailable}`);
 
                 if (repairedAvailable > 0) {
                   availableToSell = Math.min(position.amount, repairedAvailable);
-                  console.log(`[INFO] Using repaired available amount: ${availableToSell}`);
+                  logger.info(` Using repaired available amount: ${availableToSell}`);
                 }
               } catch (repairedError) {
-                console.error(`[ERROR] Failed to get available amount after repair: ${repairedError.message}`);
+                logger.error(` Failed to get available amount after repair: ${repairedError.message}`);
                 // 修復後もfailed場合は実際の残高を使用
                 if (actualBalance > 0) {
                   availableToSell = Math.min(position.amount, actualBalance);
-                  console.log(`[INFO] Fallback to actual balance after repair calculation failure: ${availableToSell}`);
+                  logger.info(` Fallback to actual balance after repair calculation failure: ${availableToSell}`);
                 }
               }
             } catch (repairError) {
-              console.warn(`[WARNING] Position repair failed: ${repairError.message}`);
+              logger.warn(` Position repair failed: ${repairError.message}`);
               // 修復失敗時は実際の残高を使用
               if (actualBalance > 0) {
                 availableToSell = Math.min(position.amount, actualBalance);
-                console.log(`[INFO] Fallback to actual balance after repair failure: ${availableToSell}`);
+                logger.info(` Fallback to actual balance after repair failure: ${availableToSell}`);
               }
             }
           } else if (netPosition > 0) {
             // netPositionと実際の残高の小さい方を使用
             const safeAmount = actualBalance > 0 ? Math.min(netPosition, actualBalance) : netPosition;
             availableToSell = Math.min(position.amount, safeAmount);
-            console.log(`[INFO] Using safe amount for stop-loss: ${availableToSell} (net: ${netPosition}, actual: ${actualBalance})`);
+            logger.info(` Using safe amount for stop-loss: ${availableToSell} (net: ${netPosition}, actual: ${actualBalance})`);
           } else if (actualBalance > 0) {
             // netPositionがゼロでも実際の残高がある場合
             availableToSell = Math.min(position.amount, actualBalance);
-            console.log(`[INFO] Using actual balance for stop-loss: ${availableToSell} (net position was ${netPosition})`);
+            logger.info(` Using actual balance for stop-loss: ${availableToSell} (net position was ${netPosition})`);
           }
         }
 
       } catch (orderError) {
-        console.warn('[WARNING] Error handling open orders:', orderError.message);
+        logger.warn('[WARNING] Error handling open orders:', orderError.message);
         // エラーの場合も詳細な残高確認を実行
         const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
@@ -512,9 +516,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         try {
           const balance = await exchange.fetchBalance();
           actualBalance = balance.total[baseAsset] || 0;
-          console.log(`[INFO] Fallback - Actual exchange balance for ${baseAsset}: ${actualBalance}`);
+          logger.info(` Fallback - Actual exchange balance for ${baseAsset}: ${actualBalance}`);
         } catch (balanceError) {
-          console.warn(`[WARNING] Fallback - Failed to fetch actual balance: ${balanceError.message}`);
+          logger.warn(` Fallback - Failed to fetch actual balance: ${balanceError.message}`);
         }
 
         // フォールバック時も不整合チェック・修復
@@ -523,7 +527,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
                              (netPosition > 0 && actualBalance === 0);
 
         if (shouldRepair) {
-          console.warn(`[WARNING] Fallback - Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
+          logger.warn(` Fallback - Position inconsistency detected: net=${netPosition}, actual=${actualBalance}`);
 
           try {
             await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
@@ -532,49 +536,49 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             const repairedNetPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
             const repairedAvailable = await formattedAvailableAmount(exchange, symbol, strategyKey, amountPrecision);
 
-            console.log(`[INFO] Fallback - After repair: Net position: ${repairedNetPosition}, Available: ${repairedAvailable}`);
+            logger.info(` Fallback - After repair: Net position: ${repairedNetPosition}, Available: ${repairedAvailable}`);
 
             if (repairedAvailable > 0) {
               availableToSell = Math.min(position.amount, repairedAvailable);
-              console.log(`[INFO] Fallback - Using repaired available amount: ${availableToSell}`);
+              logger.info(` Fallback - Using repaired available amount: ${availableToSell}`);
             }
           } catch (repairError) {
             await errorHandler.handleError(repairError, 'ポジション修復フォールバック', false);
             // 修復失敗時は実際の残高を使用
             if (actualBalance > 0) {
               availableToSell = Math.min(position.amount, actualBalance);
-              console.log(`[INFO] Fallback - Using actual balance after repair failure: ${availableToSell}`);
+              logger.info(` Fallback - Using actual balance after repair failure: ${availableToSell}`);
             }
           }
         } else if (netPosition > 0) {
           const safeAmount = actualBalance > 0 ? Math.min(netPosition, actualBalance) : netPosition;
           availableToSell = Math.min(position.amount, safeAmount);
-          console.log(`[INFO] Fallback to safe amount: ${availableToSell} (net: ${netPosition}, actual: ${actualBalance})`);
+          logger.info(` Fallback to safe amount: ${availableToSell} (net: ${netPosition}, actual: ${actualBalance})`);
         } else if (actualBalance > 0) {
           availableToSell = Math.min(position.amount, actualBalance);
-          console.log(`[INFO] Fallback to actual balance: ${availableToSell} (net position was ${netPosition})`);
+          logger.info(` Fallback to actual balance: ${availableToSell} (net position was ${netPosition})`);
         }
       }
     }
 
     // 最終的に売却可能量がない場合の処理
     if (availableToSell <= 0) {
-      console.log(`[WARNING] Stop-loss skipped: No available amount to sell (${availableToSell})`);
+      logger.info(`[WARNING] Stop-loss skipped: No available amount to sell (${availableToSell})`);
 
       // 最終チェック：実際の残高があるかもう一度確認
       let finalActualBalance = 0;
       try {
         const balance = await exchange.fetchBalance();
         finalActualBalance = balance.total[baseAsset] || 0;
-        console.log(`[INFO] Final actual balance check: ${finalActualBalance} ${baseAsset}`);
+        logger.info(` Final actual balance check: ${finalActualBalance} ${baseAsset}`);
       } catch (balanceError) {
-        console.warn(`[WARNING] Failed to get final actual balance: ${balanceError.message}`);
+        logger.warn(` Failed to get final actual balance: ${balanceError.message}`);
       }
 
       // 実際の残高がある場合は、それを使って処理を続行
       if (finalActualBalance > 0 && finalActualBalance >= minTradeAmount) {
         availableToSell = Math.min(position.amount, finalActualBalance);
-        console.log(`[WARNING] Final fallback to actual balance: ${availableToSell} ${baseAsset}`);
+        logger.info(`[WARNING] Final fallback to actual balance: ${availableToSell} ${baseAsset}`);
 
         // 処理を続行
       } else {
@@ -597,14 +601,14 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
           // 不整合ポジションの遅延削除を試行
           if (netPosition === 0 && finalActualBalance === 0 && position.amount > 0) {
-            console.warn(`[WARNING] Attempting delayed cleanup of orphaned position: ${position.key}`);
+            logger.warn(` Attempting delayed cleanup of orphaned position: ${position.key}`);
             try {
               setTimeout(async () => {
                 await closeAndCleanupPosition(position.key);
-                console.log(`[INFO] Delayed cleanup completed for orphaned position: ${position.key}`);
+                logger.info(` Delayed cleanup completed for orphaned position: ${position.key}`);
               }, 5000); // 5秒後に削除
             } catch (delayedCleanupError) {
-              console.error(`[ERROR] Delayed cleanup failed: ${delayedCleanupError.message}`);
+              logger.error(` Delayed cleanup failed: ${delayedCleanupError.message}`);
             }
           }
         } catch (notificationError) {
@@ -632,15 +636,15 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       try {
         const balance = await exchange.fetchBalance();
         finalActualBalance = balance.total[baseAsset] || 0;
-        console.log(`[INFO] Final balance check for ${baseAsset}: ${finalActualBalance}`);
+        logger.info(` Final balance check for ${baseAsset}: ${finalActualBalance}`);
       } catch (balanceError) {
-        console.warn(`[WARNING] Final balance check failed: ${balanceError.message}`);
+        logger.warn(` Final balance check failed: ${balanceError.message}`);
       }
 
       // 実際の残高がある場合は、それを使用
       if (finalActualBalance > 0) {
         sellAmount = Math.min(position.amount, finalActualBalance);
-        console.log(`[WARNING] Using actual balance as fallback: ${sellAmount} ${baseAsset}`);
+        logger.info(`[WARNING] Using actual balance as fallback: ${sellAmount} ${baseAsset}`);
 
         // それでも最小取引量を満たさない場合のみエラー
         if (sellAmount < minTradeAmount) {
@@ -654,7 +658,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
     const formattedAmount = parseFloat(sellAmount !== null && sellAmount !== undefined ? sellAmount.toFixed(amountPrecision) : 0);
 
-    console.log(`[DEBUG] Executing stop-loss sell order: ${formattedAmount} ${baseAsset}`);
+    logger.debug(` Executing stop-loss sell order: ${formattedAmount} ${baseAsset}`);
 
     // マーケット注文で即座に決済
     let order;
@@ -662,26 +666,26 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       order = await exchange.createMarketSellOrder(symbol, formattedAmount);
     } catch (orderError) {
       // 注文失敗時、実際の残高で再試行
-      console.error(`[ERROR] Initial stop-loss order failed: ${orderError.message}`);
+      logger.error(` Initial stop-loss order failed: ${orderError.message}`);
 
       // 実際の残高を再確認
       let retryBalance = 0;
       try {
         const balance = await exchange.fetchBalance();
         retryBalance = balance.total[baseAsset] || 0;
-        console.log(`[INFO] Retry with actual balance: ${retryBalance} ${baseAsset}`);
+        logger.info(` Retry with actual balance: ${retryBalance} ${baseAsset}`);
       } catch (balanceError) {
-        console.warn(`[WARNING] Failed to get retry balance: ${balanceError.message}`);
+        logger.warn(` Failed to get retry balance: ${balanceError.message}`);
       }
 
       if (retryBalance > minTradeAmount) {
         const retryAmount = Math.min(retryBalance, position.amount);
         const formattedRetryAmount = parseFloat(retryAmount !== null && retryAmount !== undefined ? retryAmount.toFixed(amountPrecision) : 0);
-        console.log(`[INFO] Retrying stop-loss with actual balance: ${formattedRetryAmount} ${baseAsset}`);
+        logger.info(` Retrying stop-loss with actual balance: ${formattedRetryAmount} ${baseAsset}`);
 
         // 実際の残高で再試行
         order = await exchange.createMarketSellOrder(symbol, formattedRetryAmount);
-        console.log('[INFO] Stop-loss retry successful');
+        logger.info('[INFO] Stop-loss retry successful');
 
         // 売却量を更新（後続処理で使用）
         sellAmount = retryAmount;
@@ -692,7 +696,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     }
 
     // デバッグ用：注文構造をログ出力
-    console.log(`[DEBUG] Stop-loss order structure for ${symbol}:`, JSON.stringify(order, null, 2));
+    logger.debug(` Stop-loss order structure for ${symbol}:`, JSON.stringify(order, null, 2));
 
     // 実行価格を取得（異なる取引所の注文構造に対応）
     let executionPrice = null;
@@ -708,9 +712,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       try {
         const ticker = await marketDataProvider.fetchTicker(exchange, symbol);
         executionPrice = ticker.last || ticker.close;
-        console.log(`[DEBUG] Using fallback price from ticker: ${executionPrice}`);
+        logger.debug(` Using fallback price from ticker: ${executionPrice}`);
       } catch (tickerError) {
-        console.warn(`[WARNING] Could not get execution price for ${symbol}:`, tickerError.message);
+        logger.warn(` Could not get execution price for ${symbol}:`, tickerError.message);
         executionPrice = null;
       }
     }
@@ -718,12 +722,12 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     // 最終フォールバック：executionPriceがnullの場合はエントリー価格を使用
     if (executionPrice === null || executionPrice === undefined || isNaN(executionPrice)) {
       executionPrice = position.entryPrice;
-      console.warn(`[WARNING] Using entry price as final fallback for closePrice: ${executionPrice} for ${symbol}`);
+      logger.warn(` Using entry price as final fallback for closePrice: ${executionPrice} for ${symbol}`);
 
       // それでもnullの場合は0を設定（データ整合性のため）
       if (executionPrice === null || executionPrice === undefined || isNaN(executionPrice)) {
         executionPrice = 0;
-        console.error(`[ERROR] No valid price available for closePrice, setting to 0 for ${symbol}`);
+        logger.error(` No valid price available for closePrice, setting to 0 for ${symbol}`);
       }
     }
 
@@ -742,7 +746,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       position.amount = parseFloat(newAmount !== null && newAmount !== undefined ? newAmount.toFixed(amountPrecision) : 0);
       position.updatedAt = Date.now();
       await savePosition(position.key, position);
-      console.log(`[DEBUG] Partial stop-loss: remaining position ${position.amount}`);
+      logger.debug(` Partial stop-loss: remaining position ${position.amount}`);
 
       // summary:tradeの同期：部分決済分を反映
       try {
@@ -759,9 +763,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           orderId: order.id
         };
         await updateTradeSummary(partialTrade);
-        console.log(`[DEBUG] Trade summary updated for partial close: ${finalFormattedAmount}`);
+        logger.debug(` Trade summary updated for partial close: ${finalFormattedAmount}`);
       } catch (summaryError) {
-        console.warn(`[リスク管理] 部分決済時のsummary:trade更新失敗: ${summaryError.message}`);
+        logger.warn(`[リスク管理] 部分決済時のsummary:trade更新失敗: ${summaryError.message}`);
         // 部分決済は成功しているので、サマリー更新失敗でも処理は継続
       }
     } else {
@@ -769,7 +773,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       position.status = 'closed';
       position.closePrice = executionPrice;
       position.closedAt = Date.now();
-      console.log('[DEBUG] Complete stop-loss: position closed, cleaning up from Redis');
+      logger.info('[DEBUG] Complete stop-loss: position closed, cleaning up from Redis');
 
       // ポジションクリーンアップ（履歴保存後にRedisから削除）
       try {
@@ -779,17 +783,17 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         });
 
         if (cleanupResult.success) {
-          console.log(`[INFO] Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
+          logger.info(` Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
           if (cleanupResult.historyKey) {
-            console.log(`[INFO] Position history saved to MongoDB: ${cleanupResult.historyKey}`);
+            logger.info(` Position history saved to MongoDB: ${cleanupResult.historyKey}`);
           }
         } else {
-          console.warn(`[WARNING] Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
+          logger.warn(` Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
           // クリーンアップに失敗した場合は通常の保存に戻す
           await savePosition(position.key, position);
         }
       } catch (cleanupError) {
-        console.error(`[ERROR] Position cleanup error: ${position.key}`, cleanupError.message);
+        logger.error(` Position cleanup error: ${position.key}`, cleanupError.message);
         // エラーの場合は通常の保存に戻す
         await savePosition(position.key, position);
       }
@@ -829,9 +833,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       remainingAmount: isPartialClose ? position.amount : 0
     };
   } catch (error) {
-    console.error(`ストップロス注文の実行に失敗: ${symbol} - ${error.message}`);
-    console.error(`エラースタック: ${error.stack}`); // スタックトレースを追加
-    console.error(`エラー発生時のavailableToSell状態: ${typeof availableToSell} / ${availableToSell}`);
+    logger.error(`ストップロス注文の実行に失敗: ${symbol} - ${error.message}`);
+    logger.error(`エラースタック: ${error.stack}`); // スタックトレースを追加
+    logger.error(`エラー発生時のavailableToSell状態: ${typeof availableToSell} / ${availableToSell}`);
 
     // 詳細なエラー情報を収集
     let errorDetails = '';
@@ -880,9 +884,9 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       try {
         const { releaseDistributedLock } = require('../../database/manager');
         await releaseDistributedLock(distributedLock);
-        console.log(`[DEBUG] Released distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
+        logger.debug(` Released distributed lock for stop-loss: ${symbol} - ${strategyKey}`);
       } catch (releaseError) {
-        console.error(`[ERROR] Failed to release distributed lock: ${releaseError.message}`);
+        logger.error(` Failed to release distributed lock: ${releaseError.message}`);
       }
     }
   }
@@ -900,7 +904,7 @@ async function clearPnLTracker() {
   try {
     await clearAllPnLRedis();
   } catch (error) {
-    console.warn('Redis 損益クリア失敗、メモリストレージのみクリア:', error.message);
+    logger.warn('Redis 損益クリア失敗、メモリストレージのみクリア:', error.message);
   }
   fallbackPnlTracker.clear();
 }
@@ -912,7 +916,7 @@ async function clearPnLTracker() {
  * @param {string} strategyKey - 戦略キー
  */
 async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
-  console.log(`[リスク管理] 戦略データクリア開始: ${exchangeId}/${symbol}/${strategyKey}`);
+  logger.info(`[リスク管理] 戦略データクリア開始: ${exchangeId}/${symbol}/${strategyKey}`);
 
   let clearedCount = 0;
   let errorCount = 0;
@@ -945,7 +949,7 @@ async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
         }
 
       } catch (positionError) {
-        console.warn(`ポジションクリア失敗: ${position.key || 'unknown'}`, positionError.message);
+        logger.warn(`ポジションクリア失敗: ${position.key || 'unknown'}`, positionError.message);
         errorCount++;
       }
     }
@@ -958,7 +962,7 @@ async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
       // メモリから削除
       if (fallbackPnlTracker.has(pnlKey)) {
         fallbackPnlTracker.delete(pnlKey);
-        console.log(`[リスク管理] 損益データクリア: ${pnlKey}`);
+        logger.info(`[リスク管理] 損益データクリア: ${pnlKey}`);
       }
 
       // Redis からも削除（個別削除のためのヘルパー関数が必要）
@@ -966,7 +970,7 @@ async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
       await recordPnL(exchangeId, strategyKey, 0); // リセット
 
     } catch (pnlError) {
-      console.warn(`損益データクリア失敗: ${exchangeId}:${strategyKey}`, pnlError.message);
+      logger.warn(`損益データクリア失敗: ${exchangeId}:${strategyKey}`, pnlError.message);
       errorCount++;
     }
 
@@ -976,10 +980,10 @@ async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
       const stopLossKey = `${exchangeId}:${symbol}:${strategyKey}`;
       // 注意: stopLossTracker は実装によってはグローバルではない可能性があるため、
       // ここでは基本的なログ出力のみ
-      console.log(`[リスク管理] ストップロス情報確認: ${stopLossKey}`);
+      logger.info(`[リスク管理] ストップロス情報確認: ${stopLossKey}`);
 
     } catch (stopLossError) {
-      console.warn(`ストップロス情報クリア失敗: ${exchangeId}:${symbol}:${strategyKey}`, stopLossError.message);
+      logger.warn(`ストップロス情報クリア失敗: ${exchangeId}:${symbol}:${strategyKey}`, stopLossError.message);
       errorCount++;
     }
 
@@ -990,12 +994,12 @@ async function clearStrategyRiskData(exchangeId, symbol, strategyKey) {
       message: `ポジション: ${clearedCount}件クリア, エラー: ${errorCount}件`
     };
 
-    console.log(`[リスク管理] 戦略データクリア完了: ${exchangeId}/${symbol}/${strategyKey} - ${result.message}`);
+    logger.info(`[リスク管理] 戦略データクリア完了: ${exchangeId}/${symbol}/${strategyKey} - ${result.message}`);
 
     return result;
 
   } catch (error) {
-    console.error(`[リスク管理] 戦略データクリアエラー: ${exchangeId}/${symbol}/${strategyKey}`, error.message);
+    logger.error(`[リスク管理] 戦略データクリアエラー: ${exchangeId}/${symbol}/${strategyKey}`, error.message);
     return {
       success: false,
       clearedCount,
@@ -1020,7 +1024,7 @@ async function recordPnL(exchangeId, strategyKey, pnl) {
     }
   } catch (error) {
     // Redis接続エラー時はメモリにフォールバック
-    console.warn(`Redis損益記録エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
+    logger.warn(`Redis損益記録エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
     recordPnLFallback(exchangeId, strategyKey, pnl);
   }
 }
@@ -1055,7 +1059,7 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
       return totalPnL;
     }
   } catch (error) {
-    console.warn(`Redis期間損益計算エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
+    logger.warn(`Redis期間損益計算エラー、メモリにフォールバック: ${exchangeId}:${strategyKey}`, error.message);
   }
 
   // Redis失敗時はメモリから計算
@@ -1108,14 +1112,14 @@ async function getCurrentBalance(exchange) {
           const jpyValue = balance.total[currency] * (ticker.last || ticker.close);
           totalJPY += jpyValue;
         } catch (error) {
-          console.warn(`${currency}/JPY の価格取得に失敗:`, error.message);
+          logger.warn(`${currency}/JPY の価格取得に失敗:`, error.message);
         }
       }
     }
 
     return totalJPY;
   } catch (error) {
-    console.error('残高取得に失敗:', error.message);
+    logger.error('残高取得に失敗:', error.message);
     return 100000; // フォールバック値
   }
 }
@@ -1200,7 +1204,7 @@ async function checkPositionLimits(exchange, symbol, strategyKey, riskSettings =
       }
     }
   } catch (error) {
-    console.warn('全ポジション数チェックでエラー、フォールバック処理:', error.message);
+    logger.warn('全ポジション数チェックでエラー、フォールバック処理:', error.message);
     // フォールバック: メモリストレージから取得
     for (const [key] of fallbackPositionStore.entries()) {
       const [exchangeId, sym, strategy] = key.split(':');
@@ -1328,7 +1332,7 @@ async function generateRiskManagementReport(exchange, strategyKey, riskSettings 
 
     return report;
   } catch (error) {
-    console.error('リスク管理レポート生成エラー:', error.message);
+    logger.error('リスク管理レポート生成エラー:', error.message);
     return null;
   }
 }
@@ -1423,7 +1427,7 @@ async function sendRiskManagementNotification(title, details, footer = null, sec
  */
 async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
   try {
-    console.log(`🧹 [リスク管理] ポジションクリーンアップを開始 (${olderThanHours}時間以上前の完了ポジション)`);
+    logger.info(`🧹 [リスク管理] ポジションクリーンアップを開始 (${olderThanHours}時間以上前の完了ポジション)`);
 
     const result = await cleanupOldClosedPositions(olderThanHours, saveHistory);
 
@@ -1443,7 +1447,7 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
         }
       }
 
-      console.log(`[INFO] ポジションクリーンアップ完了: ${result.deleted}件削除, ${result.historySaved}件履歴保存`);
+      logger.info(` ポジションクリーンアップ完了: ${result.deleted}件削除, ${result.historySaved}件履歴保存`);
     } else {
       const errorMessage = '❌ [リスク管理] ポジションクリーンアップ失敗\n' +
                           `エラー: ${result.error}\n` +
@@ -1453,7 +1457,7 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
         await postErrorToDiscord(errorMessage);
       }
 
-      console.error('[ERROR] ポジションクリーンアップ失敗:', result.error);
+      logger.error('[ERROR] ポジションクリーンアップ失敗:', result.error);
     }
 
     return result;
@@ -1466,7 +1470,7 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
       await postErrorToDiscord(errorMessage);
     }
 
-    console.error('[ERROR] ポジションクリーンアップで予期しないエラー:', error);
+    logger.error('[ERROR] ポジションクリーンアップで予期しないエラー:', error);
     return { success: false, error: error.message };
   }
 }
@@ -1481,8 +1485,8 @@ async function performPositionCleanup(olderThanHours = 24, saveHistory = true) {
  * @param {string} baseAsset - ベースアセット
  */
 async function repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset) {
-  console.log(`[INFO] Starting comprehensive position repair for ${exchange.id}:${symbol}:${strategyKey}`);
-  console.log(`[INFO] Current state - Net: ${netPosition}, Actual: ${actualBalance}`);
+  logger.info(` Starting comprehensive position repair for ${exchange.id}:${symbol}:${strategyKey}`);
+  logger.info(` Current state - Net: ${netPosition}, Actual: ${actualBalance}`);
 
   try {
     let repairAction = 'comprehensive_repair';
@@ -1493,7 +1497,7 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
     const openPositions = positions.filter(p => p.status !== 'closed');
 
     if (openPositions.length > 0) {
-      console.log(`[INFO] Closing ${openPositions.length} positions for repair`);
+      logger.info(` Closing ${openPositions.length} positions for repair`);
 
       for (const position of openPositions) {
         position.status = 'closed';
@@ -1506,21 +1510,21 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
             delayHours: 0
           });
           closedCount++;
-          console.log(`[INFO] Closed position: ${position.key}`);
+          logger.info(` Closed position: ${position.key}`);
         } catch (closeError) {
-          console.warn(`[WARNING] Failed to close position ${position.key}: ${closeError.message}`);
+          logger.warn(` Failed to close position ${position.key}: ${closeError.message}`);
           // フォールバック: 通常の保存
           await savePosition(position.key, position);
           closedCount++;
         }
       }
 
-      console.log(`[INFO] Closed ${closedCount} positions for repair`);
+      logger.info(` Closed ${closedCount} positions for repair`);
     }
 
     // 2. ネットポジションと実際残高の強制同期
     if (actualBalance === 0 && netPosition !== 0) {
-      console.log(`[INFO] Forcing net position sync: ${netPosition} -> 0 (actual balance is 0)`);
+      logger.info(` Forcing net position sync: ${netPosition} -> 0 (actual balance is 0)`);
 
       // ネットポジションを実際残高（0）に合わせる
       const currentSummary = await getTradeSummary({
@@ -1542,11 +1546,11 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
           strategyKey
         }, correctedSummary);
 
-        console.log(`[INFO] Synchronized net position to 0 for strategy ${strategyKey}`);
+        logger.info(` Synchronized net position to 0 for strategy ${strategyKey}`);
         repairAction = 'net_position_sync';
       }
     } else if (netPosition !== actualBalance && Math.abs(netPosition - actualBalance) > 0.0001) {
-      console.log(`[INFO] Synchronizing net position: ${netPosition} -> ${actualBalance}`);
+      logger.info(` Synchronizing net position: ${netPosition} -> ${actualBalance}`);
 
       const currentSummary = await getTradeSummary({
         exchangeId: exchange.id,
@@ -1570,11 +1574,11 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
           strategyKey
         }, correctedSummary);
 
-        console.log(`[INFO] Synchronized net position to actual balance: ${actualBalance}`);
+        logger.info(` Synchronized net position to actual balance: ${actualBalance}`);
         repairAction = 'balance_sync';
       }
     } else {
-      console.log('[INFO] Position and balance already synchronized');
+      logger.info('[INFO] Position and balance already synchronized');
     }
 
     // Discord通知
@@ -1592,10 +1596,10 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
       await postOrderToDiscord(repairMessage);
     }
 
-    console.log(`[INFO] Comprehensive position repair completed: ${repairAction}, closed ${closedCount} positions`);
+    logger.info(` Comprehensive position repair completed: ${repairAction}, closed ${closedCount} positions`);
 
   } catch (error) {
-    console.error(`[ERROR] Position repair failed: ${error.message}`);
+    logger.error(` Position repair failed: ${error.message}`);
 
     const errorMessage = '❌ [リスク管理] ポジション修復失敗\n' +
                          `取引所: ${exchange.id}\n` +

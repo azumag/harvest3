@@ -71,7 +71,20 @@ class Logger {
       formattedMessage = `${message} ${argsStr}`;
     }
 
-    console.log(`${timestamp} ${levelStr} ${context} ${formattedMessage}`);
+    const fullMessage = `${timestamp} ${levelStr} ${context} ${formattedMessage}`;
+
+    // 適切なコンソールメソッドを使用
+    switch (level.toUpperCase()) {
+      case 'WARN':
+        console.warn(fullMessage);
+        break;
+      case 'ERROR':
+        console.error(fullMessage);
+        break;
+      default:
+        console.log(fullMessage);
+        break;
+    }
   }
 
   info(message, ...args) {
@@ -92,14 +105,17 @@ class Logger {
 
   // 特別なフォーマット用メソッド
   success(message, ...args) {
+    if (!this.shouldLog('info')) return;
     console.log(`${this.formatTimestamp()} ${this.colors.green}${this.colors.bright}✓${this.colors.reset} ${this.formatContext()} ${this.colors.green}${message}${this.colors.reset}`, ...args);
   }
 
   separator() {
+    if (!this.shouldLog('info')) return;
     console.log(`${this.colors.gray}${'─'.repeat(80)}${this.colors.reset}`);
   }
 
   header(title) {
+    if (!this.shouldLog('info')) return;
     this.separator();
     console.log(`${this.colors.cyan}${this.colors.bright}  ${title}  ${this.colors.reset}`);
     this.separator();

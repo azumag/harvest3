@@ -21,6 +21,10 @@ const {
 
 const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
+const Logger = require('../hft/utils/Logger');
+
+// Logger instance for database operations
+const logger = new Logger('DatabaseManager');
 
 // フォールバック定数
 const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
@@ -140,23 +144,23 @@ function generateRealisticSpread(midPrice, volume, volatility) {
 
 async function initializeDB() {
   try {
-    console.log('[DB初期化] データベース接続を開始します...');
+    logger.info('[DB初期化] データベース接続を開始します...');
 
     // Redisの初期化
-    console.log('[DB初期化] Redis接続中...');
+    logger.info('[DB初期化] Redis接続中...');
     await initialize();
 
     // MongoDBの初期化（改善された接続メカニズム使用）
-    console.log('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
+    logger.info('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
     await connectWithRetry(5, 1000); // 最大5回、1秒から開始の指数バックオフ
 
     // 接続監視の開始
-    console.log('[DB初期化] MongoDB接続監視を開始します...');
+    logger.info('[DB初期化] MongoDB接続監視を開始します...');
     startHealthCheck();
 
-    console.log('[DB初期化] データベース初期化が完了しました ✓');
+    logger.info('[DB初期化] データベース初期化が完了しました ✓');
   } catch (error) {
-    console.error('[DB初期化] データベース初期化に失敗しました:', error.message);
+    logger.error('[DB初期化] データベース初期化に失敗しました:', error.message);
     throw new Error(`データベース初期化失敗: ${error.message}`);
   }
 }
@@ -175,15 +179,15 @@ async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, l
   try {
     const ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
     if (!ohlcvs || ohlcvs.length === 0) {
-      console.log(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
+      logger.info(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
       return [];
     }
     // Redisに保存
     await updateBacktestOHLCVRedisSortedSet(exchange.id, symbol, timeframe, ohlcvs);
-    console.log(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
+    logger.info(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
     return ohlcvs;
   } catch (error) {
-    console.error(`Error loading historical OHLCV data: ${error.message}`);
+    logger.error(`Error loading historical OHLCV data: ${error.message}`);
     throw error;
   }
 }
@@ -201,11 +205,11 @@ async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, l
 */
 async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100, timestamp) {
   try {
-    // console.log(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+    // logger.info(`fetchBacktestOHLCVData: ${exchangeId} ${symbol} ${timeframe} ${limit} ${timestamp}`);
     // Redisからデータを取得
     const redisData = await getBacktestOHLCVRedisBeforeTimestamp(exchangeId, symbol, timeframe, timestamp, limit);
     if (!redisData || redisData.length === 0) {
-      // console.log(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
+      // logger.info(`${symbol} - ${timeframe}: Redisにデータが見つかりませんでした。`);
       return [];
     }
 
@@ -224,7 +228,7 @@ async function fetchBacktestOHLCVData(exchangeId, symbol, timeframe, limit = 100
       ];
     });
   } catch (error) {
-    console.error(`Error fetching historical OHLCV data: ${error.message}`);
+    logger.error(`Error fetching historical OHLCV data: ${error.message}`);
     throw error;
   }
 }
@@ -270,13 +274,13 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     // バックテストモードの場合（既存ロジックを維持）
     if (options.backtest) {
       const timestamp = options.backtest.timestamp;
-      // console.log(`[OHLCVData] バックテストモード: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
+      // logger.info(`[OHLCVData] バックテストモード: ${exchange.id} ${symbol} ${timeframe} ${limit} ${timestamp}`);
       return await fetchBacktestOHLCVData(exchange.id, symbol, timeframe, limit, timestamp);
     }
 
     // 通常モード時のログを制御（バックテスト時は出力しない）
     if (!isBacktestMode()) {
-      console.log(`[OHLCVData] 通常モード: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
+      logger.info(`[OHLCVData] 通常モード: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
     }
 
     // キャッシュマネージャーとキューの初期化
@@ -288,14 +292,14 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
     if (cachedData && !options.forceUpdate) {
       const duration = Date.now() - startTime;
       if (!isBacktestMode()) {
-        console.log(`[OHLCVData] キャッシュヒット: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`);
+        logger.info(`[OHLCVData] キャッシュヒット: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`);
       }
       return applyLimitToData(cachedData, limit);
     }
 
     // 2. 新しいデータの取得が必要
     if (!isBacktestMode()) {
-      console.log(`[OHLCVData] APIから新しいデータを取得: ${exchange.id} ${symbol} ${timeframe}`);
+      logger.info(`[OHLCVData] APIから新しいデータを取得: ${exchange.id} ${symbol} ${timeframe}`);
     }
 
     // forceUpdate が true の場合以外は、limit を 200 にする（既存ロジック維持）
@@ -318,7 +322,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
 
     if (!ohlcvs || ohlcvs.length === 0) {
       if (!isBacktestMode()) {
-        console.log(`[OHLCVData] ${symbol} - ${timeframe}: データが見つかりませんでした。`);
+        logger.info(`[OHLCVData] ${symbol} - ${timeframe}: データが見つかりませんでした。`);
       }
       return [];
     }
@@ -333,23 +337,23 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
 
     const duration = Date.now() - startTime;
     if (!isBacktestMode()) {
-      console.log(`[OHLCVData] API取得完了: ${exchange.id} ${symbol} ${timeframe} (${ohlcvs.length}件, ${duration}ms)`);
+      logger.info(`[OHLCVData] API取得完了: ${exchange.id} ${symbol} ${timeframe} (${ohlcvs.length}件, ${duration}ms)`);
     }
 
     return applyLimitToData(ohlcvs, limit);
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`[OHLCVData] エラー: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`, error);
+    logger.error(`[OHLCVData] エラー: ${exchange.id} ${symbol} ${timeframe} (${duration}ms)`, error);
 
     // フォールバック: 従来の方法で取得を試行
     try {
       if (!isBacktestMode()) {
-        console.log('[OHLCVData] フォールバック処理: 従来の方法で取得');
+        logger.info('[OHLCVData] フォールバック処理: 従来の方法で取得');
       }
       return await fetchOHLCVDataFallback(exchange, symbol, timeframe, limit, options);
     } catch (fallbackError) {
-      console.error('[OHLCVData] フォールバック処理も失敗:', fallbackError);
+      logger.error('[OHLCVData] フォールバック処理も失敗:', fallbackError);
 
       // 重要なエラーはDiscordに通知
       const { postErrorToDiscord } = require('../common/notifications');
@@ -357,7 +361,7 @@ async function fetchOHLCVData(exchange, symbol, timeframe, limit = 100, options 
       try {
         await postErrorToDiscord(errorMessage);
       } catch (err) {
-        console.error('Discord通知エラー:', err);
+        logger.error('Discord通知エラー:', err);
       }
 
       throw error; // 元のエラーをスロー
@@ -392,11 +396,11 @@ async function saveOHLCVToMongoDB(exchange, symbol, timeframe, ohlcvs, options) 
         };
         addOhlcvMongoDB(ohlcvData);
       } catch (error) {
-        console.error('[OHLCVData] MongoDB保存エラー:', error);
+        logger.error('[OHLCVData] MongoDB保存エラー:', error);
       }
     }
   } catch (error) {
-    console.error('[OHLCVData] MongoDB保存処理エラー:', error);
+    logger.error('[OHLCVData] MongoDB保存処理エラー:', error);
   }
 }
 
@@ -469,7 +473,7 @@ async function getCurrentOrderPositionBySide(exchange, symbol, strategyKey, side
 
   // シンボルが取引所でサポートされているか確認
   if (!(symbol in exchange.markets)) {
-    console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。${side === 'buy' ? '買い' : '売り'}注文ポジション計算をスキップします。`);
+    logger.info(`警告: ${exchange.id}は${symbol}をサポートしていません。${side === 'buy' ? '買い' : '売り'}注文ポジション計算をスキップします。`);
     return 0; // サポートされていない場合は0を返す
   }
 
@@ -480,7 +484,7 @@ async function getCurrentOrderPositionBySide(exchange, symbol, strategyKey, side
   } catch (fetchError) {
     // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
     if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
-      console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+      logger.info(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
       return 0; // エラーの場合は0を返す
     }
     // その他のエラーは再スロー
@@ -532,7 +536,7 @@ async function getRealizedPnL(exchange, symbol, strategyKey, options = {}) { // 
     strategyKey
   });
 
-  // console.log(summary);
+  // logger.info(summary);
   return (summary && summary.realizedPnL) ? summary.realizedPnL : 0;
 }
 
@@ -555,17 +559,17 @@ async function getOrderStrategyKeyByOrderId(orderId) {
   // CRITICAL FIX: OUTSIDEデフォルトが売り注文の誤配置を引き起こす問題を修正
   // 売り注文が元の買い戦略に正しく関連付けされるよう、戦略探索を強化
   if (!order || !order.strategy) {
-    console.warn(`[戦略探索] OrderID ${orderId} の戦略が見つかりません。関連取引から推測を試みます...`);
+    logger.warn(`[戦略探索] OrderID ${orderId} の戦略が見つかりません。関連取引から推測を試みます...`);
 
     // MongoDB から同じOrderIDの取引を探す
     const relatedTrades = await listTrades({ orderId }, {}, 10);
     if (relatedTrades.length > 0 && relatedTrades[0].strategy) {
-      console.log(`[戦略探索] 関連取引から戦略を復元: ${relatedTrades[0].strategy}`);
+      logger.info(`[戦略探索] 関連取引から戦略を復元: ${relatedTrades[0].strategy}`);
       return relatedTrades[0].strategy;
     }
 
     // それでも見つからない場合は、エラーログを記録してOUTSIDEを返す
-    console.error(`[戦略探索] OrderID ${orderId} の戦略が完全に不明です。OUTSIDE戦略を使用します。`);
+    logger.error(`[戦略探索] OrderID ${orderId} の戦略が完全に不明です。OUTSIDE戦略を使用します。`);
     await postErrorToDiscord(`⚠️ 戦略不明注文検出: OrderID ${orderId} - 売り注文の誤配置リスク`);
   }
 
@@ -592,7 +596,7 @@ if (process.env.NODE_ENV !== 'test') {
     expiredKeys.forEach(key => tradeUpdateCache.delete(key));
 
     if (expiredKeys.length > 0) {
-      console.log(`[約定更新キャッシュ] 期限切れエントリを${expiredKeys.length}件削除`);
+      logger.info(`[約定更新キャッシュ] 期限切れエントリを${expiredKeys.length}件削除`);
     }
   }, 5 * 60 * 1000);
 }
@@ -611,14 +615,14 @@ async function updateFilledTrades(exchange, symbol) {
   const cached = tradeUpdateCache.get(cacheKey);
   if (cached && (now - cached.timestamp) < CACHE_DURATION) {
     const cacheAge = Math.round((now - cached.timestamp)/1000);
-    console.log(`[約定更新] キャッシュヒット: ${exchange.id} ${symbol} (${cacheAge}秒前の結果を返却)`);
+    logger.info(`[約定更新] キャッシュヒット: ${exchange.id} ${symbol} (${cacheAge}秒前の結果を返却)`);
     const result = await cached.promise;
-    console.log(`[約定更新] キャッシュ結果返却完了: ${exchange.id} ${symbol} -> ${result}件`);
+    logger.info(`[約定更新] キャッシュ結果返却完了: ${exchange.id} ${symbol} -> ${result}件`);
     return result;
   }
 
   const startTime = Date.now();
-  console.log(`[約定更新] 開始: ${exchange.id} ${symbol}`);
+  logger.info(`[約定更新] 開始: ${exchange.id} ${symbol}`);
 
   // 実際の処理をPromiseとしてキャッシュに保存
   const updatePromise = updateFilledTradesInternal(exchange, symbol, startTime);
@@ -648,14 +652,14 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     // fetchMyTradesメソッドが利用可能かどうかを確認
     if (!exchange.has || !exchange.has.fetchMyTrades) {
       if (!isBacktest) {
-        console.warn(`[約定更新] fetchMyTradesメソッドがサポートされていません: ${exchange.id} ${symbol}`);
+        logger.warn(`[約定更新] fetchMyTradesメソッドがサポートされていません: ${exchange.id} ${symbol}`);
       }
       return 0;
     }
 
     // 取引所から約定履歴を取得
     if (!isBacktest) {
-      console.log(`[約定更新] API呼び出し開始: ${exchange.id} ${symbol}`);
+      logger.info(`[約定更新] API呼び出し開始: ${exchange.id} ${symbol}`);
     }
     const apiStart = Date.now();
 
@@ -671,7 +675,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     if (!trades || trades.length === 0) {
       const totalTime = Date.now() - startTime;
       if (!isBacktest) {
-        console.log(`[約定更新] 完了（約定なし）: ${exchange.id} ${symbol} (${totalTime}ms)`);
+        logger.info(`[約定更新] 完了（約定なし）: ${exchange.id} ${symbol} (${totalTime}ms)`);
       }
       return 0;
     }
@@ -679,13 +683,13 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     const apiTime = Date.now() - apiStart;
 
     if (!isBacktest) {
-      console.log(`[約定更新] API呼び出し完了: ${exchange.id} ${symbol} (${apiTime}ms, ${trades ? trades.length : 0}件)`);
+      logger.info(`[約定更新] API呼び出し完了: ${exchange.id} ${symbol} (${apiTime}ms, ${trades ? trades.length : 0}件)`);
     }
 
 
     // 戦略キーを一括取得してキャッシュ
     if (!isBacktest) {
-      console.log(`[約定更新] 戦略キー取得開始: ${trades.length}件の約定を処理`);
+      logger.info(`[約定更新] 戦略キー取得開始: ${trades.length}件の約定を処理`);
     }
     const strategyStart = Date.now();
     const orderIds = trades.map(trade => trade.order).filter(id => id);
@@ -710,11 +714,11 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
 
         const strategyTime = Date.now() - strategyStart;
         if (!isBacktest) {
-          console.log(`[約定更新] 戦略キー取得完了: ${orderIds.length}件 (${strategyTime}ms)`);
+          logger.info(`[約定更新] 戦略キー取得完了: ${orderIds.length}件 (${strategyTime}ms)`);
         }
       } catch (error) {
         if (!isBacktest) {
-          console.warn(`戦略キー一括取得エラー: ${error.message}`);
+          logger.warn(`戦略キー一括取得エラー: ${error.message}`);
         }
       }
     }
@@ -747,7 +751,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     let successCount = 0;
 
     if (!isBacktest) {
-      console.log(`[約定更新] 分散トランザクション処理開始: ${tradeDataList.length}件`);
+      logger.info(`[約定更新] 分散トランザクション処理開始: ${tradeDataList.length}件`);
     }
     const dbStart = Date.now();
 
@@ -759,20 +763,20 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
         if (tradeCheck.exists) {
           if (tradeCheck.state === 'COMPLETED') {
             if (!isBacktest) {
-              console.log(`[約定更新] 完了済み約定をスキップ: ${_trade.tradeId} (完了時刻: ${tradeCheck.completedAt})`);
+              logger.info(`[約定更新] 完了済み約定をスキップ: ${_trade.tradeId} (完了時刻: ${tradeCheck.completedAt})`);
             }
             processedCount++;
             successCount++; // 既に完了しているので成功とカウント
             continue;
           } else if (tradeCheck.state === 'PROCESSING') {
             if (!isBacktest) {
-              console.log(`[約定更新] 処理中約定をスキップ: ${_trade.tradeId} (他のプロセスが処理中)`);
+              logger.info(`[約定更新] 処理中約定をスキップ: ${_trade.tradeId} (他のプロセスが処理中)`);
             }
             processedCount++;
             continue; // 処理中の場合は成功にもカウントしない
           } else if (tradeCheck.state === 'FAILED') {
             if (!isBacktest) {
-              console.log(`[約定更新] 失敗約定を再処理: ${_trade.tradeId}`);
+              logger.info(`[約定更新] 失敗約定を再処理: ${_trade.tradeId}`);
             }
             // 失敗状態の場合は再処理を試行
           }
@@ -784,12 +788,12 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
         if (result.success) {
           successCount++;
           if (!isBacktest) {
-            console.log(`[約定更新] 分散トランザクション成功: ${_trade.tradeId}`);
+            logger.info(`[約定更新] 分散トランザクション成功: ${_trade.tradeId}`);
           }
         } else {
           // トランザクション失敗時の処理
           if (!isBacktest) {
-            console.error(`[約定更新] 分散トランザクション失敗: ${_trade.tradeId} - ${result.error}`);
+            logger.error(`[約定更新] 分散トランザクション失敗: ${_trade.tradeId} - ${result.error}`);
           }
 
           // 重要エラーの場合はDiscord通知
@@ -809,7 +813,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
         }
       } catch (error) {
         if (!isBacktest) {
-          console.error(`[約定更新] 予期しないエラー: ${_trade.tradeId} - ${error.message}`);
+          logger.error(`[約定更新] 予期しないエラー: ${_trade.tradeId} - ${error.message}`);
         }
 
         // 予期しないエラーもDiscord通知
@@ -827,7 +831,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
 
     const dbTime = Date.now() - dbStart;
     if (!isBacktest) {
-      console.log(`[約定更新] 分散トランザクション処理完了: ${successCount}/${processedCount}件成功 (${dbTime}ms)`);
+      logger.info(`[約定更新] 分散トランザクション処理完了: ${successCount}/${processedCount}件成功 (${dbTime}ms)`);
     }
 
     // サマリータイムスタンプは最後に一度だけ更新
@@ -836,7 +840,7 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
         await updateTradeSummaryTimestamp(exchange.id, symbol, now);
       } catch (error) {
         if (!isBacktest) {
-          console.warn(`サマリータイムスタンプ更新エラー: ${error.message}`);
+          logger.warn(`サマリータイムスタンプ更新エラー: ${error.message}`);
         }
       }
     }
@@ -844,15 +848,15 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
     const totalTime = Date.now() - startTime;
     if (!isBacktest) {
       if (processedCount > 0) {
-        console.log(`[約定更新] 完了: ${exchange.id} ${symbol} ${processedCount}件処理 (合計${totalTime}ms)`);
+        logger.info(`[約定更新] 完了: ${exchange.id} ${symbol} ${processedCount}件処理 (合計${totalTime}ms)`);
       } else {
-        console.log(`[約定更新] 完了: ${exchange.id} ${symbol} 約定なし (${totalTime}ms)`);
+        logger.info(`[約定更新] 完了: ${exchange.id} ${symbol} 約定なし (${totalTime}ms)`);
       }
     }
     return processedCount;
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error(`[約定更新] エラー: ${exchange.id} ${symbol} (${totalTime}ms)`, error.message);
+    logger.error(`[約定更新] エラー: ${exchange.id} ${symbol} (${totalTime}ms)`, error.message);
 
     // エラー時はキャッシュをクリア
     const cacheKey = `${exchange.id}:${symbol}`;
@@ -887,7 +891,7 @@ async function checkTradeExists(tradeId) {
       completedAt: existingTrade.processingState === 'COMPLETED' ? existingTrade.lastStateUpdate : null
     };
   } catch (error) {
-    console.error(`重複チェックエラー: ${tradeId} - ${error.message}`);
+    logger.error(`重複チェックエラー: ${tradeId} - ${error.message}`);
     return { exists: false, state: null, error: error.message };
   }
 }
@@ -907,7 +911,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
     distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
     if (!distributedLock.acquired) {
       if (!isBacktest) {
-        console.log(`[2PC] 分散ロック取得失敗: ${trade.tradeId} - 他の処理が進行中`);
+        logger.info(`[2PC] 分散ロック取得失敗: ${trade.tradeId} - 他の処理が進行中`);
       }
       return { success: false, error: 'Lock acquisition failed', severity: 'warning' };
     }
@@ -916,14 +920,14 @@ async function executeDistributedTransaction(trade, isBacktest) {
     const stateResult = await setTradeProcessingState(trade.tradeId, 'PENDING');
     if (!stateResult.success) {
       if (!isBacktest) {
-        console.log(`[2PC] 処理状態設定失敗: ${trade.tradeId} - ${stateResult.reason}`);
+        logger.info(`[2PC] 処理状態設定失敗: ${trade.tradeId} - ${stateResult.reason}`);
       }
       return { success: false, error: stateResult.reason, severity: 'warning' };
     }
 
     // === PHASE 1: PREPARE ===
     if (!isBacktest) {
-      console.log(`[2PC] Prepare Phase開始: ${trade.tradeId}`);
+      logger.info(`[2PC] Prepare Phase開始: ${trade.tradeId}`);
     }
 
     // MongoDB Prepare
@@ -939,7 +943,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       // MongoDB への準備処理（トランザクション内）
       await addTradeMongoDB(trade, { session: mongoSession });
       if (!isBacktest) {
-        console.log(`[2PC] MongoDB Prepare完了: ${trade.tradeId}`);
+        logger.info(`[2PC] MongoDB Prepare完了: ${trade.tradeId}`);
       }
     } catch (error) {
       throw new Error(`MongoDB Prepare失敗: ${error.message}`);
@@ -954,7 +958,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       // Redis準備処理をトランザクションキューに追加
       await prepareRedisOperations(redisTransaction, trade);
       if (!isBacktest) {
-        console.log(`[2PC] Redis Prepare完了: ${trade.tradeId}`);
+        logger.info(`[2PC] Redis Prepare完了: ${trade.tradeId}`);
       }
     } catch (error) {
       throw new Error(`Redis Prepare失敗: ${error.message}`);
@@ -962,7 +966,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
 
     // === PHASE 2: COMMIT ===
     if (!isBacktest) {
-      console.log(`[2PC] Commit Phase開始: ${trade.tradeId}`);
+      logger.info(`[2PC] Commit Phase開始: ${trade.tradeId}`);
     }
 
     // Redis先行コミット（原子性保証）
@@ -978,14 +982,14 @@ async function executeDistributedTransaction(trade, isBacktest) {
     await setTradeProcessingState(trade.tradeId, 'COMPLETED');
 
     if (!isBacktest) {
-      console.log(`[2PC] 分散トランザクション成功: ${trade.tradeId}`);
+      logger.info(`[2PC] 分散トランザクション成功: ${trade.tradeId}`);
     }
 
     return { success: true };
 
   } catch (error) {
     if (!isBacktest) {
-      console.error(`[2PC] エラー発生: ${trade.tradeId} - ${error.message}`);
+      logger.error(`[2PC] エラー発生: ${trade.tradeId} - ${error.message}`);
     }
 
     // フェイルバック処理
@@ -994,7 +998,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       if (mongoSession) {
         await mongoSession.abortTransaction();
         if (!isBacktest) {
-          console.log(`[2PC] MongoDB ロールバック完了: ${trade.tradeId}`);
+          logger.info(`[2PC] MongoDB ロールバック完了: ${trade.tradeId}`);
         }
       }
 
@@ -1002,7 +1006,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       if (redisTransaction) {
         await executeRedisCompensation(trade);
         if (!isBacktest) {
-          console.log(`[2PC] Redis 補償トランザクション完了: ${trade.tradeId}`);
+          logger.info(`[2PC] Redis 補償トランザクション完了: ${trade.tradeId}`);
         }
       }
 
@@ -1011,7 +1015,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
 
     } catch (rollbackError) {
       if (!isBacktest) {
-        console.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackError.message}`);
+        logger.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackError.message}`);
       }
     }
 
@@ -1029,7 +1033,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
     if (distributedLock && distributedLock.acquired) {
       await releaseDistributedLock(distributedLock);
       if (!isBacktest) {
-        console.log(`[2PC] 分散ロック解放: ${trade.tradeId}`);
+        logger.info(`[2PC] 分散ロック解放: ${trade.tradeId}`);
       }
     }
   }
@@ -1054,7 +1058,7 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
       ttl
     };
   } catch (error) {
-    console.error(`分散ロック取得エラー: ${error.message}`);
+    logger.error(`分散ロック取得エラー: ${error.message}`);
     return { acquired: false, error: error.message };
   }
 }
@@ -1079,7 +1083,7 @@ async function releaseDistributedLock(lockInfo) {
     const result = await redisClient.eval(script, 1, lockInfo.lockKey, lockInfo.lockValue);
     return result === 1;
   } catch (error) {
-    console.error(`分散ロック解放エラー: ${error.message}`);
+    logger.error(`分散ロック解放エラー: ${error.message}`);
     return false;
   }
 }
@@ -1134,7 +1138,7 @@ async function setTradeProcessingState(tradeId, state) {
     return { success: true };
 
   } catch (error) {
-    console.error(`処理状態設定エラー: ${tradeId} - ${error.message}`);
+    logger.error(`処理状態設定エラー: ${tradeId} - ${error.message}`);
     return { success: false, reason: error.message };
   }
 }
@@ -1190,7 +1194,7 @@ async function executeRedisCompensation(trade) {
 
     await compensation.exec();
   } catch (error) {
-    console.error(`Redis補償トランザクションエラー: ${error.message}`);
+    logger.error(`Redis補償トランザクションエラー: ${error.message}`);
     throw error;
   }
 }
@@ -1302,7 +1306,7 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
     // シンボルが取引所でサポートされているか確認
     if (!(symbol in exchange.markets)) {
-      console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。利用可能量計算をスキップします。`);
+      logger.info(`警告: ${exchange.id}は${symbol}をサポートしていません。利用可能量計算をスキップします。`);
       return 0; // サポートされていない場合は0を返す
     }
 
@@ -1316,7 +1320,7 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
     } catch (fetchError) {
       // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
       if (fetchError.name === 'AuthenticationError' || fetchError.message.includes('authentication') || fetchError.message.includes('Invalid symbol')) {
-        console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+        logger.info(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
         return 0; // エラーの場合は0を返す
       }
       // その他のエラーは再スロー
@@ -1340,9 +1344,9 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
     // デバッグログ: 売却量計算の詳細
     if (!options.backtest) {
-      console.log(`[売却量DEBUG] ${exchange.id} ${symbol} ${strategyKey}:`);
-      console.log(`  ネットポジション: ${netPosition}`);
-      console.log(`  未約定売り注文量: ${totalSellOrderAmount}`);
+      logger.debug(`[売却量DEBUG] ${exchange.id} ${symbol} ${strategyKey}:`);
+      logger.debug(`  ネットポジション: ${netPosition}`);
+      logger.debug(`  未約定売り注文量: ${totalSellOrderAmount}`);
     }
 
     // 利用可能量 = ネットポジション - 未約定売り注文量
@@ -1361,11 +1365,11 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
       // 計算された利用可能量が実際の残高を超えている場合は、実際の残高を使用
       if (availableAmount > actualBalance) {
-        console.warn(`[WARNING] Available amount (${availableAmount}) exceeds actual balance (${actualBalance}) for ${symbol} - ${strategyKey}. Using actual balance.`);
+        logger.warn(`[WARNING] Available amount (${availableAmount}) exceeds actual balance (${actualBalance}) for ${symbol} - ${strategyKey}. Using actual balance.`);
         availableAmount = actualBalance;
       }
     } catch (balanceError) {
-      console.warn(`[WARNING] Failed to verify actual balance: ${balanceError.message}`);
+      logger.warn(`[WARNING] Failed to verify actual balance: ${balanceError.message}`);
       // エラーの場合は計算値をそのまま使用
     }
 
@@ -1374,15 +1378,15 @@ async function formattedAvailableAmount(exchange, symbol, strategyKey, amountPre
 
     // デバッグログ: 最終結果
     if (!options.backtest) {
-      console.log(`  計算結果: ${availableAmount} → ${result} (精度: ${amountPrecision})`);
+      logger.info(`  計算結果: ${availableAmount} → ${result} (精度: ${amountPrecision})`);
     }
 
     return result;
   } catch (error) {
-    console.error('利用可能量の計算に失敗しました:', error);
+    logger.error('利用可能量の計算に失敗しました:', error);
     // エラーとなった取引所とシンボルを記録
     const errorMessage = `formattedAvailableAmount実行中にエラーが発生しました: ${exchange.id} ${symbol} ${strategyKey}`;
-    console.error(errorMessage, error);
+    logger.error(errorMessage, error);
 
     // エラー時は安全のために0を返す（より厳格な対応）
     return 0;
@@ -1405,8 +1409,8 @@ async function fetchTicker(exchange, symbol, options = {}) {
     if (options.backtest) {
       // ohlcvData が存在しない場合はエラー
       if (!options.backtest.ohlcvData || !options.backtest.ohlcvData.length) {
-        console.log({ backtest: options.backtest });
-        console.log(`バックテストモードでのティッカー取得に失敗しました: ${exchange.id} ${symbol}`);
+        logger.info({ backtest: options.backtest });
+        logger.info(`バックテストモードでのティッカー取得に失敗しました: ${exchange.id} ${symbol}`);
         throw new Error('Backtest mode requires ohlcvData in options');
       }
 
@@ -1511,7 +1515,7 @@ async function fetchTicker(exchange, symbol, options = {}) {
     return await marketDataProvider.fetchTicker(exchange, symbol);
 
   } catch (error) {
-    console.error(`Error fetching ticker for ${symbol}:`, error);
+    logger.error(`Error fetching ticker for ${symbol}:`, error);
     throw error;
   }
 }
@@ -1540,7 +1544,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
       [baseCurrency]: available > 0 ? available : 0 // 負の値にならないようにする
       // 他の通貨は必要に応じて追加
     };
-    // console.log(`[Backtest] 利用可能資金シミュレーション: ${baseCurrency}: ${result[baseCurrency]}`);
+    // logger.info(`[Backtest] 利用可能資金シミュレーション: ${baseCurrency}: ${result[baseCurrency]}`);
     return { free: result }; // fetchBalanceの戻り値の形式に合わせる
   }
 
@@ -1552,12 +1556,12 @@ async function getAvailableFund(exchange, symbol, options = {}) {
     // デバッグ: 残高情報をログ出力
     const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
     if (balance.free && balance.free[baseCurrency] !== undefined) {
-      console.log(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+      logger.debug(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
     }
 
     return balance;
   } catch (error) {
-    console.error(`Error fetching balance for ${exchange.id}:`, error);
+    logger.error(`Error fetching balance for ${exchange.id}:`, error);
     throw error;
   }
 }
@@ -1573,7 +1577,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
 async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) {
   // ランダムなorderIDを生成
   const orderId = `backtest_${Date.now()}_buy_${Math.random().toString(36).substring(2, 15)}`;
-  // console.log(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // logger.info(`[Backtest] 買い注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   options.backtest.buyOrderCount += 1;
   options.backtest.baseFund -= price * amount; // 基本資金を減少
@@ -1594,7 +1598,7 @@ async function backtestCreateLimitBuyOrder(symbol, amount, price, options = {}) 
 async function backtestCreateLimitSellOrder(symbol, amount, price, options = {}) {
   // ランダムなorderIDを生成
   const orderId = `backtest_${Date.now()}_sell_${Math.random().toString(36).substring(2, 15)}`;
-  // console.log(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // logger.info(`[Backtest] 売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
   // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
   options.backtest.sellOrderCount += 1;
   options.backtest.baseFund += price * amount; // 基本資金を増加
@@ -1628,14 +1632,14 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
 
           // エラーレベルに応じた処理
           if (severity === 'CRITICAL') {
-            console.error(`❌ [CRITICAL] ${exchangeId}:${symbol} - ${message}`);
+            logger.error(`❌ [CRITICAL] ${exchangeId}:${symbol} - ${message}`);
             // 重要なエラーの場合は処理を停止
             throw new Error(`Critical error for ${exchangeId}:${symbol} - ${message}`);
           } else if (error === 'UNSUPPORTED_SYMBOL') {
-            console.warn(`⚠️ ${exchangeId}:${symbol} - ${message}`);
-            console.log(`   参考 - サポートペア例: ${params.examples?.join(', ') || 'なし'}`);
+            logger.warn(`⚠️ ${exchangeId}:${symbol} - ${message}`);
+            logger.info(`   参考 - サポートペア例: ${params.examples?.join(', ') || 'なし'}`);
           } else {
-            console.warn(`⚠️ ${exchangeId}:${symbol} - ${message} (エラータイプ: ${error})`);
+            logger.warn(`⚠️ ${exchangeId}:${symbol} - ${message} (エラータイプ: ${error})`);
           }
 
           // エラーメトリクスの記録
@@ -1660,14 +1664,14 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
             success: true
           };
 
-          console.log(`✅ ${exchangeId}:${symbol} パラメータ取得成功:`, {
+          logger.info(`✅ ${exchangeId}:${symbol} パラメータ取得成功:`, {
             minTradeAmount,
             pricePrecision,
             amountPrecision
           });
         } else {
           // nullまたは予期しないレスポンスの場合
-          console.warn(`⚠️ ${exchangeId}:${symbol} - 予期しないレスポンス:`, params);
+          logger.warn(`⚠️ ${exchangeId}:${symbol} - 予期しないレスポンス:`, params);
 
           marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
           marketParametersByExchange[exchangeId][symbol] = {
@@ -1680,9 +1684,9 @@ async function getMarketParametersByExchangeSymbol(symbolByExchange, config, opt
         }
 
       } catch (error) {
-        console.error(`❌ ${exchangeId}:${symbol} パラメータ取得で予期しないエラー: ${error.message}`);
-        console.error(`   エラータイプ: ${error.name}`);
-        console.error(`   スタック: ${error.stack}`);
+        logger.error(`❌ ${exchangeId}:${symbol} パラメータ取得で予期しないエラー: ${error.message}`);
+        logger.error(`   エラータイプ: ${error.name}`);
+        logger.error(`   スタック: ${error.stack}`);
 
         // エラー情報を記録
         marketParametersByExchange[exchangeId] = marketParametersByExchange[exchangeId] || {};
@@ -1728,15 +1732,15 @@ async function getMarketParameters(exchange, symbol) {
   try {
     // マーケットが読み込まれていない場合は読み込み
     if (!exchange.markets) {
-      console.log(`${logPrefix} マーケットデータ未読み込み、読み込み中...`);
+      logger.info(`${logPrefix} マーケットデータ未読み込み、読み込み中...`);
       await exchange.loadMarkets();
-      console.log(`${logPrefix} マーケットデータ読み込み完了`);
+      logger.info(`${logPrefix} マーケットデータ読み込み完了`);
     }
 
     market = exchange.markets[symbol];
     if (!market) {
       // マーケットが見つからない場合、再読み込みを試行
-      console.log(`${logPrefix} マーケットが見つからず、再読み込み試行...`);
+      logger.info(`${logPrefix} マーケットが見つからず、再読み込み試行...`);
       await exchange.loadMarkets();
       market = exchange.markets[symbol];
 
@@ -1746,9 +1750,9 @@ async function getMarketParameters(exchange, symbol) {
           .filter(s => s.includes('/JPY'))
           .sort();
 
-        console.error(`${logPrefix} ❌ 通貨ペア ${symbol} は取引所 ${exchange.id} でサポートされていません`);
-        console.error(`${logPrefix} サポートされているJPYペア数: ${supportedSymbols.length}`);
-        console.log(`${logPrefix} 参考 - サポートされているJPYペア（一部）: ${supportedSymbols.slice(0, 10).join(', ')}${supportedSymbols.length > 10 ? '...' : ''}`);
+        logger.error(`${logPrefix} ❌ 通貨ペア ${symbol} は取引所 ${exchange.id} でサポートされていません`);
+        logger.error(`${logPrefix} サポートされているJPYペア数: ${supportedSymbols.length}`);
+        logger.info(`${logPrefix} 参考 - サポートされているJPYペア（一部）: ${supportedSymbols.slice(0, 10).join(', ')}${supportedSymbols.length > 10 ? '...' : ''}`);
 
         return {
           error: 'UNSUPPORTED_SYMBOL',
@@ -1777,7 +1781,7 @@ async function getMarketParameters(exchange, symbol) {
       errorSeverity = 'WARNING';
     }
 
-    console.error(`${logPrefix} ❌ [${errorSeverity}] マーケットデータ読み込みエラー (${errorType}): ${loadError.message}`);
+    logger.error(`${logPrefix} ❌ [${errorSeverity}] マーケットデータ読み込みエラー (${errorType}): ${loadError.message}`);
 
     return {
       error: errorType,
@@ -1789,7 +1793,7 @@ async function getMarketParameters(exchange, symbol) {
 
   // market変数が正しく設定されているかチェック
   if (!market) {
-    console.error(`${logPrefix} ❌ 予期しないエラー: market変数が未定義です`);
+    logger.error(`${logPrefix} ❌ 予期しないエラー: market変数が未定義です`);
     return {
       error: 'MARKET_UNDEFINED',
       message: '予期しないエラー: market変数が未定義です',
@@ -1802,11 +1806,11 @@ async function getMarketParameters(exchange, symbol) {
   let pricePrecision = market.precision ? market.precision.price : undefined;
   let amountPrecision = market.precision ? market.precision.amount : undefined;
 
-  console.log(`${logPrefix} 基本パラメータ抽出: minTradeAmount=${minTradeAmount}, pricePrecision=${pricePrecision}, amountPrecision=${amountPrecision}`);
+  logger.info(`${logPrefix} 基本パラメータ抽出: minTradeAmount=${minTradeAmount}, pricePrecision=${pricePrecision}, amountPrecision=${amountPrecision}`);
 
   // 最小取引量の検証
   if (!minTradeAmount || minTradeAmount <= 0) {
-    console.error(`${logPrefix} ❌ 無効な最小取引量: ${minTradeAmount}`);
+    logger.error(`${logPrefix} ❌ 無効な最小取引量: ${minTradeAmount}`);
     return {
       error: 'INVALID_MIN_TRADE_AMOUNT',
       message: `最小取引量が無効です: ${minTradeAmount}`,
@@ -1819,21 +1823,21 @@ async function getMarketParameters(exchange, symbol) {
 
   // 価格精度の補完処理
   if (!pricePrecision) {
-    console.log(`${logPrefix} 価格精度が未定義のため、ティッカーから取得を試行...`);
+    logger.info(`${logPrefix} 価格精度が未定義のため、ティッカーから取得を試行...`);
     try {
       const ticker = await exchange.fetchTicker(symbol);
       if (!ticker || !ticker.last) {
-        console.warn(`${logPrefix} ⚠️ ティッカーまたはlast価格が取得できませんでした`);
+        logger.warn(`${logPrefix} ⚠️ ティッカーまたはlast価格が取得できませんでした`);
         pricePrecision = FALLBACK_PRICE_PRECISION;
-        console.log(`${logPrefix} フォールバック価格精度を使用: ${pricePrecision}`);
+        logger.info(`${logPrefix} フォールバック価格精度を使用: ${pricePrecision}`);
       } else {
         const lastPrice = ticker.last;
         if (lastPrice && lastPrice > 0) {
           const priceDecimals = (lastPrice.toString().split('.')[1] || '').length;
           pricePrecision = priceDecimals;
-          console.log(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
+          logger.info(`${logPrefix} ✅ ティッカーから価格精度を取得: ${pricePrecision} (価格: ${lastPrice})`);
         } else {
-          console.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
+          logger.warn(`${logPrefix} ⚠️ ティッカーのlast価格が無効: ${lastPrice}`);
           return {
             error: 'INVALID_TICKER_PRICE',
             message: `ティッカーの価格が無効です: ${lastPrice}`,
@@ -1853,7 +1857,7 @@ async function getMarketParameters(exchange, symbol) {
         tickerErrorType = 'TICKER_INVALID_SYMBOL_ERROR';
       }
 
-      console.error(`${logPrefix} ❌ ティッカー取得エラー (${tickerErrorType}): ${tickerError.message}`);
+      logger.error(`${logPrefix} ❌ ティッカー取得エラー (${tickerErrorType}): ${tickerError.message}`);
 
       return {
         error: tickerErrorType,
@@ -1867,26 +1871,26 @@ async function getMarketParameters(exchange, symbol) {
   if (pricePrecision > 0 && pricePrecision < 1) {
     const priceDecimals = (pricePrecision.toString().split('.')[1] || '').length;
     pricePrecision = priceDecimals;
-    console.log(`${logPrefix} 価格精度を正規化: ${pricePrecision}`);
+    logger.info(`${logPrefix} 価格精度を正規化: ${pricePrecision}`);
   }
 
   // 数量精度の補完
   if (!amountPrecision) {
     const minTradeAmountDecimals = (minTradeAmount.toString().split('.')[1] || '').length;
     amountPrecision = minTradeAmountDecimals;
-    console.log(`${logPrefix} minTradeAmountから数量精度を算出: ${amountPrecision}`);
+    logger.info(`${logPrefix} minTradeAmountから数量精度を算出: ${amountPrecision}`);
   }
 
   // 数量精度の正規化
   if (amountPrecision > 0 && amountPrecision < 1) {
     const amountDecimals = (amountPrecision.toString().split('.')[1] || '').length;
     amountPrecision = amountDecimals;
-    console.log(`${logPrefix} 数量精度を正規化: ${amountPrecision}`);
+    logger.info(`${logPrefix} 数量精度を正規化: ${amountPrecision}`);
   }
 
   // 最終検証
   if (pricePrecision === undefined || amountPrecision === undefined) {
-    console.error(`${logPrefix} ❌ 精度パラメータが未定義: price=${pricePrecision}, amount=${amountPrecision}`);
+    logger.error(`${logPrefix} ❌ 精度パラメータが未定義: price=${pricePrecision}, amount=${amountPrecision}`);
     return {
       error: 'UNDEFINED_PRECISION',
       message: `精度パラメータが未定義です: price=${pricePrecision}, amount=${amountPrecision}`,
@@ -1895,7 +1899,7 @@ async function getMarketParameters(exchange, symbol) {
   }
 
   const result = { minTradeAmount, pricePrecision, amountPrecision };
-  console.log(`${logPrefix} ✅ パラメータ取得成功:`, result);
+  logger.info(`${logPrefix} ✅ パラメータ取得成功:`, result);
 
   return result;
 }
@@ -1916,9 +1920,9 @@ async function getSymbolsByExchange(config) {
       );
 
       symbolsByExchange[exchange] = symbols;
-      console.log(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
+      logger.info(`取引所 ${exchange} のシンボルを取得しました: ${symbols}`);
     } catch (error) {
-      console.error(`取引所 ${exchange} のマーケット情報取得でエラーが発生しました: ${error.message}`);
+      logger.error(`取引所 ${exchange} のマーケット情報取得でエラーが発生しました: ${error.message}`);
       symbolsByExchange[exchange] = []; // エラー時は空配列を設定
 
       // 重要なエラー（認証エラー等）の場合は続行を停止
@@ -1947,7 +1951,7 @@ async function getSymbolsByExchange(config) {
 async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, formattedAmount, availableFunds, tradePercentage, realizedPnL, baseMinTradeAmount, isPositionSized, options = {}) {
   // バックテストモードの場合
   if (options.backtest) {
-    // console.log(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
+    // logger.info(`[Backtest] checkBuyOrderAllowance: lastSignal = ${options.backtest.lastSignal}`);
     if (options.backtest.lastSignal === 'sell') {
       return { allowed: true };
     } else if (options.backtest.lastSignal === 'buy') {
@@ -2005,7 +2009,7 @@ async function checkBuyOrderAllowance(exchange, symbol, strategyKey, price, form
   // 新しい注文を加えた場合の合計ポジションを計算
   const newEffectivePosition = effectivePosition + formattedAmount;
 
-  console.log(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}, 新注文後ポジション: ${newEffectivePosition}`);
+  logger.info(`最大可能購入量: ${maxBuyAmountWithMinTrade} 現在のポジション: ${currentTradePosition}, 買注文量: ${currentOrderPosition}, 売注文量: ${currentSellOrders}, 実質ポジション: ${effectivePosition}, 新注文後ポジション: ${newEffectivePosition}`);
 
   // 新注文を加えた合計ポジションが最大購入量以下かチェック
   const isBuyAllowed = newEffectivePosition <= maxBuyAmountWithMinTrade;
@@ -2044,12 +2048,12 @@ async function deleteTradeSummary(exchangeId, symbol, strategyKey) {
     const key = `summary:trade:${exchangeId}:${symbol}:${strategyKey}`;
     const result = await deleteKey(key);
     if (result) {
-      console.log(`トレードサマリーを削除しました: ${key}`);
+      logger.info(`トレードサマリーを削除しました: ${key}`);
       return true;
     }
     return false;
   } catch (error) {
-    console.error(`トレードサマリー削除中にエラーが発生しました: ${error.message}`);
+    logger.error(`トレードサマリー削除中にエラーが発生しました: ${error.message}`);
     return false;
   }
 }
@@ -2101,7 +2105,7 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
 
     // ⚠️ 危険: netPositionを0に補正すると戦略間データ損失が発生
     // 一時的に無効化 - より安全なアプローチが必要
-    console.warn(`[再計算] 危険な操作を無効化: netPosition=${netPosition} をリセットしません`);
+    logger.warn(`[再計算] 危険な操作を無効化: netPosition=${netPosition} をリセットしません`);
     throw new Error('recalculateTradeSummaryFromMongoDB is temporarily disabled to prevent data loss');
 
     /* 危険なサマリーリセットを無効化
@@ -2118,12 +2122,12 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
 
     await client.hSet(summaryKey, newSummary);
 
-    console.log(`[再計算] ${exchangeId}:${symbol}:${strategyKey} - ネット=${netPosition}, 買い=${buyAmount}, 売り=${sellAmount}`);
+    logger.info(`[再計算] ${exchangeId}:${symbol}:${strategyKey} - ネット=${netPosition}, 買い=${buyAmount}, 売り=${sellAmount}`);
 
     return newSummary;
     */
   } catch (error) {
-    console.error('[再計算] エラー:', error);
+    logger.error('[再計算] エラー:', error);
     throw error;
   }
 }

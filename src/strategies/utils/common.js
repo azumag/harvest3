@@ -28,6 +28,10 @@ const { DynamicPositionSizing } = require('./positionSizing');
 const { performanceTracker } = require('./performanceTracker');
 const { AdvancedOrderManager, ORDER_TYPES, URGENCY_LEVELS } = require('./orderManager');
 const { DynamicUrgencyCalculator } = require('./dynamicUrgencyCalculator');
+const Logger = require('../../hft/utils/Logger');
+
+// Logger instance for strategy utilities
+const logger = new Logger('StrategyUtils');
 
 // ==================== 共通ユーティリティ関数 ====================
 
@@ -51,11 +55,11 @@ async function performRiskManagement(exchange, symbol, strategyKey, currentPrice
   }
 
   // 約定情報を更新
-  console.log(`[リスク管理] ${symbol} の約定情報を更新中...`);
+  logger.info(`[リスク管理] ${symbol} の約定情報を更新中...`);
   const tradeUpdateStart = Date.now();
   const updatedCount = await updateFilledTrades(exchange, symbol);
   const tradeUpdateTime = Date.now() - tradeUpdateStart;
-  console.log(`[リスク管理] ${symbol} 約定情報更新完了: ${updatedCount}件 (${tradeUpdateTime}ms)`);
+  logger.info(`[リスク管理] ${symbol} 約定情報更新完了: ${updatedCount}件 (${tradeUpdateTime}ms)`);
 
   // ストップロスチェック
   const stopLossPositions = await checkStopLoss(exchange, symbol, strategyKey, currentPrice, config.riskSettings);
@@ -82,7 +86,7 @@ async function performRiskManagement(exchange, symbol, strategyKey, currentPrice
                    `制限値: ${drawdownStatus.daily.limit !== null && drawdownStatus.daily.limit !== undefined ? (drawdownStatus.daily.limit * 100).toFixed(2) : 'N/A'}%\n` +
                    '⚠️ 新規取引を停止しました';
 
-    console.log(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
+    logger.info(`${strategyName}: 日次最大損失に達したため新規取引を停止します`);
 
     if (postOrderToDiscord) {
       await postOrderToDiscord(message);
@@ -192,10 +196,10 @@ async function setupOrderOptions(config, exchange, symbol, strategyName, current
  * @returns {Promise<Object>} 検証結果
  */
 async function validateBalance(exchange, symbol, strategyName, formattedAmount, currentPrice, options) {
-  console.log(`[${strategyName}] 📊 VALIDATION START: ${symbol}`);
-  console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
-  console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
-  console.log(`[${strategyName}] └─ 戦略キー: ${strategyName}`);
+  logger.info(`[${strategyName}] 📊 VALIDATION START: ${symbol}`);
+  logger.info(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
+  logger.info(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
+  logger.info(`[${strategyName}] └─ 戦略キー: ${strategyName}`);
 
   const exchangeBalance = await exchange.fetchBalance();
   const baseCurrency = symbol.split('/')[0];
@@ -204,21 +208,21 @@ async function validateBalance(exchange, symbol, strategyName, formattedAmount, 
   const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
 
   // 詳細な残高ログ
-  console.log(`[${strategyName}] 💰 BALANCE DETAILS: ${symbol}`);
-  console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
-  console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
-  console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
-  console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
+  logger.info(`[${strategyName}] 💰 BALANCE DETAILS: ${symbol}`);
+  logger.info(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
+  logger.info(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
+  logger.info(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
+  logger.info(`[${strategyName}] └─ Required: ${formattedAmount}`);
 
   if (exchangeAmount < formattedAmount) {
     const shortage = formattedAmount - exchangeAmount;
     const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
 
-    console.error(`[${strategyName}] ❌ VALIDATION FAILED: ${symbol}`);
-    console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
-    console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
-    console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
-    console.error(`[${strategyName}] └─ 必要量: ${formattedAmount}`);
+    logger.error(`[${strategyName}] ❌ VALIDATION FAILED: ${symbol}`);
+    logger.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
+    logger.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
+    logger.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
+    logger.error(`[${strategyName}] └─ 必要量: ${formattedAmount}`);
 
     if (postErrorToDiscord && !options.backtest) {
       await postErrorToDiscord(`🚨 **残高検証失敗** ${symbol}\n` +
@@ -247,9 +251,9 @@ async function validateBalance(exchange, symbol, strategyName, formattedAmount, 
     };
   }
 
-  console.log(`[${strategyName}] ✅ VALIDATION PASSED: ${symbol}`);
-  console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
-  console.log(`[${strategyName}] └─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
+  logger.info(`[${strategyName}] ✅ VALIDATION PASSED: ${symbol}`);
+  logger.info(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
+  logger.info(`[${strategyName}] └─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
 
   return {
     success: true,
@@ -289,7 +293,7 @@ function initializeDynamicSizing(config) {
 function initializeUnifiedUrgencySystem(config) {
   if (config?.global?.unifiedUrgencySystem) {
     unifiedUrgencySystem = new UnifiedUrgencySystem(config.global.unifiedUrgencySystem);
-    console.log('[common.js] 統合動的urgency調整システムを初期化しました');
+    logger.info('[common.js] 統合動的urgency調整システムを初期化しました');
   } else if (config?.global?.dynamicUrgencyAdjustment) {
     // フォールバック: 基本動的システム
     unifiedUrgencySystem = new UnifiedUrgencySystem({
@@ -297,7 +301,7 @@ function initializeUnifiedUrgencySystem(config) {
       mode: 'basic',
       dynamic: config.global.dynamicUrgencyAdjustment
     });
-    console.log('[common.js] 基本動的urgency調整システムを初期化しました');
+    logger.info('[common.js] 基本動的urgency調整システムを初期化しました');
   }
 }
 
@@ -339,7 +343,7 @@ async function calculateUnifiedUrgency(symbol, baseUrgency, exchange, strategyNa
 
     return await unifiedUrgencySystem.calculateOptimalUrgency(context);
   } catch (error) {
-    console.error(`[統合urgency] 計算エラー: ${symbol} - ${error.message}`);
+    logger.error(`[統合urgency] 計算エラー: ${symbol} - ${error.message}`);
     return { urgency: baseUrgency, method: 'error', confidence: 0, testId: null, error: error.message };
   }
 }
@@ -363,7 +367,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
 
   if (ohlcv.length < minRequiredData) {
     if (!options.backtest) {
-      console.log(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period} (最低必要: ${minRequiredData})`);
+      logger.info(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period} (最低必要: ${minRequiredData})`);
       throw new Error(`${strategyName}戦略のデータが不足しています: ${symbol} ${ohlcv.length}/${period}`);
     }
     if (options.backtest) {
@@ -373,7 +377,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
 
   // データが最低要件は満たしているが、期待値より少ない場合は警告
   if (ohlcv.length < period && !options.backtest) {
-    console.warn(`[${strategyName}] ${symbol}: データ数が期待値より少ないですが実行継続 (${ohlcv.length}/${period})`);
+    logger.warn(`[${strategyName}] ${symbol}: データ数が期待値より少ないですが実行継続 (${ohlcv.length}/${period})`);
   }
 
   // 終値の配列を作成
@@ -381,7 +385,7 @@ async function fetchAndValidateOHLCVData(exchange, symbol, ohlcvInterval, period
 
   // データの検証を追加
   if (closes.some(price => price === undefined || price === null || isNaN(price))) {
-    console.log(`${strategyName}戦略: ${symbol} - 無効な価格データが含まれています`);
+    logger.info(`${strategyName}戦略: ${symbol} - 無効な価格データが含まれています`);
     if (errorNotificationFn) {
       await errorNotificationFn(`[${strategyName}戦略] 警告: ${exchange.id} - ${symbol} - 無効な価格データが含まれています`);
     }
@@ -445,7 +449,7 @@ async function handleStrategySignals(
   if (buySignal) {
     // 買いシグナル情報をログ出力
     if (!options.backtest) {
-      console.log(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
+      logger.info(`${strategyName}買いシグナル: ${symbol} - ${logInfo.buy}`);
     }
     if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 買いシグナル: ${exchange.id} - ${symbol} - ${logInfo.buy}`);
@@ -468,7 +472,7 @@ async function handleStrategySignals(
   } else if (sellSignal) {
     // 売りシグナル情報をログ出力
     if (!options.backtest) {
-      console.log(`${strategyName}売りシグナル: ${symbol} - ${logInfo.sell}`);
+      logger.info(`${strategyName}売りシグナル: ${symbol} - ${logInfo.sell}`);
     }
     if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 売りシグナル: ${exchange.id} - ${symbol} - ${logInfo.sell}`);
@@ -495,7 +499,7 @@ async function handleStrategySignals(
 
   } else {
     if (!options.backtest) {
-      console.log(`${strategyName}シグナルなし: ${symbol} - ${logInfo.none}`);
+      logger.info(`${strategyName}シグナルなし: ${symbol} - ${logInfo.none}`);
     }
   }
 
@@ -522,7 +526,7 @@ async function handleStrategySignals(
 async function executeBuyOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   // marketParametersが未定義の場合の安全処理
   if (!marketParameters) {
-    console.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
+    logger.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
     return { success: false, reason: 'marketParameters is undefined' };
   }
 
@@ -542,7 +546,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
                      `現在価格: ${currentPrice.toLocaleString()}円\n` +
                      '🛑 新規買い注文をスキップしました';
 
-      console.log(`${strategyName}: ${positionLimitCheck.reason}`);
+      logger.info(`${strategyName}: ${positionLimitCheck.reason}`);
 
       if (postOrderToDiscord) {
         await postOrderToDiscord(message);
@@ -563,7 +567,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
     const safeAvailableFunds = availableFunds !== null && availableFunds !== undefined ? availableFunds : 0;
     const safeTradePercentage = config.tradePercentage !== null && config.tradePercentage !== undefined ? config.tradePercentage : 0;
     const safeCalculated = (safeAvailableFunds * safeTradePercentage).toFixed(2);
-    console.log(`[資金DEBUG] ${symbol}: 利用可能資金=${safeAvailableFunds}円, tradePercentage=${safeTradePercentage}, 制限後=${safeCalculated}円`);
+    logger.debug(`[資金DEBUG] ${symbol}: 利用可能資金=${safeAvailableFunds}円, tradePercentage=${safeTradePercentage}, 制限後=${safeCalculated}円`);
   }
 
   // 損益を取得
@@ -657,11 +661,11 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
                            `市場状況: ${marketConditions.trend}\n` +
                            `ストップロス距離: ${safeStopLoss}`;
 
-            console.log(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
+            logger.info(`[動的サイジング] ${strategyName}: ${sizeInfo}`);
           }
         } else {
           // 動的サイジング失敗時は従来の方式にフォールバック
-          console.log(`[動的サイジング] 計算失敗、従来方式を使用: ${positionResult.reason}`);
+          logger.info(`[動的サイジング] 計算失敗、従来方式を使用: ${positionResult.reason}`);
           const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
           const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
           formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
@@ -673,7 +677,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         formattedAmount = parseFloat(tradeAmount.toFixed(amountPrecision));
       }
     } catch (error) {
-      console.error(`[動的サイジング] エラー、従来方式を使用: ${error.message}`);
+      logger.error(`[動的サイジング] エラー、従来方式を使用: ${error.message}`);
       // エラー時は従来の方式にフォールバック
       const maxBuyAmount = ((availableFunds * tradePercentage) + realizedPnL) / currentPrice;
       const tradeAmount = Math.max(minTradeAmount, maxBuyAmount);
@@ -753,13 +757,13 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
       // 高度注文管理が有効かチェック
       if (orderConfig.enabled) {
-        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
+        logger.info(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(
           symbol, 'buy', formattedAmount, currentPrice, orderOptions
         );
       } else {
-        console.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
+        logger.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
         orderResult.success = false; // フォールバック処理を実行
       }
 
@@ -767,12 +771,12 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
         order = orderResult.order;
       } else {
         // 🚨 EMERGENCY FIX: 高度注文が失敗した場合、従来方式にフォールバック
-        console.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
-        console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
+        logger.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
+        logger.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
 
         try {
           // 従来のマーケット注文方式でフォールバック実行
-          console.log(`[${strategyName}] フォールバック: createMarketBuyOrder実行 ${symbol} 数量:${formattedAmount}`);
+          logger.info(`[${strategyName}] フォールバック: createMarketBuyOrder実行 ${symbol} 数量:${formattedAmount}`);
           order = await exchange.createMarketBuyOrder(symbol, formattedAmount);
 
           // フォールバック成功の通知
@@ -785,11 +789,11 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
                                     `⏰ ${new Date().toLocaleString('ja-JP')}`);
           }
 
-          console.log(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
+          logger.info(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
 
         } catch (fallbackError) {
           // フォールバック失敗時のエラーハンドリング
-          console.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
+          logger.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
 
           if (postErrorToDiscord && !options.backtest) {
             await postErrorToDiscord(`🚨 **フォールバック失敗** ${symbol}\n` +
@@ -831,7 +835,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 
     return { success: true, order };
   } else {
-    // console.log(allowanceCheck.reason);
+    // logger.info(allowanceCheck.reason);
     if (postOrderToDiscord && !options.backtest) {
       await postOrderToDiscord(`[${strategyName}] ${allowanceCheck.reason}`);
     }
@@ -855,7 +859,7 @@ async function executeBuyOrder(exchange, symbol, strategyKey, config, marketPara
 async function executeSellOrder(exchange, symbol, strategyKey, config, marketParameters, currentPrice, strategyName, signalInfo, options = {}, globalConfig = null) { // globalConfigを追加
   // marketParametersが未定義の場合の安全処理
   if (!marketParameters) {
-    console.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
+    logger.error(`[${strategyName}] marketParametersが未定義です: ${symbol}`);
     return { success: false, reason: 'marketParameters is undefined' };
   }
 
@@ -873,7 +877,7 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
 
   if (formattedAmount < minTradeAmount) {
     if (!options.backtest) {
-      console.log(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
+      logger.info(`調整後の売却量が最小取引量より小さいため、売り注文は発注しません: ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
     }
     if (postOrderToDiscord && !options.backtest) {
       postOrderToDiscord(`[${strategyName}] 調整後の売却量が最小取引量より小さいため、売り注文をスキップ: ${exchange.id} - ${symbol} - 調整後: ${formattedAmount}, 最小: ${minTradeAmount}`);
@@ -930,13 +934,13 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
           };
         }
 
-        console.log(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
+        logger.info(`[${strategyName}] 高度注文管理システム使用: ${symbol} urgency=${urgency} (${urgencyResult.method}, 信頼度:${urgencyResult.confidence.toFixed(3)})`);
         // 高度注文実行
         orderResult = await orderManager.executeAdvancedOrder(
           symbol, 'sell', formattedAmount, currentPrice, orderOptions
         );
       } else {
-        console.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
+        logger.warn(`[${strategyName}] 高度注文管理無効 - 従来方式使用: ${symbol}`);
         orderResult.success = false; // フォールバック処理を実行
       }
 
@@ -944,16 +948,16 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
         order = orderResult.order;
       } else {
         // 🚨 EMERGENCY FIX: 高度注文が失敗した場合、従来方式にフォールバック
-        console.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
-        console.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
+        logger.warn(`[${strategyName}] 高度注文失敗、従来方式でフォールバック: ${symbol}`);
+        logger.warn(`[${strategyName}] 失敗理由: ${orderResult.error?.message || 'バリデーション失敗'}`);
 
         try {
           // 🔍 COMPREHENSIVE VALIDATION: Check position existence with detailed logging (fallback)
-          console.log(`[${strategyName}] 📊 FALLBACK VALIDATION START: ${symbol}`);
-          console.log(`[${strategyName}] ├─ 高度注文失敗のためフォールバック実行`);
-          console.log(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
-          console.log(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
-          console.log(`[${strategyName}] └─ 戦略キー: ${strategyKey}`);
+          logger.info(`[${strategyName}] 📊 FALLBACK VALIDATION START: ${symbol}`);
+          logger.info(`[${strategyName}] ├─ 高度注文失敗のためフォールバック実行`);
+          logger.info(`[${strategyName}] ├─ 現在価格: ¥${currentPrice?.toLocaleString()}`);
+          logger.info(`[${strategyName}] ├─ 予定売却量: ${formattedAmount}`);
+          logger.info(`[${strategyName}] └─ 戦略キー: ${strategyKey}`);
 
           const exchangeBalance = await exchange.fetchBalance();
           const baseCurrency = symbol.split('/')[0];
@@ -962,22 +966,22 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
           const exchangeTotalAmount = exchangeBalance.total[baseCurrency] || 0;
 
           // Detailed balance logging for fallback
-          console.log(`[${strategyName}] 💰 FALLBACK BALANCE DETAILS: ${symbol}`);
-          console.log(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
-          console.log(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
-          console.log(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
-          console.log(`[${strategyName}] └─ Required: ${formattedAmount}`);
+          logger.info(`[${strategyName}] 💰 FALLBACK BALANCE DETAILS: ${symbol}`);
+          logger.info(`[${strategyName}] ├─ Free: ${exchangeAmount}`);
+          logger.info(`[${strategyName}] ├─ Used: ${exchangeLockedAmount}`);
+          logger.info(`[${strategyName}] ├─ Total: ${exchangeTotalAmount}`);
+          logger.info(`[${strategyName}] └─ Required: ${formattedAmount}`);
 
           if (exchangeAmount < formattedAmount) {
             const shortage = formattedAmount - exchangeAmount;
             const shortagePercent = ((shortage / formattedAmount) * 100).toFixed(2);
 
-            console.error(`[${strategyName}] ❌ FALLBACK VALIDATION FAILED: ${symbol}`);
-            console.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
-            console.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
-            console.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
-            console.error(`[${strategyName}] ├─ 必要量: ${formattedAmount}`);
-            console.error(`[${strategyName}] └─ フォールバック実行不可`);
+            logger.error(`[${strategyName}] ❌ FALLBACK VALIDATION FAILED: ${symbol}`);
+            logger.error(`[${strategyName}] ├─ 不足量: ${shortage} (${shortagePercent}%)`);
+            logger.error(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount}`);
+            logger.error(`[${strategyName}] ├─ Exchange Used: ${exchangeLockedAmount}`);
+            logger.error(`[${strategyName}] ├─ 必要量: ${formattedAmount}`);
+            logger.error(`[${strategyName}] └─ フォールバック実行不可`);
 
             if (postErrorToDiscord && !options.backtest) {
               await postErrorToDiscord(`🚨 **フォールバックポジション検証失敗** ${symbol}\n` +
@@ -1008,13 +1012,13 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
             };
           }
 
-          console.log(`[${strategyName}] ✅ FALLBACK VALIDATION PASSED: ${symbol}`);
-          console.log(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
-          console.log(`[${strategyName}] ├─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
-          console.log(`[${strategyName}] └─ フォールバック実行可能`);
+          logger.info(`[${strategyName}] ✅ FALLBACK VALIDATION PASSED: ${symbol}`);
+          logger.info(`[${strategyName}] ├─ Exchange Free: ${exchangeAmount} >= Required: ${formattedAmount}`);
+          logger.info(`[${strategyName}] ├─ 余剰量: ${(exchangeAmount - formattedAmount).toFixed(6)}`);
+          logger.info(`[${strategyName}] └─ フォールバック実行可能`);
 
           // 従来のマーケット注文方式でフォールバック実行
-          console.log(`[${strategyName}] フォールバック: createMarketSellOrder実行 ${symbol} 数量:${formattedAmount}`);
+          logger.info(`[${strategyName}] フォールバック: createMarketSellOrder実行 ${symbol} 数量:${formattedAmount}`);
           order = await exchange.createMarketSellOrder(symbol, formattedAmount);
 
           // フォールバック成功の通知
@@ -1027,11 +1031,11 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
                                     `⏰ ${new Date().toLocaleString('ja-JP')}`);
           }
 
-          console.log(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
+          logger.info(`[${strategyName}] フォールバック成功: ${symbol} - Order ID: ${order.id}`);
 
         } catch (fallbackError) {
           // フォールバック失敗時のエラーハンドリング
-          console.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
+          logger.error(`[${strategyName}] フォールバック失敗: ${symbol} - ${fallbackError.message}`);
 
           if (postErrorToDiscord && !options.backtest) {
             await postErrorToDiscord(`🚨 **フォールバック失敗** ${symbol}\n` +
@@ -1076,16 +1080,16 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
           });
 
           const safePnL = estimatedPnL !== null && estimatedPnL !== undefined ? estimatedPnL.toFixed(2) : 'N/A';
-          console.log(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${safePnL}`);
+          logger.info(`[パフォーマンス追跡] ${strategyName}: PnL記録 ${safePnL}`);
         }
       } catch (trackingError) {
-        console.error(`[パフォーマンス追跡] エラー: ${trackingError.message}`);
+        logger.error(`[パフォーマンス追跡] エラー: ${trackingError.message}`);
       }
     }
 
     return { success: true, order };
   } else {
-    console.log(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
+    logger.info(`資産不足のため注文をスキップ: ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
     if (postOrderToDiscord) {
       postOrderToDiscord(`[${strategyName}] 資産不足のため売り注文をスキップ: ${exchange.id} - ${symbol} - 必要: ${formattedAmount}, 利用可能: ${availableAsset}`);
     }
@@ -1113,7 +1117,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
     // シンボルが取引所でサポートされているか確認
     if (!(symbol in exchange.markets)) {
-      console.log(`警告: ${exchange.id}は${symbol}をサポートしていません。オープンオーダーの確認をスキップします。`);
+      logger.info(`警告: ${exchange.id}は${symbol}をサポートしていません。オープンオーダーの確認をスキップします。`);
       return { success: false, reason: 'unsupported symbol' };
     }
 
@@ -1127,7 +1131,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
           fetchError.message.includes('authentication') ||
           fetchError.message.includes('Invalid symbol') ||
           isBitbankError(fetchError, BITBANK_ERRORS.SYSTEM_ERROR)) {  // bitbankのシステムエラー（堅牢な判定）
-        console.log(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
+        logger.info(`警告: ${exchange.id}の${symbol}でオープンオーダー取得に失敗しました（サポートされていない可能性）: ${fetchError.message}`);
         return { success: false, reason: 'unsupported symbol for private API' };
       }
       // その他のエラーは再スロー
@@ -1139,14 +1143,14 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
         const _strategyKey = await getOrderStrategyKeyByOrderId(order.id);
         return (strategyKey === _strategyKey) ? await exchange.cancelOrder(order.id, symbol) : null;
       } catch (error) {
-        console.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
+        logger.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
         if (postErrorToDiscord) {
           await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
         }
       }
     }));
   } catch (error) {
-    console.error(`オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}`);
+    logger.error(`オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}`);
     if (postErrorToDiscord) {
       await postErrorToDiscord(`[${exchange.id}] オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
     }
@@ -1158,7 +1162,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
   // TODO: use market parameters
   if (_netPosition < 0.0001) {
-    console.log(`ポジションがないため、売り注文は発注しません: ${symbol}`);
+    logger.info(`ポジションがないため、売り注文は発注しません: ${symbol}`);
     return { success: false, reason: 'no position' };
   }
 
@@ -1170,7 +1174,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
     // 売り注文成功後、関連するポジションをクリーンアップ
     try {
-      console.log(`[INFO] Cleaning up positions for strategy ${strategyKey} after market sell`);
+      logger.info(`[INFO] Cleaning up positions for strategy ${strategyKey} after market sell`);
 
       // 戦略の全ポジションを取得
       const positions = await getStrategyPositionsRedis(exchange.id, symbol, strategyKey);
@@ -1188,17 +1192,17 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
 
             if (cleanupResult.success) {
               cleanedCount++;
-              console.log(`[INFO] Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
+              logger.info(`[INFO] Position cleaned up: ${position.key}, action: ${cleanupResult.action}`);
               if (cleanupResult.historyKey) {
-                console.log(`[INFO] Position history saved to MongoDB: ${cleanupResult.historyKey}`);
+                logger.info(`[INFO] Position history saved to MongoDB: ${cleanupResult.historyKey}`);
               }
             } else {
               cleanupErrors++;
-              console.warn(`[WARNING] Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
+              logger.warn(`[WARNING] Position cleanup failed: ${position.key}, reason: ${cleanupResult.reason}`);
             }
           } catch (cleanupError) {
             cleanupErrors++;
-            console.error(`[ERROR] Position cleanup error: ${position.key}`, cleanupError.message);
+            logger.error(`[ERROR] Position cleanup error: ${position.key}`, cleanupError.message);
           }
         }
       }
@@ -1217,20 +1221,20 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
           await postOrderToDiscord(cleanupMessage);
         }
 
-        console.log(`[INFO] Position cleanup completed: ${cleanedCount} cleaned, ${cleanupErrors} errors`);
+        logger.info(`[INFO] Position cleanup completed: ${cleanedCount} cleaned, ${cleanupErrors} errors`);
       }
     } catch (cleanupError) {
-      console.error(`[ERROR] Position cleanup process failed: ${symbol}`, cleanupError.message);
+      logger.error(`[ERROR] Position cleanup process failed: ${symbol}`, cleanupError.message);
       // クリーンアップ失敗は売り注文成功を妨げない
     }
 
     // リスク管理データのクリア（バックテスト強制決済時に重要）
     try {
-      console.log(`[INFO] Clearing risk management data for strategy ${strategyKey}`);
+      logger.info(`[INFO] Clearing risk management data for strategy ${strategyKey}`);
       const riskClearResult = await clearStrategyRiskData(exchange.id, symbol, strategyKey);
 
       if (riskClearResult.success) {
-        console.log(`[INFO] Risk management data cleared successfully: ${riskClearResult.message}`);
+        logger.info(`[INFO] Risk management data cleared successfully: ${riskClearResult.message}`);
 
         if (postOrderToDiscord) {
           const riskMessage = '🛡️ [リスク管理] データクリア完了\\n' +
@@ -1243,14 +1247,14 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
           await postOrderToDiscord(riskMessage);
         }
       } else {
-        console.warn(`[WARNING] Risk management data clear had issues: ${riskClearResult.message}`);
+        logger.warn(`[WARNING] Risk management data clear had issues: ${riskClearResult.message}`);
 
         if (postErrorToDiscord) {
           await postErrorToDiscord(`[${exchange.id}] リスク管理データクリアで問題発生: ${symbol} - ${riskClearResult.message}`);
         }
       }
     } catch (riskClearError) {
-      console.error(`[ERROR] Risk management data clear failed: ${symbol}`, riskClearError.message);
+      logger.error(`[ERROR] Risk management data clear failed: ${symbol}`, riskClearError.message);
 
       if (postErrorToDiscord) {
         await postErrorToDiscord(`[${exchange.id}] リスク管理データクリア失敗: ${symbol} - エラー: ${riskClearError.message}`);
@@ -1259,7 +1263,7 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
     }
 
   } catch (error) {
-    console.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
+    logger.error(`売り注文の発注に失敗: ${symbol} - エラー: ${error.message}`);
     if (postErrorToDiscord) {
       await postErrorToDiscord(`[${exchange.id}] 売り注文の発注に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
     }
@@ -1542,8 +1546,8 @@ function getMarketRecommendation(environment, direction) {
  * @returns {Object} 標準化されたエラーレスポンス
  */
 async function handleStrategyError(error, symbol, strategyName, strategyId, exchange) {
-  console.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
-  console.error('[DETAILED ERROR] Stack trace:', error.stack);
+  logger.error(`${strategyName}戦略でエラーが発生しました: ${symbol}`, error);
+  logger.error('[DETAILED ERROR] Stack trace:', error.stack);
 
   if (postErrorToDiscord) {
     const simpleMessage = `[${strategyName}] エラー: ${exchange.id} - ${symbol} - ${error.message}`;
@@ -1568,7 +1572,7 @@ async function handleStrategyError(error, symbol, strategyName, strategyId, exch
 async function getCurrentPrice(exchange, symbol, options = {}) {
   const ticker = await fetchTicker(exchange, symbol, options);
   if (!ticker || !ticker.last) {
-    console.warn(`[getCurrentPrice] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
+    logger.warn(`[getCurrentPrice] ${symbol} - ティッカーまたはlast価格が取得できませんでした`);
     return null;
   }
   return ticker.last;
@@ -1681,7 +1685,7 @@ function recordOrderExecutionFeedback(testId, orderData, urgencyData, executionR
       });
     }
   } catch (error) {
-    console.warn('[common.js] フィードバック記録エラー:', error.message);
+    logger.warn('[common.js] フィードバック記録エラー:', error.message);
   }
 }
 
@@ -1751,7 +1755,7 @@ function calculateCurrentVolatility(ohlcvData) {
     return Math.max(0.001, Math.min(0.5, volatility));
 
   } catch (error) {
-    console.error('ボラティリティ計算エラー:', error);
+    logger.error('ボラティリティ計算エラー:', error);
     return 0.02; // デフォルト値
   }
 }
@@ -1806,7 +1810,7 @@ function analyzeMarketConditions(ohlcvData, currentPrice) {
     };
 
   } catch (error) {
-    console.error('市場分析エラー:', error);
+    logger.error('市場分析エラー:', error);
     return { trend: 'unknown', strength: 0, direction: 'sideways' };
   }
 }
