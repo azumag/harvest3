@@ -2,7 +2,7 @@ name: Auto merger
 
 on:
   issue_comment:
-    types: [created]
+    types: [edited]
 
 jobs:
   auto-merge-pr:
