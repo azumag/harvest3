@@ -41,14 +41,6 @@ jobs:
             
             const prNumber = pullRequests[0].number;
             console.log(`Found PR #${prNumber}`);
-            
-            // ci-passedラベルを追加
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              labels: ['ci-passed']
-            });
 
             // ci-failureラベルを削除
             await github.rest.issues.removeLabel({
@@ -57,5 +49,13 @@ jobs:
               issue_number: prNumber,
               name: 'ci-failure'
             }).catch(e => console.log('ci-failure label not found or already removed'));
+            
+            // ci-passedラベルを追加
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['ci-passed']
+            });
             
             console.log(`Added ci-passed label to PR #${prNumber}`);
