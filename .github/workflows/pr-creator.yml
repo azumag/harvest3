@@ -31,10 +31,18 @@ jobs:
             // GitHub Compare URLを解析
             function parseCompareUrl(url) {
               try {
+                console.log('Parsing URL:', url);
                 const urlObj = new URL(url);
+                console.log('URL pathname:', urlObj.pathname);
+                
                 // パス名から /compare/base...head の部分を抽出
-                const pathMatch = urlObj.pathname.match(/\/compare\/([^\/]+)\.\.\.([^\/]+)$/);
-                if (!pathMatch) return null;
+                const pathMatch = urlObj.pathname.match(/\/compare\/(.+)\.\.\.(.+)/);
+                if (!pathMatch) {
+                  console.error('Path match failed for:', urlObj.pathname);
+                  return null;
+                }
+                
+                console.log('Base:', pathMatch[1], 'Head:', pathMatch[2]);
                 
                 return {
                   base: pathMatch[1],
@@ -64,7 +72,9 @@ jobs:
 
             // URL解析とPR作成
             try {
+              console.log('Found URL:', urlMatch[0]);
               const prInfo = parseCompareUrl(urlMatch[0]);
+              console.log('Parsed info:', JSON.stringify(prInfo, null, 2));
               if (!prInfo) throw new Error('Invalid URL format');
 
 
