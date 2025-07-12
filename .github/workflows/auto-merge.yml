@@ -1,0 +1,37 @@
+name: Auto merger
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  auto-merge-pr:
+    name: Auto Merge PR
+    runs-on: ubuntu-latest
+    if: |
+      github.event.action == 'labeled' &&
+      contains(github.event.pull_request.labels.*.name, 'approve')
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          fetch-depth: 1
+
+      - name: Approve PR
+        run: |
+          echo "Approving PR #${{ github.event.pull_request.number }}"
+          gh pr review ${{ github.event.pull_request.number }} --approve
+
+      - name: Merge PR
+        run: |
+          echo "Merging PR #${{ github.event.pull_request.number }}"
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
