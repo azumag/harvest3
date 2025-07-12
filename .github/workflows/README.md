@@ -36,6 +36,11 @@
 - **トリガー**: 設定ファイル変更時
 - **動作**: 設定の整合性確認
 
+### 8. **pr-creator.yml** - Create PR自動作成
+- **トリガー**: `Create PR`コメント
+- **動作**: GitHub Compare URLを解析してPR自動作成
+- **認証**: GitHub App トークン（CIワークフロー連携対応）
+
 
 ## ワークフローの依存関係
 
@@ -114,6 +119,26 @@ graph TD
 - PATはユーザー個人に紐づくため、トークン作成者がリポジトリアクセス権を失うとトークンも無効になります
 - セキュリティのため、最小限の権限のみを付与してください
 - 定期的にトークンの更新を行うことを推奨します
+
+## GitHub App認証設定
+
+GitHub Appを使用することで、Personal Access Tokenでは動作しないCIワークフロー起動が可能になります。
+
+### 設定手順（簡易版）
+
+1. **GitHub App作成**: https://github.com/settings/apps → "New GitHub App"
+2. **権限設定**: Contents/Issues/Pull requests (Write)、Actions (Read)
+3. **App情報取得**: App ID記録、Private Key(.pem)ダウンロード  
+4. **リポジトリ設定**: Variables に `APP_ID`、Secrets に `APP_PRIVATE_KEY` 追加
+
+### 使用方法
+```
+Create PR: https://github.com/azumag/harvest3/compare/main...feature-branch?title=新機能
+```
+
+### 利点
+- **CI正常動作**: Personal Access Tokenの制限回避
+- **セキュリティ**: リポジトリ単位の権限管理
 
 ## 廃止されたワークフロー
 

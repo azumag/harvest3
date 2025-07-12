@@ -283,6 +283,20 @@ Claude Code Actionを使用したIssue自動解決システムを導入してい
 - `CLAUDE_CODE_OAUTH_TOKEN`をGitHub Secretsに設定する必要があります
 - ワークフローは`.github/workflows/claude-issue-resolver.yml`で管理
 
+### PR自動作成システム
+GitHub App認証を使用したPR自動作成システムを導入しています。
+
+#### 使用方法
+Issue内で`Create PR: {GitHub Compare URL}`コメントを投稿すると自動でPRを作成します。
+
+#### 利点
+- **CI正常動作**: Personal Access Tokenの制限を回避し、作成されたPRでCIが起動
+- **GitHub App認証**: リポジトリ単位の権限管理、自動トークン管理
+
+#### 設定
+- GitHub App作成と`APP_ID`/`APP_PRIVATE_KEY`設定が必要
+- 詳細は`.github/workflows/README.md`を参照
+
 ### CI自動修正システム
 GitHub Actionsを使用したCI失敗の自動修正システムを導入しています。
 

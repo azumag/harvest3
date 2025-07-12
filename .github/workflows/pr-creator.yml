@@ -1,0 +1,87 @@
+name: Create PR from Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  create-pr:
+    name: Create PR from Comment
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, 'Create PR')
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Extract and Create PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            // GitHub Compare URLを解析
+            function parseCompareUrl(url) {
+              const match = url.match(/\/compare\/([^.]+)\.\.\.([^?]+)/);
+              if (!match) return null;
+              
+              const urlObj = new URL(url);
+              return {
+                base: match[1],
+                head: match[2],
+                title: urlObj.searchParams.get('title'),
+                body: urlObj.searchParams.get('body')
+              };
+            }
+
+            // コメントからCreate PRリンクを検索
+            const comment = context.payload.comment.body;
+            const urlMatch = comment.match(/https:\/\/github\.com\/[^\/\s]+\/[^\/\s]+\/compare\/[^\s)]+/);
+            
+            if (!urlMatch) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: '❌ Create PR link not found'
+              });
+              return;
+            }
+
+            // URL解析とPR作成
+            try {
+              const prInfo = parseCompareUrl(urlMatch[0]);
+              if (!prInfo) throw new Error('Invalid URL format');
+
+              const newPR = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: prInfo.title || `PR: ${prInfo.head} → ${prInfo.base}`,
+                body: prInfo.body || `Auto-created PR from ${prInfo.head}`,
+                head: prInfo.head,
+                base: prInfo.base
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: `✅ PR created: ${newPR.data.html_url}`
+              });
+
+            } catch (error) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: `❌ Error: ${error.message}`
+              });
+            }
