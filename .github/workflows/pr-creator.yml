@@ -2,7 +2,7 @@ name: Create PR from Comment
 
 on:
   issue_comment:
-    types: [created]
+    types: [edited]
 
 jobs:
   create-pr:
