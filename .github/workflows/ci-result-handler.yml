@@ -1,0 +1,97 @@
+name: CI Result Handler
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+
+jobs:
+  handle-ci-result:
+    name: Handle CI Result
+    runs-on: ubuntu-latest
+    
+    # PRイベントの場合のみ実行
+    if: github.event.workflow_run.event == 'pull_request'
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    
+    steps:
+      - name: Handle CI Result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Pull Request番号を取得
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${context.payload.workflow_run.head_branch}`,
+              state: 'open'
+            });
+            
+            if (pullRequests.length === 0) {
+              console.log('No open PR found for this branch');
+              return;
+            }
+            
+            const prNumber = pullRequests[0].number;
+            const conclusion = context.payload.workflow_run.conclusion;
+            console.log(`Found PR #${prNumber} with CI conclusion: ${conclusion}`);
+            
+            if (conclusion === 'failure') {
+              // CI失敗時の処理
+              console.log('CI failed, updating labels...');
+              
+              // ci-passedとreview-fixedラベルを削除
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'ci-passed'
+              }).catch(e => console.log('ci-passed label not found or already removed'));
+              
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'review-fixed'
+              }).catch(e => console.log('review-fixed label not found or already removed'));
+              
+              // CI失敗ラベルを追加
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['ci-failure']
+              });
+              
+              console.log(`Added ci-failure label to PR #${prNumber}`);
+              
+            } else if (conclusion === 'success') {
+              // CI成功時の処理
+              console.log('CI succeeded, updating labels...');
+              
+              // ci-failureラベルを削除
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'ci-failure'
+              }).catch(e => console.log('ci-failure label not found or already removed'));
+              
+              // CI成功ラベルを追加
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['ci-passed']
+              });
+              
+              console.log(`Added ci-passed label to PR #${prNumber}`);
+              
+            } else {
+              console.log(`CI concluded with status: ${conclusion}, no label changes needed`);
+            }
