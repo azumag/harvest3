@@ -1,0 +1,144 @@
+name: Main CI Failure Issue Creator
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  create-issue-on-failure:
+    name: Create Issue on Main CI Failure
+    runs-on: ubuntu-latest
+    
+    # mainブランチのCIが失敗した場合のみ実行
+    if: |
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch == 'main'
+    
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    
+    steps:
+      - name: Create CI Failure Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failedWorkflowUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.payload.workflow_run.id}`;
+            const workflowName = context.payload.workflow_run.name;
+            const headSha = context.payload.workflow_run.head_sha;
+            const headCommit = context.payload.workflow_run.head_commit;
+            const triggeredBy = context.payload.workflow_run.triggering_actor.login;
+            
+            // 既存の同様のissueをチェック
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure,main-branch'
+            });
+            
+            // 24時間以内に作成された類似のissueがある場合はスキップ
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const recentIssues = existingIssues.filter(issue => 
+              new Date(issue.created_at) > twentyFourHoursAgo &&
+              issue.title.includes('main ブランチ CI 失敗')
+            );
+            
+            if (recentIssues.length > 0) {
+              console.log('Similar issue already exists within 24 hours, skipping creation');
+              return;
+            }
+            
+            const issueTitle = `🚨 main ブランチ CI 失敗 - ${new Date().toISOString().split('T')[0]}`;
+            const issueBody = `
+## 🚨 Main Branch CI Failure Alert
+
+**ワークフロー**: ${workflowName}
+**ブランチ**: main
+**失敗時刻**: ${new Date(context.payload.workflow_run.updated_at).toLocaleString('ja-JP')}
+**コミット**: \`${headSha.substring(0, 7)}\`
+**トリガー**: @${triggeredBy}
+
+### 📝 コミット詳細
+**メッセージ**: ${headCommit.message}
+**作成者**: ${headCommit.author.name}
+
+### 🔗 リンク
+- [失敗したワークフロー](${failedWorkflowUrl})
+- [コミット](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${headSha})
+
+### ⚡ 緊急対応が必要
+mainブランチのCIが失敗しています。以下を確認してください：
+
+1. **テスト失敗の確認**
+   - 失敗したテストケースの特定
+   - テストログの詳細確認
+
+2. **ビルドエラーの確認**
+   - コンパイルエラー
+   - 依存関係の問題
+
+3. **環境問題の確認**
+   - CI環境の設定
+   - 外部サービスの可用性
+
+### 🔧 推奨アクション
+- [ ] ワークフローログを確認
+- [ ] ローカル環境でテストを実行
+- [ ] 必要に応じてhotfixブランチを作成
+- [ ] 修正後、再度mainブランチでCIを実行
+
+### 📊 影響範囲
+- **デプロイメント**: 現在ブロックされています
+- **開発**: 他のPRのマージが困難になる可能性があります
+- **プロダクション**: 緊急修正の適用が困難になる可能性があります
+
+---
+*この issue は CI 失敗時に自動作成されました*
+            `;
+            
+            // Issue作成
+            const { data: newIssue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: issueBody,
+              labels: ['ci-failure', 'main-branch', 'high-priority', 'bug']
+            });
+            
+            console.log(`Created issue #${newIssue.number}: ${issueTitle}`);
+            
+            // 関連するPRにコメントを追加（該当する場合）
+            try {
+              const { data: pullRequests } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                base: 'main'
+              });
+              
+              if (pullRequests.length > 0) {
+                const commentBody = `🚨 **Main Branch CI Failure Alert**
+
+mainブランチでCIが失敗しました。このPRのマージは一時的に制限される可能性があります。
+
+詳細: #${newIssue.number}
+失敗したワークフロー: [${workflowName}](${failedWorkflowUrl})
+
+mainブランチの修正が完了するまでお待ちください。`;
+
+                for (const pr of pullRequests.slice(0, 3)) { // 最新3件のPRのみ
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    body: commentBody
+                  });
+                }
+              }
+            } catch (error) {
+              console.log('Failed to comment on PRs:', error.message);
+            }
