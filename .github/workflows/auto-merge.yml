@@ -1,19 +1,19 @@
 name: Auto merger
 
 on:
-  pull_request:
-    types: [labeled]
+  issue_comment:
+    types: [created]
 
 jobs:
   auto-merge-pr:
     name: Auto Merge PR
     runs-on: ubuntu-latest
     if: |
-      github.event.action == 'labeled' &&
-      contains(github.event.pull_request.labels.*.name, 'approve')
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, 'review-fixed')
     
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
       actions: read
@@ -30,12 +30,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          echo "Approving PR #${{ github.event.pull_request.number }}"
-          gh pr review ${{ github.event.pull_request.number }} --approve
+          echo "Approving PR #${{ github.event.issue.number }}"
+          gh pr review ${{ github.event.issue.number }} --approve
 
       - name: Merge PR
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          echo "Merging PR #${{ github.event.pull_request.number }}"
-          gh pr merge ${{ github.event.pull_request.number }} --merge --auto
+          echo "Merging PR #${{ github.event.issue.number }}"
+          gh pr merge ${{ github.event.issue.number }} --merge --auto

@@ -274,6 +274,11 @@ Claude Code Actionを使用したIssue自動解決システムを導入してい
 - 専用ブランチでのPR作成（develop向け）
 - Issue内への結果報告
 
+#### 自動マージシステム
+- **トリガー**: PRコメントに`review-fixed`が含まれる時
+- **動作**: PR承認と自動マージを実行
+- **ワークフロー**: `auto-merge.yml`
+
 #### 設定
 - `CLAUDE_CODE_OAUTH_TOKEN`をGitHub Secretsに設定する必要があります
 - ワークフローは`.github/workflows/claude-issue-resolver.yml`で管理
