@@ -96,7 +96,7 @@ async function updateTradeSummary(trade) {
   // Zod validation for trade summary data
   const validatedTrade = safeValidateTradeSummaryData(trade, 'updateTradeSummary');
   if (!validatedTrade) {
-    logger.error('Trade summary validation failed, skipping update');
+    logger.error('取引サマリーの検証に失敗、更新をスキップ');
     return;
   }
 
@@ -510,7 +510,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
   // Zod validation for strategy parameters data
   const validatedStrategyParams = safeValidateStrategyParametersData(strategyParamsData, 'saveStrategyParametersRedis');
   if (!validatedStrategyParams) {
-    logger.error('Strategy parameters validation failed, skipping save');
+    logger.error('戦略パラメーターの検証に失敗、保存をスキップ');
     return false;
   }
 
@@ -831,7 +831,7 @@ async function savePositionRedis(positionKey, positionData) {
   // Zod validation for position data
   const validatedPositionData = safeValidatePositionData(positionData, 'savePositionRedis');
   if (!validatedPositionData) {
-    logger.error('Position data validation failed, skipping save');
+    logger.error('ポジションデータの検証に失敗、保存をスキップ');
     return false;
   }
 
@@ -1318,7 +1318,7 @@ async function clearAllPositionsRedis() {
   try {
     // Check if Redis client is connected before executing commands
     if (!client || !client.isOpen) {
-      logger.warn('Redis client is not connected - skipping position clear operation');
+      logger.warn('Redisクライアントが未接続 - ポジションクリア操作をスキップ');
       return true; // Return true for test environments where Redis is not available
     }
 
@@ -1330,7 +1330,7 @@ async function clearAllPositionsRedis() {
   } catch (error) {
     // Handle specific connection errors for CI environments
     if (error.message && error.message.includes('closed')) {
-      logger.warn('Redis connection closed - treating as successful clear for test environment');
+      logger.warn('Redis接続が閉じられました - テスト環境では成功として扱います');
       return true;
     }
     logger.error('全ポジションデータのクリアに失敗しました:', error);
@@ -1346,7 +1346,7 @@ async function clearAllPnLRedis() {
   try {
     // Check if Redis client is connected before executing commands
     if (!client || !client.isOpen) {
-      logger.warn('Redis client is not connected - skipping PnL clear operation');
+      logger.warn('Redisクライアントが未接続 - 損益クリア操作をスキップ');
       return true; // Return true for test environments where Redis is not available
     }
 
@@ -1358,7 +1358,7 @@ async function clearAllPnLRedis() {
   } catch (error) {
     // Handle specific connection errors for CI environments
     if (error.message && error.message.includes('closed')) {
-      logger.warn('Redis connection closed - treating as successful clear for test environment');
+      logger.warn('Redis接続が閉じられました - テスト環境では成功として扱います');
       return true;
     }
     logger.error('全損益データのクリアに失敗しました:', error);
@@ -1520,7 +1520,7 @@ async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, o
     // Zod validation for pending order data
     const validatedPendingOrderData = safeValidatePendingOrderData(data, 'savePendingOrderRedis');
     if (!validatedPendingOrderData) {
-      logger.error('Pending order data validation failed, skipping save');
+      logger.error('未約定注文データの検証に失敗、保存をスキップ');
       return false;
     }
 

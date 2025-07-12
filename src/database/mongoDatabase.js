@@ -383,7 +383,7 @@ async function addOrderMongoDB(orderData) {
       };
     }
 
-    logger.error('Error adding order:', createLogMetadata('addOrderMongoDB', error, {
+    logger.error('注文の追加エラー:', createLogMetadata('addOrderMongoDB', error, {
       orderId: orderData.orderId
     }));
     throw error;
@@ -414,7 +414,7 @@ async function addOrdersBulk(ordersData) {
     const result = await module.exports.ordersCollection.insertMany(validatedOrdersData);
     return result;
   } catch (error) {
-    logger.error('Error adding orders in bulk:', createLogMetadata('addOrdersBulk', error, {
+    logger.error('バルク注文の追加エラー:', createLogMetadata('addOrdersBulk', error, {
       ordersCount: ordersData.length
     }));
     throw error;
@@ -442,16 +442,16 @@ async function addTradeMongoDB(tradeData) {
     );
 
     if (result.upsertedCount > 0) {
-      logger.info('New trade added:', result.upsertedId);
+      logger.info('新しい取引を追加:', result.upsertedId);
     } else if (result.modifiedCount > 0) {
-      logger.info('Existing trade updated for tradeId:', validatedTradeData.tradeId);
+      logger.info('取引IDの既存取引を更新:', validatedTradeData.tradeId);
     } else {
-      logger.info('Trade already exists (no changes):', validatedTradeData.tradeId);
+      logger.info('取引は既に存在（変更なし）:', validatedTradeData.tradeId);
     }
 
     return result;
   } catch (error) {
-    logger.error('Error adding/updating trade:', createLogMetadata('addTradeMongoDB', error, {
+    logger.error('取引の追加/更新エラー:', createLogMetadata('addTradeMongoDB', error, {
       tradeId: tradeData?.tradeId
     }));
     throw error;
@@ -469,7 +469,7 @@ async function addSignalMongoDB(signalData) {
     // console.log('Signal added:', result.insertedId);
     return result;
   } catch (error) {
-    logger.error('Error adding signal:', error);
+    logger.error('シグナルの追加エラー:', error);
     throw error;
   }
 }
@@ -513,12 +513,12 @@ async function listOrders(filter = {}, options = {}) {
 
     logger.info(`listOrders: ${processedOrders.length} orders processed from DB (excluded pre-saved orders)`);
     if (processedOrders.length > 0) {
-      logger.debug('Sample order structure:', processedOrders[0]);
+      logger.debug('サンプル注文構造:', processedOrders[0]);
     }
 
     return processedOrders;
   } catch (error) {
-    logger.error('Error listing orders:', error);
+    logger.error('注文リスト取得エラー:', error);
     throw error;
   }
 }
@@ -532,11 +532,11 @@ async function listOrders(filter = {}, options = {}) {
 async function listTrades(filter = {}, options = {}) {
   await connectDB();
   try {
-    logger.debug('Filter:', filter);
+    logger.debug('フィルター:', filter);
     const trades = await module.exports.tradesCollection.find(filter, options).toArray();
     return trades;
   } catch (error) {
-    logger.error('Error listing trades:', error);
+    logger.error('取引リスト取得エラー:', error);
     throw error;
   }
 }
@@ -562,7 +562,7 @@ async function listSignals(filter = {}, skip = 0, limit = 0, sort = { timestamp:
     const signals = await query.toArray();
     return signals;
   } catch (error) {
-    logger.error('Error listing signals:', error);
+    logger.error('シグナルリスト取得エラー:', error);
     throw error;
   }
 }
@@ -578,7 +578,7 @@ async function countSignals(filter = {}) {
     const count = await module.exports.signalsCollection.countDocuments(filter);
     return count;
   } catch (error) {
-    logger.error('Error counting signals:', error);
+    logger.error('シグナル数カウントエラー:', error);
     throw error;
   }
 }
@@ -594,7 +594,7 @@ async function getOrderByOrderId(orderId) {
     const order = await module.exports.ordersCollection.findOne({ orderId: orderId });
     return order;
   } catch (error) {
-    logger.error('Error getting order by orderId:', error);
+    logger.error('注文IDでの注文取得エラー:', error);
     throw error;
   }
 }
@@ -610,7 +610,7 @@ async function getTradeByTradeId(tradeId) {
     const trade = await module.exports.tradesCollection.findOne({ tradeId: tradeId });
     return trade;
   } catch (error) {
-    logger.error('Error getting trade by tradeId:', error);
+    logger.error('取引IDでの取引取得エラー:', error);
     throw error;
   }
 }
@@ -629,7 +629,7 @@ async function updateOrderByOrderId(orderId, updateData) {
     );
     return result;
   } catch (error) {
-    logger.error('Error updating order:', error);
+    logger.error('注文更新エラー:', error);
     throw error;
   }
 }
@@ -644,7 +644,7 @@ async function deleteOrderByOrderId(orderId) {
     const result = await module.exports.ordersCollection.deleteOne({ orderId: orderId });
     return result;
   } catch (error) {
-    logger.error('Error deleting order:', error);
+    logger.error('注文削除エラー:', error);
     throw error;
   }
 }
@@ -691,7 +691,7 @@ async function addOhlcvMongoDB(ohlcvData) {
       });
       return existingData;
     }
-    logger.error('Error adding OHLCV:', createLogMetadata('addOhlcvMongoDB', error, {
+    logger.error('OHLCVの追加エラー:', createLogMetadata('addOhlcvMongoDB', error, {
       exchange: ohlcvData?.exchange,
       symbol: ohlcvData?.symbol,
       timeframe: ohlcvData?.timeframe
@@ -740,7 +740,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
     }
     return [];
   } catch (error) {
-    logger.error('Error getting OHLCV by parameters:', error);
+    logger.error('パラメーターによるOHLCV取得エラー:', error);
     throw error;
   }
 }
@@ -756,7 +756,7 @@ async function getSignalById(id) {
     const signal = await module.exports.signalsCollection.findOne({ _id: new ObjectId(id) });
     return signal;
   } catch (error) {
-    logger.error('Error getting signal by _id:', error);
+    logger.error('_idでのシグナル取得エラー:', error);
     throw error;
   }
 }
@@ -897,7 +897,7 @@ async function saveTickerMongoDB(tickerData) {
       return { acknowledged: true, upsertedCount: 0, matchedCount: 1 };
     }
     // その他のエラーは再スロー
-    logger.error('Error saving ticker:', createLogMetadata('saveTickerMongoDB', error, {
+    logger.error('ティッカー保存エラー:', createLogMetadata('saveTickerMongoDB', error, {
       exchange: tickerData?.exchange,
       symbol: tickerData?.symbol
     }));
@@ -952,7 +952,7 @@ async function fetchTickerFromMongoDB(exchange, symbol, timestamp, maxTimeDiff =
 
     return closestTicker;
   } catch (error) {
-    logger.error('Error fetching ticker from MongoDB:', error);
+    logger.error('MongoDBからのティッカー取得エラー:', error);
     return null;
   }
 }

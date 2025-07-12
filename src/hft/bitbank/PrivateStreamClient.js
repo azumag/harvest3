@@ -21,9 +21,9 @@ class PrivateStreamClient {
       // TODO: プライベートストリーム接続時の認証ロジックを実装
       // bitbank のプライベートストリームAPI仕様を確認し、必要に応じて認証情報を渡す
       await this.client.connect();
-      this.logger.info('Private stream connected.');
+      this.logger.info('プライベートストリームに接続しました。');
     } catch (error) {
-      this.logger.error('Failed to connect private stream:', error);
+      this.logger.error('プライベートストリームの接続に失敗:', error);
       throw error; // 接続失敗を通知
     }
   }
@@ -34,7 +34,7 @@ class PrivateStreamClient {
    * @param {object} [params] - 購読に必要な追加パラメータ (例: 認証情報)
    */
   subscribe(channel, params = {}) {
-    this.logger.info(`Subscribing to private channel: ${channel}`);
+    this.logger.info(`プライベートチャンネルを購読: ${channel}`);
     // TODO: bitbank のプライベートストリームAPI仕様に基づき、適切なイベントとデータ形式で購読リクエストを送信
     // 例: this.client.emit('join-room', channel, params);
     this.client.emit('join-room', channel, params); // 仮実装
@@ -59,12 +59,12 @@ class PrivateStreamClient {
    */
   _handleMessage(message) {
     if (!message || !message.room || !message.message) {
-      this.logger.warn('Received invalid private message format:', message);
+      this.logger.warn('無効なプライベートメッセージ形式を受信:', message);
       return;
     }
 
     const { room, message: data } = message;
-    this.logger.debug(`Received private message from room: ${room}`, data);
+    this.logger.debug(`ルームからプライベートメッセージを受信: ${room}`, data);
 
     // TODO: 受信したプライベートデータ（注文、ポジションなど）を処理するロジックを実装
     // データベースの更新や、戦略への通知など
@@ -76,7 +76,7 @@ class PrivateStreamClient {
     //   this._handleMyPositions(data);
     //   break;
     default:
-      this.logger.debug(`Received message from unhandled private room: ${room}`);
+      this.logger.debug(`未対応のプライベートルームからメッセージを受信: ${room}`);
     }
   }
 
@@ -90,7 +90,7 @@ class PrivateStreamClient {
    */
   disconnect() {
     this.client.disconnect();
-    this.logger.info('Private stream disconnected.');
+    this.logger.info('プライベートストリームを切断しました。');
   }
 }
 

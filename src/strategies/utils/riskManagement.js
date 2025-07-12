@@ -339,7 +339,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
       try {
         await repairPositionInconsistency(exchange, symbol, strategyKey, netPosition, actualBalance, baseAsset);
-        logger.info('[INFO] Preemptive position repair completed');
+        logger.info('[情報] 事前修复ポジション完了');
       } catch (repairError) {
         logger.warn(` Preemptive position repair failed: ${repairError.message}`);
       }
@@ -507,7 +507,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
         }
 
       } catch (orderError) {
-        logger.warn('[WARNING] Error handling open orders:', orderError.message);
+        logger.warn('[警告] オープン注文の処理エラー:', orderError.message);
         // エラーの場合も詳細な残高確認を実行
         const netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
@@ -685,7 +685,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
         // 実際の残高で再試行
         order = await exchange.createMarketSellOrder(symbol, formattedRetryAmount);
-        logger.info('[INFO] Stop-loss retry successful');
+        logger.info('[情報] ストップロスの再試行が成功');
 
         // 売却量を更新（後続処理で使用）
         sellAmount = retryAmount;
@@ -773,7 +773,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       position.status = 'closed';
       position.closePrice = executionPrice;
       position.closedAt = Date.now();
-      logger.info('[DEBUG] Complete stop-loss: position closed, cleaning up from Redis');
+      logger.info('[デバッグ] 完全なストップロス: ポジションをクローズ、Redisからクリーンアップ');
 
       // ポジションクリーンアップ（履歴保存後にRedisから削除）
       try {
@@ -1578,7 +1578,7 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
         repairAction = 'balance_sync';
       }
     } else {
-      logger.info('[INFO] Position and balance already synchronized');
+      logger.info('[情報] ポジションと残高は既に同期済み');
     }
 
     // Discord通知

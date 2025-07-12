@@ -20,7 +20,7 @@ class WebSocketClient {
   connect() {
     return new Promise((resolve, reject) => {
       if (this.mockMode) {
-        this.logger.info('Running in mock mode - simulating WebSocket connection');
+        this.logger.info('モックモードで実行中 - WebSocket接続をシミュレート');
         this._setupMockSocket();
         resolve();
         return;
@@ -90,7 +90,7 @@ class WebSocketClient {
         }
       },
       disconnect: () => {
-        this.logger.info('Mock socket disconnected');
+        this.logger.info('モックソケットを切断');
         this.socket.connected = false;
       }
     };
@@ -172,7 +172,7 @@ class WebSocketClient {
     if (this.socket && this.socket.connected) {
       this.socket.emit(event, data);
     } else {
-      this.logger.warn('Attempted to emit event while socket is not connected.');
+      this.logger.warn('ソケットが未接続の状態でイベントの発行を試みました。');
     }
   }
 
@@ -222,13 +222,13 @@ class WebSocketClient {
 
     setTimeout(() => {
       if (!this.shouldReconnect) {
-        this.logger.debug('Reconnection cancelled');
+        this.logger.debug('再接続がキャンセルされました');
         return;
       }
 
       this.connect()
         .then(() => {
-          this.logger.info('✅ Reconnection successful');
+          this.logger.info('✅ 再接続が成功しました');
           this._notifyHandlers('reconnected', this.reconnectAttempts);
         })
         .catch((error) => {

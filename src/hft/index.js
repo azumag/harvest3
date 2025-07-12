@@ -23,12 +23,12 @@ async function startHFTStrategy(config) {
   logger.header('🚀 Bitbank HFT Strategy Initialization');
 
   if (!config || !config.strategies || !config.strategies.HFT || config.strategies.HFT.enabled !== true) {
-    logger.warn('HFT Strategy is disabled in the config.');
-    logger.info('To enable HFT, set HFT_ENABLED=true in your .env file');
+    logger.warn('HFT戦略が設定で無効化されています。');
+    logger.info('HFTを有効にするには、.envファイルでHFT_ENABLED=trueを設定してください');
     return; // HFT戦略が無効な場合は何もしない
   }
 
-  logger.info('✓ HFT Strategy is enabled');
+  logger.info('✓ HFT戦略が有効化されています');
   logger.info(`Trading pairs: ${TRADING_PAIRS.join(', ')}`);
   logger.info(`Mock mode: ${WS_CONFIG.mockMode ? 'ON' : 'OFF'}`);
 
@@ -47,13 +47,13 @@ async function startHFTStrategy(config) {
 
   try {
     // WebSocket 接続
-    logger.info('🔌 Connecting to WebSocket streams...');
+    logger.info('🔌 WebSocketストリームに接続中...');
     await publicClient.connect();
     logger.success('Public stream connected successfully');
     // TODO: プライベートストリームに接続
     // await privateClient.connect();
 
-    logger.info('⚙️  Initializing trading strategies...');
+    logger.info('⚙️  取引戦略を初期化中...');
     // 取引ペアごとにストラテジー作成と購読開始
     for (const pair of TRADING_PAIRS) {
       // ストラテジーインスタンスの作成
@@ -87,8 +87,8 @@ async function startHFTStrategy(config) {
     // TODO: transactionsUpdate イベントのハンドリング
 
   } catch (error) {
-    logger.error('❌ Failed to start Bitbank HFT Strategy:', error.message);
-    logger.debug('Error details:', error);
+    logger.error('❌ Bitbank HFT戦略の開始に失敗:', error.message);
+    logger.debug('エラー詳細:', error);
     // エラー発生時のクリーンアップ
     stopHFTStrategy();
     throw error; // 起動失敗を通知
@@ -103,12 +103,12 @@ function stopHFTStrategy() {
   if (publicClient) {
     publicClient.disconnect();
     publicClient = null;
-    logger.info('✓ Public stream disconnected');
+    logger.info('✓ パブリックストリームを切断');
   }
   if (privateClient) {
     privateClient.disconnect();
     privateClient = null;
-    logger.info('✓ Private stream disconnected');
+    logger.info('✓ プライベートストリームを切断');
   }
   // TODO: その他のリソース解放
   logger.success('🏁 Bitbank HFT Strategy stopped successfully');

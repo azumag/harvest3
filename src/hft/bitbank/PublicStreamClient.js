@@ -28,10 +28,10 @@ class PublicStreamClient {
       // 接続維持のためのping
       this.pingInterval = setInterval(() => {
         this.client.emit('ping');
-        this.logger.debug('💓 Heartbeat sent to server');
+        this.logger.debug('💓 サーバーにハートビートを送信');
       }, 30000); // 30秒ごと
     } catch (error) {
-      this.logger.error('❌ Failed to connect public stream:', error.message);
+      this.logger.error('❌ パブリックストリームの接続に失敗:', error.message);
       throw error; // 接続失敗を通知
     }
   }
@@ -69,12 +69,12 @@ class PublicStreamClient {
   _setupEventHandlers() {
     // WebSocketの標準イベント
     this.client.on('message', (data) => {
-      this.logger.debug('📨 Message received');
+      this.logger.debug('📨 メッセージを受信');
       this._handleMessage(data);
     });
 
     this.client.on('disconnect', (data) => {
-      this.logger.warn('🔌 WebSocket disconnected:', data);
+      this.logger.warn('🔌 WebSocketが切断されました:', data);
     });
   }
 
@@ -86,7 +86,7 @@ class PublicStreamClient {
     this.logger.debug(`Processing received message: ${JSON.stringify(message)}`);
 
     if (!message) {
-      this.logger.warn('Received empty message');
+      this.logger.warn('空のメッセージを受信');
       return;
     }
 
@@ -109,10 +109,10 @@ class PublicStreamClient {
       }
 
       // どちらの形式にも該当しない場合
-      this.logger.warn('Unexpected message format:', JSON.stringify(message).substring(0, 200));
+      this.logger.warn('予期しないメッセージ形式:', JSON.stringify(message).substring(0, 200));
     } catch (error) {
-      this.logger.error('Error handling message:', error.message);
-      this.logger.debug('Error stack:', error.stack);
+      this.logger.error('メッセージの処理エラー:', error.message);
+      this.logger.debug('エラースタック:', error.stack);
     }
   }
 
@@ -171,7 +171,7 @@ class PublicStreamClient {
       clearInterval(this.pingInterval);
     }
     this.client.disconnect();
-    this.logger.info('Public stream disconnected.');
+    this.logger.info('パブリックストリームを切断しました。');
   }
 }
 

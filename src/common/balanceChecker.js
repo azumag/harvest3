@@ -383,7 +383,7 @@ async function calculateBalanceFromMongoDB(exchangeId) {
 
     return balances;
   } catch (error) {
-    logger.error('MongoDB calculation error:', error.message);
+    logger.error('MongoDB計算エラー:', error.message);
     throw error;
   }
 }
@@ -409,7 +409,7 @@ async function calculateBalanceFromRedisSummary(exchangeId) {
 
     return balances;
   } catch (error) {
-    logger.error('Redis summary calculation error:', error.message);
+    logger.error('Redisサマリー計算エラー:', error.message);
     throw error;
   }
 }
@@ -421,7 +421,7 @@ async function compareBalancesRobust(exchangeId) {
   const lock = await acquireCheckerLock();
 
   if (!lock.acquired) {
-    logger.warn('Another check is already running, skipping');
+    logger.warn('他のチェックが実行中のため、スキップ');
     return { skipped: true, reason: 'another_check_running' };
   }
 
@@ -645,7 +645,7 @@ function createDetailedDiscrepancyMessage(comparison) {
  */
 async function resetCheckerState() {
   await setCheckerState(STATE.OK, { reset: true, timestamp: Date.now() });
-  logger.info('State manually reset to OK');
+  logger.info('状態を手動でOKにリセット');
 }
 
 module.exports = {
