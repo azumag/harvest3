@@ -71,7 +71,20 @@ class Logger {
       formattedMessage = `${message} ${argsStr}`;
     }
 
-    console.log(`${timestamp} ${levelStr} ${context} ${formattedMessage}`);
+    const fullMessage = `${timestamp} ${levelStr} ${context} ${formattedMessage}`;
+
+    // 適切なコンソールメソッドを使用
+    switch (level.toUpperCase()) {
+      case 'WARN':
+        console.warn(fullMessage);
+        break;
+      case 'ERROR':
+        console.error(fullMessage);
+        break;
+      default:
+        console.log(fullMessage);
+        break;
+    }
   }
 
   info(message, ...args) {
