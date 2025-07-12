@@ -489,3 +489,52 @@ describe('残高チェッカーのテスト', () => {
     });
   });
 });
+
+// Logger移行のテスト - 新規追加
+describe('BalanceChecker Logger移行のテスト', () => {
+  let Logger;
+
+  beforeEach(() => {
+    Logger = require('../../../src/hft/utils/Logger');
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.resetModules();
+  });
+
+  it('BalanceCheckerファイルでLogger instanceが正しく作成される', () => {
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/balanceChecker.js', 'utf8');
+    
+    expect(fileContent).toContain("const Logger = require('../hft/utils/Logger')");
+    expect(fileContent).toContain("const logger = new Logger('BalanceChecker')");
+  });
+
+  it('Logger移行によりconsole.logの直接使用が削除されている', () => {
+    // ファイルの内容を読んで、console.logの直接使用がないことを確認
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/balanceChecker.js', 'utf8');
+    
+    // コメントアウトされたconsole文は除外して、アクティブなconsole文が存在しないことを確認
+    const activeConsoleStatements = fileContent.split('\n').filter(line => 
+      !line.trim().startsWith('//') && 
+      !line.trim().startsWith('*') &&
+      (line.includes('console.log') || line.includes('console.warn') || line.includes('console.error'))
+    );
+    
+    expect(activeConsoleStatements).toHaveLength(0);
+  });
+
+  it('[BALANCE_CHECKER]プレフィックスが削除されている', () => {
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/balanceChecker.js', 'utf8');
+    
+    // [BALANCE_CHECKER]プレフィックスを含むlogger呼び出しが存在しないことを確認
+    const prefixedLoggerCalls = fileContent.split('\n').filter(line => 
+      line.includes('logger.') && line.includes('[BALANCE_CHECKER]')
+    );
+    
+    expect(prefixedLoggerCalls).toHaveLength(0);
+  });
+});

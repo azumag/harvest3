@@ -6,6 +6,9 @@
 const cron = require('node-cron');
 const { getValidatedConfig } = require('./balanceCheckerConfig');
 const { postErrorToDiscord } = require('./notifications');
+const Logger = require('../hft/utils/Logger');
+
+const logger = new Logger('Scheduler');
 
 class SchedulingManager {
   constructor() {
@@ -27,7 +30,7 @@ class SchedulingManager {
           await result;
         }
       } catch (error) {
-        console.error(`[スケジューラー] ${taskName} 実行エラー:`, error.message);
+        logger.error(`${taskName} 実行エラー:`, error.message);
       }
     }
   }
@@ -45,7 +48,7 @@ class SchedulingManager {
       runOnInit = false
     } = options;
 
-    console.log(`[スケジューラー] 毎時タスク登録: ${taskName}`);
+    logger.info(`毎時タスク登録: ${taskName}`);
 
     // 毎時0分に実行 (秒 分 時 日 月 曜日)
     const cronExpression = '0 0 * * * *';
@@ -56,15 +59,15 @@ class SchedulingManager {
       }
 
       try {
-        console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
+        logger.info(`${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
         await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
-        console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
+        logger.info(`${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
-        console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
+        logger.error(`${taskName} エラー:`, error.message);
 
         // エラー通知機能があれば使用
         if (typeof postErrorToDiscord !== 'undefined') {
@@ -85,7 +88,7 @@ class SchedulingManager {
 
     // 初回実行オプション
     if (runOnInit && typeof taskFunction === 'function') {
-      console.log(`[スケジューラー] ${taskName} 初回実行中...`);
+      logger.info(`${taskName} 初回実行中...`);
       setTimeout(async () => {
         await this._executeTask(taskFunction, taskName);
       }, 1000);
@@ -108,7 +111,7 @@ class SchedulingManager {
       runOnInit = false
     } = options;
 
-    console.log(`[スケジューラー] 間隔タスク登録: ${taskName} (${intervalMinutes}分間隔)`);
+    logger.info(`間隔タスク登録: ${taskName} (${intervalMinutes}分間隔)`);
 
     // 分間隔のcron表現を生成
     const cronExpression = `0 */${intervalMinutes} * * * *`;
@@ -119,15 +122,15 @@ class SchedulingManager {
       }
 
       try {
-        console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
+        logger.info(`${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
         await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
-        console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
+        logger.info(`${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
-        console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
+        logger.error(`${taskName} エラー:`, error.message);
 
         if (typeof postErrorToDiscord !== 'undefined') {
           await postErrorToDiscord(`スケジュールタスクエラー: ${taskName} - ${error.message}`);
@@ -148,7 +151,7 @@ class SchedulingManager {
 
     // 初回実行オプション
     if (runOnInit && typeof taskFunction === 'function') {
-      console.log(`[スケジューラー] ${taskName} 初回実行中...`);
+      logger.info(`${taskName} 初回実行中...`);
       setTimeout(async () => {
         await this._executeTask(taskFunction, taskName);
       }, 1000);
@@ -171,7 +174,7 @@ class SchedulingManager {
       description = ''
     } = options;
 
-    console.log(`[スケジューラー] カスタムタスク登録: ${taskName} (${cronExpression}) ${description}`);
+    logger.info(`カスタムタスク登録: ${taskName} (${cronExpression}) ${description}`);
 
     const task = cron.schedule(cronExpression, async () => {
       if (this.isShutdown) {
@@ -179,15 +182,15 @@ class SchedulingManager {
       }
 
       try {
-        console.log(`[スケジューラー] ${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
+        logger.info(`${taskName} 開始 - ${new Date().toLocaleString('ja-JP')}`);
         const startTime = Date.now();
 
         await this._executeTask(taskFunction, taskName);
 
         const duration = Date.now() - startTime;
-        console.log(`[スケジューラー] ${taskName} 完了 - 処理時間: ${duration}ms`);
+        logger.info(`${taskName} 完了 - 処理時間: ${duration}ms`);
       } catch (error) {
-        console.error(`[スケジューラー] ${taskName} エラー:`, error.message);
+        logger.error(`${taskName} エラー:`, error.message);
 
         if (typeof postErrorToDiscord !== 'undefined') {
           await postErrorToDiscord(`スケジュールタスクエラー: ${taskName} - ${error.message}`);
@@ -212,14 +215,14 @@ class SchedulingManager {
    * デフォルト残高チェックタスクの設定
    */
   setupDefaultBalanceTasks() {
-    console.log('[スケジューラー] デフォルト残高チェックタスク設定中...');
+    logger.info('デフォルト残高チェックタスク設定中...');
 
     // 設定から間隔を取得（ミリ秒を分に変換）
     const lightweightIntervalMinutes = Math.round(this.config.intervals.lightweightCheck / (1000 * 60));
     const robustIntervalMinutes = Math.round(this.config.intervals.robustCheck / (1000 * 60));
 
-    console.log(`[スケジューラー] 軽量チェック: ${lightweightIntervalMinutes}分間隔`);
-    console.log(`[スケジューラー] 堅牢チェック: ${robustIntervalMinutes}分間隔 (毎時0分)`);
+    logger.info(`軽量チェック: ${lightweightIntervalMinutes}分間隔`);
+    logger.info(`堅牢チェック: ${robustIntervalMinutes}分間隔 (毎時0分)`);
 
     // 毎時0分の堅牢残高チェック
     this.scheduleHourlyTask('robust-balance-check', async () => {
@@ -246,7 +249,7 @@ class SchedulingManager {
     const taskInfo = this.scheduledTasks.get(taskName);
     if (taskInfo) {
       taskInfo.task.stop();
-      console.log(`[スケジューラー] タスク一時停止: ${taskName}`);
+      logger.info(`タスク一時停止: ${taskName}`);
       return true;
     }
     return false;
@@ -260,7 +263,7 @@ class SchedulingManager {
     const taskInfo = this.scheduledTasks.get(taskName);
     if (taskInfo) {
       taskInfo.task.start();
-      console.log(`[スケジューラー] タスク再開: ${taskName}`);
+      logger.info(`タスク再開: ${taskName}`);
       return true;
     }
     return false;
@@ -275,7 +278,7 @@ class SchedulingManager {
     if (taskInfo) {
       taskInfo.task.destroy();
       this.scheduledTasks.delete(taskName);
-      console.log(`[スケジューラー] タスク削除: ${taskName}`);
+      logger.info(`タスク削除: ${taskName}`);
       return true;
     }
     return false;
@@ -302,10 +305,10 @@ class SchedulingManager {
    * デバッグ用: 次回実行時刻の表示
    */
   showNextExecutions() {
-    console.log('\n[スケジューラー] 次回実行予定:');
+    logger.info('\n次回実行予定:');
     for (const [name, info] of this.scheduledTasks.entries()) {
       if (info.task.running) {
-        console.log(`  ${name}: ${info.cronExpression} (${info.options.description || ''})`);
+        logger.info(`  ${name}: ${info.cronExpression} (${info.options.description || ''})`);
       }
     }
   }
@@ -314,21 +317,21 @@ class SchedulingManager {
    * 優雅なシャットダウン
    */
   async gracefulShutdown() {
-    console.log('[スケジューラー] 優雅なシャットダウン開始...');
+    logger.info('優雅なシャットダウン開始...');
     this.isShutdown = true;
 
     // 全タスクを停止
     for (const [name, info] of this.scheduledTasks.entries()) {
       try {
         info.task.destroy();
-        console.log(`[スケジューラー] タスク停止: ${name}`);
+        logger.info(`タスク停止: ${name}`);
       } catch (error) {
-        console.error(`[スケジューラー] タスク停止エラー ${name}:`, error.message);
+        logger.error(`タスク停止エラー ${name}:`, error.message);
       }
     }
 
     this.scheduledTasks.clear();
-    console.log('[スケジューラー] 全タスク停止完了');
+    logger.info('全タスク停止完了');
   }
 }
 

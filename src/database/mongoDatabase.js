@@ -6,7 +6,10 @@ const {
   safeValidateOrderData
 } = require('./schemas');
 const { postMongoConnectionErrorToDiscord } = require('../common/notifications');
+const Logger = require('../hft/utils/Logger');
 dotenv.config();
+
+const logger = new Logger('MongoDB');
 
 const mongoUrl = process.env.MONGO_URL;
 const mongoDbName = process.env.MONGO_DB_NAME;
@@ -66,7 +69,7 @@ function updateConnectionStats() {
         connectionStats.availableConnections = totalAvailable;
       }
     } catch (error) {
-      console.warn('[MongoDB] 接続プール統計の取得に失敗:', error.message);
+      logger.warn('接続プール統計の取得に失敗:', error.message);
     }
   }
   connectionStats.lastChecked = new Date().toISOString();
@@ -86,7 +89,7 @@ function startConnectionMonitoring() {
     // 警告レベルのチェック（接続プールの80%を超えた場合）
     const usageRatio = connectionStats.totalConnections / connectionStats.maxConnections;
     if (usageRatio > 0.8) {
-      console.warn(`[MongoDB] 接続プール使用率が高いです: ${Math.round(usageRatio * 100)}% (${connectionStats.totalConnections}/${connectionStats.maxConnections})`);
+      logger.warn(`接続プール使用率が高いです: ${Math.round(usageRatio * 100)}% (${connectionStats.totalConnections}/${connectionStats.maxConnections})`);
 
       // Discord通知を送信（循環参照回避のため条件付き読み込み）
       try {
@@ -97,7 +100,7 @@ function startConnectionMonitoring() {
           deduplicationWindow: 1800000 // 30分間の重複防止
         });
       } catch (error) {
-        console.warn('[MongoDB] Discord通知の送信に失敗:', error.message);
+        logger.warn('Discord通知の送信に失敗:', error.message);
       }
     }
   }, 30000); // 30秒ごとに監視
@@ -136,15 +139,15 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
       return await operation();
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
-      console.warn(`[MongoDB] ${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
+      logger.warn(`${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
 
       if (isLastAttempt) {
-        console.error(`[MongoDB] ${operationName} 最終失敗:`, error);
+        logger.error(`${operationName} 最終失敗:`, error);
         throw error;
       }
 
       const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, max 10s
-      console.log(`[MongoDB] ${backoffMs}ms後にリトライします...`);
+      logger.info(`${backoffMs}ms後にリトライします...`);
       await new Promise(resolve => setTimeout(resolve, backoffMs));
     }
   }
@@ -156,11 +159,11 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
 async function connectDB() {
   if (!await isConnected()) {
     await retryWithBackoff(async () => {
-      console.log({ mongoDbName, mongoUrl });
+      logger.info('MongoDB接続情報:', { mongoDbName, mongoUrl });
       client = new MongoClient(mongoUrl, mongoOptions);
       await client.connect();
       db = client.db(mongoDbName);
-      console.log('MongoDBに接続しました');
+      logger.info('MongoDBに接続しました');
 
       // 必要なコレクションが存在するか確認し、存在しない場合は作成
       await ensureCollectionsExist();
@@ -183,9 +186,9 @@ async function connectDB() {
     // 接続成功後のDiscord通知（エラー時のみ送信していたが、接続復旧も通知）
     try {
       // 接続エラー履歴がある場合のみ復旧通知
-      console.log('[MongoDB] 接続が正常に確立されました');
+      logger.info('接続が正常に確立されました');
     } catch (notificationError) {
-      console.warn('Discord通知送信に失敗:', notificationError.message);
+      logger.warn('Discord通知送信に失敗:', notificationError.message);
     }
   }
 }
@@ -205,13 +208,13 @@ async function ensureCollectionsExist() {
     // 存在しないコレクションを作成
     for (const name of requiredCollections) {
       if (!collectionNames.includes(name)) {
-        console.log(`コレクション ${name} が存在しないため作成します`);
+        logger.info(`コレクション ${name} が存在しないため作成します`);
         await db.createCollection(name);
-        console.log(`コレクション ${name} を作成しました`);
+        logger.info(`コレクション ${name} を作成しました`);
       }
     }
   } catch (error) {
-    console.error('コレクション確認/作成エラー:', error);
+    logger.error('コレクション確認/作成エラー:', error);
     throw error;
   }
 }
@@ -224,12 +227,12 @@ async function closeDB() {
     stopHealthCheck();
     if (client) {
       await client.close();
-      console.log('MongoDB接続を閉じました');
+      logger.info('MongoDB接続を閉じました');
       client = null;
       db = null;
     }
   } catch (error) {
-    console.error('MongoDB接続切断エラー:', error);
+    logger.error('MongoDB接続切断エラー:', error);
   }
 }
 
@@ -272,9 +275,9 @@ async function createIndexes() {
       { key: { timestamp: -1 }, options: {} }
     ]);
 
-    console.log('MongoDBインデックスの確認/作成が完了しました');
+    logger.info('MongoDBインデックスの確認/作成が完了しました');
   } catch (error) {
-    console.error('MongoDBインデックス作成エラー:', error);
+    logger.error('MongoDBインデックス作成エラー:', error);
   }
 }
 
@@ -301,10 +304,10 @@ async function createCollectionIndexesIfNotExist(collectionName, indexSpecs) {
     const indexKey = JSON.stringify(spec.key);
 
     if (!existingIndexMap.has(indexKey)) {
-      console.log(`コレクション ${collectionName} にインデックスを作成: ${indexKey}`);
+      logger.info(`コレクション ${collectionName} にインデックスを作成: ${indexKey}`);
       await collection.createIndex(spec.key, spec.options);
     } else {
-      console.log(`コレクション ${collectionName} のインデックスが既に存在: ${indexKey}`);
+      logger.info(`コレクション ${collectionName} のインデックスが既に存在: ${indexKey}`);
     }
   }
 }
@@ -328,7 +331,7 @@ async function addOrderMongoDB(orderData) {
   } catch (error) {
     // 🚨 CRITICAL FIX: Handle duplicate key errors gracefully to prevent crashes
     if (error.code === 11000 && error.keyPattern && error.keyPattern.orderId) {
-      console.warn(`[MongoDB] Order ${orderData.orderId} already exists, skipping duplicate insertion`);
+      logger.warn(`Order ${orderData.orderId} already exists, skipping duplicate insertion`);
       // Return success-like result for duplicate orders to maintain compatibility
       return {
         acknowledged: true,
@@ -338,7 +341,7 @@ async function addOrderMongoDB(orderData) {
       };
     }
 
-    console.error('Error adding order:', error);
+    logger.error('Error adding order:', error);
     throw error;
   }
 }
@@ -367,7 +370,7 @@ async function addOrdersBulk(ordersData) {
     const result = await module.exports.ordersCollection.insertMany(validatedOrdersData);
     return result;
   } catch (error) {
-    console.error('Error adding orders in bulk:', error);
+    logger.error('Error adding orders in bulk:', error);
     throw error;
   }
 }
@@ -393,16 +396,16 @@ async function addTradeMongoDB(tradeData) {
     );
 
     if (result.upsertedCount > 0) {
-      console.log('New trade added:', result.upsertedId);
+      logger.info('New trade added:', result.upsertedId);
     } else if (result.modifiedCount > 0) {
-      console.log('Existing trade updated for tradeId:', validatedTradeData.tradeId);
+      logger.info('Existing trade updated for tradeId:', validatedTradeData.tradeId);
     } else {
-      console.log('Trade already exists (no changes):', validatedTradeData.tradeId);
+      logger.info('Trade already exists (no changes):', validatedTradeData.tradeId);
     }
 
     return result;
   } catch (error) {
-    console.error('Error adding/updating trade:', error);
+    logger.error('Error adding/updating trade:', error);
     throw error;
   }
 }
@@ -418,7 +421,7 @@ async function addSignalMongoDB(signalData) {
     // console.log('Signal added:', result.insertedId);
     return result;
   } catch (error) {
-    console.error('Error adding signal:', error);
+    logger.error('Error adding signal:', error);
     throw error;
   }
 }
@@ -460,14 +463,14 @@ async function listOrders(filter = {}, options = {}) {
       };
     });
 
-    console.log(`listOrders: ${processedOrders.length} orders processed from DB (excluded pre-saved orders)`);
+    logger.info(`listOrders: ${processedOrders.length} orders processed from DB (excluded pre-saved orders)`);
     if (processedOrders.length > 0) {
-      console.log('Sample order structure:', processedOrders[0]);
+      logger.debug('Sample order structure:', processedOrders[0]);
     }
 
     return processedOrders;
   } catch (error) {
-    console.error('Error listing orders:', error);
+    logger.error('Error listing orders:', error);
     throw error;
   }
 }
@@ -481,11 +484,11 @@ async function listOrders(filter = {}, options = {}) {
 async function listTrades(filter = {}, options = {}) {
   await connectDB();
   try {
-    console.log({ filter });
+    logger.debug('Filter:', filter);
     const trades = await module.exports.tradesCollection.find(filter, options).toArray();
     return trades;
   } catch (error) {
-    console.error('Error listing trades:', error);
+    logger.error('Error listing trades:', error);
     throw error;
   }
 }
@@ -511,7 +514,7 @@ async function listSignals(filter = {}, skip = 0, limit = 0, sort = { timestamp:
     const signals = await query.toArray();
     return signals;
   } catch (error) {
-    console.error('Error listing signals:', error);
+    logger.error('Error listing signals:', error);
     throw error;
   }
 }
@@ -527,7 +530,7 @@ async function countSignals(filter = {}) {
     const count = await module.exports.signalsCollection.countDocuments(filter);
     return count;
   } catch (error) {
-    console.error('Error counting signals:', error);
+    logger.error('Error counting signals:', error);
     throw error;
   }
 }
@@ -543,7 +546,7 @@ async function getOrderByOrderId(orderId) {
     const order = await module.exports.ordersCollection.findOne({ orderId: orderId });
     return order;
   } catch (error) {
-    console.error('Error getting order by orderId:', error);
+    logger.error('Error getting order by orderId:', error);
     throw error;
   }
 }
@@ -559,7 +562,7 @@ async function getTradeByTradeId(tradeId) {
     const trade = await module.exports.tradesCollection.findOne({ tradeId: tradeId });
     return trade;
   } catch (error) {
-    console.error('Error getting trade by tradeId:', error);
+    logger.error('Error getting trade by tradeId:', error);
     throw error;
   }
 }
@@ -578,7 +581,7 @@ async function updateOrderByOrderId(orderId, updateData) {
     );
     return result;
   } catch (error) {
-    console.error('Error updating order:', error);
+    logger.error('Error updating order:', error);
     throw error;
   }
 }
@@ -593,7 +596,7 @@ async function deleteOrderByOrderId(orderId) {
     const result = await module.exports.ordersCollection.deleteOne({ orderId: orderId });
     return result;
   } catch (error) {
-    console.error('Error deleting order:', error);
+    logger.error('Error deleting order:', error);
     throw error;
   }
 }
@@ -623,7 +626,7 @@ async function addOhlcvMongoDB(ohlcvData) {
   } catch (error) {
     // 重複エラー (E11000 duplicate key error) の場合は既存データを返す
     if (error.code === 11000) {
-      console.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      logger.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
       const existingData = await module.exports.ohlcvCollection.findOne({
         exchange: ohlcvData.exchange,
         symbol: ohlcvData.symbol,
@@ -632,7 +635,7 @@ async function addOhlcvMongoDB(ohlcvData) {
       });
       return existingData;
     }
-    console.error('Error adding OHLCV:', error);
+    logger.error('Error adding OHLCV:', error);
     throw error;
   }
 }
@@ -677,7 +680,7 @@ async function fetchHistoricalOHLCVData(exchange, symbol, timeframe, limit, time
     }
     return [];
   } catch (error) {
-    console.error('Error getting OHLCV by parameters:', error);
+    logger.error('Error getting OHLCV by parameters:', error);
     throw error;
   }
 }
@@ -693,7 +696,7 @@ async function getSignalById(id) {
     const signal = await module.exports.signalsCollection.findOne({ _id: new ObjectId(id) });
     return signal;
   } catch (error) {
-    console.error('Error getting signal by _id:', error);
+    logger.error('Error getting signal by _id:', error);
     throw error;
   }
 }
@@ -708,17 +711,17 @@ async function connectWithRetry(maxRetries = 5, baseDelayMs = 1000) {
   while (retries < maxRetries) {
     try {
       await connectDB();
-      console.log(`MongoDB接続成功（${retries > 0 ? `${retries}回目の再試行後` : '初回'}）`);
+      logger.info(`MongoDB接続成功（${retries > 0 ? `${retries}回目の再試行後` : '初回'}）`);
       return;
     } catch (error) {
       retries++;
-      console.warn(`MongoDB接続失敗（${retries}/${maxRetries}）: ${error.message}`);
+      logger.warn(`MongoDB接続失敗（${retries}/${maxRetries}）: ${error.message}`);
       if (retries >= maxRetries) {
         throw new Error(`MongoDB接続が${maxRetries}回失敗しました: ${error.message}`);
       }
       // 指数バックオフ: 1秒、2秒、4秒、8秒、16秒（最大30秒）
       const delay = Math.min(baseDelayMs * Math.pow(2, retries - 1), 30000);
-      console.log(`${delay}ms後に再試行します...`);
+      logger.info(`${delay}ms後に再試行します...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -737,11 +740,11 @@ function startHealthCheck() {
   healthCheckInterval = setInterval(async () => {
     try {
       if (!await isConnected()) {
-        console.warn('MongoDB接続が失われました。再接続を試行します...');
+        logger.warn('MongoDB接続が失われました。再接続を試行します...');
         await connectWithRetry();
       }
     } catch (error) {
-      console.error('MongoDB接続監視エラー:', error);
+      logger.error('MongoDB接続監視エラー:', error);
     }
   }, 60000); // 1分間隔でチェック
 }
@@ -756,7 +759,7 @@ function stopHealthCheck() {
 // アプリケーションのmain.jsなどで呼び出し用
 function setupGracefulShutdown() {
   const shutdown = async () => {
-    console.log('シャットダウン開始...');
+    logger.info('シャットダウン開始...');
     await closeDB();
     process.exit(0);
   };
@@ -818,11 +821,11 @@ async function saveTickerMongoDB(tickerData) {
   } catch (error) {
     // 重複キーエラーの場合は警告ログのみで処理継続
     if (error.code === 11000) {
-      console.warn(`[Ticker保存] 重複データをスキップ: ${tickerData.exchange}:${tickerData.symbol} timestamp=${tickerData.timestamp}`);
+      logger.warn(`[Ticker保存] 重複データをスキップ: ${tickerData.exchange}:${tickerData.symbol} timestamp=${tickerData.timestamp}`);
       return { acknowledged: true, upsertedCount: 0, matchedCount: 1 };
     }
     // その他のエラーは再スロー
-    console.error('Error saving ticker:', error);
+    logger.error('Error saving ticker:', error);
     throw error;
   }
 }
@@ -874,7 +877,7 @@ async function fetchTickerFromMongoDB(exchange, symbol, timestamp, maxTimeDiff =
 
     return closestTicker;
   } catch (error) {
-    console.error('Error fetching ticker from MongoDB:', error);
+    logger.error('Error fetching ticker from MongoDB:', error);
     return null;
   }
 }
@@ -906,7 +909,7 @@ async function listFilledPositions(filter = {}, limit = 1000) {
     // 約定済み（closed）ポジションのみを取得
     query.status = 'closed';
 
-    console.log('listFilledPositions query:', query);
+    logger.debug('listFilledPositions query:', query);
 
     const positions = await module.exports.positionsCollection
       .find(query)
@@ -914,11 +917,11 @@ async function listFilledPositions(filter = {}, limit = 1000) {
       .limit(limit)
       .toArray();
 
-    console.log(`listFilledPositions found ${positions.length} positions`);
+    logger.info(`listFilledPositions found ${positions.length} positions`);
 
     return positions;
   } catch (error) {
-    console.error('約定済みポジションの取得に失敗:', error);
+    logger.error('約定済みポジションの取得に失敗:', error);
     throw error;
   }
 }

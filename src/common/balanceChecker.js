@@ -13,6 +13,9 @@ const {
 const {
   getTradeCurrentPosition
 } = require('../database/manager');
+const Logger = require('../hft/utils/Logger');
+
+const logger = new Logger('BalanceChecker');
 const { getBalanceCheckEligibleStrategies } = require('./strategyUtils');
 const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 
@@ -40,10 +43,10 @@ async function getExchangeBalance(exchangeId) {
       'fetchBalance'
     );
 
-    console.log(`取引所残高取得完了: ${exchangeId}`);
+    logger.info(`取引所残高取得完了: ${exchangeId}`);
     return balance;
   } catch (error) {
-    console.error(`取引所残高取得エラー (${exchangeId}):`, error.message);
+    logger.error(`取引所残高取得エラー (${exchangeId}):`, error.message);
     throw error;
   }
 }
@@ -77,10 +80,10 @@ async function getBotManagedBalance() {
       currencyBalances[baseCurrency] += position.amount || 0;
     });
 
-    console.log('Bot管理残高計算完了:', currencyBalances);
+    logger.info('Bot管理残高計算完了:', currencyBalances);
     return currencyBalances;
   } catch (error) {
-    console.error('Bot管理残高取得エラー:', error.message);
+    logger.error('Bot管理残高取得エラー:', error.message);
     throw error;
   }
 }
@@ -92,7 +95,7 @@ async function getBotManagedBalance() {
  */
 async function compareBalances(exchangeId, _thresholdPercent = 0) {
   try {
-    console.log(`残高比較開始: ${exchangeId}`);
+    logger.info(`残高比較開始: ${exchangeId}`);
 
     // 取引所残高を取得
     const exchangeBalance = await getExchangeBalance(exchangeId);
@@ -145,9 +148,9 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     if (discrepancies.length > 0) {
       const message = createDiscrepancyMessage(exchangeId, discrepancies);
       await postOrderToDiscord(message);
-      console.error(`残高不整合検出: ${exchangeId}`, discrepancies);
+      logger.error(`残高不整合検出: ${exchangeId}`, discrepancies);
     } else {
-      console.log(`残高チェック正常: ${exchangeId}`);
+      logger.info(`残高チェック正常: ${exchangeId}`);
     }
 
     return {
@@ -158,7 +161,7 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
   } catch (error) {
     const errorMessage = `残高比較エラー (${exchangeId}): ${error.message}`;
-    console.error(errorMessage);
+    logger.error(errorMessage);
     await postErrorToDiscord(errorMessage);
     throw error;
   }
@@ -191,7 +194,7 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
  */
 async function checkAllExchangeBalances() {
   try {
-    console.log('=== 全取引所残高チェック開始 ===');
+    logger.info('=== 全取引所残高チェック開始 ===');
 
     const results = [];
     const exchangeIds = Object.keys(config.exchanges);
@@ -204,7 +207,7 @@ async function checkAllExchangeBalances() {
         // 各取引所チェック間の待機（設定から取得）
         await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
       } catch (error) {
-        console.error(`${exchangeId} の残高チェックに失敗:`, error.message);
+        logger.error(`${exchangeId} の残高チェックに失敗:`, error.message);
         results.push({
           exchangeId,
           error: error.message,
@@ -213,12 +216,12 @@ async function checkAllExchangeBalances() {
       }
     }
 
-    console.log('=== 全取引所残高チェック完了 ===');
+    logger.info('=== 全取引所残高チェック完了 ===');
     return results;
 
   } catch (error) {
     const errorMessage = `全取引所残高チェックエラー: ${error.message}`;
-    console.error(errorMessage);
+    logger.error(errorMessage);
     await postErrorToDiscord(errorMessage);
     throw error;
   }
@@ -239,7 +242,7 @@ async function checkSingleExchange(exchangeId) {
       isHealthy: result.isHealthy
     };
   } catch (error) {
-    console.error(`checkSingleExchange error for ${exchangeId}:`, error.message);
+    logger.error(`checkSingleExchange error for ${exchangeId}:`, error.message);
     throw error;
   }
 }
@@ -315,7 +318,7 @@ async function setCheckerState(state, details = null) {
  */
 async function getBotManagedBalanceDetailed(exchangeId) {
   try {
-    console.log(`[BALANCE_CHECKER] Calculating detailed BOT managed balance for ${exchangeId}`);
+    logger.info(`Calculating detailed BOT managed balance for ${exchangeId}`);
 
     // 1. MongoDB取引履歴から再計算
     const mongoBalances = await calculateBalanceFromMongoDB(exchangeId);
@@ -334,10 +337,10 @@ async function getBotManagedBalanceDetailed(exchangeId) {
       redisPositions: positionBalances
     };
 
-    console.log(`[BALANCE_CHECKER] Detailed BOT balance calculated: ${exchangeId}`);
+    logger.info(`Detailed BOT balance calculated: ${exchangeId}`);
     return snapshot;
   } catch (error) {
-    console.error(`[BALANCE_CHECKER] Detailed BOT balance error (${exchangeId}):`, error.message);
+    logger.error(`Detailed BOT balance error (${exchangeId}):`, error.message);
     throw error;
   }
 }
@@ -369,7 +372,7 @@ async function calculateBalanceFromMongoDB(exchangeId) {
           const position = await getTradeCurrentPosition(exchangeId, symbol, strategy);
           totalBalance += position || 0;
         } catch (error) {
-          console.warn(`[BALANCE_CHECKER] Error getting position for ${strategy}:`, error.message);
+          logger.warn(`Error getting position for ${strategy}:`, error.message);
         }
       }
 
@@ -380,7 +383,7 @@ async function calculateBalanceFromMongoDB(exchangeId) {
 
     return balances;
   } catch (error) {
-    console.error('[BALANCE_CHECKER] MongoDB calculation error:', error.message);
+    logger.error('MongoDB calculation error:', error.message);
     throw error;
   }
 }
@@ -406,7 +409,7 @@ async function calculateBalanceFromRedisSummary(exchangeId) {
 
     return balances;
   } catch (error) {
-    console.error('[BALANCE_CHECKER] Redis summary calculation error:', error.message);
+    logger.error('Redis summary calculation error:', error.message);
     throw error;
   }
 }
@@ -418,12 +421,12 @@ async function compareBalancesRobust(exchangeId) {
   const lock = await acquireCheckerLock();
 
   if (!lock.acquired) {
-    console.log('[BALANCE_CHECKER] Another check is already running, skipping');
+    logger.warn('Another check is already running, skipping');
     return { skipped: true, reason: 'another_check_running' };
   }
 
   try {
-    console.log(`[BALANCE_CHECKER] Starting robust balance check for ${exchangeId}`);
+    logger.info(`Starting robust balance check for ${exchangeId}`);
 
     // 現在の状態を取得
     const currentStateData = await getCheckerState();
@@ -456,11 +459,11 @@ async function compareBalancesRobust(exchangeId) {
     if (shouldNotify && hasAnyIssues) {
       const message = createDetailedDiscrepancyMessage(comparison);
       await postOrderToDiscord(message);
-      console.error(`[BALANCE_CHECKER] Discrepancies detected for ${exchangeId}:`, comparison);
+      logger.error(`Discrepancies detected for ${exchangeId}:`, comparison);
     } else if (shouldNotify && !hasAnyIssues) {
       const message = `✅ **残高整合性回復**\n取引所: ${exchangeId}\n時刻: ${new Date().toLocaleString('ja-JP')}`;
       await postOrderToDiscord(message);
-      console.log(`[BALANCE_CHECKER] Balance consistency restored for ${exchangeId}`);
+      logger.info(`Balance consistency restored for ${exchangeId}`);
     }
 
     // 状態を更新
@@ -482,7 +485,7 @@ async function compareBalancesRobust(exchangeId) {
     };
 
   } catch (error) {
-    console.error(`[BALANCE_CHECKER] Robust check failed for ${exchangeId}:`, error.message);
+    logger.error(`Robust check failed for ${exchangeId}:`, error.message);
 
     // エラー状態に設定
     await setCheckerState(STATE.ERROR, {
@@ -642,7 +645,7 @@ function createDetailedDiscrepancyMessage(comparison) {
  */
 async function resetCheckerState() {
   await setCheckerState(STATE.OK, { reset: true, timestamp: Date.now() });
-  console.log('[BALANCE_CHECKER] State manually reset to OK');
+  logger.info('State manually reset to OK');
 }
 
 module.exports = {
