@@ -10,3 +10,5 @@ tools/
 .ccc.env
 settings.local.json
 .tmp/
+output.txt
+*.log
