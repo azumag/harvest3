@@ -30,16 +30,22 @@ jobs:
           script: |
             // GitHub Compare URLを解析
             function parseCompareUrl(url) {
-              const match = url.match(/\/compare\/([^.]+)\.\.\.([^?]+)/);
-              if (!match) return null;
-              
-              const urlObj = new URL(url);
-              return {
-                base: match[1],
-                head: match[2].split('?')[0], // クエリパラメータを除去
-                title: urlObj.searchParams.get('title'),
-                body: urlObj.searchParams.get('body')
-              };
+              try {
+                const urlObj = new URL(url);
+                // パス名から /compare/base...head の部分を抽出
+                const pathMatch = urlObj.pathname.match(/\/compare\/([^\/]+)\.\.\.([^\/]+)$/);
+                if (!pathMatch) return null;
+                
+                return {
+                  base: pathMatch[1],
+                  head: pathMatch[2],
+                  title: urlObj.searchParams.get('title'),
+                  body: urlObj.searchParams.get('body')
+                };
+              } catch (error) {
+                console.error('URL parsing error:', error);
+                return null;
+              }
             }
 
             // コメントからCreate PRリンクを検索
