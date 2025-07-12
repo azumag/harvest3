@@ -10,7 +10,7 @@
     {
       "commentout": "WORKFLOW_TESTED",
       "launch": null,
-      "prompt": "git diff を確認し、readme.md を適切に更新せよ。readme.md の更新が完了したら WORKFLOW_README_UPDATED とだけ表示せよ。"
+      "prompt": "git diff を確認し、readme.md を適切に更新せよ。readme.md の更新が完了したら, 説明は表示せず、1行だけ WORKFLOW_README_UPDATED とだけ表示せよ。"
     },
     {
       "launch": "WORKFLOW_README_UPDATED",
