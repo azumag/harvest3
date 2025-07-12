@@ -18,18 +18,21 @@ const {
   toString,
   validateBalance
 } = require('../common/decimalUtils');
+const Logger = require('../hft/utils/Logger');
+
+const logger = new Logger('Redis');
 
 // 初期化関数
 async function initialize() {
   try {
     const redisClient = await initRedisClient();
     if (redisClient) {
-      console.log('Redisデータベースモジュールが初期化されました');
+      logger.info('Redisデータベースモジュールが初期化されました');
     } else {
-      console.warn('Redis接続に失敗しましたが、アプリケーションを続行します');
+      logger.warn('Redis接続に失敗しましたが、アプリケーションを続行します');
     }
   } catch (error) {
-    console.error('Redis初期化エラー:', error.message);
+    logger.error('Redis初期化エラー:', error.message);
     // Redis接続に失敗してもアプリケーションを続行
   }
 }
@@ -37,14 +40,14 @@ async function initialize() {
 async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
   try {
     if (!client || !client.isReady) {
-      console.warn('Redis接続が利用できません - setCurrentOrderPairRedis をスキップ');
+      logger.warn('Redis接続が利用できません - setCurrentOrderPairRedis をスキップ');
       return false;
     }
 
     const key = `current:orderPair:${exchangeId}:${symbol}:${strategyKey}`;
     return await client.set(key, JSON.stringify({ pair }));
   } catch (error) {
-    console.error('setCurrentOrderPairRedis エラー:', error.message);
+    logger.error('setCurrentOrderPairRedis エラー:', error.message);
     return false;
   }
 }
@@ -52,7 +55,7 @@ async function setCurrentOrderPairRedis(exchangeId, symbol, strategyKey, pair) {
 async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
   try {
     if (!client || !client.isReady) {
-      console.warn('Redis接続が利用できません - getCurrentOrderPairRedis をスキップ');
+      logger.warn('Redis接続が利用できません - getCurrentOrderPairRedis をスキップ');
       return null;
     }
 
@@ -65,7 +68,7 @@ async function getCurrentOrderPairRedis(exchangeId, symbol, strategyKey) {
 
     return null;
   } catch (error) {
-    console.error('getCurrentOrderPairRedis エラー:', error.message);
+    logger.error('getCurrentOrderPairRedis エラー:', error.message);
     return null;
   }
 }
@@ -93,7 +96,7 @@ async function updateTradeSummary(trade) {
   // Zod validation for trade summary data
   const validatedTrade = safeValidateTradeSummaryData(trade, 'updateTradeSummary');
   if (!validatedTrade) {
-    console.error('Trade summary validation failed, skipping update');
+    logger.error('Trade summary validation failed, skipping update');
     return;
   }
 
@@ -171,10 +174,10 @@ async function updateTradeSummary(trade) {
       if (Math.abs(profit) <= 10000000) {
         await client.hIncrByFloat(summaryKey, 'realizedPnL', profit);
       } else {
-        console.error(`異常な実現損益を検出しブロック: ${trade.exchange}:${trade.symbol}:${trade.strategy} profit=${profit}円`);
+        logger.error(`異常な実現損益を検出しブロック: ${trade.exchange}:${trade.symbol}:${trade.strategy} profit=${profit}円`);
       }
     } else {
-      console.warn(`数値精度不足で実現損益計算をスキップ: ${trade.exchange}:${trade.symbol}:${trade.strategy}`);
+      logger.warn(`数値精度不足で実現損益計算をスキップ: ${trade.exchange}:${trade.symbol}:${trade.strategy}`);
     }
   }
 
@@ -183,10 +186,10 @@ async function updateTradeSummary(trade) {
     try {
       const validation = await validateAndFixTradeSummary(summaryKey, { autoFix: true, logLevel: 'warn' });
       if (!validation.isValid) {
-        console.warn(`[Redis] 更新後の整合性問題を検出・修正: ${summaryKey}`, validation.actions);
+        logger.warn(`更新後の整合性問題を検出・修正: ${summaryKey}`, validation.actions);
       }
     } catch (validationError) {
-      console.error(`[Redis] 更新後の整合性チェック失敗: ${validationError.message}`);
+      logger.error(`更新後の整合性チェック失敗: ${validationError.message}`);
     }
   });
 }
@@ -307,20 +310,20 @@ async function validateAndFixTradeSummary(summaryKey, options = {}) {
     // ログ出力
     if (logLevel !== 'silent') {
       if (validation.errors.length > 0 && logLevel !== 'warn') {
-        console.error(`[整合性チェック] ${summaryKey}:`, validation.errors);
+        logger.error(`[整合性チェック] ${summaryKey}:`, validation.errors);
       }
       if (validation.warnings.length > 0 && logLevel === 'verbose') {
-        console.warn(`[整合性チェック] ${summaryKey}:`, validation.warnings);
+        logger.warn(`[整合性チェック] ${summaryKey}:`, validation.warnings);
       }
       if (validation.actions.length > 0) {
-        console.log(`[整合性修正] ${summaryKey}:`, validation.actions);
+        logger.info(`[整合性修正] ${summaryKey}:`, validation.actions);
       }
     }
 
     return validation;
 
   } catch (error) {
-    console.error(`[整合性チェック] 検証エラー ${summaryKey}:`, error.message);
+    logger.error(`[整合性チェック] 検証エラー ${summaryKey}:`, error.message);
     return {
       isValid: false,
       errors: [`検証処理エラー: ${error.message}`],
@@ -355,11 +358,11 @@ async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
       return getStrategyKey(orderRecord.strategy);
     }
 
-    console.warn(`[戦略マッピング] 注文ID ${orderId} の戦略情報が見つかりません。フォールバック: ${fallbackStrategy}`);
+    logger.warn(`[戦略マッピング] 注文ID ${orderId} の戦略情報が見つかりません。フォールバック: ${fallbackStrategy}`);
     return fallbackStrategy;
 
   } catch (error) {
-    console.error(`[戦略マッピング] エラー ${orderId}:`, error.message);
+    logger.error(`[戦略マッピング] エラー ${orderId}:`, error.message);
     return fallbackStrategy;
   }
 }
@@ -368,7 +371,7 @@ async function getAllTradeSummaries() {
   try {
     // Redis接続が利用できない場合は空の配列を返す
     if (!client || !client.isReady || process.env.DISABLE_REDIS === 'true') {
-      console.log('Redis接続が利用できないため、空のサマリーを返します');
+      logger.warn('Redis接続が利用できないため、空のサマリーを返します');
       return [];
     }
 
@@ -387,7 +390,7 @@ async function getAllTradeSummaries() {
         if (exchangeId === 'undefined' || !exchangeId ||
             symbol === 'undefined' || !symbol ||
             strategyKey === 'undefined' || !strategyKey) {
-          console.warn(`無効なRedisキーを検出してスキップ: ${key}`);
+          logger.warn(`無効なRedisキーを検出してスキップ: ${key}`);
           continue;
         }
 
@@ -410,7 +413,7 @@ async function getAllTradeSummaries() {
 
     return summaries;
   } catch (error) {
-    console.error('getAllTradeSummariesでエラーが発生しました:', error);
+    logger.error('getAllTradeSummariesでエラーが発生しました:', error);
     return [];
   }
 }
@@ -419,7 +422,7 @@ async function getTradeSummaries(exchangeId) {
   try {
     // Redisが無効化されている場合は空の配列を返す
     if (!client || process.env.DISABLE_REDIS === 'true') {
-      console.log('Redis接続が無効化されているため、空のサマリーを返します');
+      logger.warn('Redis接続が無効化されているため、空のサマリーを返します');
       return [];
     }
 
@@ -448,7 +451,7 @@ async function getTradeSummaries(exchangeId) {
 
     return summaries;
   } catch (error) {
-    console.error('getTradeSummariesでエラーが発生しました:', error);
+    logger.error('getTradeSummariesでエラーが発生しました:', error);
     return [];
   }
 }
@@ -507,7 +510,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
   // Zod validation for strategy parameters data
   const validatedStrategyParams = safeValidateStrategyParametersData(strategyParamsData, 'saveStrategyParametersRedis');
   if (!validatedStrategyParams) {
-    console.error('Strategy parameters validation failed, skipping save');
+    logger.error('Strategy parameters validation failed, skipping save');
     return false;
   }
 
@@ -522,7 +525,7 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
     // console.log(`戦略パラメータを保存しました: ${key}`);
     return true;
   } catch (error) {
-    console.error(`戦略パラメータの保存中にエラーが発生しました: ${key}`, error);
+    logger.error(`戦略パラメータの保存中にエラーが発生しました: ${key}`, error);
     return false;
   }
 }
@@ -574,11 +577,11 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
       }
       return parsedParams;
     } else {
-      console.log(`戦略パラメータがRedisに存在しません: ${key}`);
+      logger.debug(`戦略パラメータがRedisに存在しません: ${key}`);
       return null;
     }
   } catch (error) {
-    console.error(`戦略パラメータの読み出し中にエラーが発生しました: ${key}`, error);
+    logger.error(`戦略パラメータの読み出し中にエラーが発生しました: ${key}`, error);
     return null;
   }
 }
@@ -604,7 +607,7 @@ async function getAllStrategyParametersRedis() {
       }
     }
 
-    console.log(`全ての戦略パラメータを取得しました (${Object.keys(allParams).length}件)`);
+    logger.info(`全ての戦略パラメータを取得しました (${Object.keys(allParams).length}件)`);
     return allParams;
   } catch (error) {
     await errorHandler.handleError(error, '全ての戦略パラメータの読み出し', true);
@@ -644,7 +647,7 @@ async function getTradeKeys() {
       }
     }
 
-    console.log(exchanges);
+    logger.debug('exchanges:', exchanges);
 
     return JSON.stringify(exchanges);
   } catch (error) {
@@ -811,7 +814,7 @@ async function deleteKey(key) {
     const result = await client.del(key);
     return result > 0;
   } catch (error) {
-    console.error(`Redisからキーの削除に失敗しました: ${key}`, error);
+    logger.error(`Redisからキーの削除に失敗しました: ${key}`, error);
     return false;
   }
 }
@@ -828,7 +831,7 @@ async function savePositionRedis(positionKey, positionData) {
   // Zod validation for position data
   const validatedPositionData = safeValidatePositionData(positionData, 'savePositionRedis');
   if (!validatedPositionData) {
-    console.error('Position data validation failed, skipping save');
+    logger.error('Position data validation failed, skipping save');
     return false;
   }
 
@@ -841,7 +844,7 @@ async function savePositionRedis(positionKey, positionData) {
     await client.hSet(key, dataWithTimestamp);
     return true;
   } catch (error) {
-    console.error(`ポジション情報の保存に失敗しました: ${key}`, error);
+    logger.error(`ポジション情報の保存に失敗しました: ${key}`, error);
     return false;
   }
 }
@@ -875,7 +878,7 @@ async function getPositionRedis(positionKey) {
       updatedAt: parseInt(position.updatedAt || 0)
     };
   } catch (error) {
-    console.error(`ポジション情報の取得に失敗しました: ${key}`, error);
+    logger.error(`ポジション情報の取得に失敗しました: ${key}`, error);
     return null;
   }
 }
@@ -916,7 +919,7 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
 
     return positions;
   } catch (error) {
-    console.error(`戦略ポジションの取得に失敗しました: ${exchangeId}:${symbol}:${strategyKey}`, error);
+    logger.error(`戦略ポジションの取得に失敗しました: ${exchangeId}:${symbol}:${strategyKey}`, error);
     return [];
   }
 }
@@ -959,7 +962,7 @@ async function getAllPositionsRedis() {
 
     return positions;
   } catch (error) {
-    console.error('全ポジションの取得に失敗しました:', error);
+    logger.error('全ポジションの取得に失敗しました:', error);
     return [];
   }
 }
@@ -975,7 +978,7 @@ async function deletePositionRedis(positionKey) {
     const result = await client.del(key);
     return result > 0;
   } catch (error) {
-    console.error(`ポジション情報の削除に失敗しました: ${key}`, error);
+    logger.error(`ポジション情報の削除に失敗しました: ${key}`, error);
     return false;
   }
 }
@@ -1006,7 +1009,7 @@ async function savePositionHistoryToMongoDB(positionData) {
 
     if (!collectionNames.includes('positions')) {
       await db.createCollection('positions');
-      console.log('positions コレクションを作成しました');
+      logger.info('positions コレクションを作成しました');
     }
 
     const positionsCollection = db.collection('positions');
@@ -1048,10 +1051,10 @@ async function savePositionHistoryToMongoDB(positionData) {
 
     await client.close();
 
-    console.log(`ポジション履歴をMongoDBに保存しました: ${positionKey}`);
+    logger.info(`ポジション履歴をMongoDBに保存しました: ${positionKey}`);
     return true;
   } catch (error) {
-    console.error('ポジション履歴のMongoDB保存に失敗しました:', error);
+    logger.error('ポジション履歴のMongoDB保存に失敗しました:', error);
     return false;
   }
 }
@@ -1091,11 +1094,11 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
         const historySaved = await savePositionHistoryToMongoDB(closedPositionData);
         if (!historySaved) {
           historyWarning = `履歴保存に失敗しましたが処理を継続します: ${positionKey}`;
-          console.warn(historyWarning);
+          logger.warn(historyWarning);
         }
       } catch (historyError) {
         historyWarning = `履歴保存でエラーが発生しましたが処理を継続します: ${positionKey} - ${historyError.message}`;
-        console.warn(historyWarning);
+        logger.warn(historyWarning);
         // MongoDB接続エラーでも処理を継続するため、エラーを再throwしない
       }
     }
@@ -1105,7 +1108,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       // 遅延削除: TTLを設定
       const ttlSeconds = delayHours * 60 * 60;
       await client.expire(key, ttlSeconds);
-      console.log(`ポジションを${delayHours}時間後に自動削除するよう設定しました: ${positionKey}`);
+      logger.info(`ポジションを${delayHours}時間後に自動削除するよう設定しました: ${positionKey}`);
 
       return {
         success: true,
@@ -1118,7 +1121,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       // 即座に削除
       const deleted = await deletePositionRedis(positionKey);
       if (deleted) {
-        console.log(`ポジションをRedisから削除しました: ${positionKey}`);
+        logger.info(`ポジションをRedisから削除しました: ${positionKey}`);
         return {
           success: true,
           action: 'immediate_cleanup',
@@ -1130,7 +1133,7 @@ async function closeAndCleanupPosition(positionKey, options = {}) {
       }
     }
   } catch (error) {
-    console.error(`ポジションクリーンアップに失敗しました: ${positionKey}`, error);
+    logger.error(`ポジションクリーンアップに失敗しました: ${positionKey}`, error);
     return { success: false, error: error.message };
   }
 }
@@ -1194,13 +1197,13 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
             if (result > 0) {
               deleted++;
               const positionKey = key.replace('position:', '');
-              console.log(`古いポジションを削除しました: ${positionKey}`);
+              logger.info(`古いポジションを削除しました: ${positionKey}`);
             }
           }
         }
       } catch (error) {
         errors++;
-        console.error(`ポジション処理エラー: ${key}`, error.message);
+        logger.error(`ポジション処理エラー: ${key}`, error.message);
       }
     }
 
@@ -1213,10 +1216,10 @@ async function cleanupOldClosedPositions(olderThanHours = 24, saveHistory = true
       cutoffTime: new Date(cutoffTime).toISOString()
     };
 
-    console.log('古いポジションクリーンアップ完了:', result);
+    logger.info('古いポジションクリーンアップ完了:', result);
     return result;
   } catch (error) {
-    console.error('古いポジションクリーンアップに失敗しました:', error);
+    logger.error('古いポジションクリーンアップに失敗しました:', error);
     return { success: false, error: error.message };
   }
 }
@@ -1253,7 +1256,7 @@ async function recordPnLRedis(exchangeId, strategyKey, pnl) {
 
     return true;
   } catch (error) {
-    console.error(`損益の記録に失敗しました: ${key}`, error);
+    logger.error(`損益の記録に失敗しました: ${key}`, error);
     return false;
   }
 }
@@ -1284,7 +1287,7 @@ async function calculatePeriodPnLRedis(exchangeId, strategyKey, days) {
 
     return totalPnL;
   } catch (error) {
-    console.error(`期間損益の計算に失敗しました: ${exchangeId}:${strategyKey}:${days}日`, error);
+    logger.error(`期間損益の計算に失敗しました: ${exchangeId}:${strategyKey}:${days}日`, error);
     return 0;
   }
 }
@@ -1302,7 +1305,7 @@ async function clearPnLRedis(exchangeId, strategyKey, date) {
     const result = await client.del(key);
     return result > 0;
   } catch (error) {
-    console.error(`損益データのクリアに失敗しました: ${key}`, error);
+    logger.error(`損益データのクリアに失敗しました: ${key}`, error);
     return false;
   }
 }
@@ -1315,7 +1318,7 @@ async function clearAllPositionsRedis() {
   try {
     // Check if Redis client is connected before executing commands
     if (!client || !client.isOpen) {
-      console.warn('Redis client is not connected - skipping position clear operation');
+      logger.warn('Redis client is not connected - skipping position clear operation');
       return true; // Return true for test environments where Redis is not available
     }
 
@@ -1327,10 +1330,10 @@ async function clearAllPositionsRedis() {
   } catch (error) {
     // Handle specific connection errors for CI environments
     if (error.message && error.message.includes('closed')) {
-      console.warn('Redis connection closed - treating as successful clear for test environment');
+      logger.warn('Redis connection closed - treating as successful clear for test environment');
       return true;
     }
-    console.error('全ポジションデータのクリアに失敗しました:', error);
+    logger.error('全ポジションデータのクリアに失敗しました:', error);
     return false;
   }
 }
@@ -1343,7 +1346,7 @@ async function clearAllPnLRedis() {
   try {
     // Check if Redis client is connected before executing commands
     if (!client || !client.isOpen) {
-      console.warn('Redis client is not connected - skipping PnL clear operation');
+      logger.warn('Redis client is not connected - skipping PnL clear operation');
       return true; // Return true for test environments where Redis is not available
     }
 
@@ -1355,10 +1358,10 @@ async function clearAllPnLRedis() {
   } catch (error) {
     // Handle specific connection errors for CI environments
     if (error.message && error.message.includes('closed')) {
-      console.warn('Redis connection closed - treating as successful clear for test environment');
+      logger.warn('Redis connection closed - treating as successful clear for test environment');
       return true;
     }
-    console.error('全損益データのクリアに失敗しました:', error);
+    logger.error('全損益データのクリアに失敗しました:', error);
     return false;
   }
 }
@@ -1374,10 +1377,10 @@ async function deleteStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
     const result = await client.del(key);
-    console.log(`戦略パラメータを削除しました: ${key}`);
+    logger.info(`戦略パラメータを削除しました: ${key}`);
     return result > 0;
   } catch (error) {
-    console.error(`戦略パラメータの削除中にエラーが発生しました: ${key}`, error);
+    logger.error(`戦略パラメータの削除中にエラーが発生しました: ${key}`, error);
     return false;
   }
 }
@@ -1408,19 +1411,19 @@ async function cleanupStrategyPendingOrders(exchangeId, symbol, strategyKey) {
           // 注文が存在しない場合はRedisから削除
           await client.del(key);
           result.deleted++;
-          console.log(`[戦略クリーンアップ] 削除: ${pendingOrder.orderId} (${strategyKey})`);
+          logger.info(`[戦略クリーンアップ] 削除: ${pendingOrder.orderId} (${strategyKey})`);
         }
       } catch (error) {
-        console.warn(`[戦略クリーンアップ] キー処理エラー: ${key} - ${error.message}`);
+        logger.warn(`[戦略クリーンアップ] キー処理エラー: ${key} - ${error.message}`);
         result.errors++;
       }
     }
 
-    console.log(`[戦略クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
+    logger.info(`[戦略クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
 
     return result;
   } catch (error) {
-    console.error(`[戦略クリーンアップ] 全体エラー: ${error.message}`);
+    logger.error(`[戦略クリーンアップ] 全体エラー: ${error.message}`);
     result.errors++;
     return result;
   }
@@ -1517,7 +1520,7 @@ async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, o
     // Zod validation for pending order data
     const validatedPendingOrderData = safeValidatePendingOrderData(data, 'savePendingOrderRedis');
     if (!validatedPendingOrderData) {
-      console.error('Pending order data validation failed, skipping save');
+      logger.error('Pending order data validation failed, skipping save');
       return false;
     }
 
@@ -1530,10 +1533,10 @@ async function savePendingOrderRedis(exchangeId, symbol, strategyKey, orderId, o
     };
 
     await client.hSet(key, redisData);
-    console.log(`未約定注文を保存しました: ${key}`);
+    logger.info(`未約定注文を保存しました: ${key}`);
     return true;
   } catch (error) {
-    console.error(`未約定注文の保存に失敗しました: ${error.message}`);
+    logger.error(`未約定注文の保存に失敗しました: ${error.message}`);
     return false;
   }
 }
@@ -1567,7 +1570,7 @@ async function getPendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
       status: order.status
     };
   } catch (error) {
-    console.error(`未約定注文の取得に失敗しました: ${error.message}`);
+    logger.error(`未約定注文の取得に失敗しました: ${error.message}`);
     return null;
   }
 }
@@ -1606,7 +1609,7 @@ async function getAllPendingOrdersRedis() {
 
     return orders;
   } catch (error) {
-    console.error(`全未約定注文の取得に失敗しました: ${error.message}`);
+    logger.error(`全未約定注文の取得に失敗しました: ${error.message}`);
     return [];
   }
 }
@@ -1624,14 +1627,14 @@ async function deletePendingOrderRedis(exchangeId, symbol, strategyKey, orderId)
     const result = await client.del(key);
 
     if (result === 1) {
-      console.log(`未約定注文を削除しました: ${key}`);
+      logger.info(`未約定注文を削除しました: ${key}`);
       return true;
     } else {
-      console.log(`削除対象の未約定注文が見つかりませんでした: ${key}`);
+      logger.debug(`削除対象の未約定注文が見つかりませんでした: ${key}`);
       return false;
     }
   } catch (error) {
-    console.error(`未約定注文の削除に失敗しました: ${error.message}`);
+    logger.error(`未約定注文の削除に失敗しました: ${error.message}`);
     return false;
   }
 }
@@ -1657,13 +1660,13 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
 
     if (pendingOrders.length === 0) {
       if (!isBacktest) {
-        console.log('[注文クリーンアップ] クリーンアップ対象の未約定注文がありません');
+        logger.info('[注文クリーンアップ] クリーンアップ対象の未約定注文がありません');
       }
       return result;
     }
 
     if (!isBacktest) {
-      console.log(`[注文クリーンアップ] ${pendingOrders.length}件の未約定注文をチェック開始`);
+      logger.info(`[注文クリーンアップ] ${pendingOrders.length}件の未約定注文をチェック開始`);
     }
 
     // 取引所インスタンスの準備
@@ -1701,7 +1704,7 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
             });
 
             if (!isBacktest) {
-              console.log(`[注文クリーンアップ] 削除: ${pendingOrder.orderId} (${orderInfo.status}, filled: ${orderInfo.filled}/${orderInfo.amount})`);
+              logger.info(`[注文クリーンアップ] 削除: ${pendingOrder.orderId} (${orderInfo.status}, filled: ${orderInfo.filled}/${orderInfo.amount})`);
             }
           }
         }
@@ -1732,13 +1735,13 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
             });
 
             if (!isBacktest) {
-              console.log(`[注文クリーンアップ] 削除（注文なし）: ${pendingOrder.orderId} - ${orderError.message}`);
+              logger.info(`[注文クリーンアップ] 削除（注文なし）: ${pendingOrder.orderId} - ${orderError.message}`);
             }
           }
         } else {
           // その他のエラーは警告ログのみ
           if (!isBacktest) {
-            console.warn(`[注文クリーンアップ] チェックエラー: ${pendingOrder.orderId} - ${orderError.message}`);
+            logger.warn(`[注文クリーンアップ] チェックエラー: ${pendingOrder.orderId} - ${orderError.message}`);
           }
         }
       }
@@ -1748,12 +1751,12 @@ async function cleanupInvalidPendingOrders(exchangeInstance) {
     }
 
     if (!isBacktest) {
-      console.log(`[注文クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
+      logger.info(`[注文クリーンアップ] 完了: ${result.checked}件チェック, ${result.deleted}件削除, ${result.errors}件エラー`);
     }
 
     return result;
   } catch (error) {
-    console.error(`[注文クリーンアップ] 全体エラー: ${error.message}`);
+    logger.error(`[注文クリーンアップ] 全体エラー: ${error.message}`);
     result.errors++;
     return result;
   }

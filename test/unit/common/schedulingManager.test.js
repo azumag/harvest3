@@ -238,31 +238,27 @@ describe('SchedulingManager', () => {
     });
 
     it('同期関数のエラーを適切に処理', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const Logger = require('../../../src/hft/utils/Logger');
+      const loggerSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       const mockTask = jest.fn().mockImplementation(() => {
         throw new Error('Test error');
       });
 
       await schedulingManager._executeTask(mockTask, 'test-task');
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[スケジューラー] test-task 実行エラー:',
-        'Test error'
-      );
-      consoleSpy.mockRestore();
+      expect(loggerSpy).toHaveBeenCalledWith('test-task 実行エラー:', 'Test error');
+      loggerSpy.mockRestore();
     });
 
     it('非同期関数のエラーを適切に処理', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const Logger = require('../../../src/hft/utils/Logger');
+      const loggerSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       const mockTask = jest.fn().mockRejectedValue(new Error('Async error'));
 
       await schedulingManager._executeTask(mockTask, 'test-task');
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[スケジューラー] test-task 実行エラー:',
-        'Async error'
-      );
-      consoleSpy.mockRestore();
+      expect(loggerSpy).toHaveBeenCalledWith('test-task 実行エラー:', 'Async error');
+      loggerSpy.mockRestore();
     });
 
     it('関数以外が渡された場合は何もしない', async () => {
@@ -275,7 +271,8 @@ describe('SchedulingManager', () => {
 
   describe('エラーハンドリング', () => {
     it('タスク実行エラーの適切な処理', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const Logger = require('../../../src/hft/utils/Logger');
+      const loggerSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       const errorTask = jest.fn().mockRejectedValue(new Error('Task error'));
 
       schedulingManager.scheduleHourlyTask('error-task', errorTask);
@@ -284,12 +281,58 @@ describe('SchedulingManager', () => {
       const [[, taskWrapper]] = cron.schedule.mock.calls;
       await taskWrapper();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[スケジューラー] error-task 実行エラー:'),
-        'Task error'
-      );
+      expect(loggerSpy).toHaveBeenCalledWith('error-task 実行エラー:', 'Task error');
 
-      consoleSpy.mockRestore();
+      loggerSpy.mockRestore();
     });
+  });
+});
+
+// Logger移行のテスト - 新規追加
+describe('SchedulingManager Logger移行のテスト', () => {
+  let Logger;
+
+  beforeEach(() => {
+    Logger = require('../../../src/hft/utils/Logger');
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.resetModules();
+  });
+
+  it('SchedulingManagerファイルでLogger instanceが正しく作成される', () => {
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/schedulingManager.js', 'utf8');
+    
+    expect(fileContent).toContain("const Logger = require('../hft/utils/Logger')");
+    expect(fileContent).toContain("const logger = new Logger('Scheduler')");
+  });
+
+  it('Logger移行によりconsole.logの直接使用が削除されている', () => {
+    // ファイルの内容を読んで、console.logの直接使用がないことを確認
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/schedulingManager.js', 'utf8');
+    
+    // コメントアウトされたconsole文は除外して、アクティブなconsole文が存在しないことを確認
+    const activeConsoleStatements = fileContent.split('\n').filter(line => 
+      !line.trim().startsWith('//') && 
+      !line.trim().startsWith('*') &&
+      (line.includes('console.log') || line.includes('console.warn') || line.includes('console.error'))
+    );
+    
+    expect(activeConsoleStatements).toHaveLength(0);
+  });
+
+  it('[スケジューラー]プレフィックスが削除されている', () => {
+    const fs = require('fs');
+    const fileContent = fs.readFileSync('src/common/schedulingManager.js', 'utf8');
+    
+    // [スケジューラー]プレフィックスを含むlogger呼び出しが存在しないことを確認
+    const prefixedLoggerCalls = fileContent.split('\n').filter(line => 
+      line.includes('logger.') && line.includes('[スケジューラー]')
+    );
+    
+    expect(prefixedLoggerCalls).toHaveLength(0);
   });
 });
