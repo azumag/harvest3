@@ -144,12 +144,12 @@ const PORTFOLIO_CONTROL_CONSTANTS = {
   
   // 戦略配分目標値
   STRATEGY_ALLOCATION: {
-    BOLLINGER_BANDS_CONSERVATIVE: { min: 0.25, max: 0.35, target: 0.30 },
-    BOLLINGER_BANDS_AGGRESSIVE: { min: 0.15, max: 0.25, target: 0.20 },
-    MULTI_INDICATOR: { min: 0.20, max: 0.30, target: 0.25 },
-    MEAN_REVERSION: { min: 0.10, max: 0.20, target: 0.15 },
-    MACD: { min: 0.05, max: 0.15, target: 0.10 },
-    TECHNICAL_MOMENTUM: { min: 0.00, max: 0.10, target: 0.05 }
+    BOLLINGER_BANDS_CONSERVATIVE: { min: 0.25, max: 0.35, target: 0.286 },
+    BOLLINGER_BANDS_AGGRESSIVE: { min: 0.15, max: 0.25, target: 0.190 },
+    MULTI_INDICATOR: { min: 0.20, max: 0.30, target: 0.238 },
+    MEAN_REVERSION: { min: 0.10, max: 0.20, target: 0.143 },
+    MACD: { min: 0.05, max: 0.15, target: 0.095 },
+    TECHNICAL_MOMENTUM: { min: 0.00, max: 0.10, target: 0.048 }
   }
 };
 
