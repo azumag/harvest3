@@ -22,6 +22,7 @@ const {
 const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
 const Logger = require('../hft/utils/Logger');
+const { TRADING_EXECUTION_CONSTANTS } = require('../common/const');
 
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
@@ -97,18 +98,22 @@ const { withBitbankErrorHandling } = require('../common/bitbankErrorHandler');
  */
 function calculateExecutionAccuracy(volume, high, low, targetPrice) {
   // ボリュームベースの流動性評価
-  const volumeNormalized = Math.min(volume / 1000, 1); // 1000を基準値として正規化
+  const volumeNormalized = Math.min(volume / TRADING_EXECUTION_CONSTANTS.VOLUME_NORMALIZATION_BASE, 1);
   const spreadRatio = (high - low) / low; // 相対的なスプレッド
 
   // 流動性が高いほど実行確率が高く、スリッページが小さい
   const liquidityFactor = volumeNormalized * (1 - spreadRatio);
 
-  // 実行確率（流動性が高いほど高い、基本確率85%）
-  const executionProbability = Math.min(0.85 + liquidityFactor * 0.14, 0.99);
+  // 実行確率（流動性が高いほど高い、基本確率から最大確率まで）
+  const probabilityRange = TRADING_EXECUTION_CONSTANTS.MAX_EXECUTION_PROBABILITY - TRADING_EXECUTION_CONSTANTS.BASE_EXECUTION_PROBABILITY;
+  const executionProbability = Math.min(
+    TRADING_EXECUTION_CONSTANTS.BASE_EXECUTION_PROBABILITY + liquidityFactor * probabilityRange, 
+    TRADING_EXECUTION_CONSTANTS.MAX_EXECUTION_PROBABILITY
+  );
 
-  // スリッページ（価格の0.01%〜0.1%、流動性によって変動）
-  const baseSlippage = 0.0001; // 0.01%
-  const maxSlippage = 0.001;   // 0.1%
+  // スリッページ（基本から最大まで、流動性によって変動）
+  const baseSlippage = TRADING_EXECUTION_CONSTANTS.BASE_SLIPPAGE_PERCENT;
+  const maxSlippage = TRADING_EXECUTION_CONSTANTS.MAX_SLIPPAGE_PERCENT;
   const slippageRatio = baseSlippage + (1 - liquidityFactor) * (maxSlippage - baseSlippage);
   const slippage = targetPrice * slippageRatio;
 
@@ -128,13 +133,13 @@ function calculateExecutionAccuracy(volume, high, low, targetPrice) {
  */
 function generateRealisticSpread(midPrice, volume, volatility) {
   // ボリュームが低いほど、ボラティリティが高いほどスプレッドが広い
-  const volumeNormalized = Math.min(volume / 1000, 1);
-  const baseSpread = 0.0002; // 0.02%
-  const maxSpread = 0.002;   // 0.2%
+  const volumeNormalized = Math.min(volume / TRADING_EXECUTION_CONSTANTS.VOLUME_NORMALIZATION_BASE, 1);
+  const baseSpread = TRADING_EXECUTION_CONSTANTS.BASE_SPREAD_PERCENT;
+  const maxSpread = TRADING_EXECUTION_CONSTANTS.MAX_SPREAD_PERCENT;
 
-  const spreadMultiplier = 1 + volatility * 2 - volumeNormalized;
+  const spreadMultiplier = 1 + volatility * TRADING_EXECUTION_CONSTANTS.SPREAD_VOLATILITY_MULTIPLIER - volumeNormalized;
   const spreadRatio = baseSpread + (Math.max(0, spreadMultiplier - 1)) * (maxSpread - baseSpread);
-  const halfSpread = midPrice * spreadRatio / 2;
+  const halfSpread = midPrice * spreadRatio / TRADING_EXECUTION_CONSTANTS.SPREAD_DIVISOR;
 
   return {
     bid: midPrice - halfSpread,

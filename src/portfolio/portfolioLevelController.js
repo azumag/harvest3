@@ -4,6 +4,7 @@
  */
 require('dotenv').config();
 const redis = require('redis');
+const { PORTFOLIO_CONTROL_CONSTANTS } = require('../common/const');
 
 class PortfolioLevelController {
   constructor() {
@@ -14,28 +15,21 @@ class PortfolioLevelController {
     // ポートフォリオ制御設定
     this.portfolioConfig = {
       // グローバル制限
-      maxTotalPositions: 200,
-      maxTotalValue: 1000000,  // ¥100万
-      maxSingleStrategyRatio: 0.35,  // 35%上限
-      maxSingleCurrencyRatio: 0.10,  // 10%上限
+      maxTotalPositions: PORTFOLIO_CONTROL_CONSTANTS.MAX_TOTAL_POSITIONS,
+      maxTotalValue: PORTFOLIO_CONTROL_CONSTANTS.MAX_TOTAL_VALUE,
+      maxSingleStrategyRatio: PORTFOLIO_CONTROL_CONSTANTS.MAX_SINGLE_STRATEGY_RATIO,
+      maxSingleCurrencyRatio: PORTFOLIO_CONTROL_CONSTANTS.MAX_SINGLE_CURRENCY_RATIO,
 
       // 戦略別配分
-      strategyAllocation: {
-        'BOLLINGER_BANDS_CONSERVATIVE': { min: 0.25, max: 0.35, target: 0.30 },
-        'BOLLINGER_BANDS_AGGRESSIVE': { min: 0.15, max: 0.25, target: 0.20 },
-        'MULTI_INDICATOR': { min: 0.20, max: 0.30, target: 0.25 },
-        'MEAN_REVERSION': { min: 0.10, max: 0.20, target: 0.15 },
-        'MACD': { min: 0.05, max: 0.15, target: 0.10 },
-        'TECHNICAL_MOMENTUM': { min: 0.00, max: 0.10, target: 0.05 }
-      },
+      strategyAllocation: PORTFOLIO_CONTROL_CONSTANTS.STRATEGY_ALLOCATION,
 
       // リスク管理
       riskLimits: {
-        maxDrawdown: 0.15,        // 15%最大ドローダウン
-        maxDailyLoss: 0.05,       // 5%日次損失限度
-        maxLongRatio: 0.75,       // 75%ロング上限
-        maxCorrelation: 0.8,      // 戦略間相関上限
-        volatilityThreshold: 0.3   // ボラティリティ閾値
+        maxDrawdown: PORTFOLIO_CONTROL_CONSTANTS.MAX_DRAWDOWN,
+        maxDailyLoss: PORTFOLIO_CONTROL_CONSTANTS.MAX_DAILY_LOSS,
+        maxLongRatio: PORTFOLIO_CONTROL_CONSTANTS.MAX_LONG_RATIO,
+        maxCorrelation: PORTFOLIO_CONTROL_CONSTANTS.MAX_CORRELATION,
+        volatilityThreshold: PORTFOLIO_CONTROL_CONSTANTS.VOLATILITY_THRESHOLD
       },
 
       // 動的調整
