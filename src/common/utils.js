@@ -1,6 +1,5 @@
 const { postErrorToDiscord } = require('./notifications');
 const { errorHandler } = require('./errorHandler');
-const { max } = require('moment');
 
 /**
  * 加重平均を計算する関数
