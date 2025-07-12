@@ -27,11 +27,15 @@ jobs:
           fetch-depth: 1
 
       - name: Approve PR
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           echo "Approving PR #${{ github.event.pull_request.number }}"
           gh pr review ${{ github.event.pull_request.number }} --approve
 
       - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           echo "Merging PR #${{ github.event.pull_request.number }}"
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto

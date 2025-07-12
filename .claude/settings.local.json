@@ -57,7 +57,10 @@
       "Bash(yamllint:*)",
       "Bash(python3:*)",
       "mcp__gemini-cli__chat",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:docs.github.com)",
+      "Bash(gh auth:*)",
+      "Bash(gh:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)"
@@ -68,6 +71,69 @@
   ],
   "hooks": {
     "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
       {
         "matcher": "",
         "hooks": [
