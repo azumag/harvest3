@@ -179,7 +179,7 @@ jobs:
             - [ ] 修正の実装
             - [ ] テストの実行
             
-            @claude この CI 失敗を分析し、修正してください。`;
+            @claude この CI 失敗を分析し、修正して, PRを作成してください。`;
             
             await github.rest.issues.create({
               owner: context.repo.owner,
