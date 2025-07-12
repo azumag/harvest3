@@ -4,6 +4,6 @@
  */
 
 // Import all test files
-require('./unit/common/utils.test');
-require('./unit/database/manager.test');
-require('./unit/strategies/utils/common.test');
+require('./unit/common/utils.test.js');
+require('./unit/database/manager.test.js');
+require('./unit/strategies/utils/common.test.js');
