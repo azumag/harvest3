@@ -139,10 +139,22 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
       return await operation();
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
-      logger.warn(`${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
+      logger.warn(`${operationName} 失敗 (試行 ${attempt}/${maxRetries}):`, {
+        error: error.message,
+        attempt: attempt,
+        maxRetries: maxRetries,
+        operationName: operationName,
+        errorCode: error.code
+      });
 
       if (isLastAttempt) {
-        logger.error(`${operationName} 最終失敗:`, error);
+        logger.error(`${operationName} 最終失敗:`, {
+          error: error.message,
+          operationName: operationName,
+          maxRetries: maxRetries,
+          errorCode: error.code,
+          stack: error.stack
+        });
         throw error;
       }
 
@@ -214,7 +226,12 @@ async function ensureCollectionsExist() {
       }
     }
   } catch (error) {
-    logger.error('コレクション確認/作成エラー:', error);
+    logger.error('コレクション確認/作成エラー:', {
+      error: error.message,
+      operation: 'ensureCollectionsExist',
+      errorCode: error.code,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -232,7 +249,12 @@ async function closeDB() {
       db = null;
     }
   } catch (error) {
-    logger.error('MongoDB接続切断エラー:', error);
+    logger.error('MongoDB接続切断エラー:', {
+      error: error.message,
+      operation: 'closeDB',
+      errorCode: error.code,
+      stack: error.stack
+    });
   }
 }
 
@@ -277,7 +299,12 @@ async function createIndexes() {
 
     logger.info('MongoDBインデックスの確認/作成が完了しました');
   } catch (error) {
-    logger.error('MongoDBインデックス作成エラー:', error);
+    logger.error('MongoDBインデックス作成エラー:', {
+      error: error.message,
+      operation: 'createIndexes',
+      errorCode: error.code,
+      stack: error.stack
+    });
   }
 }
 
@@ -331,7 +358,13 @@ async function addOrderMongoDB(orderData) {
   } catch (error) {
     // 🚨 CRITICAL FIX: Handle duplicate key errors gracefully to prevent crashes
     if (error.code === 11000 && error.keyPattern && error.keyPattern.orderId) {
-      logger.warn(`Order ${orderData.orderId} already exists, skipping duplicate insertion`);
+      logger.warn(`Order ${orderData.orderId} already exists, skipping duplicate insertion`, {
+        collection: 'orders',
+        errorCode: error.code,
+        keyPattern: error.keyPattern,
+        orderId: orderData.orderId,
+        operation: 'addOrderMongoDB'
+      });
       // Return success-like result for duplicate orders to maintain compatibility
       return {
         acknowledged: true,
@@ -341,7 +374,13 @@ async function addOrderMongoDB(orderData) {
       };
     }
 
-    logger.error('Error adding order:', error);
+    logger.error('Error adding order:', {
+      error: error.message,
+      errorCode: error.code,
+      orderId: orderData.orderId,
+      operation: 'addOrderMongoDB',
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -370,7 +409,13 @@ async function addOrdersBulk(ordersData) {
     const result = await module.exports.ordersCollection.insertMany(validatedOrdersData);
     return result;
   } catch (error) {
-    logger.error('Error adding orders in bulk:', error);
+    logger.error('Error adding orders in bulk:', {
+      error: error.message,
+      errorCode: error.code,
+      operation: 'addOrdersBulk',
+      ordersCount: ordersData.length,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -405,7 +450,13 @@ async function addTradeMongoDB(tradeData) {
 
     return result;
   } catch (error) {
-    logger.error('Error adding/updating trade:', error);
+    logger.error('Error adding/updating trade:', {
+      error: error.message,
+      errorCode: error.code,
+      operation: 'addTradeMongoDB',
+      tradeId: tradeData?.tradeId,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -626,7 +677,15 @@ async function addOhlcvMongoDB(ohlcvData) {
   } catch (error) {
     // 重複エラー (E11000 duplicate key error) の場合は既存データを返す
     if (error.code === 11000) {
-      logger.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      logger.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`, {
+        collection: 'ohlcv',
+        errorCode: error.code,
+        exchange: ohlcvData.exchange,
+        symbol: ohlcvData.symbol,
+        timeframe: ohlcvData.timeframe,
+        timestamp: ohlcvData.timestamp,
+        operation: 'addOhlcvMongoDB'
+      });
       const existingData = await module.exports.ohlcvCollection.findOne({
         exchange: ohlcvData.exchange,
         symbol: ohlcvData.symbol,
@@ -635,7 +694,15 @@ async function addOhlcvMongoDB(ohlcvData) {
       });
       return existingData;
     }
-    logger.error('Error adding OHLCV:', error);
+    logger.error('Error adding OHLCV:', {
+      error: error.message,
+      errorCode: error.code,
+      operation: 'addOhlcvMongoDB',
+      exchange: ohlcvData?.exchange,
+      symbol: ohlcvData?.symbol,
+      timeframe: ohlcvData?.timeframe,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -715,7 +782,13 @@ async function connectWithRetry(maxRetries = 5, baseDelayMs = 1000) {
       return;
     } catch (error) {
       retries++;
-      logger.warn(`MongoDB接続失敗（${retries}/${maxRetries}）: ${error.message}`);
+      logger.warn(`MongoDB接続失敗（${retries}/${maxRetries}）: ${error.message}`, {
+        error: error.message,
+        retries: retries,
+        maxRetries: maxRetries,
+        errorCode: error.code,
+        operation: 'connectWithRetry'
+      });
       if (retries >= maxRetries) {
         throw new Error(`MongoDB接続が${maxRetries}回失敗しました: ${error.message}`);
       }
@@ -821,11 +894,25 @@ async function saveTickerMongoDB(tickerData) {
   } catch (error) {
     // 重複キーエラーの場合は警告ログのみで処理継続
     if (error.code === 11000) {
-      logger.warn(`[Ticker保存] 重複データをスキップ: ${tickerData.exchange}:${tickerData.symbol} timestamp=${tickerData.timestamp}`);
+      logger.warn(`[Ticker保存] 重複データをスキップ: ${tickerData.exchange}:${tickerData.symbol} timestamp=${tickerData.timestamp}`, {
+        collection: 'tickers',
+        errorCode: error.code,
+        exchange: tickerData.exchange,
+        symbol: tickerData.symbol,
+        timestamp: tickerData.timestamp,
+        operation: 'saveTickerMongoDB'
+      });
       return { acknowledged: true, upsertedCount: 0, matchedCount: 1 };
     }
     // その他のエラーは再スロー
-    logger.error('Error saving ticker:', error);
+    logger.error('Error saving ticker:', {
+      error: error.message,
+      errorCode: error.code,
+      operation: 'saveTickerMongoDB',
+      exchange: tickerData?.exchange,
+      symbol: tickerData?.symbol,
+      stack: error.stack
+    });
     throw error;
   }
 }
