@@ -27,7 +27,7 @@ module.exports = [
     rules: {
       // エラーレベル設定 - 重要なルールはerror、スタイルルールはwarn
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-console': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
       'no-var': 'error',
       'prefer-const': 'error',

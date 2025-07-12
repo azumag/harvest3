@@ -2,10 +2,8 @@
 const { config } = require('./config');
 const { SETTINGS } = require('./config/settings');
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
-const { checkAllExchangeBalances } = require('./common/balanceChecker');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
 const { errorHandler } = require('./common/errorHandler');
-const { sleep } = require('./common/utils');
 const Logger = require('./hft/utils/Logger');
 const logger = new Logger('Bot');
 const {
@@ -27,7 +25,6 @@ const {
   checkDrawdown
 } = require('./strategies/utils/riskManagement');
 const { getAllPositionsRedis } = require('./database/redisDatabase');
-const { pro } = require('ccxt');
 
 // 未約定注文クリーンアップの最終実行時間を記録
 const lastCleanupTime = {}; // exchangeId -> timestamp
