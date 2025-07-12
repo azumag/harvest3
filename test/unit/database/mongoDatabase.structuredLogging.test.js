@@ -184,7 +184,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         await expect(addOrderMongoDB(orderData)).rejects.toThrow();
 
         expect(mockLogger.error).toHaveBeenCalledWith(
-          'Error adding order:',
+          '注文の追加エラー:',
           {
             operation: 'addOrderMongoDB',
             error: 'Database connection failed',
@@ -215,7 +215,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         await expect(addOrdersBulk(ordersData)).rejects.toThrow();
 
         expect(mockLogger.error).toHaveBeenCalledWith(
-          'Error adding orders in bulk:',
+          'バルク注文の追加エラー:',
           {
             operation: 'addOrdersBulk',
             error: 'Bulk insert failed',
@@ -248,7 +248,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         await expect(addTradeMongoDB(tradeData)).rejects.toThrow();
 
         expect(mockLogger.error).toHaveBeenCalledWith(
-          'Error adding/updating trade:',
+          '取引の追加/更新エラー:',
           {
             operation: 'addTradeMongoDB',
             error: 'Trade insert failed',
@@ -322,7 +322,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         await expect(addOhlcvMongoDB(ohlcvData)).rejects.toThrow();
 
         expect(mockLogger.error).toHaveBeenCalledWith(
-          'Error adding OHLCV:',
+          'OHLCVの追加エラー:',
           {
             operation: 'addOhlcvMongoDB',
             error: 'Database error',
@@ -394,7 +394,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         await expect(saveTickerMongoDB(tickerData)).rejects.toThrow();
 
         expect(mockLogger.error).toHaveBeenCalledWith(
-          'Error saving ticker:',
+          'ティッカー保存エラー:',
           {
             operation: 'saveTickerMongoDB',
             error: 'Save failed',
