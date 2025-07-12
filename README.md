@@ -278,6 +278,51 @@ Claude Code Actionを使用したIssue自動解決システムを導入してい
 - `CLAUDE_CODE_OAUTH_TOKEN`をGitHub Secretsに設定する必要があります
 - ワークフローは`.github/workflows/claude-issue-resolver.yml`で管理
 
+### CI自動修正システム
+GitHub Actionsを使用したCI失敗の自動修正システムを導入しています。
+
+#### 使用方法
+1. **自動起動** - CI失敗時にPersonal Access Tokenを使用して自動でfix-requestedラベルを付与
+2. **手動起動** - 既存のPRに`fix-requested`ラベルを手動で付与
+
+#### Personal Access Token (PAT) 設定方法
+
+##### 1. PAT作成
+GitHub Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token
+
+**必要な権限:**
+- `repo` (Full control of private repositories)
+- `workflow` (Update GitHub Action workflows)
+
+##### 2. リポジトリのSecretsに追加
+リポジトリ Settings → Secrets and variables → Actions → New repository secret
+
+**Name:** `PERSONAL_ACCESS_TOKEN`  
+**Secret:** 作成したPATを貼り付け
+
+##### 3. ワークフローで使用
+```yaml
+- name: Add fix-requested label
+  uses: actions/github-script@v7
+  with:
+    github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    script: |
+      await github.rest.issues.addLabels({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.payload.pull_request.number,
+        labels: ['fix-requested']
+      });
+```
+
+**注意:** PATを使用することで、GitHub Actionsからのラベル付けでもワークフローを自動起動できるようになります。
+
+#### 自動処理フロー
+- CI失敗検出時の自動ラベル付与
+- CI失敗原因の分析と修正
+- 必要なテストの実行
+- 修正完了後の自動コミット
+
 ### 開発環境の改善
 #### スケジューリングマネージャーの改善
 - **DRY原則の完全実装**: 重複コードを完全に削除し、全てのタスク実行を`_executeTask`に統一

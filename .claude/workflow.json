@@ -22,6 +22,7 @@
     },
     {
       "commentout": "WORKFLOW_GEMINI_REVIEW_COMPLETED",
+      "launch": "DISABLED_TEMPORARY",
       "prompt": "git commit を実行してください。 コミットメッセージには、作業内容の要約を含めてください。作業が完了したら WORKFLOW_COMMITTED とだけ表示せよ。"
     },
     {

@@ -67,3 +67,46 @@ graph TD
 - `GITHUB_TOKEN`: GitHub Actions のデフォルトトークン
 - `CLAUDE_CODE_OAUTH_TOKEN`: Claude AI との連携用トークン
 - `DISCORD_WEBHOOK`: Discord 通知用 Webhook URL
+- `PERSONAL_ACCESS_TOKEN`: GitHub Actions からの自動ラベル付けに必要
+
+## Personal Access Token (PAT) の設定
+
+### 概要
+`PERSONAL_ACCESS_TOKEN` は、GitHub Actions からの自動ラベル付けでワークフローを起動するために必要です。
+標準の `GITHUB_TOKEN` では、GitHub Actions によるラベル付けが他のワークフローをトリガーできない制限があります。
+
+### 設定手順
+
+#### 1. Personal Access Token の作成
+1. GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. "Generate new token" をクリック
+3. 以下の権限を付与：
+   - `repo` (Full control of private repositories)
+   - `workflow` (Update GitHub Action workflows)
+4. トークンを生成して値をコピー
+
+#### 2. リポジトリの Secrets に追加
+1. リポジトリページ → Settings → Secrets and variables → Actions
+2. "New repository secret" をクリック
+3. Name: `PERSONAL_ACCESS_TOKEN`
+4. Secret: 作成したトークンの値を貼り付け
+
+#### 3. ワークフローでの使用例
+```yaml
+- name: Add fix-requested label
+  uses: actions/github-script@v7
+  with:
+    github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    script: |
+      await github.rest.issues.addLabels({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.payload.pull_request.number,
+        labels: ['fix-requested']
+      });
+```
+
+### 重要な注意事項
+- PATはユーザー個人に紐づくため、トークン作成者がリポジトリアクセス権を失うとトークンも無効になります
+- セキュリティのため、最小限の権限のみを付与してください
+- 定期的にトークンの更新を行うことを推奨します
