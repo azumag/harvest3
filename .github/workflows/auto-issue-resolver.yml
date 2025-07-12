@@ -1,0 +1,69 @@
+name: Auto Issue Resolver
+
+on:
+    schedule:
+        # 5時間ごとに実行（UTC基準）
+        - cron: '0 0,5,10,15,20 * * *'
+    workflow_dispatch: # 手動実行も可能
+
+jobs:
+  process-issue:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Find and process highest priority issue
+        uses: actions/github-script@v7
+        with:
+          # Personal Access Tokenを使用（設定されていない場合はGITHUB_TOKENを使用）
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            // 全てのオープンissueを取得
+            const processedLabel = 'claude-code-requested';
+            
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            
+            // 未処理のissueを抽出
+            const unprocessedIssues = issues.data.filter(issue => 
+              !issue.labels.some(label => label.name === processedLabel)
+            );
+            
+            if (unprocessedIssues.length > 0) {
+              // ランダムに一つ選択
+              const randomIndex = Math.floor(Math.random() * unprocessedIssues.length);
+              const selectedIssue = unprocessedIssues[randomIndex];
+              
+              // @claudeメンションコメントを投稿
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: selectedIssue.number,
+                body: [
+                  `@claude このIssue #${selectedIssue.number} を解決してください。`,
+                  '',
+                  '以下の内容に基づいて、具体的な実装方針と必要なコード変更を提案してください：',
+                  '',
+                  `**タイトル**: ${selectedIssue.title}`,
+                  '',
+                  '**説明**:',
+                  selectedIssue.body || '説明なし'
+                ].join('\n')
+              });
+              
+              // 処理済みラベルを追加
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: selectedIssue.number,
+                labels: [processedLabel]
+              });
+              
+              console.log(`Randomly selected issue #${selectedIssue.number} for processing`);
+              console.log('Claude Code Action will be triggered by the mention');
+            }
+            
+            console.log('No unprocessed issues found');
