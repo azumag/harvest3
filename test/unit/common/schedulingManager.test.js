@@ -281,7 +281,7 @@ describe('SchedulingManager', () => {
       const [[, taskWrapper]] = cron.schedule.mock.calls;
       await taskWrapper();
 
-      expect(loggerSpy).toHaveBeenCalledWith('error-task エラー:', 'Task error');
+      expect(loggerSpy).toHaveBeenCalledWith('error-task 実行エラー:', 'Task error');
 
       loggerSpy.mockRestore();
     });
