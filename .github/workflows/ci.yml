@@ -97,6 +97,20 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report-${{ matrix.node-version }}
+        path: coverage/
+        
+    - name: Discord notification on failure
+      if: failure()
+      uses: Ilshidur/action-discord@master
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      with:
+        args: '🚨 CI Failed in ${{ github.repository }} on branch ${{ github.ref_name }}'
 
   security:
     name: Security Audit
