@@ -12,7 +12,7 @@
       "Bash(/Users/azumag/.nvm/versions/node/v23.10.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg -n \"available|資産|asset|JPY\" src/web/index.html)",
       "Bash(find:*)",
       "Bash(node:*)",
-      "Bash(HFT_MOCK_MODE=true STRATEGY_HFT_BB_WS_ENABLED=true node -e \"const { startHFTStrategy } = require(''./src/hft''); const config = { strategies: { HFT: { enabled: true } } }; startHFTStrategy(config).catch(console.error);\")",
+      "Bash(HFT_MOCK_MODE=true STRATEGY_HFT_BB_WS_ENABLED=true node -e \"const { startHFTStrategy } = require('./src/hft'); const config = { strategies: { HFT: { enabled: true } } }; startHFTStrategy(config).catch(console.error);\")",
       "Bash(rm:*)",
       "Bash(chmod:*)",
       "Bash(lsof:*)",
@@ -53,7 +53,11 @@
       "Bash(npm install)",
       "Bash(npm audit:*)",
       "Bash(make:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(yamllint:*)",
+      "Bash(python3:*)",
+      "mcp__gemini-cli__chat",
+      "Bash(cat:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)"
@@ -64,15 +68,6 @@
   ],
   "hooks": {
     "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [

@@ -284,6 +284,7 @@ GitHub Actionsを使用したCI失敗の自動修正システムを導入して�
 #### 使用方法
 1. **自動起動** - CI失敗時にPersonal Access Tokenを使用して自動でfix-requestedラベルを付与
 2. **手動起動** - 既存のPRに`fix-requested`ラベルを手動で付与
+3. **mainブランチ対応** - mainブランチでCI失敗時の自動Issue作成機能（計画中）
 
 #### Personal Access Token (PAT) 設定方法
 
@@ -322,6 +323,27 @@ GitHub Settings → Developer settings → Personal access tokens → Tokens (cl
 - CI失敗原因の分析と修正
 - 必要なテストの実行
 - 修正完了後の自動コミット
+
+#### mainブランチCI失敗対応（計画中）
+- **開発予定**: mainブランチでCI失敗時の自動Issue作成機能
+- **検討中の機能**: 失敗詳細の分析、重複防止、優先度管理
+- **現状**: KISS原則に従った簡素な実装を検討中（複雑な実装は削除済み）
+
+### Claude Code設定管理改善
+#### 設定ファイルの最適化
+- **DRY原則の徹底**: `.claude/settings.local.json`の重複hook削除（30個→1個に統合）
+- **権限管理の強化**: 必要な権限の追加（yamllint、python3、mcp__gemini-cli__chat、cat）
+- **設定の簡素化**: 冗長な設定エントリの削除とファイルサイズ最適化
+
+#### CI/CDワークフローの論理的整合性修正
+- **claude-ci-fix.yml**の修正: `ci-failure`ラベルトリガーとラベル削除処理の整合性確保
+- **論理的一貫性**: トリガー条件とアクション処理の正確な対応関係を確立
+- **ワークフロー品質向上**: コメントとコードの一致、実際の動作と期待される動作の統一
+
+#### 廃止されたワークフローの削除
+- **main-ci-failure-handler.yml**: KISS原則違反（180行の複雑すぎる実装）のため削除
+- **main-ci-failure-issue-creator.yml**: 実装が複雑すぎてメンテナンス困難のため削除
+- **方針**: YAGNI、DRY、KISS、TDD原則に従った簡素な実装への置き換えを検討中
 
 ### 開発環境の改善
 #### スケジューリングマネージャーの改善
