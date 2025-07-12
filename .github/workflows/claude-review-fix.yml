@@ -14,7 +14,7 @@ jobs:
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'reviewed'))
     
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
       id-token: write
@@ -26,21 +26,37 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Remove Review Label
+      - name: Remove Review and CI-Passed Labels
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           script: |
+            const prNumber = context.payload.pull_request.number;
+            
+            // reviewed ラベルを削除
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
+                issue_number: prNumber,
                 name: 'reviewed'
               });
-              console.log('Removed Review label');
+              console.log('Removed reviewed label');
             } catch (error) {
-              console.log('Label Review not found or already removed');
+              console.log('reviewed label not found or already removed');
+            }
+            
+            // ci-passed ラベルを削除
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'ci-passed'
+              });
+              console.log('Removed ci-passed label');
+            } catch (error) {
+              console.log('ci-passed label not found or already removed');
             }
 
       - name: Run Claude Code for Review Fix
