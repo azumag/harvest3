@@ -336,8 +336,8 @@ GitHub Settings → Developer settings → Personal access tokens → Tokens (cl
 
 ### Claude Code設定管理改善
 #### 設定ファイルの最適化
-- **DRY原則の徹底**: `.claude/settings.local.json`の重複hook削除（30個→1個に統合）
-- **権限管理の強化**: 必要な権限の追加（yamllint、python3、mcp__gemini-cli__chat、cat）
+- **DRY原則の徹底**: `.claude/settings.local.json`の重複hook削除（8個→1個に統合）  
+- **権限管理の強化**: git pull権限の追加
 - **設定の簡素化**: 冗長な設定エントリの削除とファイルサイズ最適化
 
 #### CI/CDワークフローの論理的整合性修正

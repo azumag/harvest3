@@ -60,7 +60,8 @@
       "Bash(cat:*)",
       "WebFetch(domain:docs.github.com)",
       "Bash(gh auth:*)",
-      "Bash(gh:*)"
+      "Bash(gh:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)"
@@ -71,69 +72,6 @@
   ],
   "hooks": {
     "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [
