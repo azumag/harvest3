@@ -5,14 +5,47 @@ on:
     types: [synchronize, labeled]
 
 jobs:
-  claude-ci-fix:
-    name: Claude CI Fix
+  remove-label:
+    name: Remove CI Failure Label
     runs-on: ubuntu-latest
     
     # ci-failure ラベルが付けられた時、またはci-failureラベル付きPRが更新された時のみ実行
     if: |
       (github.event.action == 'labeled' && github.event.label.name == 'ci-failure') ||
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'ci-failure'))
+    
+    permissions:
+      pull-requests: write
+      issues: write
+    
+    outputs:
+      pr-number: ${{ steps.get-pr.outputs.pr-number }}
+    
+    steps:
+      - name: Get PR Number
+        id: get-pr
+        run: echo "pr-number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+
+      - name: Remove CI Failure Label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'ci-failure'
+              });
+              console.log('Removed ci-failure label');
+            } catch (error) {
+              console.log('Label ci-failure not found or already removed');
+            }
+
+  claude-ci-fix:
+    name: Claude CI Fix
+    runs-on: ubuntu-latest
+    needs: remove-label
     
     permissions:
       contents: read
@@ -27,28 +60,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Remove CI Failure Label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                name: 'ci-failure'
-              });
-              console.log('Removed ci-failure label');
-            } catch (error) {
-              console.log('Label ci-failure not found or already removed');
-            }
-
       - name: Run Claude Code for CI Fix
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           
           additional_permissions: |
             actions: read
@@ -57,23 +73,6 @@ jobs:
             CIが失敗しています。以下の失敗を修正してください：
             - ワークフロー結果を確認し、失敗の原因を分析してください
             - 必要な修正を行ってください
-            - 修正後は適切なテストを実行してください
-            - 修正が完了したら ci-passed ラベルをつけてください
-      
-      - name: Remove CI Failure Label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                name: 'ci-failure'
-              });
-              console.log('Removed ci-failure label');
-            } catch (error) {
-              console.log('Label ci-failure not found or already removed');
-            }
+            - 修正後コミットしてください
 
       
