@@ -1127,45 +1127,64 @@ async function executeRobustBalanceCheck() {
 const { getSchedulingManager } = require('./common/schedulingManager');
 const { getMaintenanceScheduler } = require('./common/maintenanceScheduler');
 
-// スケジューリングマネージャーの初期化と設定
-const schedulingManager = getSchedulingManager();
-const maintenanceScheduler = getMaintenanceScheduler();
+// スケジューリングマネージャーの初期化と設定（テスト環境では無効）
+let schedulingManager, maintenanceScheduler;
 
-// 堅牢残高チェック（毎時0分実行）
-schedulingManager.scheduleHourlyTask('robust-balance-check', async () => {
-  await executeRobustBalanceCheck();
-}, {
-  description: '堅牢残高整合性チェック（毎時0分実行）'
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  schedulingManager = getSchedulingManager();
+  maintenanceScheduler = getMaintenanceScheduler();
 
-// 軽量リスク管理チェック（設定間隔）
-const lightweightIntervalMinutes = Math.round(BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60));
-schedulingManager.scheduleIntervalTask('lightweight-risk-management', async () => {
-  await executeRiskManagementCheck();
-}, lightweightIntervalMinutes, {
-  description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
-});
+  // 堅牢残高チェック（毎時0分実行）
+  schedulingManager.scheduleHourlyTask('robust-balance-check', async () => {
+    await executeRobustBalanceCheck();
+  }, {
+    description: '堅牢残高整合性チェック（毎時0分実行）'
+  });
 
-// デバッグ用: スケジュール状況の表示
-logger.info('\n[スケジューラー] 登録されたタスク:');
-schedulingManager.showNextExecutions();
+  // 軽量リスク管理チェック（設定間隔）
+  const lightweightIntervalMinutes = Math.round(BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60));
+  schedulingManager.scheduleIntervalTask('lightweight-risk-management', async () => {
+    await executeRiskManagementCheck();
+  }, lightweightIntervalMinutes, {
+    description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
+  });
 
-// メンテナンススケジューラーの初期化
-logger.info('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');
-maintenanceScheduler.initializeSchedules();
+  // デバッグ用: スケジュール状況の表示
+  logger.info('\n[スケジューラー] 登録されたタスク:');
+  schedulingManager.showNextExecutions();
 
-// 優雅なシャットダウンハンドラー
-process.on('SIGINT', async () => {
-  logger.info('\n[システム] シャットダウン要求を受信しました...');
-  await schedulingManager.gracefulShutdown();
-  process.exit(0);
-});
+  // メンテナンススケジューラーの初期化
+  logger.info('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');
+  maintenanceScheduler.initializeSchedules();
+} else {
+  // テスト環境用のダミーオブジェクト
+  schedulingManager = {
+    scheduleIntervalTask: () => {},
+    scheduleHourlyTask: () => {},
+    scheduleCustomTask: () => {},
+    gracefulShutdown: () => Promise.resolve(),
+    showNextExecutions: () => {},
+    removeTask: () => {}
+  };
+  maintenanceScheduler = {
+    initializeSchedules: () => {}
+  };
+}
 
-process.on('SIGTERM', async () => {
-  logger.info('\n[システム] 終了要求を受信しました...');
-  await schedulingManager.gracefulShutdown();
-  process.exit(0);
-});
+// 優雅なシャットダウンハンドラー（テスト環境では無効）
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  process.on('SIGINT', async () => {
+    logger.info('\n[システム] シャットダウン要求を受信しました...');
+    await schedulingManager.gracefulShutdown();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    logger.info('\n[システム] 終了要求を受信しました...');
+    await schedulingManager.gracefulShutdown();
+    process.exit(0);
+  });
+}
 
 // // 初期レポートを投稿
 // postReport(exchangeBB);
@@ -1175,26 +1194,30 @@ process.on('SIGTERM', async () => {
 // logger.info('利用可能な戦略:');
 // logger.info(strategies.getAvailableStrategies());
 
-// ボットを起動
-startBot();
+// ボットを起動（テスト環境では自動起動しない）
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  startBot();
+}
 
-// 初回リスク管理チェックをスケジュール（起動から30秒後）
-schedulingManager.scheduleCustomTask('initial-risk-check', '*/30 * * * * *', async () => {
-  try {
-    logger.info('=== 初回リスク管理チェック開始 ===');
-    await executeRiskManagementCheck();
-    logger.info('=== 初回リスク管理チェック完了 ===');
+// 初回リスク管理チェックをスケジュール（起動から30秒後）（テスト環境では無効）
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  schedulingManager.scheduleCustomTask('initial-risk-check', '*/30 * * * * *', async () => {
+    try {
+      logger.info('=== 初回リスク管理チェック開始 ===');
+      await executeRiskManagementCheck();
+      logger.info('=== 初回リスク管理チェック完了 ===');
 
-    // 一度だけ実行するためタスクを削除
-    schedulingManager.removeTask('initial-risk-check');
-  } catch (error) {
-    logger.error('初回リスク管理チェックエラー:', error.message);
-    await postErrorToDiscord(`初回リスク管理チェック失敗: ${error.message}`);
-    schedulingManager.removeTask('initial-risk-check');
-  }
-}, {
-  description: '初回リスク管理チェック（30秒後実行）'
-});
+      // 一度だけ実行するためタスクを削除
+      schedulingManager.removeTask('initial-risk-check');
+    } catch (error) {
+      logger.error('初回リスク管理チェックエラー:', error.message);
+      await postErrorToDiscord(`初回リスク管理チェック失敗: ${error.message}`);
+      schedulingManager.removeTask('initial-risk-check');
+    }
+  }, {
+    description: '初回リスク管理チェック（30秒後実行）'
+  });
+}
 
 // アービトラージ戦略を実行
 // if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
