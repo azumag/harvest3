@@ -41,8 +41,6 @@
       "Bash(git worktree add:*)",
       "Bash(npm run test:*)",
       "Bash(docker restart:*)",
-      "Bash(gh pr create:*)",
-      "Bash(git worktree:*)",
       "Bash(npm run check-position-consistency:*)",
       "Bash(source ~/.bashrc)",
       "Bash(deno:*)",
@@ -54,7 +52,8 @@
       "Bash(ls:*)",
       "Bash(npm install)",
       "Bash(npm audit:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [
       "Bash(rm -rf:*)"
@@ -65,6 +64,15 @@
   ],
   "hooks": {
     "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/azumag/work/cc-hooks-workflow/workflow.sh"
+          }
+        ]
+      },
       {
         "matcher": "",
         "hooks": [
