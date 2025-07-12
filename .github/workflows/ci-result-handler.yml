@@ -88,6 +88,16 @@ jobs:
               
               console.log(`Added ci-failure label to PR #${prNumber}`);
               
+              // CI失敗時のコメントを追加（@claude メンション付き）
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🚨 CI が失敗しました。\n\n@claude CIの失敗を修正してください。\n\n以下を実行してください：\n- CI失敗の原因を分析\n- 必要な修正を実装\n- 適切なテストの実行\n- 修正完了後のコミット`
+              });
+              
+              console.log(`Added CI failure comment with @claude mention to PR #${prNumber}`);
+              
             } else if (conclusion === 'success') {
               // CI成功時の処理
               console.log('CI succeeded, updating labels...');
