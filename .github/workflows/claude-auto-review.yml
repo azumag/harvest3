@@ -12,13 +12,15 @@ jobs:
       (
         github.event.action == 'synchronize' &&
         contains(github.event.pull_request.labels.*.name, 'ci-passed') &&
-        !contains(github.event.pull_request.labels.*.name, 'review-fixed')
+        !contains(github.event.pull_request.labels.*.name, 'review-fixed') &&
+        !contains(github.event.pull_request.labels.*.name, 'reviewed')
       )
       ||
       (
         github.event.action == 'labeled' &&
         contains(github.event.pull_request.labels.*.name, 'ci-passed') &&
-        !contains(github.event.pull_request.labels.*.name, 'review-fixed')
+        !contains(github.event.pull_request.labels.*.name, 'review-fixed') &&
+        !contains(github.event.pull_request.labels.*.name, 'reviewed')
       )
 
     permissions:
