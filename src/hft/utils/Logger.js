@@ -105,14 +105,17 @@ class Logger {
 
   // 特別なフォーマット用メソッド
   success(message, ...args) {
+    if (!this.shouldLog('info')) return;
     console.log(`${this.formatTimestamp()} ${this.colors.green}${this.colors.bright}✓${this.colors.reset} ${this.formatContext()} ${this.colors.green}${message}${this.colors.reset}`, ...args);
   }
 
   separator() {
+    if (!this.shouldLog('info')) return;
     console.log(`${this.colors.gray}${'─'.repeat(80)}${this.colors.reset}`);
   }
 
   header(title) {
+    if (!this.shouldLog('info')) return;
     this.separator();
     console.log(`${this.colors.cyan}${this.colors.bright}  ${title}  ${this.colors.reset}`);
     this.separator();
