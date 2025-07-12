@@ -128,8 +128,12 @@ GitHub Appを使用することで、Personal Access Tokenでは動作しないC
 
 1. **GitHub App作成**: https://github.com/settings/apps → "New GitHub App"
 2. **権限設定**: Contents/Issues/Pull requests (Write)、Actions (Read)
-3. **App情報取得**: App ID記録、Private Key(.pem)ダウンロード  
-4. **リポジトリ設定**: Variables に `APP_ID`、Secrets に `APP_PRIVATE_KEY` 追加
+3. **App情報取得**: App ID記録、Private Key(.pem)ダウンロード
+4. **リポジトリインストール**: 左サイドバー"Install App" → リポジトリ選択
+5. **リポジトリ設定**: Variables に `APP_ID`、Secrets に `APP_PRIVATE_KEY` 追加
+
+### トラブルシューティング
+**"Not Found" エラー**: GitHub Appがリポジトリにインストールされていない → 手順4を実行
 
 ### 使用方法
 ```
