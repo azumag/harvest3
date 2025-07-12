@@ -89,6 +89,70 @@ const TRADING_SETTINGS = {
   ]
 };
 
+// 取引実行精度定数
+const TRADING_EXECUTION_CONSTANTS = {
+  // ボリューム正規化
+  VOLUME_NORMALIZATION_BASE: 1000,      // ボリューム正規化の基準値
+  
+  // 実行確率
+  BASE_EXECUTION_PROBABILITY: 0.85,     // 基本実行確率（85%）
+  MAX_EXECUTION_PROBABILITY: 0.99,      // 最大実行確率（99%）
+  
+  // スリッページ設定
+  BASE_SLIPPAGE_PERCENT: 0.0001,        // 基本スリッページ（0.01%）
+  MAX_SLIPPAGE_PERCENT: 0.001,          // 最大スリッページ（0.1%）
+  
+  // スプレッド設定
+  BASE_SPREAD_PERCENT: 0.0002,          // 基本スプレッド（0.02%）
+  MAX_SPREAD_PERCENT: 0.002,            // 最大スプレッド（0.2%）
+  
+  // スプレッド計算係数
+  SPREAD_VOLATILITY_MULTIPLIER: 2,      // ボラティリティによるスプレッド拡大係数
+  SPREAD_DIVISOR: 2                     // スプレッドを半分に分割する係数
+};
+
+// ポジション制御定数
+const POSITION_CONTROL_CONSTANTS = {
+  // 固定ストップロス設定
+  FIXED_STOP_LOSS_PERCENT: 0.03,        // 固定ストップロス（3%）
+  
+  // トレーリングストップ設定
+  TRAILING_STOP_TRIGGER_PERCENT: 0.02,  // トレーリングストップ発動閾値（2%利益）
+  TRAILING_STOP_DISTANCE_PERCENT: 0.02, // トレーリングストップ距離（2%）
+  
+  // 時間ベース設定
+  TIME_BASED_STOP_HOURS: 24,            // 時間ベースストップ（24時間）
+  POSITION_AGE_DIVISOR: 1000 * 60 * 60  // ポジション年齢計算用除数（ミリ秒→時間）
+};
+
+// ポートフォリオレベル制御定数
+const PORTFOLIO_CONTROL_CONSTANTS = {
+  // グローバル制限
+  MAX_TOTAL_POSITIONS: 200,              // 最大総ポジション数
+  MAX_TOTAL_VALUE: 1000000,             // 最大総価値（¥100万）
+  
+  // 配分制限
+  MAX_SINGLE_STRATEGY_RATIO: 0.35,      // 単一戦略最大割合（35%）
+  MAX_SINGLE_CURRENCY_RATIO: 0.10,      // 単一通貨最大割合（10%）
+  
+  // リスク制限
+  MAX_DRAWDOWN: 0.15,                   // 最大ドローダウン（15%）
+  MAX_DAILY_LOSS: 0.05,                 // 日次最大損失（5%）
+  MAX_LONG_RATIO: 0.75,                 // ロングポジション最大割合（75%）
+  MAX_CORRELATION: 0.8,                 // 戦略間最大相関（80%）
+  VOLATILITY_THRESHOLD: 0.3,            // ボラティリティ閾値（30%）
+  
+  // 戦略配分目標値
+  STRATEGY_ALLOCATION: {
+    BOLLINGER_BANDS_CONSERVATIVE: { min: 0.25, max: 0.35, target: 0.286 },
+    BOLLINGER_BANDS_AGGRESSIVE: { min: 0.15, max: 0.25, target: 0.190 },
+    MULTI_INDICATOR: { min: 0.20, max: 0.30, target: 0.238 },
+    MEAN_REVERSION: { min: 0.10, max: 0.20, target: 0.143 },
+    MACD: { min: 0.05, max: 0.15, target: 0.095 },
+    TECHNICAL_MOMENTUM: { min: 0.00, max: 0.10, target: 0.048 }
+  }
+};
+
 // bitFlyer最小取引数量
 const BITFLYER_MIN_TRADE_AMOUNTS = {
   'BTC/JPY': 0.001,
@@ -114,6 +178,9 @@ module.exports = {
   OHLCVTimeFrames,
   EXCHANGE_SETTINGS,
   TRADING_SETTINGS,
+  TRADING_EXECUTION_CONSTANTS,
+  POSITION_CONTROL_CONSTANTS,
+  PORTFOLIO_CONTROL_CONSTANTS,
   BITFLYER_MIN_TRADE_AMOUNTS,
   ORDER_MANAGEMENT_SETTINGS,
   RISK_MANAGEMENT_SETTINGS,
