@@ -23,7 +23,8 @@ const mockCollection = {
   find: jest.fn(),
   findOne: jest.fn(),
   createIndex: jest.fn(),
-  listIndexes: jest.fn()
+  listIndexes: jest.fn(),
+  countDocuments: jest.fn()
 };
 
 const mockDb = {
@@ -66,14 +67,32 @@ jest.mock('../../../src/hft/utils/Logger', () => {
 process.env.MONGO_URL = 'mongodb://test:27017';
 process.env.MONGO_DB_NAME = 'test_db';
 
+// connectDB のモック
+const mockConnectDB = jest.fn().mockResolvedValue();
+
+// mongoDatabase モジュールをモック
+jest.mock('../../../src/database/mongoDatabase', () => {
+  const originalModule = jest.requireActual('../../../src/database/mongoDatabase');
+  return {
+    ...originalModule,
+    connectDB: jest.fn().mockResolvedValue(),
+    ordersCollection: null,
+    tradesCollection: null,
+    ohlcvCollection: null,
+    tickersCollection: null,
+    signalsCollection: null
+  };
+});
+
 // テスト対象をインポート
+const mongoDatabase = require('../../../src/database/mongoDatabase');
 const {
   addOrderMongoDB,
   addOrdersBulk,
   addTradeMongoDB,
   addOhlcvMongoDB,
   saveTickerMongoDB
-} = require('../../../src/database/mongoDatabase');
+} = mongoDatabase;
 
 describe('mongoDatabase - 構造化ログ機能', () => {
   beforeEach(() => {
@@ -92,6 +111,17 @@ describe('mongoDatabase - 構造化ログ機能', () => {
       toArray: jest.fn().mockResolvedValue([])
     });
     mockCollection.createIndex.mockResolvedValue();
+    mockCollection.countDocuments.mockResolvedValue(0);
+
+    // connectDB のモック設定
+    mongoDatabase.connectDB.mockResolvedValue();
+    
+    // コレクションの参照をモックに設定
+    mongoDatabase.ordersCollection = mockCollection;
+    mongoDatabase.tradesCollection = mockCollection;
+    mongoDatabase.ohlcvCollection = mockCollection;
+    mongoDatabase.tickersCollection = mockCollection;
+    mongoDatabase.signalsCollection = mockCollection;
   });
 
   describe('addOrderMongoDB', () => {
