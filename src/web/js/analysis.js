@@ -383,20 +383,102 @@ async function fetchDataAndRenderChart() {
  * パラメータの入力フィールドを生成する
  */
   function createSimpleInputField(key, value, type) {
-    // TODO: 型に応じた入力フィールドのバリデーションや、select/checkboxなどの対応
-    // 現状はtext入力のみ
-    let inputType = 'text';
-    let step = null;
+    // 型に応じた適切な入力フィールドを生成
+    const baseClasses = 'form-control form-control-sm parameter-input';
+    const dataAttrs = `data-param-key="${key}" data-param-type="${type}"`;
+    
     if (type === 'number') {
-      inputType = 'number';
-      step = 'any'; // 小数点も許可
+      // 数値型：number入力フィールドでバリデーション付き
+      return `<input type="number" class="${baseClasses}" ${dataAttrs} value="${value}" step="any" min="" max="" oninput="validateNumberInput(this)">`;
     } else if (type === 'boolean') {
-      // booleanの場合はチェックボックスやドロップダウンなどが考えられるが、
-      // シンプルにtextで 'true'/'false' を入力させるか、別途対応が必要
-      // ここでは一旦textとしておく
+      // boolean型：セレクトボックスで true/false 選択
+      const isTrue = value === true || value === 'true' || value === '1';
+      return `
+        <select class="${baseClasses}" ${dataAttrs} onchange="validateBooleanInput(this)">
+          <option value="true" ${isTrue ? 'selected' : ''}>true</option>
+          <option value="false" ${!isTrue ? 'selected' : ''}>false</option>
+        </select>
+      `;
+    } else if (type === 'string') {
+      // 文字列型：テキスト入力フィールド
+      return `<input type="text" class="${baseClasses}" ${dataAttrs} value="${value}" oninput="validateStringInput(this)">`;
+    } else {
+      // その他の型：デフォルトはテキスト入力
+      return `<input type="text" class="${baseClasses}" ${dataAttrs} value="${value}" oninput="validateGenericInput(this)">`;
     }
+  }
 
-    return `<input type="${inputType}" class="form-control form-control-sm parameter-input" data-param-key="${key}" value="${value}" ${step ? `step="${step}"` : ''}>`;
+  /**
+   * 数値入力のバリデーション
+   */
+  function validateNumberInput(input) {
+    const value = parseFloat(input.value);
+    const isValid = !isNaN(value) && isFinite(value);
+    
+    // バリデーション結果をUIに反映
+    if (isValid) {
+      input.classList.remove('is-invalid');
+      input.classList.add('is-valid');
+    } else {
+      input.classList.remove('is-valid');
+      input.classList.add('is-invalid');
+    }
+    
+    return isValid;
+  }
+
+  /**
+   * boolean入力のバリデーション
+   */
+  function validateBooleanInput(input) {
+    const value = input.value;
+    const isValid = value === 'true' || value === 'false';
+    
+    if (isValid) {
+      input.classList.remove('is-invalid');
+      input.classList.add('is-valid');
+    } else {
+      input.classList.remove('is-valid');
+      input.classList.add('is-invalid');
+    }
+    
+    return isValid;
+  }
+
+  /**
+   * 文字列入力のバリデーション
+   */
+  function validateStringInput(input) {
+    const value = input.value;
+    const isValid = typeof value === 'string' && value.trim().length > 0;
+    
+    if (isValid) {
+      input.classList.remove('is-invalid');
+      input.classList.add('is-valid');
+    } else {
+      input.classList.remove('is-valid');
+      input.classList.add('is-invalid');
+    }
+    
+    return isValid;
+  }
+
+  /**
+   * 汎用入力のバリデーション
+   */
+  function validateGenericInput(input) {
+    const value = input.value;
+    const isValid = value !== null && value !== undefined && value.toString().trim().length > 0;
+    
+    if (isValid) {
+      input.classList.remove('is-invalid');
+      input.classList.add('is-valid');
+    } else {
+      input.classList.remove('is-valid');
+      input.classList.add('is-invalid');
+    }
+    
+    return isValid;
   }
 
   /**

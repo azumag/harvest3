@@ -15,8 +15,7 @@ const { getValidatedConfig: getBalanceCheckerConfig } = require('./common/balanc
 const { getInstance: getCollectorConfig } = require('./config/collectorConfig');
 const { WS_CONFIG, STRATEGY_PARAMS } = require('./hft/config');
 
-// APIキーとシークレットを設定
-// TODO: move to const.js
+// APIキーとシークレットを設定 (環境変数から取得)
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
 
@@ -103,9 +102,10 @@ const config = {
       },
 
       // Kelly基準設定
-      // TODO: 理解する
-      kellyEnabled: false, // Phase 1では無効
-      kellyFraction: 0.25,
+      // Kelly基準: 期待値とリスクに基づく最適ポジションサイズ計算手法
+      // f* = (bp - q) / b ここで、b=オッズ-1, p=勝率, q=負率
+      kellyEnabled: false, // Phase 1では無効（高リスクのため）
+      kellyFraction: 0.25, // Kelly基準の25%を使用（リスク軽減）
 
       // パフォーマンス調整設定
       performanceAdjustment: {
