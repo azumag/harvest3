@@ -123,3 +123,24 @@ if (process.env.CI) {
     }
   });
 }
+
+// CI環境でのクリーンアップ強化
+if (process.env.CI) {
+  // テスト終了後のクリーンアップ
+  afterAll(async () => {
+    // 未処理のPromiseやタイマーをクリア
+    jest.clearAllTimers();
+    jest.clearAllMocks();
+    
+    // ガベージコレクションを強制実行
+    if (global.gc) {
+      global.gc();
+    }
+  });
+
+  // 各テストスイート後のクリーンアップ
+  afterEach(() => {
+    // モックコールをクリア
+    jest.clearAllMocks();
+  });
+}
