@@ -35,7 +35,10 @@ const exchangeBB = new ccxt.bitbank({
   timeout: EXCHANGE_SETTINGS.TIMEOUT,
   options: {
     // Issue #443: CCXTライブラリの制限に合わせたthrottle設定
-    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE, // 800（CCXTの1000制限に対して安全な値）
+    // CCXT制限: 1000, 設定値: 800 (20%安全マージン)
+    // 理由: 高負荷時の一時的なキュー積み上がりやAPIレスポンス遅延を考慮し
+    // overflow回避のため制限値より20%低い値に設定
+    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
     'defaultType': 'spot',
     'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
     'adjustForTimeDifference': true

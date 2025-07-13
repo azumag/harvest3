@@ -436,13 +436,18 @@ class ThrottleMonitor {
    */
   updateHealthHistory(score) {
     const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+    
+    // 古いエントリーを時間ベースで削除（メモリリーク対策）
+    this.healthMonitoring.healthHistory = this.healthMonitoring.healthHistory
+      .filter(entry => now - entry.timestamp < ONE_HOUR);
     
     this.healthMonitoring.healthHistory.push({
       score: score,
       timestamp: now
     });
     
-    // 履歴サイズ制限
+    // 履歴サイズ制限も適用
     if (this.healthMonitoring.healthHistory.length > this.healthMonitoring.maxHistorySize) {
       this.healthMonitoring.healthHistory.shift();
     }

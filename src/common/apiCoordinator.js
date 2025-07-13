@@ -176,6 +176,12 @@ class APICoordinator {
     }
 
     this.isProcessing = true;
+    
+    // 二重チェック（競合状態対策）
+    if (this.queue.length === 0) {
+      this.isProcessing = false;
+      return;
+    }
 
     try {
       while (this.queue.length > 0) {
@@ -311,8 +317,12 @@ class APICoordinator {
     // 待機中のリクエストをエラーで終了
     this.queue.forEach(request => {
       // テスト時など、reject関数が存在しない場合の安全チェック
-      if (typeof request.reject === 'function') {
-        request.reject(new Error('Emergency reset - request cancelled'));
+      try {
+        if (request.reject && typeof request.reject === 'function') {
+          request.reject(new Error('Emergency reset - request cancelled'));
+        }
+      } catch (rejectionError) {
+        logger.warn(`[Emergency Reset] リクエスト拒否時エラー: ${rejectionError.message}`);
       }
     });
     
