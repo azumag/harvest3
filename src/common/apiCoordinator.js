@@ -225,7 +225,10 @@ class APICoordinator {
     
     // 待機中のリクエストをエラーで終了
     this.queue.forEach(request => {
-      request.reject(new Error('Emergency reset - request cancelled'));
+      // テスト時など、reject関数が存在しない場合の安全チェック
+      if (typeof request.reject === 'function') {
+        request.reject(new Error('Emergency reset - request cancelled'));
+      }
     });
     
     this.queue = [];
