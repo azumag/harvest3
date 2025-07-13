@@ -37,16 +37,16 @@ const globalOrderValidators = {}; // exchangeId -> OrderValidation
 
 // 包括的クリーンアップの実行間隔
 const COMPREHENSIVE_CLEANUP_INTERVAL = SETTINGS.MONITORING.COMPREHENSIVE_CLEANUP_INTERVAL;
-let lastComprehensiveCleanupTime = 0;
+const lastComprehensiveCleanupTime = 0;
 
 // 自己修復システムの実行間隔
 const SELF_HEALING_INTERVAL = SETTINGS.MONITORING.SELF_HEALING_INTERVAL;
-let lastSelfHealingTime = 0;
+const lastSelfHealingTime = 0;
 
 // 残高整合性チェック設定を取得
 const BALANCE_CONFIG = getValidatedConfig();
 const BALANCE_CHECK_INTERVAL = BALANCE_CONFIG.intervals.lightweightCheck;
-let lastBalanceCheckTime = 0;
+const lastBalanceCheckTime = 0;
 const lastRobustBalanceCheckTime = 0;
 
 /**
@@ -197,11 +197,16 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 
 /**
- * 効率的な戦略実行エンジン（イベント駆動型）
- * レビュー対応: sleep(1000)ポーリングを置き換え
+ * 効率的な戦略実行エンジン（スロットリング対応版）
+ * CCXTスロットルキュー問題を解決するため、API呼び出しを分散して実行
  */
 async function executeStrategyCycle() {
   try {
+    const { globalStrategyExecutionManager } = require('./common/strategyExecutionManager');
+    const { globalAPIDataCache } = require('./common/apiDataCache');
+    
+    logger.info('[戦略実行] スロットリング対応版戦略実行サイクル開始');
+    
     // マーケットパラメータの更新
     const symbolsByExchange = await getSymbolsByExchange(config);
     const marketParametersByExchange = await getMarketParametersByExchangeSymbol(symbolsByExchange, config, { targetSymbol });
@@ -222,343 +227,128 @@ async function executeStrategyCycle() {
       }
     }
 
-    // 各取引所-シンボルの組み合わせに対して並列処理で効率化
-    await Promise.allSettled(allExchangeSymbolPairs.map(async ({ exchangeId, symbol, marketParameters }) => {
-      const exchangeConfig = config.exchanges[exchangeId];
-      if (!exchangeConfig) {
-        return;
-      }
-
-      const exchangeInstance = exchangeConfig.instance;
-      logger.info(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`);
-
-      try {
-        // 約定済み取引の更新
-        await updateFilledTrades(exchangeInstance, symbol);
-
-        // 包括的未約定注文管理システムの初期化
-        if (!globalOrderManagers[exchangeId]) {
-          const redis = require('redis');
-          const redisClient = redis.createClient({
-            url: process.env.REDIS_URL || 'redis://localhost:6379'
-          });
-          await redisClient.connect();
-
-          globalOrderManagers[exchangeId] = new PendingOrderLimitManager(exchangeInstance, redisClient);
-          globalOrderValidators[exchangeId] = new OrderValidation(exchangeInstance);
-
-          logger.info(`[注文管理] 初期化完了: ${exchangeId}`);
-        }
-
-        // 強化版未約定注文クリーンアップ（5分間隔）
-        const now = Date.now();
-        const cleanupInterval = 5 * 60 * 1000; // 5分
-        const lastTime = lastCleanupTime[exchangeId] || 0;
-
-        if (now - lastTime >= cleanupInterval) {
-          try {
-            logger.info(`[強化クリーンアップ] 開始: ${exchangeId}`);
-            const enhancedResult = await enhancedPendingOrderCleanup(exchangeInstance, exchangeId, false);
-            lastCleanupTime[exchangeId] = now;
-
-            if (enhancedResult.success && enhancedResult.cleanupResult.deleted > 0) {
-              logger.info(`[強化クリーンアップ] 成功: ${exchangeId} - ${enhancedResult.cleanupResult.deleted}件削除`);
-            } else if (!enhancedResult.success) {
-              logger.warn(`[強化クリーンアップ] 失敗: ${exchangeId} - ${enhancedResult.error}`);
-            }
-          } catch (cleanupError) {
-            logger.warn(`[強化クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
-          }
-        }
-
-        // 包括的未約定注文管理（10分間隔）
-        if (now - lastComprehensiveCleanupTime >= COMPREHENSIVE_CLEANUP_INTERVAL) {
-          try {
-            logger.info(`[包括管理] 開始: ${exchangeId}`);
-            const orderManager = globalOrderManagers[exchangeId];
-
-            if (orderManager) {
-              // ヘルスチェック実行
-              const health = await orderManager.healthCheck();
-              logger.info(`[包括管理] ヘルス: ${health.status} (利用率: ${health.utilization}, 買い比率: ${health.buyRatio})`);
-
-              // 制限違反の確認
-              const violations = await orderManager.detectLimitViolations();
-
-              if (violations.length > 0) {
-                const highPriorityViolations = violations.filter(v => v.severity === 'high');
-
-                if (highPriorityViolations.length > 0) {
-                  logger.info(`[包括管理] 緊急対応必要: ${highPriorityViolations.length}件の高優先度違反`);
-
-                  // 自動修復実行
-                  const remediationResult = await orderManager.performAutoCleanup();
-                  logger.info(`[包括管理] 自動修復完了: ${remediationResult.cleaned}件削除`);
-
-                  // Discord通知（詳細版）
-                  if (remediationResult.cleaned > 0) {
-                    let message = `🔧 **未約定注文自動整理完了** (${exchangeId})\n` +
-                                   '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                                   '📈 **修復結果**\n' +
-                                   `　削除件数: ${remediationResult.cleaned}件\n` +
-                                   `　緊急度: 🚨 高優先度 (${highPriorityViolations.length}件違反)\n`;
-
-                    // 修復アクション詳細
-                    if (remediationResult.actions && remediationResult.actions.length > 0) {
-                      message += '\n🛠️ **修復アクション**\n';
-                      remediationResult.actions.forEach(action => {
-                        message += `　• ${action}\n`;
-                      });
-                    }
-
-                    // 健全性情報
-                    message += '\n📊 **修復前の状況**\n' +
-                                `　利用率: ${health.utilization}\n` +
-                                `　買い注文比率: ${health.buyRatio}\n` +
-                                `　制限違反: ${violations.length}件\n`;
-
-                    message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
-
-                    await postOrderToDiscord(message);
-                  }
-                } else {
-                  logger.info(`[包括管理] 中優先度違反: ${violations.length}件 - 監視継続`);
-
-                  // 中優先度違反の通知（12時間に1回程度）
-                  const lastMediumNotify = globalOrderManagers[exchangeId].lastMediumNotifyTime || 0;
-                  const mediumNotifyInterval = 12 * 60 * 60 * 1000; // 12時間
-
-                  if (now - lastMediumNotify >= mediumNotifyInterval) {
-                    const mediumViolations = violations.filter(v => v.severity === 'medium');
-                    let message = `⚠️ **未約定注文監視レポート** (${exchangeId})\n` +
-                                   '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                                   '📊 **現在の状況**\n' +
-                                   `　利用率: ${health.utilization}\n` +
-                                   `　買い注文比率: ${health.buyRatio}\n` +
-                                   `　中優先度違反: ${mediumViolations.length}件\n\n` +
-                                   '⚡ **主な違反内容**\n';
-
-                    mediumViolations.slice(0, 5).forEach(violation => {
-                      message += `　• ${violation.message}\n`;
-                    });
-
-                    if (mediumViolations.length > 5) {
-                      message += `　... 他 ${mediumViolations.length - 5} 件\n`;
-                    }
-
-                    message += '\n📈 **対応状況**: 監視継続中（自動修復待機）\n';
-                    message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
-
-                    await postOrderToDiscord(message);
-                    globalOrderManagers[exchangeId].lastMediumNotifyTime = now;
-                  }
-                }
-              } else {
-                logger.info('[包括管理] 正常: 制限違反なし');
-
-                // 正常状態の通知（24時間に1回）
-                const lastHealthyNotify = globalOrderManagers[exchangeId].lastHealthyNotifyTime || 0;
-                const healthyNotifyInterval = 24 * 60 * 60 * 1000; // 24時間
-
-                if (now - lastHealthyNotify >= healthyNotifyInterval) {
-                  const message = `✅ **未約定注文システム正常** (${exchangeId})\n` +
-                                 '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                                 '📊 **健全性状況**\n' +
-                                 `　利用率: ${health.utilization}\n` +
-                                 `　買い注文比率: ${health.buyRatio}\n` +
-                                 '　制限違反: なし\n' +
-                                 `　状態: ${health.status === 'healthy' ? '✅ 健全' : '⚠️ 要注意'}\n\n` +
-                                 `🔧 **最終クリーンアップ**: ${health.lastCleanup}\n` +
-                                 `⏰ ${new Date().toLocaleString('ja-JP')}`;
-
-                  await postOrderToDiscord(message);
-                  globalOrderManagers[exchangeId].lastHealthyNotifyTime = now;
-                }
-              }
-
-              lastComprehensiveCleanupTime = now;
-            }
-          } catch (comprehensiveError) {
-            logger.warn(`[包括管理] エラー: ${exchangeId} - ${comprehensiveError.message}`);
-          }
-        }
-
-        // 残高整合性チェック（5分間隔）
-        // EMERGENCY: Temporarily disable balance check due to CCXT throttling crisis
-        if (false && now - lastBalanceCheckTime >= BALANCE_CHECK_INTERVAL) {
-          try {
-            logger.info(`[残高チェック] 開始: ${exchangeId}`);
-            const { compareBalances } = require('./common/balanceChecker');
-            const result = await compareBalances(exchangeId);
-
-            if (result.discrepancies.length > 0) {
-              logger.info(`[残高チェック] 不整合検出: ${result.discrepancies.length}件`);
-
-              // 不整合が検出された場合の詳細ログ
-              for (const discrepancy of result.discrepancies) {
-                logger.info(`  ${discrepancy.currency}: Bot ${discrepancy.botAmount} vs 取引所 ${discrepancy.exchangeAmount} (${discrepancy.discrepancyPercent}%差)`);
-              }
-
-              // 高い不整合（10%以上）が検出された場合、Discord通知
-              const highDiscrepancies = result.discrepancies.filter(d => Math.abs(d.discrepancyPercent) >= 10);
-              if (highDiscrepancies.length > 0) {
-                let message = `⚠️ **残高不整合検出** (${exchangeId})\n` +
-                               '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                               `📊 **不整合通貨**: ${highDiscrepancies.length}件\n\n`;
-
-                highDiscrepancies.forEach(d => {
-                  message += `💱 **${d.currency}**\n` +
-                              `　Bot計算: ${d.botAmount.toFixed(6)}\n` +
-                              `　取引所: ${d.exchangeAmount.toFixed(6)}\n` +
-                              `　差異: ${d.discrepancyPercent.toFixed(2)}%\n\n`;
-                });
-
-                message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
-                await postOrderToDiscord(message);
-              }
-            } else {
-              logger.info('[残高チェック] 正常: 不整合なし');
-            }
-
-            lastBalanceCheckTime = now;
-          } catch (balanceError) {
-            logger.warn(`[残高チェック] エラー: ${exchangeId} - ${balanceError.message}`);
-          }
-        }
-
-        // 自己修復システム（30分間隔）
-        if (now - lastSelfHealingTime >= SELF_HEALING_INTERVAL) {
-          try {
-            logger.info(`[自己修復] 開始: ${exchangeId}`);
-            const { Phase2SelfHealingSystem } = require('../scripts/phase2SelfHealingSystem');
-            const healer = new Phase2SelfHealingSystem();
-
-            // 自己修復実行 (✅ FIX: Corrected method name from performSelfHealing to executeSelfHealing)
-            const healingResult = await healer.executeSelfHealing();
-
-            // 安全なプロパティアクセスのためのnullチェック
-            if (healingResult && typeof healingResult === 'object') {
-              const totalFixed = healingResult.totalFixed || 0;
-              const phantomFixed = healingResult.phantomFixed || 0;
-              const partialFixed = healingResult.partialFixed || 0;
-              const minorFixed = healingResult.minorFixed || 0;
-              const details = healingResult.details || [];
-
-              if (totalFixed > 0) {
-                logger.info(`[自己修復] 修復完了: ${totalFixed}件`);
-
-                let message = `🔧 **自己修復システム実行** (${exchangeId})\n` +
-                               '━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                               '✅ **修復結果**\n' +
-                               `　偽約定ポジション: ${phantomFixed}件削除\n` +
-                               `　部分約定: ${partialFixed}件修正\n` +
-                               `　軽微な不整合: ${minorFixed}件調整\n` +
-                               `　合計: ${totalFixed}件\n\n`;
-
-                if (details && details.length > 0) {
-                  message += '📝 **修復詳細**\n';
-                  details.slice(0, 5).forEach(detail => {
-                    message += `　• ${detail}\n`;
-                  });
-
-                  if (details.length > 5) {
-                    message += `　... 他 ${details.length - 5} 件\n`;
-                  }
-                }
-
-                message += `\n⏰ ${new Date().toLocaleString('ja-JP')}`;
-                await postOrderToDiscord(message);
-              } else {
-                logger.info('[自己修復] 正常: 修復対象なし');
-              }
-            } else {
-              logger.info('[自己修復] 警告: 修復結果が無効です');
-            }
-
-            lastSelfHealingTime = now;
-          } catch (healingError) {
-            logger.warn(`[自己修復] エラー: ${exchangeId} - ${healingError.message}`);
-          }
-        }
-
-        // Ticker情報を取得
-        // 同時にキャッシュする効果もある
-        const ticker = await fetchTicker(exchangeInstance, symbol);
-        // logger.info(`Ticker: ${exchangeId} - ${symbol} - ${JSON.stringify(ticker)}`);
-
-        // 有効な戦略を適用
-        for (const strategyKey of Object.keys(config.strategies)) {
-          const strategy = config.strategies[strategyKey];
-
-          // 戦略設定を取得し、統一化された有効性をチェック
-          const strategyConfig = await getStrategyConfig(exchangeInstance, symbol, strategyKey, config);
-          if (!strategyConfig || !strategyConfig.enabled) {
-            // レガシー戦略の場合はログ出力を抑制（データ整合性のため定義は保持）
-            if (strategy.type !== 'legacy') {
-              logger.info(`戦略 ${strategyKey} が無効です`);
-            }
-            continue;
-          }
-
-          // コマンドライン引数で指定された戦略以外はスキップ
-          if (hasArgs && !args.includes(`--${strategyKey}`)) {
-            continue;
-          }
-
-          // atomicExec指定でコマンドライン引数なしの場合はスキップ
-          if (strategy.atomicExec && (!hasArgs || !args.includes(`--${strategyKey}`))) {
-            logger.info(`戦略 ${strategyKey} は単一コンテナ実行指定戦略です: SKIP`);
-            continue;
-          }
-
-          // 新しいHFT戦略 (WebSocketベース) の場合
-          if (strategyKey === 'HFT') {
-            // HFTは別コンテナで実行予定
-            continue;
-            // // HFT戦略は内部で通貨ペアのループとWebSocket接続を管理するため、
-            // // ここでは戦略のエントリポイント関数を一度だけ呼び出す
-            // logger.info(`--- 戦略 ${strategyKey} を実行中...`);
-            // try {
-            //   await strategy.function(config); // startHFTStrategy(config) を呼び出し
-            // } catch (error) {
-            //   logger.error(`戦略 ${strategyKey} の実行中にエラーが発生しました: ${error.message}`);
-            //   await postErrorToDiscord(`戦略 ${strategyKey} でエラー: ${error.message}`).catch(() => {});
-            // }
-            // // HFT戦略は常駐するため、このループの他の通貨ペアでは実行しない
-            // continue;
-          }
-
-          // この戦略が対象の取引所をサポートしているか確認 (HFT_BB_WS以外)
-          const supportedExchange = strategy.exchanges.find(e => e.id === exchangeId);
-          if (!supportedExchange) {
-            continue;
-          }
-
-          try {
-            await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config, strategyConfig });
-          } catch (error) {
-            await unifiedErrorHandler.handleError(error, {
-              context: `戦略 ${strategyKey}、通貨ペア ${symbol}`,
-              severity: 'CRITICAL',
-              shouldThrow: false,
-              deduplicationWindow: 600000 // 10分間の重複防止
-            });
-          }
-        }
-      } catch (error) {
-        await unifiedErrorHandler.handleError(error, {
-          context: `通貨ペア ${symbol}`,
-          severity: 'WARNING',
-          shouldThrow: false,
-          deduplicationWindow: 1800000 // 30分間の重複防止
-        });
-      }
-    }));
+    // 戦略実行前のメンテナンス処理を実行（従来通り、しかし分散実行）
+    await executeMaintenance(allExchangeSymbolPairs);
+    
+    // 新しいスロットリング対応戦略実行システムを使用
+    logger.info(`[戦略実行] ${allExchangeSymbolPairs.length}ペアの分散実行を開始`);
+    await globalStrategyExecutionManager.scheduleStrategyExecution(allExchangeSymbolPairs, config);
+    
+    // 実行統計をログ出力
+    const cacheStats = globalAPIDataCache.getStats();
+    logger.info(`[戦略実行] サイクル完了 - API効率: ${cacheStats.hitRate} (${cacheStats.hits}H/${cacheStats.misses}M)`);
 
   } catch (error) {
     const errorMessage = `[戦略実行] エラーが発生しました: ${error.message}`;
     logger.error(errorMessage, error);
     await postErrorToDiscord(errorMessage);
+  }
+}
+
+/**
+ * メンテナンス処理（未約定注文クリーンアップ等）を分散実行
+ */
+async function executeMaintenance(allExchangeSymbolPairs) {
+  const processedExchanges = new Set();
+  
+  for (const { exchangeId, symbol } of allExchangeSymbolPairs) {
+    if (processedExchanges.has(exchangeId)) {
+      continue; // 取引所ごとに1回のみ実行
+    }
+    processedExchanges.add(exchangeId);
+    
+    const exchangeConfig = config.exchanges[exchangeId];
+    if (!exchangeConfig) {
+      continue;
+    }
+
+    const exchangeInstance = exchangeConfig.instance;
+    logger.info(`[メンテナンス] 開始: ${exchangeId}`);
+
+    try {
+      // 約定済み取引の更新（最初のシンボルのみで代表実行）
+      const firstSymbol = allExchangeSymbolPairs.find(p => p.exchangeId === exchangeId)?.symbol;
+      if (firstSymbol) {
+        await updateFilledTrades(exchangeInstance, firstSymbol);
+      }
+
+      // 包括的未約定注文管理システムの初期化
+      if (!globalOrderManagers[exchangeId]) {
+        const redis = require('redis');
+        const redisClient = redis.createClient({
+          url: process.env.REDIS_URL || 'redis://localhost:6379'
+        });
+        await redisClient.connect();
+
+        globalOrderManagers[exchangeId] = new PendingOrderLimitManager(exchangeInstance, redisClient);
+        globalOrderValidators[exchangeId] = new OrderValidation(exchangeInstance);
+
+        logger.info(`[注文管理] 初期化完了: ${exchangeId}`);
+      }
+
+      // 強化版未約定注文クリーンアップ（5分間隔）
+      const now = Date.now();
+      const cleanupInterval = 5 * 60 * 1000; // 5分
+      const lastTime = lastCleanupTime[exchangeId] || 0;
+
+      if (now - lastTime >= cleanupInterval) {
+        try {
+          logger.info(`[強化クリーンアップ] 開始: ${exchangeId}`);
+          const enhancedResult = await enhancedPendingOrderCleanup(exchangeInstance, exchangeId, false);
+          lastCleanupTime[exchangeId] = now;
+
+          if (enhancedResult.success && enhancedResult.cleanupResult.deleted > 0) {
+            logger.info(`[強化クリーンアップ] 成功: ${exchangeId} - ${enhancedResult.cleanupResult.deleted}件削除`);
+          } else if (!enhancedResult.success) {
+            logger.warn(`[強化クリーンアップ] 失敗: ${exchangeId} - ${enhancedResult.error}`);
+          }
+        } catch (cleanupError) {
+          logger.warn(`[強化クリーンアップ] エラー: ${exchangeId} - ${cleanupError.message}`);
+        }
+      }
+
+      // 包括的未約定注文管理（10分間隔）
+      if (now - lastComprehensiveCleanupTime >= COMPREHENSIVE_CLEANUP_INTERVAL) {
+        try {
+          logger.info(`[包括管理] 開始: ${exchangeId}`);
+          const orderManager = globalOrderManagers[exchangeId];
+
+          if (orderManager) {
+            // ヘルスチェック実行
+            const health = await orderManager.healthCheck();
+            logger.info(`[包括管理] ヘルス: ${health.status} (利用率: ${health.utilization}, 買い比率: ${health.buyRatio})`);
+
+            // 制限違反の確認
+            const violations = await orderManager.detectLimitViolations();
+
+            if (violations.length > 0) {
+              const highPriorityViolations = violations.filter(v => v.severity === 'high');
+
+              if (highPriorityViolations.length > 0) {
+                logger.info(`[包括管理] 緊急対応必要: ${highPriorityViolations.length}件の高優先度違反`);
+
+                // 自動修復実行
+                const remediationResult = await orderManager.performAutoCleanup();
+                logger.info(`[包括管理] 自動修復完了: ${remediationResult.cleaned}件削除`);
+
+                // Discord通知（詳細版）
+                if (remediationResult.cleaned > 0) {
+                  // TODO: Discord通知処理を実装
+                }
+              } else {
+                logger.info(`[包括管理] 中優先度違反: ${violations.length}件 - 監視継続`);
+              }
+            } else {
+              logger.info('[包括管理] 正常: 制限違反なし');
+            }
+          }
+        } catch (comprehensiveError) {
+          logger.warn(`[包括管理] エラー: ${exchangeId} - ${comprehensiveError.message}`);
+        }
+      }
+    } catch (error) {
+      logger.warn(`[メンテナンス] エラー: ${exchangeId} - ${error.message}`);
+    }
   }
 }
 
@@ -665,471 +455,215 @@ async function executeRiskManagementCheck() {
             const { closeAndCleanupPosition } = require('./database/redisDatabase');
             await closeAndCleanupPosition(position.key);
             preRepairCount++;
-          } catch (cleanupError) {
-            logger.warn(`[リスク管理] 無効ポジション削除失敗: ${cleanupError.message}`);
+            logger.info(`[リスク管理] 無効ポジション削除: ${position.key}`);
+          } catch (deleteError) {
+            logger.error(`[リスク管理] 無効ポジション削除失敗: ${position.key} - ${deleteError.message}`);
           }
           continue;
         }
 
         validPositions.push(position);
-      } catch (checkError) {
-        logger.warn(`[リスク管理] ポジションチェックエラー: ${checkError.message}`);
-        validPositions.push(position); // エラー時は保守的に保持
+      } catch (validationError) {
+        logger.warn(`[リスク管理] ポジション検証エラー: ${position.key || 'unknown'} - ${validationError.message}`);
       }
     }
 
     if (preRepairCount > 0) {
-      logger.info(`[リスク管理] 事前修復完了: ${preRepairCount}個の無効ポジション削除`);
+      logger.info(`[リスク管理] 事前修復完了: ${preRepairCount}件の無効ポジションを削除`);
     }
 
-    logger.info(`[リスク管理] 有効ポジション: ${validPositions.length}個を処理開始`);
+    let processedCount = 0;
+    let stoppedCount = 0;
+    let errorCount = 0;
 
-    // 取引所ごとにグループ化
-    const positionsByExchange = {};
+    // 有効なポジションに対してリスク管理を実行
     for (const position of validPositions) {
-      if (!positionsByExchange[position.exchangeId]) {
-        positionsByExchange[position.exchangeId] = [];
-      }
-      positionsByExchange[position.exchangeId].push(position);
-    }
-
-    let totalProcessed = 0;
-    let totalStopLossExecuted = 0;
-
-    // 各取引所のポジションを処理
-    for (const [exchangeId, positions] of Object.entries(positionsByExchange)) {
       try {
+        processedCount++;
+
         // 取引所インスタンスを取得
-        const exchangeConfig = config.exchanges[exchangeId];
+        const exchangeConfig = config.exchanges[position.exchangeId];
         if (!exchangeConfig) {
-          logger.warn(`[リスク管理] 取引所設定が見つかりません: ${exchangeId}`);
+          logger.warn(`[リスク管理] 取引所設定が見つかりません: ${position.exchangeId}`);
+          errorCount++;
           continue;
         }
 
         const exchangeInstance = exchangeConfig.instance;
 
-        // シンボルごとにグループ化
-        const positionsBySymbol = {};
-        for (const position of positions) {
-          if (!positionsBySymbol[position.symbol]) {
-            positionsBySymbol[position.symbol] = [];
-          }
-          positionsBySymbol[position.symbol].push(position);
+        // 現在価格を取得
+        const ticker = await fetchTicker(exchangeInstance, position.symbol);
+        if (!ticker || !ticker.last) {
+          logger.warn(`[リスク管理] 価格情報取得失敗: ${position.symbol} @ ${position.exchangeId}`);
+          errorCount++;
+          continue;
         }
 
-        // 各シンボルのポジションを処理
-        for (const [symbol, symbolPositions] of Object.entries(positionsBySymbol)) {
+        const currentPrice = ticker.last;
+
+        // ストップロス条件をチェック
+        const stopLossResult = await checkStopLoss(position, currentPrice);
+
+        if (stopLossResult.shouldStop) {
+          logger.info(`[リスク管理] ストップロス発動: ${position.symbol} @ ${position.exchangeId}`);
+          logger.info(`  エントリー価格: ${position.entryPrice}`);
+          logger.info(`  現在価格: ${currentPrice}`);
+          logger.info(`  損失: ${stopLossResult.lossAmount} JPY (${stopLossResult.lossPercentage.toFixed(2)}%)`);
+
           try {
-            // リスク管理設定を取得
-            const riskSettings = {
-              fixedStopLossPercent: POSITION_CONTROL_CONSTANTS.FIXED_STOP_LOSS_PERCENT,
-              trailingStopTriggerPercent: POSITION_CONTROL_CONSTANTS.TRAILING_STOP_TRIGGER_PERCENT,
-              trailingStopDistancePercent: POSITION_CONTROL_CONSTANTS.TRAILING_STOP_DISTANCE_PERCENT,
-              timeBasedStopHours: POSITION_CONTROL_CONSTANTS.TIME_BASED_STOP_HOURS
-            };
+            await executeStopLoss(position, exchangeInstance, currentPrice);
+            stoppedCount++;
+            logger.info(`[リスク管理] ストップロス実行完了: ${position.symbol}`);
+          } catch (stopLossError) {
+            logger.error(`[リスク管理] ストップロス実行失敗: ${position.symbol} - ${stopLossError.message}`);
+            errorCount++;
+          }
+          continue;
+        }
 
-            // 各ポジションのストップロスをチェック
-            const allStopLossPositions = [];
+        // ポジション制限チェック
+        const positionLimitResult = await checkPositionLimits(position);
+        if (positionLimitResult.shouldClose) {
+          logger.info(`[リスク管理] ポジション制限超過: ${position.symbol} @ ${position.exchangeId}`);
+          logger.info(`  理由: ${positionLimitResult.reason}`);
 
-            for (const position of symbolPositions) {
-              // 現在価格を取得
-              const ticker = await fetchTicker(exchangeInstance, symbol);
-              const currentPrice = ticker.last;
+          try {
+            await executeStopLoss(position, exchangeInstance, currentPrice);
+            stoppedCount++;
+            logger.info(`[リスク管理] ポジション制限クローズ完了: ${position.symbol}`);
+          } catch (limitCloseError) {
+            logger.error(`[リスク管理] ポジション制限クローズ失敗: ${position.symbol} - ${limitCloseError.message}`);
+            errorCount++;
+          }
+          continue;
+        }
 
-              // 時間ベースのストップロスチェック
-              const positionAge = (Date.now() - position.createdAt) / POSITION_CONTROL_CONSTANTS.POSITION_AGE_DIVISOR;
-              const timeBasedStop = positionAge >= riskSettings.timeBasedStopHours;
+        // ドローダウンチェック
+        const drawdownResult = await checkDrawdown(validPositions);
+        if (drawdownResult.shouldReducePositions) {
+          logger.warn(`[リスク管理] ドローダウン警告: 総ドローダウン ${drawdownResult.totalDrawdownPercentage.toFixed(2)}%`);
 
-              // 価格ベースのストップロスチェック（3%損失）
-              const priceBasedStop = currentPrice <= position.entryPrice * (1 - riskSettings.fixedStopLossPercent);
+          // 最も損失の大きなポジションを優先的にクローズ
+          if (drawdownResult.positionsToClose.includes(position.key)) {
+            logger.info(`[リスク管理] ドローダウン制御: ${position.symbol} をクローズ`);
 
-              if (timeBasedStop || priceBasedStop) {
-                logger.info(`[リスク管理] ストップロス対象: ${position.strategyKey} ${symbol} - 経過時間: ${positionAge.toFixed(1)}h, 理由: ${timeBasedStop ? 'time-based' : 'price-based'}`);
-                allStopLossPositions.push({
-                  ...position,
-                  reason: timeBasedStop ? 'time-based' : 'price-based',
-                  currentPrice,
-                  positionAge: positionAge.toFixed(1)
-                });
-              }
+            try {
+              await executeStopLoss(position, exchangeInstance, currentPrice);
+              stoppedCount++;
+              logger.info(`[リスク管理] ドローダウン制御完了: ${position.symbol}`);
+            } catch (drawdownCloseError) {
+              logger.error(`[リスク管理] ドローダウン制御失敗: ${position.symbol} - ${drawdownCloseError.message}`);
+              errorCount++;
             }
-
-            if (allStopLossPositions.length > 0) {
-              logger.info(`[リスク管理] ${symbol}: ${allStopLossPositions.length}個のポジションでストップロス発動`);
-
-              // ストップロス実行
-              for (const position of allStopLossPositions) {
-                try {
-                  // 実行前の不整合チェック
-                  const baseAsset = symbol.split('/')[0];
-
-                  // 実際の残高を確認
-                  let actualBalance = 0;
-                  try {
-                    const balance = await exchangeInstance.fetchBalance();
-                    actualBalance = balance.total[baseAsset] || 0;
-                  } catch (balanceError) {
-                    logger.warn(`[リスク管理] 残高取得失敗 ${symbol}: ${balanceError.message}`);
-                  }
-
-                  // より包括的な不整合チェック
-                  const { getTradeCurrentPosition, formattedAvailableAmount } = require('./database/manager');
-                  const netPosition = await getTradeCurrentPosition(exchangeInstance, symbol, position.strategyKey);
-
-                  // availableToSellを安全に初期化
-                  let availableToSell = 0;
-                  try {
-                    // マーケットパラメータを取得してからavailableToSellを計算
-                    const marketParams = await getMarketParametersByExchangeSymbol(
-                      { [exchangeInstance.id]: [symbol] },
-                      config,
-                      {}
-                    );
-                    const marketParameters = marketParams[exchangeInstance.id][symbol];
-                    const amountPrecision = marketParameters.amountPrecision || 8;
-
-                    availableToSell = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
-                  } catch (availableError) {
-                    logger.debug(`availableToSell取得失敗 ${symbol}: ${availableError.message}`);
-                    availableToSell = 0;
-                  }
-
-                  // 複数の不整合パターンをチェック
-                  const hasZeroBalance = actualBalance === 0;
-                  const hasPositiveNet = netPosition > 0;
-                  const hasPositivePosition = position.amount > 0;
-
-                  // パターン1: 実際残高0だが記録ポジションあり
-                  const pattern1 = hasZeroBalance && hasPositivePosition;
-
-                  // パターン2: 実際残高0だがネットポジションあり
-                  const pattern2 = hasZeroBalance && hasPositiveNet;
-
-                  // パターン3: ネットポジション > 実際残高の大幅乖離
-                  const pattern3 = hasPositiveNet && actualBalance > 0 && (netPosition > actualBalance * 2);
-
-                  // パターン4: 負のネットポジション（売り>買いの異常状態）
-                  const pattern4 = netPosition < 0;
-
-                  // パターン5: 未約定注文による利用可能量ブロック
-                  const pattern5 = availableToSell <= 0 && actualBalance > position.amount && netPosition > 0;
-
-                  if (pattern1 || pattern2 || pattern3 || pattern4 || pattern5) {
-                    const patternType = pattern1 ? 'position-mismatch' :
-                      pattern2 ? 'net-mismatch' :
-                        pattern3 ? 'balance-mismatch' :
-                          pattern4 ? 'negative-net' :
-                            'pending-order-block';
-                    logger.warn(`[リスク管理] 不整合ポジション検出(${patternType}): ${position.strategyKey} ${symbol} - 実際残高${actualBalance}、記録ポジション${position.amount}、ネット${netPosition}`);
-
-                    try {
-                      // パターン別修復処理
-                      if (pattern5) {
-                        // 未約定注文ブロック修復
-                        logger.info(`[リスク管理] 未約定注文ブロック修復開始: ${symbol} ${position.strategyKey}`);
-
-                        // 該当戦略の未約定注文をクリーンアップ
-                        try {
-                          const { cleanupStrategyPendingOrders } = require('./database/redisDatabase');
-                          const cleanupResult = await cleanupStrategyPendingOrders(exchangeInstance.id, symbol, position.strategyKey);
-
-                          logger.info(`[リスク管理] 未約定注文クリーンアップ完了: ${cleanupResult.deleted}件削除`);
-
-                          // マーケット設定を取得してamountPrecisionを取得
-                          const marketParams = await getMarketParametersByExchangeSymbol(
-                            { [exchangeInstance.id]: [symbol] },
-                            config,
-                            {}
-                          );
-                          const marketData = marketParams[exchangeInstance.id]?.[symbol];
-                          const amountPrecision = marketData?.amountPrecision || 8;
-
-                          // クリーンアップ後に再度利用可能量を計算
-                          const newAvailableAmount = await formattedAvailableAmount(exchangeInstance, symbol, position.strategyKey, amountPrecision);
-
-                          if (newAvailableAmount > 0) {
-                            availableToSell = Math.min(position.amount, newAvailableAmount);
-                            logger.info(`[リスク管理] クリーンアップ後の利用可能量: ${newAvailableAmount} → 売却量: ${availableToSell}`);
-                          } else {
-                            // それでもダメな場合は実際の残高を使用
-                            availableToSell = Math.min(position.amount, actualBalance);
-                            logger.info(`[リスク管理] フォールバック: 実際残高${actualBalance}を使用 → 売却量: ${availableToSell}`);
-                          }
-
-                          await postErrorToDiscord(`🧹 [未約定注文修復] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n削除: ${cleanupResult.deleted}件\n利用可能量: 0 → ${availableToSell}\n実残高: ${actualBalance}`);
-
-                        } catch (cleanupError) {
-                          logger.error(`[リスク管理] 未約定注文クリーンアップ失敗: ${cleanupError.message}`);
-                          // クリーンアップ失敗時は実際の残高を強制使用
-                          availableToSell = Math.min(position.amount, actualBalance);
-                          logger.info(`[リスク管理] クリーンアップ失敗、実際残高を強制使用: ${availableToSell}`);
-                        }
-
-                      } else if (pattern2 || pattern4) {
-                        // ⚠️ 危険: ネットポジションリセットは戦略間データ損失を引き起こす
-                        // 一時的に無効化 - 代替案として単純なポジション削除のみ実行
-                        logger.warn(`[リスク管理] 危険な包括修復を無効化: ${symbol} ${position.strategyKey} (ネット=${netPosition}, 実残高=${actualBalance})`);
-
-                        // 単純な個別ポジション削除のみ実行（サマリーリセットなし）
-                        const { closeAndCleanupPosition } = require('./database/redisDatabase');
-                        await closeAndCleanupPosition(position.key);
-                        logger.info(`[リスク管理] 単純削除完了: ${position.key}`);
-
-                        await postOrderToDiscord(`⚠️ [安全削除] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n個別ポジション削除のみ実行\nネット: ${netPosition} (保持)\n実残高: ${actualBalance} (保持)`);
-
-                        /* 危険なサマリーリセットコードを無効化 - 戦略間データ損失を防ぐため
-                        logger.info(`[リスク管理] ネットポジション包括修復開始${isNegative ? '(負の値)' : ''}: ${symbol} ${position.strategyKey}`);
-
-                        // 1. 該当戦略の全ポジションを取得
-                        const { getStrategyPositionsRedis, getTradeSummary, updateTradeSummary } = require('./database/redisDatabase');
-                        const allStrategyPositions = await getStrategyPositionsRedis(exchangeInstance.id, symbol, position.strategyKey);
-
-                        // 2. 全ポジションを削除
-                        let deletedCount = 0;
-                        for (const pos of allStrategyPositions) {
-                          try {
-                            const { closeAndCleanupPosition } = require('./database/redisDatabase');
-                            await closeAndCleanupPosition(pos.key);
-                            deletedCount++;
-                          } catch (deleteError) {
-                            logger.warn(`[リスク管理] ポジション削除失敗: ${pos.key}`);
-                          }
-                        }
-
-                        // 3. 負のネットポジションの場合は取引履歴から再計算
-                        if (isNegative) {
-                          logger.info(`[リスク管理] 負のネットポジション検出: ${netPosition} - 取引履歴から再計算開始`);
-
-                          try {
-                            // MongoDBから取引履歴を取得して再計算
-                            const { recalculateTradeSummaryFromMongoDB } = require('./database/manager');
-                            const newSummary = await recalculateTradeSummaryFromMongoDB(exchangeInstance.id, symbol, position.strategyKey);
-
-                            logger.info(`[リスク管理] 再計算完了: 新ネットポジション=${newSummary.netPosition}, 買い量=${newSummary.buyAmount}, 売り量=${newSummary.sellAmount}`);
-
-                            // 再計算後もまだ負の場合は強制リセット
-                            if (newSummary.netPosition < 0) {
-                              logger.warn(`[リスク管理] 再計算後も負のネットポジション: ${newSummary.netPosition} - 強制リセット実行`);
-                              throw new Error('再計算後も負のネットポジション');
-                            }
-                          } catch (recalcError) {
-                            logger.error(`[リスク管理] 再計算失敗: ${recalcError.message} - 強制リセットに切り替え`);
-                            // 再計算失敗時は強制リセット
-                            const summaryKey = `summary:trade:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
-                            const { getClient } = require('./database/redisDatabase');
-                            const client = getClient();
-
-                            await client.hSet(summaryKey, {
-                              netPosition: 0,
-                              buyAmount: 0,
-                              sellAmount: 0,
-                              totalBuyCost: 0,
-                              totalSellRevenue: 0,
-                              updatedAt: Date.now()
-                            });
-
-                            logger.info(`[リスク管理] 取引サマリー強制リセット完了: ${summaryKey}`);
-                          }
-                        } else {
-                          // 通常の強制リセット
-                          try {
-                            const summaryKey = `summary:trade:${exchangeInstance.id}:${symbol}:${position.strategyKey}`;
-                            const { getClient } = require('./database/redisDatabase');
-                            const client = getClient();
-
-                            await client.hSet(summaryKey, {
-                              netPosition: 0,
-                              buyAmount: 0,
-                              sellAmount: 0,
-                              totalBuyCost: 0,
-                              totalSellRevenue: 0,
-                              updatedAt: Date.now()
-                            });
-
-                            logger.info(`[リスク管理] 取引サマリー強制リセット完了: ${summaryKey}`);
-                          } catch (resetError) {
-                            logger.warn(`[リスク管理] サマリーリセット失敗: ${resetError.message}`);
-                          }
-                        }
-
-                        logger.info(`[リスク管理] ネットポジション包括修復完了: ${deletedCount}ポジション削除、サマリーリセット`);
-
-                        // Discord通知
-                        await postErrorToDiscord(`🔧 [包括修復] ${exchangeInstance.id} - ${symbol} - ${position.strategyKey}\n削除: ${deletedCount}ポジション\nネット: ${netPosition} → 0\n実残高: ${actualBalance}`);
-                        */ // 危険なサマリーリセットコード終了
-
-                      } else {
-                        // 単一ポジション削除（従来の処理）
-                        const { closeAndCleanupPosition } = require('./database/redisDatabase');
-                        await closeAndCleanupPosition(position.key);
-                        logger.info(`[リスク管理] 不整合ポジション自動削除完了: ${position.key}`);
-
-                        // Discord通知
-                        await postOrderToDiscord(`🧹 [自動修復] 不整合ポジション削除: ${exchangeInstance.id} - ${symbol} - ${position.strategyKey} (残高${actualBalance}、記録${position.amount})`);
-                      }
-
-                      totalStopLossExecuted++; // 削除も成功としてカウント
-                      continue; // 次のポジションへ
-                    } catch (cleanupError) {
-                      logger.error(`[リスク管理] 不整合ポジション削除失敗: ${cleanupError.message}`);
-                    }
-                  }
-
-                  // マーケットパラメータを取得
-                  const marketParams = await getMarketParametersByExchangeSymbol(
-                    { [exchangeId]: [symbol] },
-                    config,
-                    {}
-                  );
-                  const marketParameters = marketParams[exchangeId]?.[symbol];
-
-                  logger.info(`[リスク管理] ストップロス実行: ${position.strategyKey} ${symbol} (理由: ${position.reason})`);
-
-                  const result = await executeStopLoss(
-                    exchangeInstance,
-                    symbol,
-                    position.strategyKey,
-                    position,
-                    marketParameters
-                  );
-
-                  if (result.success) {
-                    totalStopLossExecuted++;
-                    if (result.reason === 'auto_cleanup') {
-                      logger.info(`[リスク管理] 自動修復完了: ${symbol} - ${result.message}`);
-                    } else {
-                      logger.info(`[リスク管理] ストップロス成功: ${symbol} - ${result.soldAmount} ${symbol.split('/')[0]}`);
-                    }
-                  } else {
-                    logger.warn(`[リスク管理] ストップロス失敗: ${symbol} - ${result.message || result.error}`);
-                  }
-                } catch (stopLossError) {
-                  logger.error(`[リスク管理] ストップロス実行エラー: ${symbol} - ${stopLossError.message}`);
-                  logger.debug('ストップロスエラー詳細:', stopLossError.stack);
-                  logger.debug('エラー発生時のパラメータ:', {
-                    symbol,
-                    strategyKey: position.strategyKey,
-                    positionAmount: position.amount
-                  });
-                }
-              }
-            }
-
-            totalProcessed += symbolPositions.length;
-          } catch (symbolError) {
-            logger.error(`[リスク管理] シンボル処理エラー: ${symbol} - ${symbolError.message}`);
           }
         }
-      } catch (exchangeError) {
-        logger.error(`[リスク管理] 取引所処理エラー: ${exchangeId} - ${exchangeError.message}`);
+
+      } catch (error) {
+        logger.error(`[リスク管理] ポジション処理エラー: ${position.symbol} @ ${position.exchangeId} - ${error.message}`);
+        errorCount++;
       }
     }
 
-    logger.info(`[リスク管理] 処理完了: ${totalProcessed}個処理、${totalStopLossExecuted}個のストップロス実行`);
+    // 結果のサマリー
+    logger.info(`[リスク管理] チェック完了: 処理 ${processedCount}件, 停止 ${stoppedCount}件, エラー ${errorCount}件`);
 
-    if (totalStopLossExecuted > 0) {
-      await postOrderToDiscord(`[リスク管理] ${totalStopLossExecuted}個のポジションでストップロスを実行しました`);
+    // 重要な結果をDiscordに通知
+    if (stoppedCount > 0 || errorCount > 0) {
+      const message = `🛡️ **リスク管理実行結果**\n` +
+                     '━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                     '📊 **処理結果**\n' +
+                     `　チェック対象: ${allPositions.length}ポジション\n` +
+                     `　有効ポジション: ${validPositions.length}件\n` +
+                     `　停止実行: ${stoppedCount}件\n` +
+                     `　事前修復: ${preRepairCount}件\n` +
+                     `　エラー: ${errorCount}件\n` +
+                     `⏰ ${new Date().toLocaleString('ja-JP')}`;
+
+      await postOrderToDiscord(message);
     }
 
   } catch (error) {
-    logger.error('[リスク管理] チェック処理エラー:', error.message);
+    const errorMessage = `[リスク管理] システムエラー: ${error.message}`;
+    logger.error(errorMessage, error);
+    await postErrorToDiscord(errorMessage);
     throw error;
   }
 }
 
 /**
- * 指定された戦略を実行する関数
- * @param {Object} exchange - 取引所オブジェクト
- * @param {String} symbol - 通貨ペア
- * @param {String} strategyKey - 戦略のキー
+ * 戦略実行用のRunStrategy関数
+ * @param {Object} strategy - 実行する戦略
+ * @param {Object} exchange - 取引所の設定
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
  * @param {Object} marketParametersBySymbol - 通貨ペアごとの市場パラメータ
  * @param {Object} options - オプションオブジェクト
  */
 async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol, options) {
   try {
+    const { allExchangeSymbolPairs, config, strategyConfig } = options;
 
-    // ループの最初で取得済みの設定を使用 (performance向上)
-    // 呼び出し元で既に取得済みなので、再度取得する必要なし
-    const strategyConfig = options.strategyConfig || await getStrategyConfig(exchange, symbol, strategyKey, config);
+    // 戦略関数を呼び出し
+    await strategy.function(exchange, symbol, strategyConfig, {
+      allExchangeSymbolPairs,
+      config,
+      marketParameters: marketParametersBySymbol
+    });
 
-    if (!strategyConfig || strategyConfig.enabled === false) {
-      logger.info(`戦略 ${strategyKey}:${symbol} は無効化されています`);
-      return null;
-    }
-
-    // MUTUAL_INFO戦略の場合は、referenceSymbolsを設定
-    if (strategyKey === 'MUTUAL_INFO' && options.allExchangeSymbolPairs) {
-      // 同じ取引所のシンボルのみを抽出し、自分自身と除外シンボルを除外
-      const sameExchangeSymbols = options.allExchangeSymbolPairs
-        .filter(pair =>
-          pair.exchangeId === exchange.id &&
-          pair.symbol !== symbol &&
-          !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
-        )
-        .map(pair => pair.symbol);
-
-      options.referenceSymbols = sameExchangeSymbols;
-    }
-
-    logger.info(`--- 戦略 ${strategyKey} を実行中...`);
-    return strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);
   } catch (error) {
-    logger.error(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${symbol}`, error);
-    if (postErrorToDiscord) {
-      await postErrorToDiscord(`戦略の実行中にエラーが発生しました: ${strategyKey} - ${exchange.id} - ${symbol} - ${error.message}`);
-    }
-    return null;
+    logger.error(`戦略実行エラー: ${strategyKey} - ${symbol} @ ${exchange.id}`, error);
+    throw error;
   }
 }
-
-// レポートを投稿するためのタイマー設定
-// setInterval(() => {
-//   const now = new Date();
-//   if (now.getMinutes() === 0) { // 時間ごと
-//     // 全体資産計算レポート
-//     postReport(exchangeBB);
-//     postReport(exchangeBF);
-
-//     // 戦略と銘柄ごとの損益レポート
-//     postStrategyProfitReport(exchangeBB);
-//     postStrategyProfitReport(exchangeBF);
-//   }
-// }, 60000); // 1分ごとにチェック
 
 /**
  * 堅牢な残高チェックの実行関数
  */
 async function executeRobustBalanceCheck() {
   try {
-    logger.info('=== 定期残高整合性チェック開始 ===');
-    const { compareBalancesRobust } = require('./common/balanceChecker');
+    logger.info('[堅牢残高チェック] 開始...');
 
-    const results = [];
-    for (const exchangeId of Object.keys(config.exchanges)) {
+    for (const [exchangeId, exchangeConfig] of Object.entries(config.exchanges)) {
+      if (!exchangeConfig) {
+        continue;
+      }
+
       try {
-        const result = await compareBalancesRobust(exchangeId);
-        results.push(result);
+        const { compareBalances } = require('./common/balanceChecker');
+        const result = await compareBalances(exchangeId);
 
-        if (!result.skipped) {
-          logger.info(`[残高チェック] ${exchangeId}: ${result.hasDiscrepancies ? 'エラー' : 'OK'}`);
-        }
+        if (result.discrepancies.length > 0) {
+          logger.warn(`[堅牢残高チェック] ${exchangeId} 不整合検出: ${result.discrepancies.length}件`);
 
-        // 各取引所チェック間の待機（効率的レート制限対応）
-        if (BALANCE_CONFIG.intervals.exchangeCheckDelay > 0) {
-          await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+          // 重大な不整合をDiscordに通知
+          const severeDiscrepancies = result.discrepancies.filter(d => Math.abs(d.discrepancyPercent) >= 15);
+          if (severeDiscrepancies.length > 0) {
+            let message = `⚠️ **重大な残高不整合検出** (${exchangeId})\n` +
+                         '━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                         `📊 **重大不整合**: ${severeDiscrepancies.length}件\n\n`;
+
+            severeDiscrepancies.forEach(d => {
+              message += `💱 **${d.currency}**\n` +
+                        `　Bot計算: ${d.botAmount.toFixed(6)}\n` +
+                        `　取引所: ${d.exchangeAmount.toFixed(6)}\n` +
+                        `　差異: ${d.discrepancyPercent.toFixed(2)}%\n\n`;
+            });
+
+            message += `⏰ ${new Date().toLocaleString('ja-JP')}`;
+            await postErrorToDiscord(message);
+          }
+        } else {
+          logger.info(`[堅牢残高チェック] ${exchangeId} 正常`);
         }
-      } catch (error) {
-        logger.error(`[残高チェック] ${exchangeId}エラー:`, error.message);
-        results.push({ exchangeId, success: false, error: error.message });
+      } catch (balanceError) {
+        logger.error(`[堅牢残高チェック] ${exchangeId} エラー:`, balanceError.message);
       }
     }
 
-    const errorCount = results.filter(r => !r.success || r.hasDiscrepancies).length;
-    logger.info(`=== 定期残高整合性チェック完了 (${errorCount}件のエラー) ===`);
-
   } catch (error) {
-    logger.error('定期残高整合性チェックエラー:', error.message);
-    await postErrorToDiscord(`定期残高整合性チェック失敗: ${error.message}`);
+    const errorMessage = `堅牢残高チェック失敗: ${error.message}`;
+    logger.error(errorMessage, error);
+    await postErrorToDiscord(errorMessage);
   }
 }
 
@@ -1140,45 +674,52 @@ async function executeRobustBalanceCheck() {
 const { getSchedulingManager } = require('./common/schedulingManager');
 const { getMaintenanceScheduler } = require('./common/maintenanceScheduler');
 
-// スケジューリングマネージャーの初期化と設定（テスト環境では無効）
-let schedulingManager, maintenanceScheduler;
+// スケジューリングマネージャーの初期化（テスト環境では無効）
+let schedulingManager;
+let maintenanceScheduler;
 
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
   schedulingManager = getSchedulingManager();
   maintenanceScheduler = getMaintenanceScheduler();
 
-  // 堅牢残高チェック（毎時0分実行）
-  schedulingManager.scheduleHourlyTask('robust-balance-check', async () => {
-    await executeRobustBalanceCheck();
-  }, {
-    description: '堅牢残高整合性チェック（毎時0分実行）'
+  // リスク管理チェックを15分間隔でスケジュール
+  schedulingManager.scheduleIntervalTask('risk-management', async () => {
+    try {
+      await executeRiskManagementCheck();
+    } catch (error) {
+      logger.error('スケジュール済みリスク管理チェックエラー:', error.message);
+      await postErrorToDiscord(`リスク管理チェック失敗: ${error.message}`);
+    }
+  }, 15, {
+    description: 'リスク管理チェック（15分間隔）'
   });
 
-  // 軽量リスク管理チェック（設定間隔）
-  const lightweightIntervalMinutes = Math.round(BALANCE_CONFIG.intervals.lightweightCheck / (1000 * 60));
-  schedulingManager.scheduleIntervalTask('lightweight-risk-management', async () => {
-    await executeRiskManagementCheck();
-  }, lightweightIntervalMinutes, {
-    description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
+  // 堅牢な残高チェックを1時間間隔でスケジュール
+  schedulingManager.scheduleIntervalTask('robust-balance-check', async () => {
+    try {
+      await executeRobustBalanceCheck();
+    } catch (error) {
+      logger.error('スケジュール済み堅牢残高チェックエラー:', error.message);
+      await postErrorToDiscord(`堅牢残高チェック失敗: ${error.message}`);
+    }
+  }, 60, {
+    description: '堅牢残高チェック（1時間間隔）'
   });
 
-  // デバッグ用: スケジュール状況の表示
-  logger.info('\n[スケジューラー] 登録されたタスク:');
-  schedulingManager.showNextExecutions();
-
-  // メンテナンススケジューラーの初期化
+  // 自動メンテナンスシステムの初期化
   logger.info('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');
   maintenanceScheduler.initializeSchedules();
 } else {
   // テスト環境用のダミーオブジェクト
   schedulingManager = {
     scheduleIntervalTask: () => {},
-    scheduleHourlyTask: () => {},
     scheduleCustomTask: () => {},
-    gracefulShutdown: () => Promise.resolve(),
-    showNextExecutions: () => {},
-    removeTask: () => {}
+    removeTask: () => {},
+    removeAllTasks: () => {},
+    getActiveTasks: () => [],
+    initializeSchedules: () => {}
   };
+  
   maintenanceScheduler = {
     initializeSchedules: () => {}
   };
@@ -1186,26 +727,20 @@ if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
 
 // 優雅なシャットダウンハンドラー（テスト環境では無効）
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
-  process.on('SIGINT', async () => {
-    logger.info('\n[システム] シャットダウン要求を受信しました...');
-    await schedulingManager.gracefulShutdown();
+  process.on('SIGTERM', () => {
+    logger.info('\n[システム] SIGTERM受信 - 優雅なシャットダウンを開始...');
+    schedulingManager.removeAllTasks();
+    logger.info('[システム] 全スケジュールタスクを停止しました');
     process.exit(0);
   });
 
-  process.on('SIGTERM', async () => {
-    logger.info('\n[システム] 終了要求を受信しました...');
-    await schedulingManager.gracefulShutdown();
+  process.on('SIGINT', () => {
+    logger.info('\n[システム] SIGINT受信 (Ctrl+C) - 優雅なシャットダウンを開始...');
+    schedulingManager.removeAllTasks();
+    logger.info('[システム] 全スケジュールタスクを停止しました');
     process.exit(0);
   });
 }
-
-// // 初期レポートを投稿
-// postReport(exchangeBB);
-// postReport(exchangeBF);
-
-// 利用可能な戦略を表示
-// logger.info('利用可能な戦略:');
-// logger.info(strategies.getAvailableStrategies());
 
 // ボットを起動（テスト環境では自動起動しない）
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
@@ -1231,41 +766,3 @@ if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
     description: '初回リスク管理チェック（30秒後実行）'
   });
 }
-
-// アービトラージ戦略を実行
-// if (config.strategies.INTER_EXCHANGE_ARBITRAGE.enabled) {
-//   // 共通の通貨ペアを見つける
-//   const bbMarkets = await exchangeBB.loadMarkets();
-//   const bfMarkets = await exchangeBF.loadMarkets();
-
-//   const bbSymbols = Object.keys(bbMarkets).filter(symbol => symbol.endsWith('/JPY'));
-//   const bfSymbols = Object.keys(bfMarkets).filter(symbol => symbol.endsWith('/JPY'));
-
-//   // 両方の取引所に存在する通貨ペアを見つける
-//   const commonSymbols = bbSymbols.filter(symbol => bfSymbols.includes(symbol));
-
-//   // 定期的にアービトラージ機会を確認
-//   setInterval(async () => {
-//     // 一度に処理する通貨ペアの数を制限（最大3つ）
-//     const symbolsToProcess = commonSymbols.slice(0, 3);
-
-//     // 各通貨ペアの処理の間に待機時間を入れる
-//     for (const symbol of symbolsToProcess) {
-//       try {
-//         await runArbitrageStrategy(exchanges, symbol, {
-//           postOrderToDiscord,
-//           postErrorToDiscord,
-//           tradePercentage: config.tradePercentage
-//         });
-//         // 各通貨ペアの処理の間に3秒待機
-//         await sleep(3000);
-//       } catch (error) {
-//         logger.error(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol}`, error);
-//         await postErrorToDiscord(`アービトラージ戦略の実行中にエラーが発生しました: ${symbol} - ${error.message}`);
-//       }
-//     }
-
-//     // 通貨ペアのローテーション（次回は別の通貨ペアを処理）
-//     commonSymbols.push(commonSymbols.shift());
-//   }, 30000); // 30秒ごとに確認（10秒から30秒に延長）
-// }

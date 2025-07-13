@@ -167,6 +167,19 @@ const TRADING_SETTINGS = {
   }
 };
 
+// APIキャッシュ・戦略実行設定（中優先度）
+const API_CACHE_SETTINGS = {
+  // キャッシュ設定
+  MAX_CACHE_AGE: parseEnvInt('API_CACHE_MAX_AGE', 300000, 60000), // 5分間（最小1分）
+  REQUEST_DELAY: parseEnvInt('API_CACHE_REQUEST_DELAY', 1500, 500), // 1.5秒間隔（最小0.5秒）
+  CLEANUP_INTERVAL: parseEnvInt('API_CACHE_CLEANUP_INTERVAL', 60000, 30000), // 1分間隔（最小30秒）
+
+  // 戦略実行管理設定
+  MAX_CONCURRENT_STRATEGIES: parseEnvInt('STRATEGY_MAX_CONCURRENT', 3, 1), // 最大同時実行戦略数
+  STAGGER_INTERVAL: parseEnvInt('STRATEGY_STAGGER_INTERVAL', 500, 100), // 戦略実行間隔（最小100ms）
+  SLOT_DURATION: parseEnvInt('STRATEGY_SLOT_DURATION', 60000, 30000) // スロット期間（最小30秒）
+};
+
 // 設定検証
 function validateSettings() {
   const warnings = [];
@@ -200,7 +213,8 @@ const SETTINGS = {
   RISK_MANAGEMENT: RISK_MANAGEMENT_SETTINGS,
   PERFORMANCE: PERFORMANCE_SETTINGS,
   HFT: HFT_SETTINGS,
-  TRADING: TRADING_SETTINGS
+  TRADING: TRADING_SETTINGS,
+  API_CACHE: API_CACHE_SETTINGS
 };
 
 // 設定検証の実行
@@ -215,5 +229,6 @@ module.exports = {
   PERFORMANCE_SETTINGS,
   HFT_SETTINGS,
   TRADING_SETTINGS,
+  API_CACHE_SETTINGS,
   validateSettings
 };
