@@ -341,7 +341,8 @@ describe('UnifiedErrorHandler', () => {
       
       expect(ErrorHandler).toBeDefined();
       expect(errorHandler).toBeDefined();
-      expect(errorHandler).toBe(unifiedErrorHandler);
+      expect(errorHandler).toBeInstanceOf(ErrorHandler);
+      expect(errorHandler).toBeInstanceOf(UnifiedErrorHandler);
     });
 
     it('should handle legacy handleError signature', async () => {

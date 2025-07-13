@@ -121,8 +121,8 @@ class UnifiedErrorHandler {
       deduplicationWindow = null
     } = options;
 
-    // null/undefinedのチェック
-    if (!error) {
+    // null/undefinedのチェック（空文字列は除外）
+    if (error == null) {
       const fallbackError = 'Unknown error (null or undefined)';
       if (shouldThrow) {
         throw new Error(fallbackError);
