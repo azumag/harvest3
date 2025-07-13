@@ -99,6 +99,8 @@ describe('Particle', () => {
 
   describe('位置更新', () => {
     test('位置が速度に基づいて更新される', () => {
+      // 境界から十分離れた安全な位置に設定
+      particle.position = { x: 5, y: 0 };
       const oldPosition = { ...particle.position };
       particle.velocity = { x: 1, y: -0.5 };
       
