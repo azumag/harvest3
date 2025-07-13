@@ -45,7 +45,7 @@ jobs:
                 body: [
                   `@claude このIssue #${selectedIssue.number} を解決してください。`,
                   '',
-                  '以下の内容に基づいて、具体的な実装方針と必要なコード変更を提案してください：',
+                  '以下の内容に基づいて実装し、PRを作成してください。',
                   '',
                   `**タイトル**: ${selectedIssue.title}`,
                   '',
