@@ -1,12 +1,13 @@
 name: Auto Issue Resolver
 
 on:
-    schedule:
-      # 1-5時は30分ごとに実行（UTC基準）
-      - cron: '0,30 1-5 * * *'
-      # それ以外の時間は1時間ごとに実行
-      - cron: '0 0,6-23 * * *'
-    workflow_dispatch: # 手動実行も可能
+  schedule:
+    # JST基準（UTC+9）で1-5時は30分ごとに実行
+    # UTCでは16-20時がJSTの1-5時
+    - cron: '0,30 16-20 * * *'
+    # それ以外の時間は1時間ごとに実行（JST 6-24時 → UTC 21-15時）
+    - cron: '0 21-23,0-15 * * *'
+  workflow_dispatch: # 手動実行も可能
 
 jobs:
   process-issue:
