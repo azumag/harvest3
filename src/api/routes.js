@@ -84,47 +84,10 @@ router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 // ヘルスチェックAPI
 router.get('/health', async (req, res) => {
   try {
-    const healthStatus = {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      services: {}
-    };
+    const { performHealthCheck } = require('../utils/healthCheck');
+    const healthStatus = await performHealthCheck();
 
-    // Redis接続チェック
-    try {
-      const { getClient } = require('../database/redisClient');
-      const redisClient = getClient();
-      if (redisClient && redisClient.isReady) {
-        await redisClient.ping();
-        healthStatus.services.redis = 'connected';
-      } else {
-        healthStatus.services.redis = 'disconnected';
-        healthStatus.status = 'degraded';
-      }
-    } catch (redisError) {
-      healthStatus.services.redis = 'error';
-      healthStatus.status = 'degraded';
-    }
-
-    // MongoDB接続チェック
-    try {
-      const { getClient: getMongoClient } = require('../database/mongoDatabase');
-      const mongoClient = getMongoClient();
-      if (mongoClient) {
-        await mongoClient.admin().ping();
-        healthStatus.services.mongodb = 'connected';
-      } else {
-        healthStatus.services.mongodb = 'disconnected';
-        healthStatus.status = 'degraded';
-      }
-    } catch (mongoError) {
-      healthStatus.services.mongodb = 'error';
-      healthStatus.status = 'degraded';
-    }
-
-    // すべてのサービスが利用できない場合はエラー
-    if (healthStatus.services.redis === 'error' && healthStatus.services.mongodb === 'error') {
-      healthStatus.status = 'error';
+    if (healthStatus.status === 'error') {
       res.status(503).json(healthStatus);
     } else {
       res.json(healthStatus);

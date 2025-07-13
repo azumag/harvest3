@@ -5,10 +5,15 @@
 
 set -e  # エラー時即座終了
 
-# 設定
+# 設定（環境変数で上書き可能）
 CONTAINER_NAME="strategy-runner"
-MAX_STARTUP_TIME=60  # 最大起動時間（秒）
-HEALTH_CHECK_INTERVAL=5  # ヘルスチェック間隔（秒）
+MAX_STARTUP_TIME=${MAX_STARTUP_TIME:-60}  # 最大起動時間（秒）
+HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}  # ヘルスチェック間隔（秒）
+API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-60}  # APIサーバー起動タイムアウト（秒）
+API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}  # APIチェック間隔（秒）
+PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒）
+DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
+DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
 
 # ログ関数
 log() {
@@ -59,7 +64,7 @@ send_startup_error_to_discord() {
                 const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
                 const message = { content: \`${discord_message}\` };
                 
-                axios.post(webhookUrl, message, { timeout: 10000 })
+                axios.post(webhookUrl, message, { timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000 })
                     .then(() => console.log('Discord notification sent successfully'))
                     .catch(err => {
                         console.error('Discord notification failed:', err.message);
@@ -123,7 +128,7 @@ check_database_connections() {
         client.connect()
             .then(() => { console.log('Redis connection OK'); process.exit(0); })
             .catch(err => { console.error('Redis connection failed:', err.message); process.exit(1); });
-        setTimeout(() => { console.error('Redis connection timeout'); process.exit(1); }, 10000);
+        setTimeout(() => { console.error('Redis connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
     " 2>/dev/null; then
         local error_msg="Redis connection failed"
         log "ERROR: $error_msg"
@@ -139,7 +144,7 @@ check_database_connections() {
             .then(() => { console.log('MongoDB connection OK'); return client.close(); })
             .then(() => process.exit(0))
             .catch(err => { console.error('MongoDB connection failed:', err.message); process.exit(1); });
-        setTimeout(() => { console.error('MongoDB connection timeout'); process.exit(1); }, 10000);
+        setTimeout(() => { console.error('MongoDB connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
     " 2>/dev/null; then
         local error_msg="MongoDB connection failed"
         log "ERROR: $error_msg"
@@ -161,23 +166,22 @@ start_application() {
     
     # APIサーバーの起動を待つ（より寛容なタイムアウト設定）
     local api_startup_time=0
-    local max_api_wait=60  # 60秒に増加
-    while [ $api_startup_time -lt $max_api_wait ]; do
+    while [ $api_startup_time -lt $API_STARTUP_TIMEOUT ]; do
         if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
             log "API server is ready on port 3000"
             break
         fi
-        sleep 3  # 少し長めの間隔
-        api_startup_time=$((api_startup_time + 3))
+        sleep $API_CHECK_INTERVAL
+        api_startup_time=$((api_startup_time + API_CHECK_INTERVAL))
         
         # 進捗ログ
-        if [ $((api_startup_time % 15)) -eq 0 ]; then
-            log "API server startup: ${api_startup_time}/${max_api_wait} seconds elapsed"
+        if [ $((api_startup_time % PROGRESS_LOG_INTERVAL)) -eq 0 ]; then
+            log "API server startup: ${api_startup_time}/${API_STARTUP_TIMEOUT} seconds elapsed"
         fi
     done
     
-    if [ $api_startup_time -ge $max_api_wait ]; then
-        local error_msg="API server failed to start within ${max_api_wait} seconds"
+    if [ $api_startup_time -ge $API_STARTUP_TIMEOUT ]; then
+        local error_msg="API server failed to start within ${API_STARTUP_TIMEOUT} seconds"
         log "ERROR: $error_msg"
         send_startup_error_to_discord "$error_msg" "API server startup timeout"
         exit 1

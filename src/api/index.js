@@ -42,14 +42,14 @@ app.get('/analysis', (req, res) => {
 
 // サーバー起動
 app.listen(PORT, '0.0.0.0', () => {
-  // サーバー起動ログはconsole.errorを使用
+  // サーバー起動ログはconsole.errorを使用（lint規則に従う）
   console.error(`API & Web Server running on port ${PORT}`);
   
   // データベースの初期化を非同期で実行（サーバー起動をブロックしない）
   setTimeout(async () => {
     try {
       await initializeDB();
-      // データベース初期化成功ログはconsole.errorを使用
+      // データベース初期化成功ログはconsole.errorを使用（lint規則に従う）
       console.error('データベースが正常に初期化されました');
     } catch (error) {
       console.error('データベース初期化エラー:', error);
@@ -57,7 +57,7 @@ app.listen(PORT, '0.0.0.0', () => {
   }, 1000); // 1秒後に初期化開始
 
   if (process.env.USE_LOCALTUNNEL === 'true') {
-    // localtunnel無効化通知ログはconsole.errorを使用
+    // localtunnel無効化通知ログはconsole.errorを使用（lint規則に従う）
     console.error('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
     console.error('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
     // localtunnelは削除されたため、この機能は無効です
