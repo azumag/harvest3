@@ -156,9 +156,48 @@ class DiscordRateLimiter {
   }
 
   /**
+   * メッセージ内容とWebhook URLのバリデーション
+   */
+  validateMessage(webhookUrl, message) {
+    const errors = [];
+    
+    // Webhook URLの検証
+    if (!webhookUrl || typeof webhookUrl !== 'string') {
+      errors.push('Webhook URL is required and must be a string');
+    } else if (!webhookUrl.startsWith('https://discord.com/api/webhooks/') && 
+               !webhookUrl.startsWith('https://discordapp.com/api/webhooks/')) {
+      errors.push('Invalid Discord webhook URL format');
+    }
+    
+    // メッセージ内容の検証
+    if (message === null || message === undefined) {
+      errors.push('Message cannot be null or undefined');
+    } else if (typeof message !== 'string') {
+      errors.push('Message must be a string');
+    } else if (message.trim() === '') {
+      errors.push('Message cannot be empty');
+    } else if (message.length > 2000) {
+      errors.push(`Message is too long: ${message.length} characters (max 2000)`);
+    }
+    
+    return errors;
+  }
+
+  /**
    * 実際のDiscord送信処理
    */
   async sendToDiscord(webhookUrl, message) {
+    // 事前バリデーション
+    const validationErrors = this.validateMessage(webhookUrl, message);
+    if (validationErrors.length > 0) {
+      console.error('[DISCORD_RATE_LIMITER] Validation errors:', validationErrors);
+      return { 
+        success: false, 
+        error: 'validation_failed', 
+        details: validationErrors 
+      };
+    }
+
     try {
       const axios = require('axios');
       await axios.post(webhookUrl, { content: message });
@@ -174,6 +213,28 @@ class DiscordRateLimiter {
           success: false,
           rateLimitUntil,
           error: 'rate_limit'
+        };
+      }
+
+      // HTTP 400エラーの詳細処理
+      if (error.response && error.response.status === 400) {
+        console.error('[DISCORD_RATE_LIMITER] HTTP 400 Bad Request error:');
+        console.error('  Status:', error.response.status);
+        console.error('  Status Text:', error.response.statusText);
+        console.error('  Response Data:', JSON.stringify(error.response.data, null, 2));
+        console.error('  Request URL:', webhookUrl.substring(0, 50) + '...');
+        console.error('  Message Length:', message.length);
+        console.error('  Message Preview:', message.substring(0, 100));
+        
+        return { 
+          success: false, 
+          error: 'bad_request',
+          details: {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            messageLength: message.length
+          }
         };
       }
 
