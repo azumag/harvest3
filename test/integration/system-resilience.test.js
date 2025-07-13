@@ -136,10 +136,10 @@ describe('System Resilience Tests', () => {
       expect(result.stdout).toContain('ソースコード検証モード');
       expect(result.stdout).toContain('設定値検証完了: 問題は検出されませんでした');
       // 設定値が正しく取得できることを確認
-      expect(result.stdout).toContain('RATE_LIMIT: 3500');
+      expect(result.stdout).toContain('RATE_LIMIT: 5000');
       expect(result.stdout).toContain('TIMEOUT: 60000');
-      expect(result.stdout).toContain('MAX_THROTTLE_QUEUE_SIZE: 600');
-      expect(result.stdout).toContain('MAX_CONCURRENT_PAIRS: 2');
+      expect(result.stdout).toContain('MAX_THROTTLE_QUEUE_SIZE: 400');
+      expect(result.stdout).toContain('MAX_CONCURRENT_PAIRS: 1');
       console.log('✅ デフォルト検証（ソースコードのみ）が正常に動作');
     });
   });
