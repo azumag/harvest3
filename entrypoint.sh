@@ -166,7 +166,8 @@ start_application() {
     
     # APIサーバーの起動を待つ（より寛容なタイムアウト設定）
     local api_startup_time=0
-    while [ $api_startup_time -lt $API_STARTUP_TIMEOUT ]; do
+    local max_api_wait=$API_STARTUP_TIMEOUT
+    while [ $api_startup_time -lt $max_api_wait ]; do
         if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
             log "API server is ready on port 3000"
             break
@@ -176,12 +177,12 @@ start_application() {
         
         # 進捗ログ
         if [ $((api_startup_time % PROGRESS_LOG_INTERVAL)) -eq 0 ]; then
-            log "API server startup: ${api_startup_time}/${API_STARTUP_TIMEOUT} seconds elapsed"
+            log "API server startup: ${api_startup_time}/${max_api_wait} seconds elapsed"
         fi
     done
     
-    if [ $api_startup_time -ge $API_STARTUP_TIMEOUT ]; then
-        local error_msg="API server failed to start within ${API_STARTUP_TIMEOUT} seconds"
+    if [ $api_startup_time -ge $max_api_wait ]; then
+        local error_msg="API server failed to start within ${max_api_wait} seconds"
         log "ERROR: $error_msg"
         send_startup_error_to_discord "$error_msg" "API server startup timeout"
         exit 1
