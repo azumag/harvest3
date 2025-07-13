@@ -35,10 +35,18 @@ const { postErrorToDiscord } = require('../../../src/common/notifications');
 describe('getAvailableFund throttle error handling', () => {
   let mockExchange;
   let getAvailableFund;
+  let originalSetTimeout;
 
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
+    
+    // Setup global setTimeout mock
+    originalSetTimeout = global.setTimeout;
+    global.setTimeout = jest.fn((fn, delay) => {
+      fn(); // Immediately call the function to avoid actual waiting
+      return originalSetTimeout(() => {}, 0);
+    });
     
     // Setup mock exchange
     mockExchange = {
@@ -112,6 +120,11 @@ describe('getAvailableFund throttle error handling', () => {
         }
       }
     };
+  });
+  
+  afterEach(() => {
+    // Restore original setTimeout
+    global.setTimeout = originalSetTimeout;
   });
 
   describe('正常系', () => {
