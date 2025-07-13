@@ -15,6 +15,10 @@ const { getValidatedConfig: getBalanceCheckerConfig } = require('./common/balanc
 const { getInstance: getCollectorConfig } = require('./config/collectorConfig');
 const { WS_CONFIG, STRATEGY_PARAMS } = require('./hft/config');
 
+// Issue #443: APIコーディネーターとthrottleMonitor連携
+const { apiCoordinator } = require('./common/apiCoordinator');
+const { throttleMonitor } = require('./common/throttleMonitor');
+
 // APIキーとシークレットを設定 (環境変数から取得)
 const BBApiKey = process.env.BB_API_KEY;
 const BBApiSecret = process.env.BB_API_SECRET;
@@ -22,31 +26,30 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
-// 緊急対応: CCXTインスタンス作成と強制throttle設定
+// Issue #443: CCXTインスタンス作成とthrottle queue最適化
 const exchangeBB = new ccxt.bitbank({
   apiKey: BBApiKey,
   secret: BBApiSecret,
   enableRateLimit: true,
-  rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
+  rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT, // 統一された設定値を使用
   timeout: EXCHANGE_SETTINGS.TIMEOUT,
   options: {
-    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
+    // Issue #443: CCXTライブラリの制限に合わせたthrottle設定
+    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE, // 800（CCXTの1000制限に対して安全な値）
     'defaultType': 'spot',
     'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
     'adjustForTimeDifference': true
   }
 });
 
-// Issue #210対応: CCXT標準rate limiting機能への移行
-// bitbank API制限: 取得系 10回/秒、更新系 6回/秒
-// 安全な設定: 1000ms間隔（1回/秒）で安定運用
-console.log('[Issue #210] CCXT標準rate limitingへ移行');
-exchangeBB.enableRateLimit = true;
-exchangeBB.rateLimit = SETTINGS.EXCHANGE.BITBANK_RATE_LIMIT; // 設定ファイルから取得
-exchangeBB.timeout = EXCHANGE_SETTINGS.TIMEOUT;
-
-// CCXT標準機能の設定確認
+// Issue #443対応: throttle queue overflow対策
+console.log('[Issue #443] throttle queue overflow対策を適用');
 console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rateLimit: ${exchangeBB.rateLimit}ms, timeout: ${exchangeBB.timeout}ms`);
+console.log(`[Throttle Queue] maxSize: ${exchangeBB.options.maxThrottleQueueSize}, CCXT内部制限: 1000`);
+
+// Issue #443: throttleMonitorとAPIコーディネーターの連携設定
+throttleMonitor.setAPICoordinator(apiCoordinator);
+console.log('[Issue #443] throttleMonitorとAPIコーディネーターの連携を設定');
 
 const exchangeBF = new ccxt.bitflyer({
   apiKey: BFApiKey,

@@ -24,6 +24,7 @@ const marketDataProvider = require('../data/marketDataProvider');
 const Logger = require('../hft/utils/Logger');
 const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/const');
 const { throttleMonitor } = require('../common/throttleMonitor');
+const { apiCoordinator } = require('../common/apiCoordinator');
 
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
@@ -1554,13 +1555,19 @@ async function getAvailableFund(exchange, symbol, options = {}) {
     return { free: result }; // fetchBalanceの戻り値の形式に合わせる
   }
 
-  // リアルタイムモードの場合 - throttle queue対応のリトライ機構付き
-  const maxRetries = 5;
+  // リアルタイムモードの場合 - Issue #443: APIコーディネーターでthrottle queue対応
+  const maxRetries = 3; // リトライ回数を削減（協調制御により不要なリトライを回避）
   let consecutiveFailures = 0;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const balance = await exchange.fetchBalance();
+      // Issue #443: APIコーディネーターを使用して協調制御でAPI呼び出し
+      const requestId = `balance_${exchange.id}_${symbol || 'all'}_${Date.now()}`;
+      const balance = await apiCoordinator.executeAPICall(
+        () => exchange.fetchBalance(),
+        requestId,
+        1 // 残高取得は高優先度
+      );
 
       // デバッグ: 残高情報をログ出力
       const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
@@ -1570,6 +1577,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
 
       // 成功時はthrottleMonitorに記録
       throttleMonitor.recordRequest(false);
+      logger.debug(`[残高取得成功] ${exchange.id} 試行${attempt}回目で成功`);
       return balance;
 
     } catch (error) {
@@ -1580,16 +1588,29 @@ async function getAvailableFund(exchange, symbol, options = {}) {
       // throttleMonitorにエラーを記録
       throttleMonitor.recordRequest(true, errorMessage);
 
+      // Issue #443: APIコーディネーター利用時のエラーハンドリング
+      if (errorMessage.includes('queue is full') || 
+          errorMessage.includes('coordinator')) {
+        // APIコーディネーターのqueue満杯エラー
+        logger.error(`[API Coordinator] queue満杯またはコーディネーターエラー: ${errorMessage}`);
+        
+        if (attempt < maxRetries) {
+          // 短い待機後に再試行
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+      }
+
       // throttle queue エラーまたはrate limitエラーの場合
       if (errorMessage.includes('throttle') || 
           errorMessage.includes('maxCapacity') || 
           errorMessage.includes('rate limit') || 
           errorMessage.includes('429')) {
         
-        // exponential backoffで待機時間を計算
-        const baseDelay = EXCHANGE_SETTINGS.BACKOFF_INITIAL_DELAY || 5000;
-        const maxDelay = EXCHANGE_SETTINGS.BACKOFF_MAX_DELAY || 120000;
-        const multiplier = EXCHANGE_SETTINGS.BACKOFF_MULTIPLIER || 3;
+        // Issue #443: 改善されたbackoff設定を使用
+        const baseDelay = EXCHANGE_SETTINGS.BACKOFF_INITIAL_DELAY;
+        const maxDelay = EXCHANGE_SETTINGS.BACKOFF_MAX_DELAY;
+        const multiplier = EXCHANGE_SETTINGS.BACKOFF_MULTIPLIER;
         
         const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), maxDelay);
         
@@ -1607,7 +1628,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
         logger.error(`[残高取得失敗] ${exchange.id} 最大試行回数(${maxRetries})に到達:`, error);
         
         // 重要なエラーの場合はDiscord通知
-        const errorContext = `残高取得失敗: ${exchange.id} (${symbol})`;
+        const errorContext = `残高取得失敗: ${exchange.id} (${symbol}) - Issue #443対応後`;
         await postErrorToDiscord(error, errorContext).catch(discordError => {
           logger.error('Discord通知失敗:', discordError);
         });
