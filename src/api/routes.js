@@ -17,6 +17,10 @@ const systemHealthController = require('./controllers/systemHealth');
 
 const { getOhlcv } = require('./controllers/ohlcv');
 
+// データベース接続モジュール（パフォーマンス改善のため事前インポート）
+const { client: redisClient } = require('../database/redisDatabase');
+const { isConnected: isMongoConnected } = require('../database/mongoDatabase');
+
 // // 取引履歴API
 // router.get('/history', getHistory);
 
@@ -91,8 +95,7 @@ router.get('/health', async (req, res) => {
 
   // Redis接続確認
   try {
-    const { client } = require('../database/redisDatabase');
-    if (client && client.isReady) {
+    if (redisClient && redisClient.isReady) {
       health.services.redis = 'connected';
     } else {
       health.services.redis = 'disconnected';
@@ -105,8 +108,7 @@ router.get('/health', async (req, res) => {
 
   // MongoDB接続確認
   try {
-    const { isConnected } = require('../database/mongoDatabase');
-    const connected = await isConnected();
+    const connected = await isMongoConnected();
     if (connected) {
       health.services.mongodb = 'connected';
     } else {
