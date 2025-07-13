@@ -69,6 +69,9 @@ describe('APICoordinator', () => {
     test('queue容量制限が機能すること', async () => {
       const mockAPICall = jest.fn().mockImplementation(() => new Promise(() => {})); // 永続化するPromise
       
+      // 処理を停止してすべてのリクエストがキューに留まるようにする
+      coordinator.isProcessing = true;
+      
       // queue容量上限まで追加
       const promises = [];
       for (let i = 0; i < EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE; i++) {
@@ -78,9 +81,9 @@ describe('APICoordinator', () => {
         promises.push(promise);
       }
       
-      // 容量を超えるリクエストは拒否されるべき
+      // 容量を超えるリクエストは拒否されるべき（緊急排出後も高負荷の場合）
       await expect(coordinator.executeAPICall(mockAPICall, 'overflow_request'))
-        .rejects.toThrow('API coordinator queue is full');
+        .rejects.toThrow(/API coordinator queue (is full|remains critical after emergency drainage)/);
       
       // テスト終了前に手動でリセットして無限Promiseをクリーンアップ
       coordinator.emergencyReset();

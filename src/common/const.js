@@ -21,13 +21,13 @@ function parseEnvInt(envVar, defaultValue, minValue = 0) {
 // CCXTライブラリ内部のthrottle queue capacity: 1000固定
 // 最適化戦略: API呼び出し頻度を制限し、queueオーバーフローを防止
 const EXCHANGE_SETTINGS = {
-  // Issue #443: CCXTのthrottle queue容量制限(1000)に対応
-  // 安全な間隔で API呼び出しを行い、queue蓄積を防ぐ
-  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 2000, 1000), // 2秒間隔（CCXTqueue対応）
+  // Issue #438 & #443: CCXTのthrottle queue容量制限(1000)に対応強化
+  // より安全な間隔で API呼び出しを行い、queue蓄積を防ぐ
+  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 3500, 1000), // 3.5秒間隔（Issue #438対応）
   TIMEOUT: parseEnvInt(process.env.EXCHANGE_TIMEOUT, 60000, 5000), // 60秒タイムアウト（最小5秒制限）
   
-  // CCXTライブラリの制限に合わせた設定
-  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 800, 100), // CCXTの1000制限に対して余裕を持った800
+  // CCXTライブラリの制限に合わせた設定（Issue #438: より保守的に）
+  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 600, 100), // CCXTの1000制限に対して40%安全マージン（Issue #438対応）
   
   RECV_WINDOW: 60000,
   // 新しい設定: 段階的バックオフ（Issue #443対応）
@@ -44,13 +44,17 @@ const EXCHANGE_SETTINGS = {
   MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 2, 1), // 同時処理を2に制限（throttle queue負荷軽減）
   EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 1500, 500), // 各ペア処理間の遅延を1.5秒に短縮
   
-  // Issue #443: throttle queue管理の強化
+  // Issue #438 & #443: throttle queue管理の強化
   THROTTLE_QUEUE_MONITORING: {
     ENABLED: true,
-    CHECK_INTERVAL: 1000, // 1秒間隔でqueue状況監視
-    WARNING_THRESHOLD: 600, // queue使用率60%で警告
-    CRITICAL_THRESHOLD: 800, // queue使用率80%で重要警告
-    EMERGENCY_DELAY: 5000 // 緊急時の待機時間
+    CHECK_INTERVAL: 500, // 0.5秒間隔でqueue状況監視（Issue #438: より頻繁に）
+    WARNING_THRESHOLD: 300, // queue使用率50%で警告（Issue #438: より早期に）
+    CRITICAL_THRESHOLD: 450, // queue使用率75%で重要警告（Issue #438: より保守的に）
+    EMERGENCY_DELAY: 10000, // 緊急時の待機時間（Issue #438: 倍増）
+    // Issue #438: maxCapacity特化設定
+    MAX_CAPACITY_RECOVERY_DELAY: 180000, // maxCapacityエラー時は3分待機
+    PREVENTIVE_THROTTLE_THRESHOLD: 400, // 66%で予防的throttle開始
+    DYNAMIC_RATE_LIMIT_MULTIPLIER: 2.5 // 動的レート制限の倍数
   }
 };
 

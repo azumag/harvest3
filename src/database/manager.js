@@ -1611,18 +1611,28 @@ async function getAvailableFund(exchange, symbol, options = {}) {
       // throttleMonitorにエラーを記録
       throttleMonitor.recordRequest(true, errorMessage);
 
-      // Issue #440: throttle queue overflow の場合は即座に中断
+      // Issue #438: maxCapacity特化処理 - 即座に中断し、throttleMonitorにmaxCapacityエラーを通知
       if (errorMessage.includes('maxCapacity') || 
           errorMessage.includes('throttle queue is over')) {
-        logger.error(`[残高取得] throttle queue overflow検出、即座に中断: ${errorMessage}`);
+        logger.error(`[残高取得] maxCapacity overflow検出、即座に中断: ${errorMessage}`);
         
-        // Issue #440: 緊急時はDiscord通知を送信
-        const emergencyContext = `緊急: throttle queue overflow - ${exchange.id} 残高取得中`;
+        // Issue #438: throttleMonitorにmaxCapacityエラーを記録（特別処理をトリガー）
+        throttleMonitor.recordRequest(true, errorMessage);
+        
+        // Issue #438: 緊急時はDiscord通知を送信
+        const emergencyContext = `🚨 Issue #438: CCXT maxCapacity overflow - ${exchange.id} 残高取得中
+        
+**エラー**: ${errorMessage}
+**対象Exchange**: ${exchange.id}
+**Symbol**: ${symbol || 'all'}
+**試行回数**: ${attempt}/${maxRetries}
+
+**自動対応**: throttleMonitor maxCapacity特化処理を実行中...`;
         await postErrorToDiscord(error, emergencyContext).catch(discordError => {
           logger.error('Discord通知失敗:', discordError);
         });
         
-        throw new Error(`throttle queue overflow: ${errorMessage}`);
+        throw new Error(`maxCapacity overflow (Issue #438対応): ${errorMessage}`);
       }
 
       // Issue #443: APIコーディネーター利用時のエラーハンドリング
