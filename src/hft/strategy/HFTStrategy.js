@@ -341,7 +341,7 @@ class HFTStrategy {
    * VWAP(出来高加重平均価格)を計算
    */
   calculateVWAP(trades) {
-    if (trades.length === 0) return 0;
+    if (trades.length === 0) {return 0;}
     
     let totalVolume = 0;
     let totalValue = 0;
@@ -360,7 +360,7 @@ class HFTStrategy {
    * 買い圧力を計算
    */
   calculateBuyPressure(trades) {
-    if (trades.length === 0) return 0.5;
+    if (trades.length === 0) {return 0.5;}
     
     const buyTrades = trades.filter(trade => trade.side === 'buy');
     return buyTrades.length / trades.length;
@@ -370,7 +370,7 @@ class HFTStrategy {
    * 取引モメンタムを計算
    */
   calculateMomentum(trades) {
-    if (trades.length < 2) return 0;
+    if (trades.length < 2) {return 0;}
     
     // 直近の価格変化率を計算
     const latestPrice = parseFloat(trades[0].price);

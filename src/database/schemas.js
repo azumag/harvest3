@@ -181,26 +181,26 @@ function parseRedisValue(value, type = 'auto') {
       return z.string().parse(String(value));
     
     case 'number':
-      if (typeof value === 'number') return value;
+      if (typeof value === 'number') {return value;}
       const num = parseFloat(value);
       return z.number().parse(num);
     
     case 'boolean':
-      if (typeof value === 'boolean') return value;
+      if (typeof value === 'boolean') {return value;}
       if (typeof value === 'string') {
         return z.boolean().parse(value.toLowerCase() === 'true');
       }
       return z.boolean().parse(Boolean(value));
     
     case 'array':
-      if (Array.isArray(value)) return value;
+      if (Array.isArray(value)) {return value;}
       if (typeof value === 'string') {
         return z.array(z.any()).parse(JSON.parse(value));
       }
       return [value];
     
     case 'object':
-      if (typeof value === 'object' && value !== null) return value;
+      if (typeof value === 'object' && value !== null) {return value;}
       if (typeof value === 'string') {
         return z.object({}).parse(JSON.parse(value));
       }

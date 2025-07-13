@@ -173,7 +173,8 @@ npm run log-monitor:no-reconnect
 - **スロットリング機能**: 同じエラーのIssue作成間隔制御（デフォルト: 5分）
 - **類似エラー検出**: 同一サービス内の類似エラータイプの長期間スロットリング
 - **自動正規化**: タイムスタンプ、UUID、URL、メモリアドレス等の動的情報を除去
-- **1日最大Issue数制限**: 過剰なIssue作成を防止（デフォルト: 10件/日）
+- **スタックトレース抽出**: エラー発生時の詳細なスタックトレース情報を自動抽出（機密情報サニタイズ付き）
+- **設定可能なIssue数制限**: 1日あたりのIssue作成数制限（0で無制限、デフォルト: 無制限）
 - **自動再接続機能**: Docker Composeプロセス終了時の自動再接続（デフォルト: 10秒間隔）
 - **堅牢性**: Docker再起動やネットワーク一時断絶に対する耐性
 
@@ -192,7 +193,7 @@ npm run auto-update:status
 #### 自動更新監視システムの機能
 - **定期的なmainブランチ監視**: デフォルト5分間隔で更新をチェック
 - **自動git pull**: 更新検出時に自動でgit pullを実行
-- **Dockerサービス自動再起動**: `docker compose down && docker compose up backtest bot -d`
+- **Dockerサービス自動再起動**: `docker compose down && docker compose build && docker compose up backtest bot -d`
 - **リトライ機能**: 更新失敗時の自動リトライ（最大3回）
 - **グレースフルシャットダウン**: SIGINT/SIGTERMでの安全な停止
 - **ステータス確認**: 現在の監視状態とハッシュ情報の表示

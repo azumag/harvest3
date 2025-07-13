@@ -173,13 +173,34 @@ class AutoUpdateMonitor {
      * Dockerサービスを再起動
      */
     async restartDockerServices() {
+        let isDown = false;
+        
         try {
             // Docker Composeが利用可能かチェック
             await this.executeCommand('docker', ['compose', 'version']);
             
             console.log('🛑 Dockerサービスを停止中...');
             await this.executeCommand('docker', ['compose', 'down']);
+            isDown = true;
             console.log('✅ Dockerサービス停止完了');
+
+            console.log('🔨 Dockerイメージを再ビルド中...');
+            try {
+                await this.executeCommand('docker', ['compose', 'build', ...this.config.dockerServices]);
+                console.log('✅ Dockerイメージ再ビルド完了');
+            } catch (buildError) {
+                console.error('❌ ビルド失敗、前の状態に復旧中...');
+                
+                // ビルド失敗時は前のイメージで起動を試行
+                try {
+                    await this.executeCommand('docker', ['compose', 'up', '-d', ...this.config.dockerServices]);
+                    console.log('⚠️  前のイメージでサービス復旧完了');
+                } catch (recoveryError) {
+                    console.error('💥 サービス復旧も失敗:', recoveryError.message);
+                }
+                
+                throw new Error(`ビルド失敗: ${buildError.message}`);
+            }
 
             console.log(`🚀 Dockerサービスを起動中: ${this.config.dockerServices.join(', ')}`);
             const args = ['compose', 'up', '-d', ...this.config.dockerServices];
@@ -187,6 +208,17 @@ class AutoUpdateMonitor {
             console.log('✅ Dockerサービス起動完了');
 
         } catch (error) {
+            // サービスが停止状態で失敗した場合の緊急復旧
+            if (isDown && !error.message.includes('ビルド失敗')) {
+                console.error('💥 緊急復旧を試行中...');
+                try {
+                    await this.executeCommand('docker', ['compose', 'up', '-d', ...this.config.dockerServices]);
+                    console.log('🆘 緊急復旧完了');
+                } catch (emergencyError) {
+                    console.error('💀 緊急復旧失敗:', emergencyError.message);
+                }
+            }
+            
             console.error('❌ Dockerサービス再起動失敗:', error.message);
             throw error;
         }

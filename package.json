@@ -70,7 +70,7 @@
     "eslint": "^9.29.0",
     "jest": "^29.7.0",
     "string-similarity-js": "^2.1.4",
-    "supertest": "^6.3.3",
+    "supertest": "^6.3.4",
     "typescript": "^5.8.3"
   }
 }

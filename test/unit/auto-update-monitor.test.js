@@ -208,6 +208,12 @@ describe.skip('AutoUpdateMonitor', () => {
             mockSpawn.emit('close', 0);
             await downPromise;
             
+            // Docker build
+            const buildPromise = monitor.executeCommand('docker', ['compose', 'build', 'test-service1', 'test-service2']);
+            mockSpawn.stdout.emit('data', 'building');
+            mockSpawn.emit('close', 0);
+            await buildPromise;
+            
             // Docker up
             const upPromise = monitor.executeCommand('docker', ['compose', 'up', '-d', 'test-service1', 'test-service2']);
             mockSpawn.stdout.emit('data', 'starting');
@@ -218,6 +224,7 @@ describe.skip('AutoUpdateMonitor', () => {
             
             expect(spawn).toHaveBeenCalledWith('docker', ['compose', 'version'], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('docker', ['compose', 'down'], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('docker', ['compose', 'build', 'test-service1', 'test-service2'], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('docker', ['compose', 'up', '-d', 'test-service1', 'test-service2'], expect.any(Object));
         });
 

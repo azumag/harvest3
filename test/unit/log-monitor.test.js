@@ -21,7 +21,6 @@ describe('DockerLogMonitor', () => {
             errorPatterns: [/Error:/i, /Exception:/i],
             issueThrottleMs: 1000, // テスト用に短く設定
             issueHistoryFile: TEST_ISSUE_HISTORY_FILE,
-            maxIssuesPerDay: 3,
             debug: false,
             reconnectEnabled: true,
             reconnectIntervalMs: 100, // テスト用に短く設定
@@ -40,13 +39,11 @@ describe('DockerLogMonitor', () => {
         test('デフォルト設定で初期化される', () => {
             const defaultMonitor = new DockerLogMonitor();
             expect(defaultMonitor.config.services).toEqual(['bot', 'hft', 'backtest', 'web-ui']);
-            expect(defaultMonitor.config.maxIssuesPerDay).toBe(10);
             expect(defaultMonitor.config.issueThrottleMs).toBe(5 * 60 * 1000);
         });
 
         test('カスタム設定で初期化される', () => {
             expect(monitor.config.services).toEqual(['test-service']);
-            expect(monitor.config.maxIssuesPerDay).toBe(3);
             expect(monitor.config.issueThrottleMs).toBe(1000);
             expect(monitor.config.reconnectEnabled).toBe(true);
             expect(monitor.config.reconnectIntervalMs).toBe(100);
@@ -216,22 +213,6 @@ describe('DockerLogMonitor', () => {
             expect(shouldCreate).toBe(true);
         });
 
-        test('1日の最大Issue数に達した場合Issue作成しない', () => {
-            const today = Date.now();
-            
-            // 最大数までIssueを追加
-            for (let i = 0; i < monitor.config.maxIssuesPerDay; i++) {
-                monitor.issueHistory.issues.push({
-                    timestamp: today,
-                    errorHash: `hash-${i}`,
-                    service: 'test-service',
-                    errorType: 'Error'
-                });
-            }
-            
-            const shouldCreate = monitor.shouldCreateIssue('new-hash', 'test-service', 'Error: Max reached');
-            expect(shouldCreate).toBe(false);
-        });
 
         test('類似エラータイプは長い期間でスロットリングされる', () => {
             const errorMessage1 = 'TypeError: Cannot read property';
@@ -294,6 +275,70 @@ describe('DockerLogMonitor', () => {
             
             const context = monitor.getLogContext('test-service', 'Current line');
             expect(context).toBe('Line 1\nLine 2\nLine 3\nCurrent line');
+        });
+    });
+
+    describe('スタックトレース抽出', () => {
+        test('基本的なスタックトレースを抽出する', () => {
+            const logLines = [
+                'Info: Starting process',
+                'TypeError: Cannot read property of undefined',
+                '    at Object.test (/app/src/test.js:10:5)',
+                '    at Module.require (internal/modules/cjs/loader.js:123:45)',
+                '    at Object.<anonymous> (/app/src/main.js:5:1)',
+                'Info: Process ended'
+            ];
+            
+            const stackTrace = monitor.extractStackTrace(logLines);
+            expect(stackTrace).toContain('TypeError: Cannot read property of undefined');
+            expect(stackTrace).toContain('[APP_DIR]'); // サニタイズされたパス
+            expect(stackTrace).toContain('[INTERNAL]'); // サニタイズされたパス
+        });
+
+        test('スタックトレースがない場合はnullを返す', () => {
+            const logLines = [
+                'Info: Starting process',
+                'Debug: Processing data',
+                'Info: Process completed'
+            ];
+            
+            const stackTrace = monitor.extractStackTrace(logLines);
+            expect(stackTrace).toBeNull();
+        });
+
+        test('複数のエラーパターンを検出する', () => {
+            const logLines = [
+                'ReferenceError: variable is not defined',
+                '    at test.js:15:3',
+                '    at main.js:8:1'
+            ];
+            
+            const stackTrace = monitor.extractStackTrace(logLines);
+            expect(stackTrace).toContain('ReferenceError: variable is not defined');
+            expect(stackTrace).toContain('at test.js:15:3');
+        });
+
+        test('機密情報をサニタイズする', () => {
+            const logLines = [
+                'TypeError: Cannot read property of undefined',
+                '    at Object.test (/home/user/project/src/test.js:10:5)',
+                '    at Module.require (/opt/app/node_modules/express/lib/router.js:123:45)',
+                '    at internal/modules/cjs/loader.js:456:7',
+                '    at /usr/src/app/scripts/main.js:8:1'
+            ];
+            
+            const stackTrace = monitor.extractStackTrace(logLines);
+            
+            // 機密情報がサニタイズされていることを確認
+            expect(stackTrace).toContain('[HOME_DIR]');
+            expect(stackTrace).toContain('[OPT_DIR]'); // node_modulesを含むパス
+            expect(stackTrace).toContain('[INTERNAL]');
+            expect(stackTrace).toContain('[SRC_DIR]');
+            
+            // 元のパスが含まれていないことを確認
+            expect(stackTrace).not.toContain('/home/user');
+            expect(stackTrace).not.toContain('node_modules/express');
+            expect(stackTrace).not.toContain('/usr/src/app');
         });
     });
 

@@ -27,8 +27,8 @@ class DockerLogMonitor {
             issueThrottleMs: config.issueThrottleMs || 5 * 60 * 1000,
             // Issue履歴ファイル
             issueHistoryFile: config.issueHistoryFile || '.tmp/issue-history.json',
-            // 最大Issue数（1日あたり）
-            maxIssuesPerDay: config.maxIssuesPerDay || 10,
+            // 最大Issue数（1日あたり、0で無制限）
+            maxIssuesPerDay: config.maxIssuesPerDay ?? 0,
             // デバッグモード
             debug: config.debug || false,
             // 再接続設定
@@ -95,15 +95,19 @@ class DockerLogMonitor {
             this.cleanupIssueHistory();
         }
 
-        // 1日あたりの最大Issue数チェック
-        const today = new Date().toDateString();
-        const todayIssues = this.issueHistory.issues.filter(issue => 
-            new Date(issue.timestamp).toDateString() === today
-        );
-        
-        if (todayIssues.length >= this.config.maxIssuesPerDay) {
-            console.warn(`1日の最大Issue数(${this.config.maxIssuesPerDay})に達しました`);
-            return false;
+        // 1日あたりの最大Issue数チェック（0の場合は無制限）
+        if (this.config.maxIssuesPerDay > 0) {
+            const today = new Date().toDateString();
+            const todayIssues = this.issueHistory.issues.filter(issue => 
+                new Date(issue.timestamp).toDateString() === today
+            );
+            
+            if (todayIssues.length >= this.config.maxIssuesPerDay) {
+                if (this.config.debug) {
+                    console.warn(`1日の最大Issue数(${this.config.maxIssuesPerDay})に達しました`);
+                }
+                return false;
+            }
         }
 
         // 同じエラーハッシュのスロットリングチェック
@@ -211,6 +215,10 @@ class DockerLogMonitor {
      * GitHub Issue を作成
      */
     async createGitHubIssue(service, errorMessage, logContext) {
+        // ログコンテキストからスタックトレースを抽出
+        const logLines = logContext.split('\n');
+        const stackTrace = this.extractStackTrace(logLines);
+        
         const title = `[自動] ${service}サービスで例外が発生`;
         const body = `## 概要
 ${service}サービスで例外が検出されました。
@@ -220,7 +228,12 @@ ${service}サービスで例外が検出されました。
 ${errorMessage}
 \`\`\`
 
-## ログコンテキスト
+${stackTrace ? `## スタックトレース
+\`\`\`
+${stackTrace}
+\`\`\`
+
+` : ''}## ログコンテキスト
 \`\`\`
 ${logContext}
 \`\`\`
@@ -327,7 +340,70 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
     getLogContext(service, currentLine) {
         const buffer = this.logBuffer.get(service) || [];
         const context = [...buffer, currentLine];
-        return context.slice(-5).join('\n'); // 直近5行
+        return context.slice(-10).join('\n'); // 直近10行に拡大
+    }
+
+    /**
+     * スタックトレースを抽出（機密情報をサニタイズ）
+     */
+    extractStackTrace(logLines) {
+        const stackTraceLines = [];
+        let inStackTrace = false;
+        
+        for (const line of logLines) {
+            // スタックトレースの開始を検出
+            if (line.includes('Error:') || line.includes('Exception:') || 
+                line.includes('TypeError:') || line.includes('ReferenceError:') ||
+                line.includes('at ')) {
+                inStackTrace = true;
+                stackTraceLines.push(line);
+            } else if (inStackTrace) {
+                // スタックトレースの行を検出
+                if (line.trim().startsWith('at ') || 
+                    line.includes('.js:') || line.includes('.ts:') ||
+                    line.includes('node_modules') || line.includes('internal/')) {
+                    stackTraceLines.push(line);
+                } else if (line.trim() === '' || line.includes('---')) {
+                    // 空行または区切り線でスタックトレース終了
+                    break;
+                } else {
+                    // その他の行が来たらスタックトレース終了
+                    break;
+                }
+            }
+        }
+        
+        if (stackTraceLines.length === 0) {
+            return null;
+        }
+        
+        // 機密情報をサニタイズ
+        const sanitized = stackTraceLines.map(line => {
+            let sanitizedLine = line;
+            
+            // 絶対パスのサニタイズ（順序重要）
+            sanitizedLine = sanitizedLine.replace(/\/usr\/src\/app\/[^\s:)]+/g, '[SRC_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/workspaces\/[^\s:)]+/g, '[WORKSPACE]');
+            sanitizedLine = sanitizedLine.replace(/\/home\/[^\s:)]+/g, '[HOME_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/opt\/[^\s:)]+/g, '[OPT_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/usr\/[^\s:)]+/g, '[USR_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/var\/[^\s:)]+/g, '[VAR_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/tmp\/[^\s:)]+/g, '[TMP_DIR]');
+            sanitizedLine = sanitizedLine.replace(/\/app\/[^\s:)]+/g, '[APP_DIR]');
+            
+            // node_modules とinternal/ の特別処理
+            sanitizedLine = sanitizedLine.replace(/[^\s]*node_modules[^\s:)]*/g, '[NODE_MODULES]');
+            sanitizedLine = sanitizedLine.replace(/[^\s]*internal\/[^\s:)]*/g, '[INTERNAL]');
+            
+            // プロジェクト内の相対パスは保持
+            sanitizedLine = sanitizedLine.replace(/\/[^\s]*\/(src\/[^\s:)]+)/g, '$1');
+            sanitizedLine = sanitizedLine.replace(/\/[^\s]*\/(scripts\/[^\s:)]+)/g, '$1');
+            sanitizedLine = sanitizedLine.replace(/\/[^\s]*\/(test\/[^\s:)]+)/g, '$1');
+            
+            return sanitizedLine;
+        });
+        
+        return sanitized.join('\n');
     }
 
     /**
