@@ -85,6 +85,7 @@ class APICoordinator {
       }
     }
     this.queue.splice(insertIndex, 0, request);
+    logger.debug(`[Queue Insert] ${request.id} (優先度: ${request.priority}) をインデックス ${insertIndex} に挿入`);
   }
 
   /**
@@ -120,6 +121,7 @@ class APICoordinator {
           break;
         }
 
+        logger.debug(`[Queue Process] 処理開始: ${request.id}, 優先度: ${request.priority}`);
         this.lastRequestTime = Date.now();
         this.executeRequest(request);
       }
