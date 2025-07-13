@@ -1,0 +1,28 @@
+{
+  "services": ["bot", "hft", "backtest", "web-ui"],
+  "errorPatterns": [
+    "Error:",
+    "Exception:",
+    "TypeError:",
+    "ReferenceError:",
+    "SyntaxError:",
+    "UnhandledPromiseRejectionWarning",
+    "Process exited with code [1-9]",
+    "\\[ERROR\\]",
+    "FATAL",
+    "Uncaught",
+    "MongoServerError",
+    "ConnectionError",
+    "RedisError",
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "Failed to connect",
+    "Database connection failed",
+    "Redis connection failed"
+  ],
+  "issueThrottleMs": 300000,
+  "issueHistoryFile": ".tmp/issue-history.json",
+  "maxIssuesPerDay": 10,
+  "debug": false,
+  "description": "Docker Composeログ監視設定ファイル。このファイルを編集することで監視対象や例外パターンをカスタマイズできます。"
+}

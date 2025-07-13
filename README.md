@@ -44,6 +44,7 @@ open http://localhost:3000
 - **リアルタイム監視**: WebUIでの状態確認
 - **残高監視システム**: 自動残高監視と異常検知
 - **残高整合性サービス**: 3つのデータソースの照合と自動修正
+- **ログ監視**: Docker Composeログ監視とGitHub Issue自動発行
 - **Discord通知**: エラー、注文、損益レポート
 - **データ永続化**: Redis（リアルタイム）+ MongoDB（履歴）
 - **バックテスト**: 戦略の事前検証
@@ -152,6 +153,15 @@ npm run test:e2e-position-sizing
 
 # 拡張データ収集テスト
 npm run test-enhanced
+```
+
+### ログ監視
+```bash
+# Docker Composeログ監視開始（GitHub Issue自動発行）
+npm run log-monitor
+
+# デバッグモード付きログ監視
+npm run log-monitor:debug
 ```
 
 ## 🎯 アーキテクチャ
