@@ -23,6 +23,7 @@ const { disableStrategy, clearPositionMarket } = require('./strategies/utils/com
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
 const { BacktestOptimizer } = require('./optimization');
+const { createIntelligentParameterManager } = require('./parameters');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -341,23 +342,74 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         );
       }
     } else {
-      // 従来の最適化手法
-      // リトライが多いほどパラメータの変動幅を広げる
-      if (gridSearch) {
-        // グリッドサーチを実行
-        parameterCombinations = generateParameterCombinations(
-          dbParams,
+      // インテリジェントパラメータ管理システムを試行
+      try {
+        console.log(`インテリジェントパラメータ管理システムを使用してパラメータを生成中...`);
+        
+        const intelligentManager = createIntelligentParameterManager(
+          dbParams, 
           numericParameterKeys,
-          0.1 + (retryCount*0.1), // パラメータの変動幅
-          10 // ステップ数
+          {
+            // 履歴データがあれば使用（今後の拡張用）
+            historicalResults: [],
+            // 戦略タイプの自動検出を有効化
+            autoDetectStrategy: true
+          }
         );
-      } else {
-        // 正規乱数を使ったランダムサーチを実行
-        parameterCombinations = generateRandomParameterCombinations(
-          dbParams, numericParameterKeys,
-          10 + (retryCount*10), // パラメータのパターン数
-          0.1 + (retryCount*0.1) // 変動幅
-        );
+
+        if (gridSearch) {
+          // インテリジェントグリッドサーチ
+          parameterCombinations = intelligentManager.generateParameterCombinations(
+            dbParams,
+            numericParameterKeys,
+            0.1 + (retryCount*0.1), // パラメータの変動幅
+            10 // ステップ数
+          );
+          console.log(`インテリジェントグリッドサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
+        } else {
+          // インテリジェントランダムサーチ
+          parameterCombinations = intelligentManager.generateRandomParameterCombinations(
+            dbParams, 
+            numericParameterKeys,
+            10 + (retryCount*10), // パラメータのパターン数
+            0.1 + (retryCount*0.1) // 変動幅
+          );
+          console.log(`インテリジェントランダムサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
+        }
+
+        // 品質レポート生成
+        const qualityReport = intelligentManager.generateAnalysisReport(parameterCombinations);
+        console.log(`パラメータ品質: 妥当性=${(qualityReport.quality.validity*100).toFixed(1)}%, ` +
+                   `多様性=${(qualityReport.quality.diversity*100).toFixed(1)}%, ` +
+                   `カバー率=${(qualityReport.quality.coverage*100).toFixed(1)}%`);
+        
+        if (qualityReport.recommendations && qualityReport.recommendations.length > 0) {
+          console.log('品質改善の推奨事項:');
+          qualityReport.recommendations.forEach(rec => {
+            console.log(`  ${rec.type}: ${rec.message}`);
+          });
+        }
+
+      } catch (intelligentError) {
+        console.log(`インテリジェントパラメータ生成でエラー、従来手法にフォールバック: ${intelligentError.message}`);
+        
+        // フォールバック: 従来の最適化手法
+        if (gridSearch) {
+          // グリッドサーチを実行
+          parameterCombinations = generateParameterCombinations(
+            dbParams,
+            numericParameterKeys,
+            0.1 + (retryCount*0.1), // パラメータの変動幅
+            10 // ステップ数
+          );
+        } else {
+          // 正規乱数を使ったランダムサーチを実行
+          parameterCombinations = generateRandomParameterCombinations(
+            dbParams, numericParameterKeys,
+            10 + (retryCount*10), // パラメータのパターン数
+            0.1 + (retryCount*0.1) // 変動幅
+          );
+        }
       }
     }
 
