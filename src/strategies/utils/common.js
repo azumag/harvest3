@@ -7,7 +7,8 @@ const { formattedAvailableAmount, getRealizedPnL, addSignal,
   getTradeCurrentPosition,
   getOrderStrategyKeyByOrderId,
   updateFilledTrades,
-  fetchTicker
+  fetchTicker,
+  getMarketParameters
 } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { BITBANK_ERRORS, isBitbankError } = require('../../common/exchangeErrors');

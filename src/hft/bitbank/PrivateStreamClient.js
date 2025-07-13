@@ -126,7 +126,7 @@ class PrivateStreamClient {
    * 受信したメッセージを処理します。
    * @param {object} message - 受信したメッセージデータ
    */
-  _handleMessage(message) {
+  async _handleMessage(message) {
     if (!message || !message.room || !message.message) {
       this.logger.warn('Received invalid private message format:', message);
       return;
