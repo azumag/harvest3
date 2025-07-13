@@ -162,6 +162,9 @@ npm run log-monitor
 
 # デバッグモード付きログ監視
 npm run log-monitor:debug
+
+# 自動再接続無効でログ監視
+npm run log-monitor:no-reconnect
 ```
 
 #### ログ監視システムの機能
@@ -171,6 +174,8 @@ npm run log-monitor:debug
 - **類似エラー検出**: 同一サービス内の類似エラータイプの長期間スロットリング
 - **自動正規化**: タイムスタンプ、UUID、URL、メモリアドレス等の動的情報を除去
 - **1日最大Issue数制限**: 過剰なIssue作成を防止（デフォルト: 10件/日）
+- **自動再接続機能**: Docker Composeプロセス終了時の自動再接続（デフォルト: 10秒間隔）
+- **堅牢性**: Docker再起動やネットワーク一時断絶に対する耐性
 
 ### 自動更新監視
 ```bash

@@ -22,7 +22,10 @@ describe('DockerLogMonitor', () => {
             issueThrottleMs: 1000, // テスト用に短く設定
             issueHistoryFile: TEST_ISSUE_HISTORY_FILE,
             maxIssuesPerDay: 3,
-            debug: false
+            debug: false,
+            reconnectEnabled: true,
+            reconnectIntervalMs: 100, // テスト用に短く設定
+            maxReconnectAttempts: 2
         });
     });
 
@@ -45,6 +48,9 @@ describe('DockerLogMonitor', () => {
             expect(monitor.config.services).toEqual(['test-service']);
             expect(monitor.config.maxIssuesPerDay).toBe(3);
             expect(monitor.config.issueThrottleMs).toBe(1000);
+            expect(monitor.config.reconnectEnabled).toBe(true);
+            expect(monitor.config.reconnectIntervalMs).toBe(100);
+            expect(monitor.config.maxReconnectAttempts).toBe(2);
         });
     });
 
@@ -351,6 +357,78 @@ describe('DockerLogMonitor', () => {
             
             expect(monitor.issueHistory.issues).toHaveLength(1);
             expect(monitor.issueHistory.issues[0].errorHash).toBe('recent');
+        });
+    });
+
+    describe('再接続機能', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        test('プロセス終了時に再接続をスケジュールする', () => {
+            monitor.isRunning = true;
+            monitor.config.reconnectEnabled = true;
+            
+            monitor.scheduleReconnect(0);
+            
+            expect(monitor.reconnectAttempts).toBe(1);
+            expect(monitor.reconnectTimer).not.toBeNull();
+        });
+
+        test('最大再接続回数に達した場合停止する', () => {
+            monitor.isRunning = true;
+            monitor.config.maxReconnectAttempts = 2;
+            monitor.reconnectAttempts = 2;
+            
+            const stopSpy = jest.spyOn(monitor, 'stop').mockImplementation(() => {});
+            
+            monitor.scheduleReconnect(1);
+            
+            expect(stopSpy).toHaveBeenCalled();
+            stopSpy.mockRestore();
+        });
+
+        test('手動停止時は再接続しない', () => {
+            monitor.isRunning = false;
+            monitor.config.reconnectEnabled = true;
+            
+            monitor.scheduleReconnect(0);
+            
+            expect(monitor.reconnectTimer).toBeNull();
+        });
+
+        test('再接続タイマーをクリアしてプロセス停止する', () => {
+            // テスト環境であることを示す
+            const originalEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'test';
+            
+            monitor.reconnectTimer = setTimeout(() => {}, 1000);
+            const mockProcess = { kill: jest.fn() };
+            monitor.currentProcess = mockProcess;
+            
+            monitor.stop();
+            
+            expect(monitor.reconnectTimer).toBeNull();
+            expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+            expect(monitor.currentProcess).toBeNull();
+            expect(monitor.isRunning).toBe(false);
+            
+            // 環境変数を復元
+            process.env.NODE_ENV = originalEnv;
+        });
+
+        test('再接続無効時は再接続しない', () => {
+            monitor.isRunning = true;
+            monitor.config.reconnectEnabled = false;
+            
+            monitor.scheduleReconnect(0);
+            
+            expect(monitor.reconnectTimer).toBeNull();
+            expect(monitor.reconnectAttempts).toBe(1); // カウンターは増加するが実際には再接続しない
         });
     });
 });

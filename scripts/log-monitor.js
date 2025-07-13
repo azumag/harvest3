@@ -30,11 +30,19 @@ class DockerLogMonitor {
             // 最大Issue数（1日あたり）
             maxIssuesPerDay: config.maxIssuesPerDay || 10,
             // デバッグモード
-            debug: config.debug || false
+            debug: config.debug || false,
+            // 再接続設定
+            reconnectEnabled: config.reconnectEnabled !== false, // デフォルトで有効
+            reconnectIntervalMs: config.reconnectIntervalMs || 10 * 1000, // 10秒間隔
+            maxReconnectAttempts: config.maxReconnectAttempts || -1 // -1は無制限
         };
         
         this.issueHistory = this.loadIssueHistory();
         this.logBuffer = new Map(); // サービス別ログバッファ
+        this.isRunning = false;
+        this.currentProcess = null;
+        this.reconnectAttempts = 0;
+        this.reconnectTimer = null;
     }
 
     /**
@@ -340,16 +348,51 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
     }
 
     /**
-     * Docker Composeログを監視開始
+     * 監視停止
      */
-    startMonitoring() {
-        console.log(`🔍 Docker Composeログ監視を開始 (対象: ${this.config.services.join(', ')})`);
+    stop() {
+        console.log('\n🛑 ログ監視を停止中...');
+        this.isRunning = false;
         
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        
+        if (this.currentProcess) {
+            this.currentProcess.kill('SIGTERM');
+            this.currentProcess = null;
+        }
+        
+        console.log('✅ ログ監視を停止しました');
+        
+        // テスト環境では process.exit() をスキップ
+        if (process.env.NODE_ENV !== 'test') {
+            process.exit(0);
+        }
+    }
+
+    /**
+     * Docker Composeプロセスを開始
+     */
+    startDockerComposeProcess() {
+        if (this.config.debug) {
+            console.log(`📡 Docker Composeプロセスを開始 (試行回数: ${this.reconnectAttempts + 1})`);
+        }
+
         const dockerCompose = spawn('docker', ['compose', 'logs', '-f', ...this.config.services], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
+        this.currentProcess = dockerCompose;
+
         dockerCompose.stdout.on('data', (data) => {
+            // 再接続成功時はカウンターをリセット
+            if (this.reconnectAttempts > 0) {
+                console.log('✅ Docker Compose接続復旧しました');
+                this.reconnectAttempts = 0;
+            }
+
             const lines = data.toString().split('\n').filter(line => line.trim());
             
             lines.forEach(line => {
@@ -367,31 +410,126 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
         });
 
         dockerCompose.stderr.on('data', (data) => {
-            console.error('Docker Compose エラー:', data.toString());
+            const errorMessage = data.toString().trim();
+            if (this.config.debug) {
+                console.error('Docker Compose エラー:', errorMessage);
+            }
         });
 
         dockerCompose.on('close', (code) => {
-            console.log(`Docker Compose監視が終了しました (exit code: ${code})`);
+            if (this.config.debug) {
+                console.log(`📋 Docker Compose監視が終了 (exit code: ${code})`);
+            }
+
+            // 手動停止でない場合は再接続を試行
+            if (this.isRunning && this.config.reconnectEnabled) {
+                this.scheduleReconnect(code);
+            }
         });
 
-        // グレースフルシャットダウン
-        process.on('SIGINT', () => {
-            console.log('\n監視を停止中...');
-            dockerCompose.kill('SIGTERM');
-            process.exit(0);
+        dockerCompose.on('error', (error) => {
+            console.error('❌ Docker Composeプロセスエラー:', error.message);
+            
+            if (this.isRunning && this.config.reconnectEnabled) {
+                this.scheduleReconnect(-1);
+            }
         });
 
         return dockerCompose;
+    }
+
+    /**
+     * 再接続をスケジュール
+     */
+    scheduleReconnect(exitCode) {
+        this.reconnectAttempts++;
+        
+        // 最大再接続回数をチェック（-1は無制限）
+        if (this.config.maxReconnectAttempts > 0 && 
+            this.reconnectAttempts > this.config.maxReconnectAttempts) {
+            console.error(`💥 最大再接続回数 (${this.config.maxReconnectAttempts}) に達しました。監視を終了します。`);
+            this.stop();
+            return;
+        }
+
+        // 再接続が無効な場合はスケジュールしない
+        if (!this.config.reconnectEnabled || !this.isRunning) {
+            return;
+        }
+
+        const delay = this.config.reconnectIntervalMs;
+        console.log(`🔄 ${delay / 1000}秒後にDocker Compose接続を再試行... (${this.reconnectAttempts}回目)`);
+        
+        this.reconnectTimer = setTimeout(() => {
+            if (this.isRunning) {
+                this.startDockerComposeProcess();
+            }
+        }, delay);
+    }
+
+    /**
+     * Docker Composeログを監視開始
+     */
+    startMonitoring() {
+        console.log(`🔍 Docker Composeログ監視を開始 (対象: ${this.config.services.join(', ')})`);
+        
+        if (this.config.reconnectEnabled) {
+            console.log(`🔄 自動再接続有効 (間隔: ${this.config.reconnectIntervalMs / 1000}秒)`);
+        }
+        
+        this.isRunning = true;
+        this.reconnectAttempts = 0;
+
+        // グレースフルシャットダウン
+        process.on('SIGINT', () => this.stop());
+        process.on('SIGTERM', () => this.stop());
+        process.on('exit', () => {
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+            }
+        });
+        process.on('uncaughtException', (error) => {
+            console.error('予期しないエラー:', error);
+            this.stop();
+        });
+
+        // 初回接続
+        this.startDockerComposeProcess();
     }
 }
 
 // CLIから実行された場合
 if (require.main === module) {
+    // CLI引数のバリデーション関数
+    function validateAndGetIntegerArg(argName, defaultValue, min = 1) {
+        const argIndex = process.argv.indexOf(argName);
+        if (argIndex === -1) {
+            return defaultValue;
+        }
+        
+        const valueIndex = argIndex + 1;
+        if (valueIndex >= process.argv.length) {
+            throw new Error(`${argName} に値が指定されていません`);
+        }
+        
+        const value = parseInt(process.argv[valueIndex]);
+        if (isNaN(value) || value < min) {
+            throw new Error(`${argName} には ${min} 以上の整数を指定してください: ${process.argv[valueIndex]}`);
+        }
+        
+        return value;
+    }
+
     const config = {
         debug: process.argv.includes('--debug'),
         services: process.argv.includes('--services') ? 
             process.argv[process.argv.indexOf('--services') + 1].split(',') : 
-            undefined
+            undefined,
+        reconnectEnabled: !process.argv.includes('--no-reconnect'),
+        reconnectIntervalMs: process.argv.includes('--reconnect-interval') ?
+            validateAndGetIntegerArg('--reconnect-interval', undefined, 1) * 1000 : undefined,
+        maxReconnectAttempts: process.argv.includes('--max-reconnect') ?
+            validateAndGetIntegerArg('--max-reconnect', undefined, 1) : undefined
     };
     
     const monitor = new DockerLogMonitor(config);

@@ -39,6 +39,7 @@
     "test-enhanced": "jest test/monitoring/realDataCollectorEnhanced.test.js",
     "log-monitor": "node scripts/log-monitor.js",
     "log-monitor:debug": "node scripts/log-monitor.js --debug",
+    "log-monitor:no-reconnect": "node scripts/log-monitor.js --no-reconnect",
     "auto-update": "node scripts/auto-update-monitor.js",
     "auto-update:debug": "node scripts/auto-update-monitor.js --debug",
     "auto-update:status": "node scripts/auto-update-monitor.js --status"
