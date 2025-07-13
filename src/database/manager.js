@@ -22,7 +22,8 @@ const {
 const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
 const Logger = require('../hft/utils/Logger');
-const { TRADING_EXECUTION_CONSTANTS } = require('../common/const');
+const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/const');
+const { throttleMonitor } = require('../common/throttleMonitor');
 
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
@@ -1553,21 +1554,72 @@ async function getAvailableFund(exchange, symbol, options = {}) {
     return { free: result }; // fetchBalanceの戻り値の形式に合わせる
   }
 
-  // リアルタイムモードの場合 (既存のfetchBalanceを呼び出す)
-  // exchange オブジェクトは CCXT の インスタンスであると仮定
-  try {
-    const balance = await exchange.fetchBalance();
+  // リアルタイムモードの場合 - throttle queue対応のリトライ機構付き
+  const maxRetries = 5;
+  let consecutiveFailures = 0;
 
-    // デバッグ: 残高情報をログ出力
-    const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
-    if (balance.free && balance.free[baseCurrency] !== undefined) {
-      logger.debug(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const balance = await exchange.fetchBalance();
+
+      // デバッグ: 残高情報をログ出力
+      const baseCurrency = symbol ? symbol.split('/')[1] : 'JPY';
+      if (balance.free && balance.free[baseCurrency] !== undefined) {
+        logger.debug(`[残高DEBUG] ${exchange.id} ${baseCurrency}: ${balance.free[baseCurrency]}円 (symbol: ${symbol})`);
+      }
+
+      // 成功時はthrottleMonitorに記録
+      throttleMonitor.recordRequest(false);
+      return balance;
+
+    } catch (error) {
+      consecutiveFailures++;
+      const errorMessage = error.message || '';
+      logger.warn(`[残高取得エラー] ${exchange.id} 試行${attempt}/${maxRetries}: ${errorMessage}`);
+
+      // throttleMonitorにエラーを記録
+      throttleMonitor.recordRequest(true, errorMessage);
+
+      // throttle queue エラーまたはrate limitエラーの場合
+      if (errorMessage.includes('throttle') || 
+          errorMessage.includes('maxCapacity') || 
+          errorMessage.includes('rate limit') || 
+          errorMessage.includes('429')) {
+        
+        // exponential backoffで待機時間を計算
+        const baseDelay = EXCHANGE_SETTINGS.BACKOFF_INITIAL_DELAY || 5000;
+        const maxDelay = EXCHANGE_SETTINGS.BACKOFF_MAX_DELAY || 120000;
+        const multiplier = EXCHANGE_SETTINGS.BACKOFF_MULTIPLIER || 3;
+        
+        const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), maxDelay);
+        
+        logger.warn(`[Throttle対応] ${exchange.id} throttle/rate limitエラー検出: ${delay}ms待機中...`);
+        
+        // 最終試行でない場合のみ待機
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      // その他のエラーまたは最終試行の場合
+      if (attempt === maxRetries) {
+        logger.error(`[残高取得失敗] ${exchange.id} 最大試行回数(${maxRetries})に到達:`, error);
+        
+        // 重要なエラーの場合はDiscord通知
+        const errorContext = `残高取得失敗: ${exchange.id} (${symbol})`;
+        await postErrorToDiscord(error, errorContext).catch(discordError => {
+          logger.error('Discord通知失敗:', discordError);
+        });
+        
+        throw error;
+      }
+
+      // 通常のエラーの場合は短い待機後に再試行
+      const shortDelay = 1000 * attempt;
+      logger.info(`[残高取得リトライ] ${exchange.id} ${shortDelay}ms後に再試行...`);
+      await new Promise(resolve => setTimeout(resolve, shortDelay));
     }
-
-    return balance;
-  } catch (error) {
-    logger.error(`Error fetching balance for ${exchange.id}:`, error);
-    throw error;
   }
 }
 
