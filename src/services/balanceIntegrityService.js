@@ -8,6 +8,7 @@
 const { config } = require('../config');
 const { getCollectionRef, ensureConnection } = require('../database/manager');
 const { getStrategyPositionsRedis, getRedisClient } = require('../database/redisDatabase');
+const { unifiedErrorHandler } = require('../common/errorHandler');
 const { postErrorToDiscord, postOrderToDiscord } = require('../common/notifications');
 const { formatJST } = require('../common/utils');
 const {
@@ -116,7 +117,12 @@ class BalanceIntegrityService {
       try {
         await this.performRealTimeCheck();
       } catch (error) {
-        console.error('リアルタイム監視中にエラーが発生:', error);
+        await unifiedErrorHandler.handleError(error, {
+          context: 'リアルタイム監視',
+          severity: 'WARNING',
+          shouldThrow: false,
+          deduplicationWindow: 300000 // 5分間の重複防止
+        });
         this.consecutiveFailures++;
 
         if (this.consecutiveFailures >= this.config.tradingHalt.maxConsecutiveFailures) {
@@ -169,7 +175,12 @@ class BalanceIntegrityService {
       return discrepancies;
 
     } catch (error) {
-      console.error('完全チェック中にエラーが発生:', error);
+      await unifiedErrorHandler.handleError(error, {
+        context: '完全残高整合性チェック',
+        severity: 'CRITICAL',
+        shouldThrow: false,
+        deduplicationWindow: 1800000 // 30分間の重複防止
+      });
       this.metrics.failedChecks++;
       this.consecutiveFailures++;
 
