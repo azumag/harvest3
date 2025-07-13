@@ -275,6 +275,9 @@ class APICoordinator {
     try {
       logger.debug(`[Execute] リクエスト実行開始: ${request.id}`);
       
+      // Issue #447: ccxtのthrottle queue状況を事前チェック
+      await this.checkCcxtThrottleQueueBeforeExecution(request);
+      
       const result = await request.apiCall();
       
       // 成功時の統計更新
@@ -287,8 +290,17 @@ class APICoordinator {
     } catch (error) {
       logger.warn(`[Execute Error] リクエスト失敗: ${request.id}, エラー: ${error.message}`);
       
-      // throttle monitor にエラーを記録
-      throttleMonitor.recordRequest(true, error.message);
+      // Issue #447: maxCapacityエラーの特別処理
+      if (error.message.includes('maxCapacity') || error.message.includes('throttle queue is over')) {
+        logger.error(`[Execute Critical] CCXT maxCapacity error detected: ${error.message}`);
+        // 緊急停止: 現在のキューをクリア
+        this.emergencyQueueClearance();
+        // throttle monitorに緊急通知
+        throttleMonitor.recordRequest(true, `CRITICAL_MAXCAPACITY: ${error.message}`);
+      } else {
+        // throttle monitor にエラーを記録
+        throttleMonitor.recordRequest(true, error.message);
+      }
       
       request.reject(error);
     } finally {
@@ -406,6 +418,110 @@ class APICoordinator {
    */
   setThrottleMonitor(monitor) {
     this.throttleMonitor = monitor;
+  }
+
+  /**
+   * Issue #447: ccxtのthrottle queue状況を事前チェック
+   */
+  async checkCcxtThrottleQueueBeforeExecution(request) {
+    // ccxtのthrottle queueは直接アクセスできないため、
+    // 間接的にリスクを評価し、予防的な待機を実行
+    
+    // 1. 現在のAPIコーディネーターの負荷状況チェック
+    const totalRequests = this.queue.length + this.activeRequests.size;
+    const usageRate = totalRequests / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
+    
+    // 2. throttleMonitorの状況チェック
+    const throttleStats = (throttleMonitor && typeof throttleMonitor.getStats === 'function') 
+      ? throttleMonitor.getStats() 
+      : null;
+    
+    // 3. 高リスク状況の判定
+    let shouldWait = false;
+    let waitTime = 0;
+    
+    if (usageRate >= 0.4) { // 40%以上で予防的制御開始
+      shouldWait = true;
+      waitTime = Math.min(2000 + (usageRate * 3000), 8000); // 2-8秒の待機
+      logger.warn(`[CCXT Queue Check] 高負荷予防待機: 使用率${(usageRate * 100).toFixed(1)}%, 待機${waitTime}ms`);
+    }
+    
+    if (throttleStats && throttleStats.consecutiveErrors >= 2) {
+      shouldWait = true;
+      waitTime = Math.max(waitTime, 5000); // 最低5秒
+      logger.warn(`[CCXT Queue Check] エラー続発により待機: 連続エラー${throttleStats.consecutiveErrors}回`);
+    }
+    
+    // 4. ccxtが最近maxCapacityエラーを出している場合の特別制御
+    if (throttleStats && throttleStats.lastQueueOverflow && 
+        (Date.now() - throttleStats.lastQueueOverflow) < 30000) { // 30秒以内
+      shouldWait = true;
+      waitTime = Math.max(waitTime, 10000); // 最低10秒
+      logger.warn(`[CCXT Queue Check] 最近のmaxCapacityエラーにより長期待機: ${waitTime}ms`);
+    }
+    
+    if (shouldWait) {
+      logger.info(`[CCXT Queue Check] リクエスト${request.id}: 予防的待機${waitTime}ms実行中...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+
+  /**
+   * Issue #447: maxCapacityエラー時の緊急キュークリア
+   */
+  emergencyQueueClearance() {
+    logger.error('[Emergency Queue Clearance] CCXT maxCapacity緊急対応開始');
+    
+    const queueLength = this.queue.length;
+    const rejectedCount = Math.floor(queueLength * 0.7); // 70%のリクエストを拒否
+    
+    // 低優先度のリクエストを優先的に拒否
+    const toReject = [];
+    const toKeep = [];
+    
+    this.queue.forEach(request => {
+      if (request.priority >= 3 || request.dropIfBusy) {
+        toReject.push(request);
+      } else {
+        toKeep.push(request);
+      }
+    });
+    
+    // 必要に応じて中優先度も拒否（ただし、高優先度は保護）
+    while (toReject.length < rejectedCount && toKeep.length > 0) {
+      const request = toKeep.pop();
+      if (request.priority >= 2) {
+        toReject.push(request);
+      } else {
+        // 高優先度リクエストは保護するために戻す
+        toKeep.unshift(request);
+        break; // 高優先度しか残っていない場合はループ終了
+      }
+    }
+    
+    // 拒否対象リクエストをエラーで終了
+    toReject.forEach(request => {
+      try {
+        if (request.reject && typeof request.reject === 'function') {
+          request.reject(new Error('Emergency queue clearance due to CCXT maxCapacity overflow'));
+        }
+      } catch (error) {
+        logger.warn(`[Emergency Queue Clearance] リクエスト拒否エラー: ${error.message}`);
+      }
+    });
+    
+    // キューを残すべきリクエストのみに更新
+    this.queue = toKeep;
+    this.stats.rejectedRequests += toReject.length;
+    
+    logger.error(`[Emergency Queue Clearance] 完了: ${toReject.length}件拒否, ${toKeep.length}件保持`);
+    
+    // 処理を一時停止してccxtキューの排出を待つ
+    this.isProcessing = false;
+    setTimeout(() => {
+      logger.info('[Emergency Queue Clearance] 処理再開');
+      this.processQueue();
+    }, 15000); // 15秒後に処理再開
   }
 }
 

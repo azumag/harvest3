@@ -16,18 +16,18 @@ function parseEnvInt(envVar, defaultValue, minValue = 0) {
   return parsed;
 }
 
-// API/Exchange設定定数 - Issue #443 throttle queue対応
+// API/Exchange設定定数 - Issue #447 throttle queue overflow根本対策
 // bitbank API制限: 取得系 10回/秒、更新系 6回/秒
 // CCXTライブラリ内部のthrottle queue capacity: 1000固定
 // 最適化戦略: API呼び出し頻度を制限し、queueオーバーフローを防止
 const EXCHANGE_SETTINGS = {
-  // Issue #438 & #443: CCXTのthrottle queue容量制限(1000)に対応強化
-  // より安全な間隔で API呼び出しを行い、queue蓄積を防ぐ
-  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 3500, 1000), // 3.5秒間隔（Issue #438対応）
+  // Issue #447: CCXTのthrottle queue overflow根本対策
+  // maxCapacityエラー解決のため、より保守的な間隔とキュー管理
+  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 5000, 1000), // 5秒間隔（Issue #447: 3.5秒から大幅に拡大）
   TIMEOUT: parseEnvInt(process.env.EXCHANGE_TIMEOUT, 60000, 5000), // 60秒タイムアウト（最小5秒制限）
   
-  // CCXTライブラリの制限に合わせた設定（Issue #438: より保守的に）
-  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 600, 100), // CCXTの1000制限に対して40%安全マージン（Issue #438対応）
+  // Issue #447: CCXTのmaxCapacity(1000)に対してより大きな安全マージン
+  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 400, 100), // CCXTの1000制限に対して60%安全マージン（Issue #447: 600から削減）
   
   RECV_WINDOW: 60000,
   // 新しい設定: 段階的バックオフ（Issue #443対応）
@@ -40,21 +40,21 @@ const EXCHANGE_SETTINGS = {
   HEALTH_CHECK_INTERVAL: 60000, // 1分間隔でヘルスチェック
   MAX_CONSECUTIVE_FAILURES: 3, // 連続失敗回数の閾値を3に調整
   
-  // 新しい設定: 並列実行制限（API負荷軽減） - Issue #443対応
-  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 2, 1), // 同時処理を2に制限（throttle queue負荷軽減）
-  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 1500, 500), // 各ペア処理間の遅延を1.5秒に短縮
+  // Issue #447: 並列実行制限をさらに強化（API負荷軽減）
+  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 1, 1), // 同時処理を1に制限（Issue #447: maxCapacity対策で2から削減）
+  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 2500, 500), // 各ペア処理間の遅延を2.5秒に拡大（Issue #447: 1.5秒から拡大）
   
-  // Issue #438 & #443: throttle queue管理の強化
+  // Issue #447: throttle queue管理のさらなる強化
   THROTTLE_QUEUE_MONITORING: {
     ENABLED: true,
     CHECK_INTERVAL: 500, // 0.5秒間隔でqueue状況監視（Issue #438: より頻繁に）
-    WARNING_THRESHOLD: 300, // queue使用率50%で警告（Issue #438: より早期に）
-    CRITICAL_THRESHOLD: 450, // queue使用率75%で重要警告（Issue #438: より保守的に）
-    EMERGENCY_DELAY: 10000, // 緊急時の待機時間（Issue #438: 倍増）
-    // Issue #438: maxCapacity特化設定
-    MAX_CAPACITY_RECOVERY_DELAY: 180000, // maxCapacityエラー時は3分待機
-    PREVENTIVE_THROTTLE_THRESHOLD: 400, // 66%で予防的throttle開始
-    DYNAMIC_RATE_LIMIT_MULTIPLIER: 2.5 // 動的レート制限の倍数
+    WARNING_THRESHOLD: 160, // queue使用率40%で警告（Issue #447: 300から大幅削減）
+    CRITICAL_THRESHOLD: 240, // queue使用率60%で重要警告（Issue #447: 450から大幅削減）
+    EMERGENCY_DELAY: 15000, // 緊急時の待機時間（Issue #447: 10秒から15秒に拡大）
+    // Issue #447: maxCapacity特化設定の強化
+    MAX_CAPACITY_RECOVERY_DELAY: 300000, // maxCapacityエラー時は5分待機（Issue #447: 3分から拡大）
+    PREVENTIVE_THROTTLE_THRESHOLD: 200, // 50%で予防的throttle開始（Issue #447: 66%から削減）
+    DYNAMIC_RATE_LIMIT_MULTIPLIER: 3.0 // 動的レート制限の倍数（Issue #447: 2.5から増加）
   }
 };
 
