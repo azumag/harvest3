@@ -55,20 +55,32 @@ class APICoordinator {
       request.resolve = resolve;
       request.reject = reject;
 
-      // Issue #440: システム負荷チェックと適応的制御
+      // Issue #438 & #440: システム負荷チェックと適応的制御強化
       const totalRequests = this.queue.length + this.activeRequests.size;
       const queueUsageRate = totalRequests / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
       
-      // Issue #440: 高負荷時の緊急対応
-      if (queueUsageRate >= 0.9) {
-        // 90%以上で緊急排出
+      // Issue #438: より積極的な予防策
+      if (queueUsageRate >= 0.75) {
+        // 75%以上で緊急排出（従来の90%から引き下げ）
         this.emergencyQueueDrainage();
-      } else if (queueUsageRate >= 0.7 && request.dropIfBusy) {
-        // 70%以上で非重要リクエストをドロップ
+        
+        // 緊急排出後もまだ高い場合は新規リクエストを一時的に拒否
+        const newQueueUsageRate = (this.queue.length + this.activeRequests.size) / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
+        if (newQueueUsageRate >= 0.6) {
+          this.stats.rejectedRequests++;
+          logger.warn(`[Queue Critical] 緊急排出後も高負荷のためリクエスト拒否: ${request.id}, 使用率: ${(newQueueUsageRate * 100).toFixed(1)}%`);
+          reject(new Error('API coordinator queue remains critical after emergency drainage'));
+          return;
+        }
+      } else if (queueUsageRate >= 0.6 && request.dropIfBusy) {
+        // 60%以上で非重要リクエストをドロップ（従来の70%から引き下げ）
         this.stats.rejectedRequests++;
         logger.warn(`[Queue Busy] 高負荷のため非重要リクエストをドロップ: ${request.id}, 使用率: ${(queueUsageRate * 100).toFixed(1)}%`);
         reject(new Error('API coordinator is busy - request dropped'));
         return;
+      } else if (queueUsageRate >= 0.5) {
+        // Issue #438: 50%以上で予防警告
+        logger.warn(`[Queue Prevention] キュー使用率警告: ${(queueUsageRate * 100).toFixed(1)}%, 予防的監視中...`);
       }
       
       if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
@@ -114,39 +126,74 @@ class APICoordinator {
   }
   
   /**
-   * Issue #440: 緊急キュー排出
+   * Issue #438 & #440: 緊急キュー排出強化
    */
   emergencyQueueDrainage() {
     const now = Date.now();
     let drainedCount = 0;
+    const initialQueueLength = this.queue.length;
     
-    // 低優先度かつ古いリクエストから排出
+    // Issue #438: より積極的な排出ロジック
     this.queue = this.queue.filter(request => {
       const age = now - request.timestamp;
-      const shouldDrain = request.priority >= 3 && (age > 10000 || request.dropIfBusy);
+      let shouldDrain = false;
+      
+      // 優先度3以上（低優先度）は積極的に排出
+      if (request.priority >= 3) {
+        shouldDrain = true;
+      }
+      // 優先度2でも古い（5秒以上）またはdropIfBusyの場合は排出
+      else if (request.priority === 2 && (age > 5000 || request.dropIfBusy)) {
+        shouldDrain = true;
+      }
+      // 優先度1でも非常に古い（15秒以上）場合は排出
+      else if (request.priority === 1 && age > 15000) {
+        shouldDrain = true;
+      }
       
       if (shouldDrain) {
         drainedCount++;
         if (typeof request.reject === 'function') {
-          request.reject(new Error('Emergency queue drainage - request dropped'));
+          request.reject(new Error('Emergency queue drainage - request dropped for maxCapacity prevention'));
         }
         return false;
       }
       return true;
     });
     
+    // Issue #438: 排出が不十分な場合は追加排出
+    if (drainedCount > 0 && this.queue.length > EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE * 0.5) {
+      logger.warn(`[Emergency Drainage] 初回排出後もキューが高負荷: ${this.queue.length}個、追加排出実行中...`);
+      
+      // より積極的な追加排出（優先度2も含める）
+      let additionalDrained = 0;
+      this.queue = this.queue.filter(request => {
+        const age = now - request.timestamp;
+        if (request.priority >= 2 && age > 3000) {
+          additionalDrained++;
+          if (typeof request.reject === 'function') {
+            request.reject(new Error('Additional emergency drainage - maxCapacity overflow prevention'));
+          }
+          return false;
+        }
+        return true;
+      });
+      drainedCount += additionalDrained;
+    }
+    
     if (drainedCount > 0) {
-      logger.warn(`[Emergency Drainage] ${drainedCount}個のリクエストを緊急排出しました`);
+      logger.warn(`[Emergency Drainage] ${drainedCount}個のリクエストを緊急排出しました (${initialQueueLength} → ${this.queue.length})`);
       
       // throttleMonitorに通知
       if (this.throttleMonitor) {
-        this.throttleMonitor.sendAlert(`⚠️ **緊急キュー排出実行**
+        this.throttleMonitor.sendAlert(`🚨 **Issue #438: 強化された緊急キュー排出実行**
         
 **排出数**: ${drainedCount}個のリクエスト
-**理由**: キュー使用率90%超過
-**現在のキュー長**: ${this.queue.length}
+**理由**: キュー使用率75%超過（maxCapacity overflow予防）
+**変化**: ${initialQueueLength} → ${this.queue.length}個
+**現在使用率**: ${((this.queue.length / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) * 100).toFixed(1)}%
 
-システム負荷軽減のため低優先度リクエストを排出しました。`);
+**Issue #438対応**: より積極的な予防策でmaxCapacityエラーを防止しています。`);
       }
     }
   }

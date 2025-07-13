@@ -4,7 +4,7 @@
  */
 
 const { postErrorToDiscord } = require('./notifications');
-const { MONITORING_SETTINGS, NOTIFICATION_SETTINGS } = require('./const');
+const { MONITORING_SETTINGS, NOTIFICATION_SETTINGS, EXCHANGE_SETTINGS } = require('./const');
 
 class ThrottleMonitor {
   constructor() {
@@ -105,10 +105,16 @@ class ThrottleMonitor {
   }
 
   /**
-   * スロットルエラーを処理する - Issue #443対応
+   * スロットルエラーを処理する - Issue #438 & #443対応
    */
   async handleThrottleError(errorType = '') {
     const errorRate = this.stats.throttleErrors / this.stats.totalRequests;
+
+    // Issue #438: maxCapacity特化処理
+    if (errorType.includes('maxCapacity') || errorType.includes('throttle queue is over')) {
+      await this.handleMaxCapacityError(errorType);
+      return;
+    }
 
     // Issue #443: queue overflow の早期検出
     if (this.stats.queueOverflowErrors >= this.thresholds.queueOverflowThreshold) {
@@ -172,6 +178,53 @@ class ThrottleMonitor {
     
     // 統計リセット
     this.stats.queueOverflowErrors = 0;
+  }
+
+  /**
+   * MaxCapacityエラー特化処理 - Issue #438対応
+   */
+  async handleMaxCapacityError(errorType = '') {
+    console.log(`[ThrottleMonitor] maxCapacityエラー検出: ${errorType}`);
+    
+    // 即座にサーキットブレーカーを開く
+    this.openCircuitBreaker();
+    
+    const message = `🚨 **CCXT MaxCapacity Error 緊急対応**
+    
+**エラー詳細**: ${errorType}
+**検出時刻**: ${new Date().toLocaleString()}
+**対応**: 
+- サーキットブレーカー即座開放
+- API呼び出し3分間停止
+- キュー完全排出実行
+
+**Issue #438対応: 予防的システム停止を実行中...**`;
+
+    await this.sendAlert(message);
+
+    // APIコーディネーターの完全リセット
+    if (this.apiCoordinator) {
+      console.log('[ThrottleMonitor] maxCapacityエラー対応: APIコーディネーター完全リセット');
+      this.apiCoordinator.emergencyReset();
+      
+      // 追加待機でキュー完全排出を保証
+      console.log('[ThrottleMonitor] キュー完全排出のため30秒追加待機...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+    }
+
+    // maxCapacity特化の長期回復時間（3分）
+    const maxCapacityDelay = MONITORING_SETTINGS.THROTTLE_QUEUE_MONITORING?.MAX_CAPACITY_RECOVERY_DELAY || 180000;
+    console.log(`[ThrottleMonitor] maxCapacityエラー対応: ${maxCapacityDelay}ms長期回復待機...`);
+    await new Promise(resolve => setTimeout(resolve, maxCapacityDelay));
+    
+    // より長期のサーキットブレーカー設定
+    this.circuitBreaker.nextAttemptTime = Date.now() + maxCapacityDelay;
+    
+    // 統計をリセット
+    this.stats.queueOverflowErrors = 0;
+    this.stats.lastQueueOverflow = Date.now();
+    
+    console.log('[ThrottleMonitor] maxCapacityエラー対応完了、システム復旧開始');
   }
 
   /**
@@ -292,7 +345,7 @@ class ThrottleMonitor {
   }
 
   /**
-   * 現在の推奨待機時間を取得する - Issue #440対応
+   * 現在の推奨待機時間を取得する - Issue #438 & #440対応
    */
   getRecommendedDelay() {
     // Issue #440: サーキットブレーカーの状態を考慮
@@ -305,6 +358,24 @@ class ThrottleMonitor {
       return Math.min(6000 * this.stats.consecutiveErrors, 35000); // Issue #440: 若干延長
     }
 
+    // Issue #438: APIコーディネーターのキュー使用率による動的調整
+    const coordinatorStats = this.apiCoordinator ? this.apiCoordinator.getStats() : { queueUsageRate: 0 };
+    const queueUsageRate = coordinatorStats.queueUsageRate;
+    
+    // Issue #438: 予防的throttling - キュー使用率に応じて動的にdelay調整
+    if (queueUsageRate >= 0.66) { // 66%以上で予防的throttle
+      const preventiveDelay = Math.min(
+        EXCHANGE_SETTINGS.RATE_LIMIT * EXCHANGE_SETTINGS.THROTTLE_QUEUE_MONITORING.DYNAMIC_RATE_LIMIT_MULTIPLIER,
+        20000 // 最大20秒
+      );
+      console.log(`[ThrottleMonitor] 予防的throttle適用: キュー使用率${(queueUsageRate * 100).toFixed(1)}%, 遅延: ${preventiveDelay}ms`);
+      return preventiveDelay;
+    } else if (queueUsageRate >= 0.5) { // 50%以上で軽度調整
+      const moderateDelay = EXCHANGE_SETTINGS.RATE_LIMIT * 1.5;
+      console.log(`[ThrottleMonitor] 軽度throttle適用: キュー使用率${(queueUsageRate * 100).toFixed(1)}%, 遅延: ${moderateDelay}ms`);
+      return moderateDelay;
+    }
+
     // Issue #440: システムヘルスを考慮した動的遅延
     const healthScore = this.getSystemHealthScore();
     const baseErrorRate = this.stats.throttleErrors / this.stats.totalRequests;
@@ -314,8 +385,8 @@ class ThrottleMonitor {
       return Math.min(healthPenalty, 8000);
     }
     
-    if (baseErrorRate > 0.08) { // 8% エラー率以上（閾値を下げた）
-      return Math.min(3000 * (baseErrorRate / 0.08), 6000); // 動的待機時間
+    if (baseErrorRate > 0.05) { // Issue #438: 5%エラー率以上（より厳格に）
+      return Math.min(4000 * (baseErrorRate / 0.05), 10000); // 動的待機時間（より長く）
     }
 
     return 0;
