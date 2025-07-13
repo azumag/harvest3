@@ -263,8 +263,76 @@ describe('mongoDatabase - 構造化ログ機能', () => {
   });
 
   describe('addOhlcvMongoDB', () => {
-    describe('🔴 Red: OHLCVデータエラーの構造化ログ', () => {
-      it('OHLCV重複エラー時に構造化されたログ情報を出力すること', async () => {
+    describe('🔴 Red: OHLCVデータ処理の構造化ログ', () => {
+      it('新規OHLCVデータ挿入時にdebugログを出力すること', async () => {
+        const ohlcvData = {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          timeframe: '1h',
+          timestamp: 1673000000000,
+          open: 4000000,
+          high: 4100000,
+          low: 3900000,
+          close: 4050000,
+          volume: 100
+        };
+
+        // 新規挿入を模擬
+        mockCollection.replaceOne.mockResolvedValue({
+          acknowledged: true,
+          matchedCount: 0,
+          modifiedCount: 0,
+          upsertedCount: 1,
+          upsertedId: 'new-id-123'
+        });
+
+        const result = await addOhlcvMongoDB(ohlcvData);
+
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('[OHLCV] 新規データ追加:')
+        );
+
+        expect(result).toMatchObject({
+          acknowledged: true,
+          upsertedCount: 1,
+          insertedId: 'new-id-123'
+        });
+      });
+
+      it('既存OHLCVデータ更新時にdebugログを出力すること', async () => {
+        const ohlcvData = {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          timeframe: '1h',
+          timestamp: 1673000000000,
+          open: 4000000,
+          high: 4100000,
+          low: 3900000,
+          close: 4050000,
+          volume: 100
+        };
+
+        // 既存データ更新を模擬
+        mockCollection.replaceOne.mockResolvedValue({
+          acknowledged: true,
+          matchedCount: 1,
+          modifiedCount: 1,
+          upsertedCount: 0
+        });
+
+        const result = await addOhlcvMongoDB(ohlcvData);
+
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('[OHLCV] 既存データ更新:')
+        );
+
+        expect(result).toMatchObject({
+          acknowledged: true,
+          modifiedCount: 1
+        });
+      });
+
+      it('OHLCV重複エラー（フォールバック）時に構造化されたログ情報を出力すること', async () => {
         const ohlcvData = {
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
@@ -280,19 +348,18 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         const duplicateError = new Error('Duplicate key error');
         duplicateError.code = 11000;
 
-        mockCollection.findOne.mockResolvedValueOnce(null);
-        mockCollection.insertOne.mockRejectedValue(duplicateError);
-        mockCollection.findOne.mockResolvedValueOnce(ohlcvData);
+        mockCollection.replaceOne.mockRejectedValue(duplicateError);
+        mockCollection.findOne.mockResolvedValue(ohlcvData);
 
         const result = await addOhlcvMongoDB(ohlcvData);
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('[OHLCV] 重複データ検出:'),
+          expect.stringContaining('[OHLCV] 重複データ検出（フォールバック処理）:'),
           {
             operation: 'addOhlcvMongoDB',
             error: 'Duplicate key error',
             errorCode: 11000,
-            timestamp: 1673000000000, // This is the timestamp from the ohlcvData, not the log timestamp
+            timestamp: 1673000000000,
             collection: 'ohlcv',
             exchange: 'bitbank',
             symbol: 'BTC/JPY',
@@ -316,8 +383,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         generalError.code = 'DB_ERROR';
         generalError.stack = 'Error stack trace';
 
-        mockCollection.findOne.mockResolvedValue(null);
-        mockCollection.insertOne.mockRejectedValue(generalError);
+        mockCollection.replaceOne.mockRejectedValue(generalError);
 
         await expect(addOhlcvMongoDB(ohlcvData)).rejects.toThrow();
 

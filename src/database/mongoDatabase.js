@@ -656,25 +656,32 @@ async function deleteOrderByOrderId(orderId) {
 async function addOhlcvMongoDB(ohlcvData) {
   await connectDB();
   try {
-    // 重複挿入を防ぐために upsert: true を使用するか、事前に findOne で確認する
-    const existingData = await module.exports.ohlcvCollection.findOne({
-      exchange: ohlcvData.exchange,
-      symbol: ohlcvData.symbol,
-      timeframe: ohlcvData.timeframe,
-      timestamp: ohlcvData.timestamp
-    });
-    if (existingData) {
-      // console.log('OHLCV data already exists:', ohlcvData.timestamp);
-      return existingData;
+    // replaceOneとupsertを使用して重複キーエラーを防止
+    const result = await module.exports.ohlcvCollection.replaceOne(
+      {
+        exchange: ohlcvData.exchange,
+        symbol: ohlcvData.symbol,
+        timeframe: ohlcvData.timeframe,
+        timestamp: ohlcvData.timestamp
+      },
+      ohlcvData,
+      { upsert: true }
+    );
+
+    if (result.upsertedCount > 0) {
+      logger.debug(`[OHLCV] 新規データ追加: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      return { ...result, insertedId: result.upsertedId };
+    } else if (result.modifiedCount > 0) {
+      logger.debug(`[OHLCV] 既存データ更新: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      return result;
+    } else {
+      logger.debug(`[OHLCV] データ変更なし: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`);
+      return result;
     }
-    // insertOne を使用し、ユニークインデックスで重複エラーをハンドル
-    const result = await module.exports.ohlcvCollection.insertOne(ohlcvData);
-    // console.log('OHLCV added:', result.insertedId);
-    return result;
   } catch (error) {
-    // 重複エラー (E11000 duplicate key error) の場合は既存データを返す
+    // 万が一重複エラーが発生した場合のフォールバック
     if (error.code === 11000) {
-      logger.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`, 
+      logger.warn(`[OHLCV] 重複データ検出（フォールバック処理）: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`, 
         createLogMetadata('addOhlcvMongoDB', error, {
           collection: 'ohlcv',
           exchange: ohlcvData.exchange,
