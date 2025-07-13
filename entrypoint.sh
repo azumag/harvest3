@@ -124,7 +124,7 @@ pre_startup_checks() {
     # decimal.jsの存在を具体的にチェック
     if ! node -e "require('decimal.js'); console.log('decimal.js OK');" 2>/dev/null; then
         log "decimal.js not found, installing specifically..."
-        if ! npm install decimal.js@^10.6.0; then
+        if ! npm install decimal.js@10.6.0; then
             local error_msg="Failed to install decimal.js specifically"
             log "ERROR: $error_msg"
             send_startup_error_to_discord "$error_msg" "decimal.js installation failed"
