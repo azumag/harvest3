@@ -17,31 +17,57 @@ class ThrottleMonitor {
       // Issue #443: 新しい統計項目
       queueOverflowErrors: 0,
       coordinatorErrors: 0,
-      lastQueueOverflow: 0
+      lastQueueOverflow: 0,
+      // Issue #440: 追加統計
+      emergencyStops: 0,
+      lastEmergencyStop: 0,
+      systemHealthScore: 1.0 // 0.0-1.0 のスコア
     };
 
     this.thresholds = {
-      criticalErrorRate: 0.2, // Issue #443: 20%エラー率で危険レベル（より厳格に）
-      maxConsecutiveErrors: 5, // Issue #443: 連続エラー閾値を5に削減（早期対応）
-      recoveryDelay: 30000, // Issue #443: 回復待機時間を30秒に短縮
+      criticalErrorRate: 0.15, // Issue #440: 15%エラー率で危険レベル（より厳格に）
+      maxConsecutiveErrors: 3, // Issue #440: 連続エラー閾値を3に削減（早期対応）
+      recoveryDelay: 25000, // Issue #440: 回復待機時間を25秒に短縮
       alertCooldown: NOTIFICATION_SETTINGS.RATE_LIMIT_WINDOW_MS,
-      // Issue #443: 新しい閾値
-      queueOverflowThreshold: 3, // queue overflow 3回で緊急対応
-      coordinatorResetThreshold: 5 // コーディネーターリセット閾値
+      // Issue #440: 強化された閾値
+      queueOverflowThreshold: 2, // queue overflow 2回で緊急対応（より厳格）
+      coordinatorResetThreshold: 3, // コーディネーターリセット閾値を削減
+      emergencyThreshold: 0.8, // システム負荷80%で緊急停止
+      healthRecoveryThreshold: 0.7 // ヘルススコア70%以下で制限開始
     };
 
     this.lastAlertTime = 0;
     this.isRecoveryMode = false;
     this.apiCoordinator = null; // 後で設定される
+    
+    // Issue #440: サーキットブレーカー状態管理
+    this.circuitBreaker = {
+      state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
+      failureCount: 0,
+      lastFailureTime: 0,
+      nextAttemptTime: 0,
+      successCount: 0
+    };
+    
+    // Issue #440: システムヘルスモニタリング
+    this.healthMonitoring = {
+      enabled: true,
+      lastHealthCheck: 0,
+      healthHistory: [], // 直近の健康状態履歴
+      maxHistorySize: 10
+    };
   }
 
   /**
-   * API リクエストを記録する - Issue #443対応
+   * API リクエストを記録する - Issue #440対応
    * @param {boolean} isError - エラーかどうか
    * @param {string} errorType - エラーの種類
    */
   recordRequest(isError = false, errorType = '') {
     this.stats.totalRequests++;
+
+    // Issue #440: サーキットブレーカー状態を更新
+    this.updateCircuitBreakerState(!isError);
 
     if (isError) {
       this.stats.throttleErrors++;
@@ -65,6 +91,9 @@ class ThrottleMonitor {
         this.handleRecovery();
       }
     }
+    
+    // Issue #440: システムヘルススコアを定期的に更新
+    this.stats.systemHealthScore = this.getSystemHealthScore();
   }
 
   /**
@@ -211,19 +240,25 @@ class ThrottleMonitor {
   }
 
   /**
-   * 現在の統計情報を取得する
+   * 現在の統計情報を取得する - Issue #440対応
    */
   getStats() {
     return {
       ...this.stats,
       errorRate: this.stats.totalRequests > 0 ?
         (this.stats.throttleErrors / this.stats.totalRequests) : 0,
-      isRecoveryMode: this.isRecoveryMode
+      isRecoveryMode: this.isRecoveryMode,
+      // Issue #440: 追加統計情報
+      circuitBreakerState: this.circuitBreaker.state,
+      systemHealthScore: this.getSystemHealthScore(),
+      shouldAllowRequest: this.shouldAllowRequest(),
+      recommendedDelay: this.getRecommendedDelay(),
+      healthHistory: this.healthMonitoring.healthHistory.slice(-5) // 直近5件
     };
   }
 
   /**
-   * 統計をリセットする
+   * 統計をリセットする - Issue #440対応
    */
   resetStats() {
     this.stats = {
@@ -231,26 +266,193 @@ class ThrottleMonitor {
       throttleErrors: 0,
       consecutiveErrors: 0,
       lastErrorTime: 0,
-      recoveryAttempts: 0
+      recoveryAttempts: 0,
+      queueOverflowErrors: 0,
+      coordinatorErrors: 0,
+      lastQueueOverflow: 0,
+      emergencyStops: 0,
+      lastEmergencyStop: 0,
+      systemHealthScore: 1.0
     };
     this.isRecoveryMode = false;
-    console.log('[ThrottleMonitor] 統計をリセットしました');
+    
+    // Issue #440: サーキットブレーカーもリセット
+    this.circuitBreaker = {
+      state: 'CLOSED',
+      failureCount: 0,
+      lastFailureTime: 0,
+      nextAttemptTime: 0,
+      successCount: 0
+    };
+    
+    // Issue #440: ヘルス履歴もリセット
+    this.healthMonitoring.healthHistory = [];
+    
+    console.log('[ThrottleMonitor] 統計とサーキットブレーカーをリセットしました');
   }
 
   /**
-   * 現在の推奨待機時間を取得する
+   * 現在の推奨待機時間を取得する - Issue #440対応
    */
   getRecommendedDelay() {
+    // Issue #440: サーキットブレーカーの状態を考慮
+    if (this.circuitBreaker.state === 'OPEN') {
+      const timeUntilNextAttempt = this.circuitBreaker.nextAttemptTime - Date.now();
+      return Math.max(timeUntilNextAttempt, 0);
+    }
+    
     if (this.isRecoveryMode) {
-      return Math.min(5000 * this.stats.consecutiveErrors, 30000);
+      return Math.min(6000 * this.stats.consecutiveErrors, 35000); // Issue #440: 若干延長
     }
 
-    const errorRate = this.stats.throttleErrors / this.stats.totalRequests;
-    if (errorRate > 0.1) { // 10% エラー率以上
-      return 2000; // 2秒待機
+    // Issue #440: システムヘルスを考慮した動的遅延
+    const healthScore = this.getSystemHealthScore();
+    const baseErrorRate = this.stats.throttleErrors / this.stats.totalRequests;
+    
+    if (healthScore < this.thresholds.healthRecoveryThreshold) {
+      const healthPenalty = (1 - healthScore) * 5000; // 最大5秒のペナルティ
+      return Math.min(healthPenalty, 8000);
+    }
+    
+    if (baseErrorRate > 0.08) { // 8% エラー率以上（閾値を下げた）
+      return Math.min(3000 * (baseErrorRate / 0.08), 6000); // 動的待機時間
     }
 
     return 0;
+  }
+  
+  /**
+   * Issue #440: サーキットブレーカーの状態をチェック
+   */
+  shouldAllowRequest() {
+    const now = Date.now();
+    
+    switch (this.circuitBreaker.state) {
+      case 'CLOSED':
+        return true;
+        
+      case 'OPEN':
+        if (now >= this.circuitBreaker.nextAttemptTime) {
+          this.circuitBreaker.state = 'HALF_OPEN';
+          this.circuitBreaker.successCount = 0;
+          console.log('[ThrottleMonitor] サーキットブレーカー: OPEN → HALF_OPEN');
+          return true;
+        }
+        return false;
+        
+      case 'HALF_OPEN':
+        return true;
+        
+      default:
+        return true;
+    }
+  }
+  
+  /**
+   * Issue #440: サーキットブレーカーの状態を更新
+   */
+  updateCircuitBreakerState(isSuccess) {
+    const now = Date.now();
+    
+    if (isSuccess) {
+      this.circuitBreaker.failureCount = 0;
+      
+      if (this.circuitBreaker.state === 'HALF_OPEN') {
+        this.circuitBreaker.successCount++;
+        if (this.circuitBreaker.successCount >= 3) { // 3回連続成功で回復
+          this.circuitBreaker.state = 'CLOSED';
+          console.log('[ThrottleMonitor] サーキットブレーカー: HALF_OPEN → CLOSED');
+        }
+      }
+    } else {
+      this.circuitBreaker.failureCount++;
+      this.circuitBreaker.lastFailureTime = now;
+      
+      if (this.circuitBreaker.state === 'CLOSED' && 
+          this.circuitBreaker.failureCount >= this.thresholds.maxConsecutiveErrors) {
+        this.openCircuitBreaker();
+      } else if (this.circuitBreaker.state === 'HALF_OPEN') {
+        this.openCircuitBreaker();
+      }
+    }
+  }
+  
+  /**
+   * Issue #440: サーキットブレーカーをOPEN状態にする
+   */
+  openCircuitBreaker() {
+    this.circuitBreaker.state = 'OPEN';
+    this.circuitBreaker.nextAttemptTime = Date.now() + this.thresholds.recoveryDelay;
+    this.stats.emergencyStops++;
+    this.stats.lastEmergencyStop = Date.now();
+    
+    console.log(`[ThrottleMonitor] サーキットブレーカー: OPEN (${this.thresholds.recoveryDelay}ms後に再試行)`);
+    
+    // 緊急停止通知
+    this.sendAlert(`🔴 **サーキットブレーカー緊急停止**
+    
+**原因**: 連続エラー閾値到達 (${this.circuitBreaker.failureCount}回)
+**状態**: API呼び出しを一時停止
+**復旧予定**: ${new Date(this.circuitBreaker.nextAttemptTime).toLocaleString()}
+
+システムの安定化を図っています...`);
+  }
+  
+  /**
+   * Issue #440: システムヘルススコアを計算
+   */
+  getSystemHealthScore() {
+    const now = Date.now();
+    
+    if (this.stats.totalRequests === 0) {
+      return 1.0; // リクエストがない場合は健全とする
+    }
+    
+    // エラー率による減点 (最大40%減点)
+    const errorRate = this.stats.throttleErrors / this.stats.totalRequests;
+    const errorPenalty = Math.min(errorRate * 2, 0.4);
+    
+    // 連続エラーによる減点 (最大30%減点)
+    const consecutivePenalty = Math.min(this.stats.consecutiveErrors * 0.1, 0.3);
+    
+    // 最近のqueue overflowによる減点 (最大20%減点)
+    const timeSinceOverflow = now - this.stats.lastQueueOverflow;
+    const overflowPenalty = timeSinceOverflow < 60000 ? 0.2 : 0; // 1分以内なら減点
+    
+    // APIコーディネーターの状態による減点
+    const coordinatorPenalty = this.apiCoordinator ? 
+      Math.min(this.apiCoordinator.getStats().queueUsageRate * 0.1, 0.1) : 0;
+    
+    const healthScore = Math.max(1.0 - errorPenalty - consecutivePenalty - overflowPenalty - coordinatorPenalty, 0.0);
+    
+    // ヘルス履歴を更新
+    this.updateHealthHistory(healthScore);
+    
+    return healthScore;
+  }
+  
+  /**
+   * Issue #440: ヘルス履歴を更新
+   */
+  updateHealthHistory(score) {
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+    
+    // 古いエントリーを時間ベースで削除（メモリリーク対策）
+    this.healthMonitoring.healthHistory = this.healthMonitoring.healthHistory
+      .filter(entry => now - entry.timestamp < ONE_HOUR);
+    
+    this.healthMonitoring.healthHistory.push({
+      score: score,
+      timestamp: now
+    });
+    
+    // 履歴サイズ制限も適用
+    if (this.healthMonitoring.healthHistory.length > this.healthMonitoring.maxHistorySize) {
+      this.healthMonitoring.healthHistory.shift();
+    }
+    
+    this.healthMonitoring.lastHealthCheck = now;
   }
 }
 

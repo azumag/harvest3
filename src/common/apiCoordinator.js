@@ -32,28 +32,45 @@ class APICoordinator {
   }
 
   /**
-   * API呼び出しを協調制御で実行
+   * API呼び出しを協調制御で実行 - Issue #440対応
    * @param {Function} apiCall - 実行するAPI呼び出し関数
    * @param {string} requestId - リクエストID
    * @param {number} priority - 優先度 (1: 高, 2: 中, 3: 低)
+   * @param {Object} options - オプション (dropIfBusy: 高負荷時にドロップ可能, timeout: タイムアウト時間)
    * @returns {Promise} API呼び出しの結果
    */
-  async executeAPICall(apiCall, requestId = null, priority = 2) {
+  async executeAPICall(apiCall, requestId = null, priority = 2, options = {}) {
     const request = {
       id: requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       apiCall,
       priority,
       timestamp: Date.now(),
       resolve: null,
-      reject: null
+      reject: null,
+      dropIfBusy: options.dropIfBusy || false,
+      timeout: options.timeout || 30000
     };
 
     return new Promise((resolve, reject) => {
       request.resolve = resolve;
       request.reject = reject;
 
-      // Issue #443: queue容量制限チェック (queue + activeRequests の合計)
+      // Issue #440: システム負荷チェックと適応的制御
       const totalRequests = this.queue.length + this.activeRequests.size;
+      const queueUsageRate = totalRequests / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
+      
+      // Issue #440: 高負荷時の緊急対応
+      if (queueUsageRate >= 0.9) {
+        // 90%以上で緊急排出
+        this.emergencyQueueDrainage();
+      } else if (queueUsageRate >= 0.7 && request.dropIfBusy) {
+        // 70%以上で非重要リクエストをドロップ
+        this.stats.rejectedRequests++;
+        logger.warn(`[Queue Busy] 高負荷のため非重要リクエストをドロップ: ${request.id}, 使用率: ${(queueUsageRate * 100).toFixed(1)}%`);
+        reject(new Error('API coordinator is busy - request dropped'));
+        return;
+      }
+      
       if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
         this.stats.rejectedRequests++;
         logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${this.queue.length}, active: ${this.activeRequests.size})`);
@@ -61,15 +78,77 @@ class APICoordinator {
         return;
       }
 
+      // Issue #440: 動的優先度調整
+      request.priority = this.adjustPriorityBasedOnLoad(request.priority, queueUsageRate);
+
       // 優先度順でキューに追加
       this.addToQueue(request);
       this.stats.queuedRequests++;
       
-      logger.debug(`[Queue Add] リクエスト追加: ${request.id}, queue長: ${this.queue.length}`);
+      logger.debug(`[Queue Add] リクエスト追加: ${request.id}, queue長: ${this.queue.length}, 優先度: ${request.priority}`);
 
       // キュー処理開始
       this.processQueue();
     });
+  }
+  
+  /**
+   * Issue #440: システム負荷に基づく動的優先度調整
+   */
+  adjustPriorityBasedOnLoad(originalPriority, queueUsageRate) {
+    if (queueUsageRate < 0.3) {
+      return originalPriority; // 負荷が低い場合は調整なし
+    }
+    
+    // 負荷が高い場合は優先度を1段階上げる（数値を下げる）
+    if (queueUsageRate >= 0.7) {
+      return Math.max(originalPriority - 1, 1);
+    }
+    
+    // 中程度の負荷の場合は低優先度のみ調整
+    if (originalPriority >= 3 && queueUsageRate >= 0.5) {
+      return originalPriority - 1;
+    }
+    
+    return originalPriority;
+  }
+  
+  /**
+   * Issue #440: 緊急キュー排出
+   */
+  emergencyQueueDrainage() {
+    const now = Date.now();
+    let drainedCount = 0;
+    
+    // 低優先度かつ古いリクエストから排出
+    this.queue = this.queue.filter(request => {
+      const age = now - request.timestamp;
+      const shouldDrain = request.priority >= 3 && (age > 10000 || request.dropIfBusy);
+      
+      if (shouldDrain) {
+        drainedCount++;
+        if (typeof request.reject === 'function') {
+          request.reject(new Error('Emergency queue drainage - request dropped'));
+        }
+        return false;
+      }
+      return true;
+    });
+    
+    if (drainedCount > 0) {
+      logger.warn(`[Emergency Drainage] ${drainedCount}個のリクエストを緊急排出しました`);
+      
+      // throttleMonitorに通知
+      if (this.throttleMonitor) {
+        this.throttleMonitor.sendAlert(`⚠️ **緊急キュー排出実行**
+        
+**排出数**: ${drainedCount}個のリクエスト
+**理由**: キュー使用率90%超過
+**現在のキュー長**: ${this.queue.length}
+
+システム負荷軽減のため低優先度リクエストを排出しました。`);
+      }
+    }
   }
 
   /**
@@ -97,6 +176,12 @@ class APICoordinator {
     }
 
     this.isProcessing = true;
+    
+    // 二重チェック（競合状態対策）
+    if (this.queue.length === 0) {
+      this.isProcessing = false;
+      return;
+    }
 
     try {
       while (this.queue.length > 0) {
@@ -221,16 +306,23 @@ class APICoordinator {
   }
 
   /**
-   * 緊急時のqueue初期化
+   * 緊急時のqueue初期化 - Issue #440対応
    */
   emergencyReset() {
     logger.warn('[Emergency Reset] API coordinator緊急リセット実行');
     
+    const queueLength = this.queue.length;
+    const activeCount = this.activeRequests.size;
+    
     // 待機中のリクエストをエラーで終了
     this.queue.forEach(request => {
       // テスト時など、reject関数が存在しない場合の安全チェック
-      if (typeof request.reject === 'function') {
-        request.reject(new Error('Emergency reset - request cancelled'));
+      try {
+        if (request.reject && typeof request.reject === 'function') {
+          request.reject(new Error('Emergency reset - request cancelled'));
+        }
+      } catch (rejectionError) {
+        logger.warn(`[Emergency Reset] リクエスト拒否時エラー: ${rejectionError.message}`);
       }
     });
     
@@ -239,7 +331,32 @@ class APICoordinator {
     this.queue = [];
     this.activeRequests.clear();
     
-    logger.info('[Emergency Reset] 完了');
+    // Issue #440: 統計をリセット
+    this.stats.rejectedRequests += queueLength;
+    this.lastRequestTime = 0;
+    
+    logger.info(`[Emergency Reset] 完了 - クリア: queue=${queueLength}, active=${activeCount}`);
+    
+    // Issue #440: throttleMonitorと連携した通知
+    if (this.throttleMonitor) {
+      this.throttleMonitor.sendAlert(`🔴 **API Coordinator緊急リセット**
+      
+**クリア対象**:
+- 待機中リクエスト: ${queueLength}個
+- 実行中リクエスト: ${activeCount}個
+
+**原因**: システム負荷またはqueue overflow対応
+**状態**: 全てのリクエストキューをクリア
+
+システムの復旧処理を実行中...`);
+    }
+  }
+  
+  /**
+   * Issue #440: throttleMonitorとの連携設定
+   */
+  setThrottleMonitor(monitor) {
+    this.throttleMonitor = monitor;
   }
 }
 

@@ -35,7 +35,10 @@ const exchangeBB = new ccxt.bitbank({
   timeout: EXCHANGE_SETTINGS.TIMEOUT,
   options: {
     // Issue #443: CCXTライブラリの制限に合わせたthrottle設定
-    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE, // 800（CCXTの1000制限に対して安全な値）
+    // CCXT制限: 1000, 設定値: 800 (20%安全マージン)
+    // 理由: 高負荷時の一時的なキュー積み上がりやAPIレスポンス遅延を考慮し
+    // overflow回避のため制限値より20%低い値に設定
+    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
     'defaultType': 'spot',
     'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
     'adjustForTimeDifference': true
@@ -47,9 +50,10 @@ console.log('[Issue #443] throttle queue overflow対策を適用');
 console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rateLimit: ${exchangeBB.rateLimit}ms, timeout: ${exchangeBB.timeout}ms`);
 console.log(`[Throttle Queue] maxSize: ${exchangeBB.options.maxThrottleQueueSize}, CCXT内部制限: 1000`);
 
-// Issue #443: throttleMonitorとAPIコーディネーターの連携設定
+// Issue #440 & #443: throttleMonitorとAPIコーディネーターの双方向連携設定
 throttleMonitor.setAPICoordinator(apiCoordinator);
-console.log('[Issue #443] throttleMonitorとAPIコーディネーターの連携を設定');
+apiCoordinator.setThrottleMonitor(throttleMonitor);
+console.log('[Issue #440] throttleMonitorとAPIコーディネーターの双方向連携を設定');
 
 const exchangeBF = new ccxt.bitflyer({
   apiKey: BFApiKey,
