@@ -172,6 +172,26 @@ npm run log-monitor:debug
 - **自動正規化**: タイムスタンプ、UUID、URL、メモリアドレス等の動的情報を除去
 - **1日最大Issue数制限**: 過剰なIssue作成を防止（デフォルト: 10件/日）
 
+### 自動更新監視
+```bash
+# mainブランチ自動更新監視開始
+npm run auto-update
+
+# デバッグモード付き自動更新監視
+npm run auto-update:debug
+
+# 自動更新監視のステータス確認
+npm run auto-update:status
+```
+
+#### 自動更新監視システムの機能
+- **定期的なmainブランチ監視**: デフォルト5分間隔で更新をチェック
+- **自動git pull**: 更新検出時に自動でgit pullを実行
+- **Dockerサービス自動再起動**: `docker compose down && docker compose up backtest bot -d`
+- **リトライ機能**: 更新失敗時の自動リトライ（最大3回）
+- **グレースフルシャットダウン**: SIGINT/SIGTERMでの安全な停止
+- **ステータス確認**: 現在の監視状態とハッシュ情報の表示
+
 ## 🎯 アーキテクチャ
 
 ### データフロー
@@ -193,6 +213,7 @@ npm run log-monitor:debug
 - **src/common/**: 共通ユーティリティ
 - **src/hft/**: 高頻度取引機能
 - **scripts/log-monitor.js**: Docker Composeログ監視とGitHub Issue自動発行
+- **scripts/auto-update-monitor.js**: mainブランチ自動更新監視とDockerサービス再起動
 
 ## ⚙️ 設定
 
@@ -523,6 +544,12 @@ export DISCORD_WEBHOOK_URL=your_webhook_url           # Discord通知有効化
   - 動的情報（タイムスタンプ、UUID、URL、メモリアドレス）の自動正規化
   - 同一サービス内類似エラーの長期間スロットリング機能
   - 包括的な単体テスト（29テストケース）による品質保証
+- **自動更新監視システム**: mainブランチ自動更新とDockerサービス再起動機能
+  - 定期的なmainブランチ監視（デフォルト5分間隔）
+  - 更新検出時の自動git pullとDockerサービス再起動
+  - リトライ機能付きの堅牢な更新処理（最大3回リトライ）
+  - グレースフルシャットダウンとステータス監視機能
+  - 包括的な単体テスト（19テストケース）による品質保証
 - **設定管理システム**: 環境変数ベースの設定管理と検証機能
 - **高精度数値計算**: Decimal.jsを使用した浮動小数点誤差の解消
 - **エラーハンドリング強化**: Bitbank API固有のエラー処理とリトライ機能

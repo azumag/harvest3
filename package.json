@@ -38,7 +38,10 @@
     "load-test": "node scripts/load-test-data-collection.js",
     "test-enhanced": "jest test/monitoring/realDataCollectorEnhanced.test.js",
     "log-monitor": "node scripts/log-monitor.js",
-    "log-monitor:debug": "node scripts/log-monitor.js --debug"
+    "log-monitor:debug": "node scripts/log-monitor.js --debug",
+    "auto-update": "node scripts/auto-update-monitor.js",
+    "auto-update:debug": "node scripts/auto-update-monitor.js --debug",
+    "auto-update:status": "node scripts/auto-update-monitor.js --status"
   },
   "dependencies": {
     "axios": "^1.7.7",
