@@ -46,7 +46,17 @@ function isBitbankError(error, targetCode) {
     // JSON解析に失敗した場合は次の方法へ
   }
 
-  // 方法3: 文字列検索（フォールバック、後方互換性のため）
+  // 方法3: エラーメッセージ内での基本的な文字列検索
+  if (error.message && error.message.includes(targetCode)) {
+    return true;
+  }
+
+  // 方法4: レスポンスボディでのエラーコード確認
+  if (error.response && error.response.error && error.response.error.includes(targetCode)) {
+    return true;
+  }
+
+  // 方法5: 従来の詳細JSON形式の文字列検索（後方互換性のため）
   if (error.message && error.message.includes(`code":"${targetCode}"`)) {
     return true;
   }

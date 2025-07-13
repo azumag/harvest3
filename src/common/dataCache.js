@@ -6,6 +6,7 @@
 class DataCache {
   constructor(defaultTTL = 60000) { // デフォルト1分
     this.cache = new Map();
+    this.pendingFetches = new Map(); // 進行中のフェッチを追跡
     this.defaultTTL = defaultTTL;
     this.stats = {
       hits: 0,
@@ -31,19 +32,36 @@ class DataCache {
       return cached.data;
     }
     
+    // 進行中のフェッチがあるかチェック
+    if (this.pendingFetches.has(key)) {
+      this.stats.hits++; // 同じキーの並行リクエストもヒットとして扱う
+      return this.pendingFetches.get(key);
+    }
+    
     // キャッシュミス - 新規取得
     this.stats.misses++;
-    try {
-      const data = await fetchFunction();
-      this.set(key, data, ttl);
-      return data;
-    } catch (error) {
-      // エラー時は期限切れキャッシュがあれば返す
-      if (cached) {
-        return cached.data;
+    
+    const fetchPromise = (async () => {
+      try {
+        const data = await fetchFunction();
+        this.set(key, data, ttl);
+        return data;
+      } catch (error) {
+        // エラー時は期限切れキャッシュがあれば返す
+        if (cached) {
+          return cached.data;
+        }
+        throw error;
+      } finally {
+        // フェッチ完了後は進行中リストから削除
+        this.pendingFetches.delete(key);
       }
-      throw error;
-    }
+    })();
+    
+    // 進行中フェッチとして登録
+    this.pendingFetches.set(key, fetchPromise);
+    
+    return fetchPromise;
   }
   
   /**
@@ -98,6 +116,7 @@ class DataCache {
   clear() {
     const size = this.cache.size;
     this.cache.clear();
+    this.pendingFetches.clear();
     this.stats.invalidations += size;
   }
   
