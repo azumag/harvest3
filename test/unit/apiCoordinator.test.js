@@ -258,4 +258,217 @@ describe('APICoordinator', () => {
       expect(coordinator.stats.avgWaitTime).toBe(expected);
     });
   });
+
+  // Issue #447: 新機能のテスト
+  describe('Issue #447: CCXT throttle queue overflow対策', () => {
+    let mockThrottleMonitor;
+
+    beforeEach(() => {
+      // throttleMonitorのモック設定
+      mockThrottleMonitor = {
+        getStats: jest.fn().mockReturnValue({
+          consecutiveErrors: 0,
+          lastQueueOverflow: null
+        })
+      };
+      
+      // dynamically mock throttleMonitor for this test
+      const { throttleMonitor } = require('../../src/common/throttleMonitor');
+      Object.assign(throttleMonitor, mockThrottleMonitor);
+    });
+
+    describe('checkCcxtThrottleQueueBeforeExecution', () => {
+      test('高負荷時に予防的待機が実行されること', async () => {
+        // 高負荷状況をシミュレート（使用率45%）
+        for (let i = 0; i < 5; i++) {
+          coordinator.queue.push({ id: `dummy_${i}`, priority: 2 });
+        }
+
+        const request = { id: 'test_request' };
+        const startTime = Date.now();
+
+        await coordinator.checkCcxtThrottleQueueBeforeExecution(request);
+
+        const executionTime = Date.now() - startTime;
+        
+        // 2秒以上の待機が発生していることを確認
+        expect(executionTime).toBeGreaterThanOrEqual(1900); // 100ms余裕
+      });
+
+      test('連続エラー時に待機が実行されること', async () => {
+        mockThrottleMonitor.getStats.mockReturnValue({
+          consecutiveErrors: 3,
+          lastQueueOverflow: null
+        });
+
+        const request = { id: 'test_request' };
+        const startTime = Date.now();
+
+        await coordinator.checkCcxtThrottleQueueBeforeExecution(request);
+
+        const executionTime = Date.now() - startTime;
+        
+        // 5秒以上の待機が発生していることを確認
+        expect(executionTime).toBeGreaterThanOrEqual(4900); // 100ms余裕
+      });
+
+      test('最近のmaxCapacityエラー時に長期待機が実行されること', async () => {
+        mockThrottleMonitor.getStats.mockReturnValue({
+          consecutiveErrors: 0,
+          lastQueueOverflow: Date.now() - 20000 // 20秒前
+        });
+
+        const request = { id: 'test_request' };
+        const startTime = Date.now();
+
+        await coordinator.checkCcxtThrottleQueueBeforeExecution(request);
+
+        const executionTime = Date.now() - startTime;
+        
+        // 10秒以上の待機が発生していることを確認
+        expect(executionTime).toBeGreaterThanOrEqual(9900); // 100ms余裕
+      });
+
+      test('正常状況では待機が発生しないこと', async () => {
+        // 正常状況（低負荷、エラーなし）
+        coordinator.queue = []; // 空のキュー
+        mockThrottleMonitor.getStats.mockReturnValue({
+          consecutiveErrors: 0,
+          lastQueueOverflow: null
+        });
+
+        const request = { id: 'test_request' };
+        const startTime = Date.now();
+
+        await coordinator.checkCcxtThrottleQueueBeforeExecution(request);
+
+        const executionTime = Date.now() - startTime;
+        
+        // 待機時間が最小限であることを確認（50ms以下）
+        expect(executionTime).toBeLessThan(50);
+      });
+    });
+
+    describe('emergencyQueueClearance', () => {
+      test('低優先度リクエストが適切に拒否されること', () => {
+        // 様々な優先度のリクエストを作成
+        const requests = [
+          { id: 'high1', priority: 1, reject: jest.fn() },
+          { id: 'medium1', priority: 2, reject: jest.fn() },
+          { id: 'low1', priority: 3, reject: jest.fn() },
+          { id: 'low2', priority: 3, dropIfBusy: true, reject: jest.fn() },
+          { id: 'medium2', priority: 2, reject: jest.fn() }
+        ];
+
+        coordinator.queue = [...requests];
+
+        coordinator.emergencyQueueClearance();
+
+        // 低優先度リクエストが拒否されていることを確認
+        expect(requests[2].reject).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringContaining('Emergency queue clearance')
+          })
+        );
+        expect(requests[3].reject).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringContaining('Emergency queue clearance')
+          })
+        );
+
+        // 優先度に基づいてリクエストが適切に処理されていることを確認
+        const remainingIds = coordinator.queue.map(req => req.id);
+        
+        // 高優先度は必ず保持される
+        expect(remainingIds).toContain('high1');
+        
+        // 低優先度とdropIfBusyは確実に拒否される
+        expect(remainingIds).not.toContain('low1');
+        expect(remainingIds).not.toContain('low2');
+        
+        // 70%削減により、5個中3個が拒否されるため、2個が保持される
+        expect(remainingIds.length).toBe(2);
+      });
+
+      test('処理が一時停止され、後で再開されること', (done) => {
+        coordinator.queue = [
+          { id: 'test', priority: 2, reject: jest.fn() }
+        ];
+
+        const originalProcessQueue = coordinator.processQueue;
+        coordinator.processQueue = jest.fn();
+
+        coordinator.emergencyQueueClearance();
+
+        // 処理が停止されていることを確認
+        expect(coordinator.isProcessing).toBe(false);
+
+        // 15秒後に処理が再開されることを確認
+        setTimeout(() => {
+          expect(coordinator.processQueue).toHaveBeenCalled();
+          coordinator.processQueue = originalProcessQueue;
+          done();
+        }, 15100); // 15.1秒後にチェック
+      }, 20000); // テストタイムアウトを20秒に設定
+
+      test('統計が正しく更新されること', () => {
+        const initialRejectedCount = coordinator.stats.rejectedRequests;
+        
+        coordinator.queue = [
+          { id: 'high', priority: 1, reject: jest.fn() },
+          { id: 'low1', priority: 3, reject: jest.fn() },
+          { id: 'low2', priority: 3, reject: jest.fn() }
+        ];
+
+        coordinator.emergencyQueueClearance();
+
+        // 拒否されたリクエスト数が統計に追加されていることを確認
+        expect(coordinator.stats.rejectedRequests).toBeGreaterThan(initialRejectedCount);
+      });
+    });
+
+    describe('maxCapacityエラー時の特別処理', () => {
+      test('maxCapacityエラー時に緊急キュークリアが実行されること', async () => {
+        const mockAPICall = jest.fn().mockRejectedValue(
+          new Error('throttle queue is over maxCapacity (1000)')
+        );
+
+        // emergencyQueueClearanceのモック化
+        const originalEmergencyQueueClearance = coordinator.emergencyQueueClearance;
+        coordinator.emergencyQueueClearance = jest.fn();
+
+        try {
+          await coordinator.executeAPICall(mockAPICall, 'test_request');
+        } catch (error) {
+          // エラーが期待されているので無視
+        }
+
+        // 緊急キュークリアが呼び出されたことを確認
+        expect(coordinator.emergencyQueueClearance).toHaveBeenCalled();
+
+        // 元のメソッドを復元
+        coordinator.emergencyQueueClearance = originalEmergencyQueueClearance;
+      });
+
+      test('maxCapacityエラー時にthrottleMonitorに特別記録されること', async () => {
+        const mockAPICall = jest.fn().mockRejectedValue(
+          new Error('throttle queue is over maxCapacity (1000)')
+        );
+
+        const { throttleMonitor } = require('../../src/common/throttleMonitor');
+
+        try {
+          await coordinator.executeAPICall(mockAPICall, 'test_request');
+        } catch (error) {
+          // エラーが期待されているので無視
+        }
+
+        // throttleMonitorに特別なエラー記録が行われたことを確認
+        expect(throttleMonitor.recordRequest).toHaveBeenCalledWith(
+          true, 
+          expect.stringContaining('CRITICAL_MAXCAPACITY')
+        );
+      });
+    });
+  });
 });
