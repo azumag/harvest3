@@ -1,13 +1,16 @@
 const Logger = require('../hft/utils/Logger');
+const { API_CACHE_SETTINGS } = require('../config/settings');
 const logger = new Logger({ service: 'APIDataCache' });
 
 class APIDataCache {
-  constructor() {
+  constructor(options = {}) {
     this.cache = new Map();
     this.requestQueue = [];
     this.processingQueue = false;
-    this.maxCacheAge = 5 * 60 * 1000; // 5分間
-    this.requestDelay = 1500; // リクエスト間隔 1.5秒
+    this.maxCacheAge = options.maxCacheAge || API_CACHE_SETTINGS.MAX_CACHE_AGE; // 設定ファイルから取得
+    this.requestDelay = options.requestDelay || API_CACHE_SETTINGS.REQUEST_DELAY; // 設定ファイルから取得
+    this.cleanupInterval = options.cleanupInterval || API_CACHE_SETTINGS.CLEANUP_INTERVAL; // 設定ファイルから取得
+    this.cleanupIntervalId = null;
     this.stats = {
       hits: 0,
       misses: 0,
@@ -162,13 +165,52 @@ class APIDataCache {
   clearStats() {
     this.stats = { hits: 0, misses: 0, requests: 0 };
   }
+
+  startCleanupTimer() {
+    if (this.cleanupIntervalId) {
+      return; // すでに開始済み
+    }
+    this.cleanupIntervalId = setInterval(() => {
+      this.clearExpiredCache();
+    }, this.cleanupInterval);
+    logger.debug(`[APIキャッシュ] クリーンアップタイマー開始: ${this.cleanupInterval}ms間隔`);
+  }
+
+  stopCleanupTimer() {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+      logger.debug('[APIキャッシュ] クリーンアップタイマー停止');
+    }
+  }
+
+  destroy() {
+    this.stopCleanupTimer();
+    this.cache.clear();
+    this.requestQueue = [];
+    logger.debug('[APIキャッシュ] インスタンス破棄');
+  }
 }
 
 const globalAPIDataCache = new APIDataCache();
 
-setInterval(() => {
-  globalAPIDataCache.clearExpiredCache();
-}, 60000);
+// クリーンアップタイマーを開始
+globalAPIDataCache.startCleanupTimer();
+
+// プロセス終了時のクリーンアップ
+process.on('exit', () => {
+  globalAPIDataCache.destroy();
+});
+
+process.on('SIGINT', () => {
+  globalAPIDataCache.destroy();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  globalAPIDataCache.destroy();
+  process.exit(0);
+});
 
 module.exports = {
   APIDataCache,

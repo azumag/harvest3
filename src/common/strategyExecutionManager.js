@@ -1,13 +1,14 @@
 const Logger = require('../hft/utils/Logger');
+const { API_CACHE_SETTINGS } = require('../config/settings');
 const logger = new Logger({ service: 'StrategyExecutionManager' });
 const { globalAPIDataCache } = require('./apiDataCache');
 
 class StrategyExecutionManager {
-  constructor() {
+  constructor(options = {}) {
     this.executionSlots = [];
-    this.slotDuration = 60000; // 1分間を分割
-    this.maxConcurrentStrategies = 3;
-    this.staggerInterval = 500; // 500ms間隔で戦略実行をずらす
+    this.slotDuration = options.slotDuration || API_CACHE_SETTINGS.SLOT_DURATION; // 設定ファイルから取得
+    this.maxConcurrentStrategies = options.maxConcurrentStrategies || API_CACHE_SETTINGS.MAX_CONCURRENT_STRATEGIES; // 設定ファイルから取得
+    this.staggerInterval = options.staggerInterval || API_CACHE_SETTINGS.STAGGER_INTERVAL; // 設定ファイルから取得
   }
 
   async scheduleStrategyExecution(allExchangeSymbolPairs, config) {
@@ -16,6 +17,7 @@ class StrategyExecutionManager {
     logger.info(`[戦略実行管理] ${strategyGroups.length}グループの実行をスケジュール`);
     
     const results = [];
+    const groupPromises = [];
     let delayOffset = 0;
 
     for (const [groupIndex, group] of strategyGroups.entries()) {
@@ -24,21 +26,32 @@ class StrategyExecutionManager {
 
       logger.info(`[戦略実行管理] グループ${groupIndex + 1}を${delay}ms後に実行 (${group.length}戦略)`);
 
-      setTimeout(async () => {
-        try {
-          const groupResults = await this.executeStrategyGroup(group);
-          results.push(...groupResults);
-          
-          if (groupIndex === strategyGroups.length - 1) {
-            this.logExecutionSummary(results);
+      const groupPromise = new Promise((resolve, reject) => {
+        setTimeout(async () => {
+          try {
+            const groupResults = await this.executeStrategyGroup(group);
+            results.push(...groupResults);
+            resolve(groupResults);
+          } catch (error) {
+            logger.error(`[戦略実行管理] グループ${groupIndex + 1}実行エラー:`, error.message);
+            reject(error);
           }
-        } catch (error) {
-          logger.error(`[戦略実行管理] グループ${groupIndex + 1}実行エラー:`, error.message);
-        }
-      }, delay);
+        }, delay);
+      });
+
+      groupPromises.push(groupPromise);
     }
 
-    return results;
+    // すべてのグループの実行完了を待機
+    try {
+      await Promise.allSettled(groupPromises);
+      this.logExecutionSummary(results);
+      return results;
+    } catch (error) {
+      logger.error(`[戦略実行管理] 実行エラー:`, error.message);
+      this.logExecutionSummary(results);
+      return results;
+    }
   }
 
   groupStrategiesByPriority(allExchangeSymbolPairs, config) {
