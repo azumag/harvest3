@@ -47,9 +47,10 @@ console.log('[Issue #443] throttle queue overflow対策を適用');
 console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rateLimit: ${exchangeBB.rateLimit}ms, timeout: ${exchangeBB.timeout}ms`);
 console.log(`[Throttle Queue] maxSize: ${exchangeBB.options.maxThrottleQueueSize}, CCXT内部制限: 1000`);
 
-// Issue #443: throttleMonitorとAPIコーディネーターの連携設定
+// Issue #440 & #443: throttleMonitorとAPIコーディネーターの双方向連携設定
 throttleMonitor.setAPICoordinator(apiCoordinator);
-console.log('[Issue #443] throttleMonitorとAPIコーディネーターの連携を設定');
+apiCoordinator.setThrottleMonitor(throttleMonitor);
+console.log('[Issue #440] throttleMonitorとAPIコーディネーターの双方向連携を設定');
 
 const exchangeBF = new ccxt.bitflyer({
   apiKey: BFApiKey,

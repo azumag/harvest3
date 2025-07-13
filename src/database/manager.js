@@ -1555,12 +1555,35 @@ async function getAvailableFund(exchange, symbol, options = {}) {
     return { free: result }; // fetchBalanceの戻り値の形式に合わせる
   }
 
-  // リアルタイムモードの場合 - Issue #443: APIコーディネーターでthrottle queue対応
-  const maxRetries = 3; // リトライ回数を削減（協調制御により不要なリトライを回避）
+  // リアルタイムモードの場合 - Issue #440: throttle queue overflow対策強化
+  
+  // Issue #440: throttleMonitorの状態をチェックしてサーキットブレーカー適用
+  const throttleStats = throttleMonitor.getStats();
+  const coordinatorStats = apiCoordinator.getStats();
+  
+  // サーキットブレーカー: システムが高負荷の場合はリトライを減らす
+  let maxRetries = 2; // デフォルトリトライ数を削減（Issue #440対応）
+  
+  if (throttleStats.isRecoveryMode || 
+      throttleStats.errorRate > 0.15 || 
+      coordinatorStats.queueUsageRate > 0.7) {
+    maxRetries = 1; // 高負荷時はリトライをさらに削減
+    logger.warn(`[残高取得] システム高負荷検出、リトライを制限: ${maxRetries}回 (errorRate: ${(throttleStats.errorRate * 100).toFixed(1)}%, queueUsage: ${(coordinatorStats.queueUsageRate * 100).toFixed(1)}%)`);
+  }
+  
   let consecutiveFailures = 0;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Issue #440: システム負荷が高い場合は事前待機
+      if (attempt === 1 && throttleStats.isRecoveryMode) {
+        const preDelay = throttleMonitor.getRecommendedDelay();
+        if (preDelay > 0) {
+          logger.debug(`[残高取得] 事前待機: ${preDelay}ms (recovery mode)`);
+          await new Promise(resolve => setTimeout(resolve, preDelay));
+        }
+      }
+      
       // Issue #443: APIコーディネーターを使用して協調制御でAPI呼び出し
       const requestId = `balance_${exchange.id}_${symbol || 'all'}_${Date.now()}`;
       const balance = await apiCoordinator.executeAPICall(
@@ -1588,31 +1611,46 @@ async function getAvailableFund(exchange, symbol, options = {}) {
       // throttleMonitorにエラーを記録
       throttleMonitor.recordRequest(true, errorMessage);
 
+      // Issue #440: throttle queue overflow の場合は即座に中断
+      if (errorMessage.includes('maxCapacity') || 
+          errorMessage.includes('throttle queue is over')) {
+        logger.error(`[残高取得] throttle queue overflow検出、即座に中断: ${errorMessage}`);
+        
+        // Issue #440: 緊急時はDiscord通知を送信
+        const emergencyContext = `緊急: throttle queue overflow - ${exchange.id} 残高取得中`;
+        await postErrorToDiscord(error, emergencyContext).catch(discordError => {
+          logger.error('Discord通知失敗:', discordError);
+        });
+        
+        throw new Error(`throttle queue overflow: ${errorMessage}`);
+      }
+
       // Issue #443: APIコーディネーター利用時のエラーハンドリング
       if (errorMessage.includes('queue is full') || 
           errorMessage.includes('coordinator')) {
         // APIコーディネーターのqueue満杯エラー
         logger.error(`[API Coordinator] queue満杯またはコーディネーターエラー: ${errorMessage}`);
         
+        // Issue #440: coordinator errorの場合、より長い待機時間
         if (attempt < maxRetries) {
-          // 短い待機後に再試行
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          const coordinatorDelay = Math.min(5000 * attempt, 15000); // 最大15秒
+          logger.warn(`[残高取得] coordinator待機: ${coordinatorDelay}ms`);
+          await new Promise(resolve => setTimeout(resolve, coordinatorDelay));
           continue;
         }
       }
 
-      // throttle queue エラーまたはrate limitエラーの場合
+      // throttle/rate limitエラーの場合（maxCapacity以外）
       if (errorMessage.includes('throttle') || 
-          errorMessage.includes('maxCapacity') || 
           errorMessage.includes('rate limit') || 
           errorMessage.includes('429')) {
         
-        // Issue #443: 改善されたbackoff設定を使用
-        const baseDelay = EXCHANGE_SETTINGS.BACKOFF_INITIAL_DELAY;
-        const maxDelay = EXCHANGE_SETTINGS.BACKOFF_MAX_DELAY;
-        const multiplier = EXCHANGE_SETTINGS.BACKOFF_MULTIPLIER;
+        // Issue #440: throttleMonitorの推奨遅延を優先使用
+        const recommendedDelay = throttleMonitor.getRecommendedDelay();
+        const fallbackDelay = Math.min(EXCHANGE_SETTINGS.BACKOFF_INITIAL_DELAY * Math.pow(2, attempt - 1), 
+                                      EXCHANGE_SETTINGS.BACKOFF_MAX_DELAY);
         
-        const delay = Math.min(baseDelay * Math.pow(multiplier, attempt - 1), maxDelay);
+        const delay = recommendedDelay > 0 ? Math.max(recommendedDelay, fallbackDelay) : fallbackDelay;
         
         logger.warn(`[Throttle対応] ${exchange.id} throttle/rate limitエラー検出: ${delay}ms待機中...`);
         
@@ -1627,8 +1665,8 @@ async function getAvailableFund(exchange, symbol, options = {}) {
       if (attempt === maxRetries) {
         logger.error(`[残高取得失敗] ${exchange.id} 最大試行回数(${maxRetries})に到達:`, error);
         
-        // 重要なエラーの場合はDiscord通知
-        const errorContext = `残高取得失敗: ${exchange.id} (${symbol}) - Issue #443対応後`;
+        // Issue #440: エラー詳細を含む通知
+        const errorContext = `残高取得失敗: ${exchange.id} (${symbol}) - Issue #440対応後 - throttleStats: errorRate=${(throttleStats.errorRate * 100).toFixed(1)}%, queueUsage=${(coordinatorStats.queueUsageRate * 100).toFixed(1)}%`;
         await postErrorToDiscord(error, errorContext).catch(discordError => {
           logger.error('Discord通知失敗:', discordError);
         });
@@ -1636,8 +1674,8 @@ async function getAvailableFund(exchange, symbol, options = {}) {
         throw error;
       }
 
-      // 通常のエラーの場合は短い待機後に再試行
-      const shortDelay = 1000 * attempt;
+      // 通常のエラーの場合は適応的待機
+      const shortDelay = Math.min(2000 * attempt, 8000); // Issue #440: 最大8秒に制限
       logger.info(`[残高取得リトライ] ${exchange.id} ${shortDelay}ms後に再試行...`);
       await new Promise(resolve => setTimeout(resolve, shortDelay));
     }
