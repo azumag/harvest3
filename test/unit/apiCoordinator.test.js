@@ -17,6 +17,12 @@ jest.mock('../../src/common/const', () => ({
       WARNING_THRESHOLD: 6,
       CRITICAL_THRESHOLD: 8,
       EMERGENCY_DELAY: 5000
+    },
+    CCXT_QUEUE_PROTECTION: {
+      WAIT_TIME_BASE_MS: 2000,
+      WAIT_TIME_MULTIPLIER_MS: 3000,
+      WAIT_TIME_MAX_MS: 8000,
+      EMERGENCY_REJECTION_RATE: 0.7
     }
   }
 }));

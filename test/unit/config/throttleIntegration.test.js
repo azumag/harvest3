@@ -5,21 +5,29 @@
 const ccxt = require('ccxt');
 const { SETTINGS } = require('../../../src/config/settings');
 
-// CI環境での高速実行のためccxtをモック化
-if (process.env.CI) {
-  jest.mock('ccxt', () => ({
-    bitbank: jest.fn().mockImplementation(() => ({
-      enableRateLimit: true,
-      rateLimit: 1000,
-      timeout: 60000,
-      throttle: jest.fn().mockImplementation(async (cost = 1) => {
-        // CI環境では即座に完了
-        await new Promise(resolve => setTimeout(resolve, 1));
-        return Promise.resolve();
+// CI環境での高速実行のためccxtをモック化  
+jest.mock('ccxt', () => {
+  if (process.env.CI) {
+    return {
+      bitbank: jest.fn().mockImplementation(() => {
+        const throttleMock = jest.fn().mockImplementation(async (cost = 1) => {
+          // CI環境では即座に完了
+          await new Promise(resolve => setTimeout(resolve, 1));
+          return Promise.resolve();
+        });
+        
+        return {
+          enableRateLimit: true,
+          rateLimit: 1000,
+          timeout: 60000,
+          throttle: throttleMock
+        };
       })
-    }))
-  }));
-}
+    };
+  }
+  // ローカル環境では実際のccxtを使用
+  return jest.requireActual('ccxt');
+});
 
 describe('CCXT標準throttle機能統合テスト', () => {
   let exchangeBB;
