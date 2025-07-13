@@ -486,7 +486,7 @@ class MultiObjectiveGA extends GeneticAlgorithm {
 
     // 後続フロントの生成
     let frontIndex = 0;
-    while (fronts[frontIndex].length > 0) {
+    while (frontIndex < fronts.length && fronts[frontIndex].length > 0) {
       const nextFront = [];
       
       fronts[frontIndex].forEach(i => {

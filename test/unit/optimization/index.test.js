@@ -130,6 +130,10 @@ describe('AdvancedOptimizer', () => {
 
   describe('結果の合意計算', () => {
     test('複数結果から合意が計算される', () => {
+      // boundsを設定
+      const bounds = { x: [0, 10], y: [0, 10] };
+      optimizer.setObjective((params) => params.x + params.y, bounds);
+      
       const results = [
         { bestParameters: { x: 5.1, y: 3.9 }, bestValue: 20 },
         { bestParameters: { x: 4.9, y: 4.1 }, bestValue: 19 },
@@ -145,6 +149,10 @@ describe('AdvancedOptimizer', () => {
     });
 
     test('単一結果でnullが返される', () => {
+      // boundsを設定
+      const bounds = { x: [0, 10], y: [0, 10] };
+      optimizer.setObjective((params) => params.x + params.y, bounds);
+      
       const results = [
         { bestParameters: { x: 5.0, y: 4.0 }, bestValue: 20 }
       ];
