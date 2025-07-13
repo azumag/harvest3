@@ -116,11 +116,67 @@ describe('DockerLogMonitor', () => {
             
             expect(hash1).not.toBe(hash2);
         });
+
+        test('UUIDやハッシュ値を正規化する', () => {
+            const error1 = 'Error: Request failed with id 550e8400-e29b-41d4-a716-446655440000';
+            const error2 = 'Error: Request failed with id 6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+            
+            const hash1 = monitor.generateErrorHash('service1', error1);
+            const hash2 = monitor.generateErrorHash('service1', error2);
+            
+            expect(hash1).toBe(hash2);
+        });
+
+        test('URLとポート番号を正規化する', () => {
+            const error1 = 'Connection failed to http://localhost:3000/api/data';
+            const error2 = 'Connection failed to https://api.example.com:8080/v1/users';
+            
+            const hash1 = monitor.generateErrorHash('service1', error1);
+            const hash2 = monitor.generateErrorHash('service1', error2);
+            
+            expect(hash1).toBe(hash2);
+        });
+
+        test('メモリアドレスを正規化する', () => {
+            const error1 = 'Segmentation fault at 0x7ffee8b5c000';
+            const error2 = 'Segmentation fault at 0x7ffee8b5d123';
+            
+            const hash1 = monitor.generateErrorHash('service1', error1);
+            const hash2 = monitor.generateErrorHash('service1', error2);
+            
+            expect(hash1).toBe(hash2);
+        });
+    });
+
+    describe('エラータイプ抽出', () => {
+        test('TypeErrorを正しく識別する', () => {
+            const error = 'TypeError: Cannot read property of undefined';
+            const errorType = monitor.extractErrorType(error);
+            expect(errorType).toBe('TypeError');
+        });
+
+        test('接続エラーを正しく識別する', () => {
+            const error = 'Connection failed to database';
+            const errorType = monitor.extractErrorType(error);
+            expect(errorType).toBe('ConnectionError');
+        });
+
+        test('プロセス終了エラーを正しく識別する', () => {
+            const error = 'Process exited with code 1';
+            const errorType = monitor.extractErrorType(error);
+            expect(errorType).toBe('ProcessExit');
+        });
+
+        test('不明なエラーはUnknownとして識別する', () => {
+            const error = 'Some unknown error message';
+            const errorType = monitor.extractErrorType(error);
+            expect(errorType).toBe('Unknown');
+        });
     });
 
     describe('Issue作成判定', () => {
         test('初回エラーでIssue作成可能', () => {
-            const shouldCreate = monitor.shouldCreateIssue('new-error-hash');
+            const shouldCreate = monitor.shouldCreateIssue('new-error-hash', 'test-service', 'Error: New error');
             expect(shouldCreate).toBe(true);
         });
 
@@ -130,10 +186,12 @@ describe('DockerLogMonitor', () => {
             // 履歴に追加
             monitor.issueHistory.issues.push({
                 timestamp: Date.now() - 500, // 500ms前
-                errorHash: errorHash
+                errorHash: errorHash,
+                service: 'test-service',
+                errorType: 'Error'
             });
             
-            const shouldCreate = monitor.shouldCreateIssue(errorHash);
+            const shouldCreate = monitor.shouldCreateIssue(errorHash, 'test-service', 'Error: Throttled error');
             expect(shouldCreate).toBe(false);
         });
 
@@ -143,10 +201,12 @@ describe('DockerLogMonitor', () => {
             // 履歴に追加（スロットリング期間より古い）
             monitor.issueHistory.issues.push({
                 timestamp: Date.now() - 2000, // 2秒前（スロットリング1秒より長い）
-                errorHash: errorHash
+                errorHash: errorHash,
+                service: 'test-service',
+                errorType: 'Error'
             });
             
-            const shouldCreate = monitor.shouldCreateIssue(errorHash);
+            const shouldCreate = monitor.shouldCreateIssue(errorHash, 'test-service', 'Error: Expired error');
             expect(shouldCreate).toBe(true);
         });
 
@@ -157,12 +217,47 @@ describe('DockerLogMonitor', () => {
             for (let i = 0; i < monitor.config.maxIssuesPerDay; i++) {
                 monitor.issueHistory.issues.push({
                     timestamp: today,
-                    errorHash: `hash-${i}`
+                    errorHash: `hash-${i}`,
+                    service: 'test-service',
+                    errorType: 'Error'
                 });
             }
             
-            const shouldCreate = monitor.shouldCreateIssue('new-hash');
+            const shouldCreate = monitor.shouldCreateIssue('new-hash', 'test-service', 'Error: Max reached');
             expect(shouldCreate).toBe(false);
+        });
+
+        test('類似エラータイプは長い期間でスロットリングされる', () => {
+            const errorMessage1 = 'TypeError: Cannot read property';
+            const errorMessage2 = 'TypeError: Cannot access property';
+            
+            // 最初のエラーを履歴に追加
+            monitor.issueHistory.issues.push({
+                timestamp: Date.now() - 1500, // 1.5秒前
+                errorHash: 'different-hash',
+                service: 'test-service',
+                errorType: 'TypeError'
+            });
+            
+            // 類似エラータイプは2倍の期間でスロットリング（2秒）
+            const shouldCreate = monitor.shouldCreateIssue('new-hash', 'test-service', errorMessage2);
+            expect(shouldCreate).toBe(false);
+        });
+
+        test('異なるサービスの類似エラーは別々に処理される', () => {
+            const errorMessage = 'TypeError: Cannot read property';
+            
+            // service1での履歴を追加
+            monitor.issueHistory.issues.push({
+                timestamp: Date.now() - 1500,
+                errorHash: 'service1-hash',
+                service: 'service1',
+                errorType: 'TypeError'
+            });
+            
+            // service2では類似エラータイプでもIssue作成可能
+            const shouldCreate = monitor.shouldCreateIssue('service2-hash', 'service2', errorMessage);
+            expect(shouldCreate).toBe(true);
         });
     });
 
@@ -203,7 +298,11 @@ describe('DockerLogMonitor', () => {
             
             await monitor.processLogLine('test-service', 'Error: Test error message');
             
-            expect(shouldCreateSpy).toHaveBeenCalled();
+            expect(shouldCreateSpy).toHaveBeenCalledWith(
+                expect.any(String), // errorHash
+                'test-service',
+                'Error: Test error message'
+            );
             expect(createIssueSpy).toHaveBeenCalledWith(
                 'test-service',
                 'Error: Test error message',
@@ -222,6 +321,19 @@ describe('DockerLogMonitor', () => {
             expect(createIssueSpy).not.toHaveBeenCalled();
             
             createIssueSpy.mockRestore();
+        });
+
+        test('重複チェックでスキップされたIssueは作成されない', async () => {
+            const createIssueSpy = jest.spyOn(monitor, 'createGitHubIssue').mockResolvedValue('issue-url');
+            const shouldCreateSpy = jest.spyOn(monitor, 'shouldCreateIssue').mockReturnValue(false);
+            
+            await monitor.processLogLine('test-service', 'Error: Duplicate error');
+            
+            expect(shouldCreateSpy).toHaveBeenCalled();
+            expect(createIssueSpy).not.toHaveBeenCalled();
+            
+            createIssueSpy.mockRestore();
+            shouldCreateSpy.mockRestore();
         });
     });
 

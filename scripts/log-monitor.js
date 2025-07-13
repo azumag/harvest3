@@ -79,7 +79,7 @@ class DockerLogMonitor {
     /**
      * 重複Issue発行を防止するためのチェック
      */
-    shouldCreateIssue(errorHash) {
+    shouldCreateIssue(errorHash, service, errorMessage) {
         const now = Date.now();
         
         // 24時間ごとにクリーンアップ
@@ -98,13 +98,34 @@ class DockerLogMonitor {
             return false;
         }
 
-        // 同じエラーのスロットリングチェック
+        // 同じエラーハッシュのスロットリングチェック
         const recentSameError = this.issueHistory.issues.find(issue => 
             issue.errorHash === errorHash && 
             now - issue.timestamp < this.config.issueThrottleMs
         );
 
-        return !recentSameError;
+        if (recentSameError) {
+            if (this.config.debug) {
+                console.log(`⏭️  重複スキップ (ハッシュ): ${errorHash.slice(0, 50)}...`);
+            }
+            return false;
+        }
+
+        // 同じサービスでの類似エラーの追加チェック
+        const recentSimilarError = this.issueHistory.issues.find(issue => 
+            issue.service === service &&
+            issue.errorType === this.extractErrorType(errorMessage) &&
+            now - issue.timestamp < this.config.issueThrottleMs * 2 // より長い期間でチェック
+        );
+
+        if (recentSimilarError) {
+            if (this.config.debug) {
+                console.log(`⏭️  類似エラースキップ (${service}): ${this.extractErrorType(errorMessage)}`);
+            }
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -113,13 +134,69 @@ class DockerLogMonitor {
     generateErrorHash(service, errorMessage) {
         // エラーメッセージから動的な部分（時刻、ファイルパスなど）を除去
         const cleanError = errorMessage
-            .replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}/g, '[TIMESTAMP]')
-            .replace(/\/[^\s]+\/([^\/\s]+\.js)/g, '[PATH]/$1')
+            // タイムスタンプの正規化
+            .replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(\.\d+)?([Z]|[+-]\d{2}:\d{2})?/g, '[TIMESTAMP]')
+            .replace(/\d{2}:\d{2}:\d{2}/g, '[TIME]')
+            // ファイルパスの正規化  
+            .replace(/\/[^\s]+\/([^\/\s]+\.(js|ts|json|py))/g, '[PATH]/$1')
+            .replace(/\s+at\s+[^\s]+:[^\s]+/g, ' at [LOCATION]')
+            // 行番号・列番号の正規化
             .replace(/line \d+/g, 'line [NUM]')
             .replace(/column \d+/g, 'column [NUM]')
-            .replace(/\d+ms/g, '[TIME]ms');
+            .replace(/:\d+:\d+/g, ':[NUM]:[NUM]')
+            // 時間・ID・数値の正規化
+            .replace(/\d+ms/g, '[TIME]ms')
+            .replace(/\b\d{13,}\b/g, '[TIMESTAMP_MS]')
+            .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[UUID]')
+            .replace(/\b\d{4,}\b/g, '[NUM]')
+            // メモリアドレスやハッシュ値の正規化
+            .replace(/0x[0-9a-f]+/gi, '[ADDR]')
+            .replace(/\b[0-9a-f]{32,}\b/gi, '[HASH]')
+            // URLやポート番号の正規化
+            .replace(/https?:\/\/[^\s]+/g, '[URL]')
+            .replace(/:\d{2,5}\b/g, ':[PORT]')
+            // 空白の正規化
+            .replace(/\s+/g, ' ')
+            .trim();
         
-        return `${service}:${cleanError}`.slice(0, 100);
+        // エラータイプを抽出してより一般化
+        const errorType = this.extractErrorType(cleanError);
+        const generalizedError = `${errorType}:${cleanError}`;
+        
+        return `${service}:${generalizedError}`.slice(0, 150);
+    }
+
+    /**
+     * エラータイプを抽出（より精密な分類のため）
+     */
+    extractErrorType(errorMessage) {
+        const patterns = [
+            { pattern: /TypeError/i, type: 'TypeError' },
+            { pattern: /ReferenceError/i, type: 'ReferenceError' },
+            { pattern: /SyntaxError/i, type: 'SyntaxError' },
+            { pattern: /RangeError/i, type: 'RangeError' },
+            { pattern: /URIError/i, type: 'URIError' },
+            { pattern: /EvalError/i, type: 'EvalError' },
+            { pattern: /UnhandledPromiseRejectionWarning/i, type: 'UnhandledPromise' },
+            { pattern: /Process exited with code/i, type: 'ProcessExit' },
+            { pattern: /\[ERROR\]/i, type: 'GenericError' },
+            { pattern: /FATAL/i, type: 'Fatal' },
+            { pattern: /Uncaught/i, type: 'Uncaught' },
+            { pattern: /Connection\s+(failed|refused|timeout)/i, type: 'ConnectionError' },
+            { pattern: /Database\s+error/i, type: 'DatabaseError' },
+            { pattern: /Authentication\s+(failed|error)/i, type: 'AuthError' },
+            { pattern: /Permission\s+denied/i, type: 'PermissionError' },
+            { pattern: /File\s+not\s+found/i, type: 'FileNotFound' },
+            { pattern: /Error:/i, type: 'Error' }
+        ];
+
+        for (const { pattern, type } of patterns) {
+            if (pattern.test(errorMessage)) {
+                return type;
+            }
+        }
+        
+        return 'Unknown';
     }
 
     /**
@@ -204,30 +281,34 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
         
         if (hasError) {
             const errorHash = this.generateErrorHash(service, line);
+            const errorType = this.extractErrorType(line);
             
-            if (this.shouldCreateIssue(errorHash)) {
+            if (this.shouldCreateIssue(errorHash, service, line)) {
                 // ログコンテキストを取得（前後数行）
                 const logContext = this.getLogContext(service, line);
                 
                 try {
                     const issueUrl = await this.createGitHubIssue(service, line, logContext);
                     
-                    // Issue履歴に追加
+                    // Issue履歴に追加（エラータイプも含める）
                     this.issueHistory.issues.push({
                         timestamp: Date.now(),
                         service,
                         errorHash,
+                        errorType,
                         issueUrl,
                         errorMessage: line.slice(0, 200) // メッセージを短縮
                     });
                     this.saveIssueHistory();
                     
-                    console.log(`🚨 ${service}で例外検出 -> Issue作成: ${issueUrl}`);
+                    console.log(`🚨 ${service}で例外検出 [${errorType}] -> Issue作成: ${issueUrl}`);
                 } catch (error) {
                     console.error(`Issue作成失敗 (${service}):`, error.message);
                 }
             } else {
-                console.log(`⏭️  重複/スロットル制限により Issue作成をスキップ: ${service}`);
+                if (this.config.debug) {
+                    console.log(`⏭️  重複/スロットル制限により Issue作成をスキップ: ${service} [${errorType}]`);
+                }
             }
         }
     }
