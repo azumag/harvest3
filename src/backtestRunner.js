@@ -22,6 +22,7 @@ const { timeframeToMs } = require('./common/utils');
 const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
+const { BacktestOptimizer } = require('./optimization');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -31,6 +32,11 @@ const gridSearch = args.includes('--grid-search'); // grid-search フラグを�
 const enableMonteCarlo = args.includes('--monte-carlo'); // monte-carlo フラグを検出
 const enableWalkForward = args.includes('--walk-forward'); // walk-forward フラグを検出
 const strategySpecify = args.find(arg => arg.startsWith('--strategy'))?.split('=')[1]; // --strategy=<戦略名> フラグを検出
+
+// 高度な最適化アルゴリズムのフラグ
+const useAdvancedOptimization = args.includes('--advanced-opt'); // 高度な最適化を有効化
+const optimizationAlgorithm = args.find(arg => arg.startsWith('--opt-algorithm'))?.split('=')[1] || 'auto'; // bayesian, genetic, pso, auto, ensemble, hybrid
+const maxEvaluations = parseInt(args.find(arg => arg.startsWith('--max-eval'))?.split('=')[1]) || 60;
 
 // 引数の説明を表示
 if (args.includes('--help') || args.includes('-h')) {
@@ -303,22 +309,56 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     let parameterCombinations = null;
 
     // パラメータの組み合わせを生成
-    // リトライが多いほどパラメータの変動幅を広げる
-    if (gridSearch) {
-      // グリッドサーチを実行
-      parameterCombinations = generateParameterCombinations(
-        dbParams,
-        numericParameterKeys,
-        0.1 + (retryCount*0.1), // パラメータの変動幅
-        10 // ステップ数
-      );
+    // 高度な最適化アルゴリズムまたは従来手法の選択
+    if (useAdvancedOptimization && numericParameterKeys.length > 0) {
+      // 高度な最適化アルゴリズムを使用
+      try {
+        parameterCombinations = await generateAdvancedParameterCombinations(
+          exchange,
+          symbol,
+          strategy,
+          strategyKey,
+          marketParametersBySymbol,
+          dbParams,
+          numericParameterKeys,
+          {
+            retryCount,
+            timeframe,
+            startDate,
+            endDate,
+            allExchangeSymbolPairs,
+            algorithm: optimizationAlgorithm,
+            maxEvaluations
+          }
+        );
+      } catch (error) {
+        console.log(`高度な最適化でエラー発生、従来手法にフォールバック: ${error.message}`);
+        // フォールバック: 従来のランダムサーチ
+        parameterCombinations = generateRandomParameterCombinations(
+          dbParams, numericParameterKeys,
+          10 + (retryCount*10),
+          0.1 + (retryCount*0.1)
+        );
+      }
     } else {
-      // 正規乱数を使ったランダムサーチを実行
-      parameterCombinations = generateRandomParameterCombinations(
-        dbParams, numericParameterKeys,
-        10 + (retryCount*10), // パラメータのパターン数
-        0.1 + (retryCount*0.1) // 変動幅
-      );
+      // 従来の最適化手法
+      // リトライが多いほどパラメータの変動幅を広げる
+      if (gridSearch) {
+        // グリッドサーチを実行
+        parameterCombinations = generateParameterCombinations(
+          dbParams,
+          numericParameterKeys,
+          0.1 + (retryCount*0.1), // パラメータの変動幅
+          10 // ステップ数
+        );
+      } else {
+        // 正規乱数を使ったランダムサーチを実行
+        parameterCombinations = generateRandomParameterCombinations(
+          dbParams, numericParameterKeys,
+          10 + (retryCount*10), // パラメータのパターン数
+          0.1 + (retryCount*0.1) // 変動幅
+        );
+      }
     }
 
     // 重複排除
@@ -605,6 +645,227 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
   console.log(`バックテスト完了: ${symbol} - ${strategyKey}`);
   return { shouldRetry: false };
+}
+
+/**
+ * 高度な最適化アルゴリズムを使用してパラメータ組み合わせを生成
+ * @param {Object} exchange - 取引所オブジェクト
+ * @param {string} symbol - 通貨ペア
+ * @param {Object} strategy - 戦略
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} marketParametersBySymbol - 市場パラメータ
+ * @param {Object} dbParams - デフォルトパラメータ
+ * @param {Array} numericKeys - 数値型キー
+ * @param {Object} options - 最適化オプション
+ * @returns {Array} 最適化されたパラメータ組み合わせ
+ */
+async function generateAdvancedParameterCombinations(
+  exchange,
+  symbol,
+  strategy,
+  strategyKey,
+  marketParametersBySymbol,
+  dbParams,
+  numericKeys,
+  options
+) {
+  const {
+    retryCount = 0,
+    timeframe,
+    startDate,
+    endDate,
+    allExchangeSymbolPairs,
+    algorithm = 'auto',
+    maxEvaluations = 60
+  } = options;
+
+  console.log(`🔬 高度な最適化開始: ${algorithm} アルゴリズム (${symbol} - ${strategyKey})`);
+
+  // 最適化器の初期化
+  const optimizer = new BacktestOptimizer({
+    algorithm,
+    maxEvaluations: Math.max(20, maxEvaluations - (retryCount * 10)),
+    convergenceThreshold: 1e-4
+  });
+
+  // リトライ回数に応じて設定調整
+  optimizer.configureForBacktest(retryCount, numericKeys.length);
+
+  // 境界の設定
+  const variationRange = 0.1 + (retryCount * 0.1);
+  const bounds = {};
+  numericKeys.forEach(key => {
+    const defaultValue = dbParams[key];
+    const range = defaultValue * variationRange;
+    bounds[key] = [
+      Math.max(1, Math.floor(defaultValue - range)),
+      Math.ceil(defaultValue + range)
+    ];
+  });
+
+  // 目的関数の定義
+  const objectiveFunction = (parameters) => {
+    return evaluateParameterCombination(
+      parameters,
+      exchange,
+      symbol,
+      strategy,
+      strategyKey,
+      marketParametersBySymbol,
+      timeframe,
+      startDate,
+      endDate,
+      allExchangeSymbolPairs
+    );
+  };
+
+  // 最適化実行
+  optimizer.setObjective(objectiveFunction, bounds);
+  const result = await optimizer.optimize();
+
+  console.log(`✅ 最適化完了: ${result.algorithmType} - 最良値: ${result.bestValue?.toFixed(2) || 'N/A'}`);
+
+  // 結果から複数のパラメータ組み合わせを生成
+  const combinations = [];
+  
+  // 最良解を含める
+  if (result.bestParameters) {
+    combinations.push(result.bestParameters);
+  }
+
+  // 最良解周辺の探索点を追加生成
+  const additionalPoints = Math.max(5, Math.min(15, maxEvaluations / 4));
+  for (let i = 0; i < additionalPoints; i++) {
+    const variation = {};
+    numericKeys.forEach(key => {
+      const [min, max] = bounds[key];
+      const center = result.bestParameters?.[key] || dbParams[key];
+      const noise = (Math.random() - 0.5) * (max - min) * 0.1;
+      variation[key] = Math.max(min, Math.min(max, Math.round(center + noise)));
+    });
+    combinations.push(variation);
+  }
+
+  // デフォルト設定も含める
+  const defaultCombo = {};
+  numericKeys.forEach(key => {
+    defaultCombo[key] = dbParams[key];
+  });
+  combinations.push(defaultCombo);
+
+  return combinations;
+}
+
+/**
+ * パラメータ組み合わせの評価
+ * @param {Object} parameters - パラメータ
+ * @param {Object} exchange - 取引所
+ * @param {string} symbol - シンボル
+ * @param {Object} strategy - 戦略
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} marketParametersBySymbol - 市場パラメータ
+ * @param {string} timeframe - タイムフレーム
+ * @param {Date} startDate - 開始日
+ * @param {Date} endDate - 終了日
+ * @param {Array} allExchangeSymbolPairs - 全ペア
+ * @returns {number} 適応度スコア
+ */
+function evaluateParameterCombination(
+  parameters,
+  exchange,
+  symbol,
+  strategy,
+  strategyKey,
+  marketParametersBySymbol,
+  timeframe,
+  startDate,
+  endDate,
+  allExchangeSymbolPairs
+) {
+  try {
+    // バックテスト用の戦略設定を作成
+    const strategyConfig = {
+      ...parameters,
+      hlcvInterval: timeframe,
+      tradePercentage: config.global.tradePercentage
+    };
+
+    // バックテストオプションの設定
+    const options = {
+      backtest: {
+        totalSellCost: 0,
+        totalBuyCost: 0,
+        baseFund: 10000,
+        ohlcvData: [],
+        lastSignal: 'sell',
+        currentAmount: 0,
+        buySignalCount: 0,
+        sellSignalCount: 0,
+        buyOrderCount: 0,
+        sellOrderCount: 0,
+        timeframe
+      },
+      postOrderToDiscord: async () => {},
+      postErrorToDiscord: async () => {},
+      allExchangeSymbolPairs,
+      config
+    };
+
+    // MUTUAL_INFO戦略の場合のreferenceSymbols設定
+    if (strategyKey === 'MUTUAL_INFO' && allExchangeSymbolPairs) {
+      const sameExchangeSymbols = allExchangeSymbolPairs
+        .filter(pair =>
+          pair.exchangeId === exchange.id &&
+          pair.symbol !== symbol &&
+          !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+        )
+        .map(pair => pair.symbol);
+      
+      options.referenceSymbols = sameExchangeSymbols;
+    }
+
+    // 簡略化されたバックテスト実行（同期的）
+    const timeframeMs = timeframeToMs('1m');
+    let currentTimestamp = startDate.getTime();
+    const endTimestamp = endDate.getTime();
+    
+    // サンプリング間隔を調整（高速化のため）
+    const samplingInterval = Math.max(timeframeMs, (endTimestamp - currentTimestamp) / 100);
+    
+    while (currentTimestamp <= endTimestamp) {
+      options.backtest.timestamp = currentTimestamp;
+      
+      try {
+        // 戦略の同期実行（awaitを削除）
+        strategy.function(exchange, symbol, strategyKey, strategyConfig, marketParametersBySymbol, options);
+      } catch {
+        // エラーは無視して継続
+      }
+      
+      currentTimestamp += samplingInterval;
+    }
+
+    // 最終ポジションの決済
+    if (options.backtest.lastSignal === 'buy' && options.backtest.currentAmount > 0) {
+      const currentPrice = options.backtest.currentPrice || 100;
+      options.backtest.baseFund += options.backtest.currentAmount * currentPrice;
+    }
+
+    // 適応度スコアの計算（基本スコア + ボーナス）
+    let score = options.backtest.baseFund;
+    
+    // 取引回数ボーナス（適度な取引回数を評価）
+    const totalTrades = options.backtest.buyOrderCount + options.backtest.sellOrderCount;
+    if (totalTrades > 5 && totalTrades < 50) {
+      score += totalTrades * 10;
+    }
+
+    return score;
+
+  } catch (error) {
+    // エラー時は低いスコアを返す
+    return 8000;
+  }
 }
 
 /**
