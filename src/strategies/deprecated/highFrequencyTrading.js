@@ -10,6 +10,8 @@ const { postErrorToDiscord, postOrderToDiscord } = require('../../common/notific
 
 const { checkBuyOrderAllowance } = require('../../database/manager');
 
+const { globalStrategyCache } = require('../../common/dataCache');
+
 const priceCache = {};
 
 /**
@@ -42,9 +44,13 @@ async function highFrequencyTrading(exchange, symbol, strategyKey, config, marke
 
     try {
 
-      // 注文ブックを取得
-      // TODO: ループの先頭で取得してメモリから復元するようにする (performance向上)
-      const orderBook = await exchange.fetchOrderBook(symbol, orderBookDepth);
+      // 注文ブックを取得 (キャッシュ付きでperformance向上)
+      const orderBook = await globalStrategyCache.getOrderBook(
+        exchange, 
+        symbol, 
+        orderBookDepth,
+        async () => await exchange.fetchOrderBook(symbol, orderBookDepth)
+      );
       const bids = orderBook.bids; // 買い注文
       const asks = orderBook.asks; // 売り注文
 

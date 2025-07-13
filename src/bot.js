@@ -4,6 +4,7 @@ const { SETTINGS } = require('./config/settings');
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
 const { unifiedErrorHandler } = require('./common/errorHandler');
+const { globalStrategyCache } = require('./common/dataCache');
 const Logger = require('./hft/utils/Logger');
 const logger = new Logger('Bot');
 const {
@@ -531,7 +532,7 @@ async function executeStrategyCycle() {
           }
 
           try {
-            await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config });
+            await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config, strategyConfig });
           } catch (error) {
             await unifiedErrorHandler.handleError(error, {
               context: `戦略 ${strategyKey}、通貨ペア ${symbol}`,
@@ -1044,8 +1045,9 @@ async function executeRiskManagementCheck() {
 async function runStrategy(strategy, exchange, symbol, strategyKey, marketParametersBySymbol, options) {
   try {
 
-    // TODO: ループの最初で取得してメモリから復元するようにする (performance向上)
-    const strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
+    // ループの最初で取得済みの設定を使用 (performance向上)
+    // 呼び出し元で既に取得済みなので、再度取得する必要なし
+    const strategyConfig = options.strategyConfig || await getStrategyConfig(exchange, symbol, strategyKey, config);
 
     if (!strategyConfig || strategyConfig.enabled === false) {
       logger.info(`戦略 ${strategyKey}:${symbol} は無効化されています`);

@@ -54,13 +54,83 @@ function isBitbankError(error, targetCode) {
   return false;
 }
 
-// bitflyer APIエラーコード（将来的に追加予定）
+// bitflyer APIエラーコード
 const BITFLYER_ERRORS = {
-  // TODO: bitflyerのエラーコードを追加
+  // 一般的なエラー
+  INVALID_API_KEY: 'INVALID_API_KEY',
+  INVALID_SIGNATURE: 'INVALID_SIGNATURE', 
+  INVALID_TIMESTAMP: 'INVALID_TIMESTAMP',
+  INVALID_NONCE: 'INVALID_NONCE',
+  MISSING_FIELD: 'MISSING_FIELD',
+  INVALID_FIELD_FORMAT: 'INVALID_FIELD_FORMAT',
+  INVALID_FIELD_VALUE: 'INVALID_FIELD_VALUE',
+  
+  // 注文関連エラー
+  ORDER_NOT_FOUND: 'ORDER_NOT_FOUND',
+  ORDER_TIMEOUT: 'ORDER_TIMEOUT',
+  CANCEL_TIMEOUT: 'CANCEL_TIMEOUT',
+  INVALID_SIZE: 'INVALID_SIZE',
+  INVALID_PRICE: 'INVALID_PRICE',
+  INVALID_PRODUCT_CODE: 'INVALID_PRODUCT_CODE',
+  INVALID_SIDE: 'INVALID_SIDE',
+  INVALID_ORDER_TYPE: 'INVALID_ORDER_TYPE',
+  INVALID_TIME_IN_FORCE: 'INVALID_TIME_IN_FORCE',
+  
+  // 残高・資金関連エラー
+  INSUFFICIENT_FUNDS: 'INSUFFICIENT_FUNDS',
+  INSUFFICIENT_MARGIN: 'INSUFFICIENT_MARGIN',
+  EXCEED_MAX_POSITION_SIZE: 'EXCEED_MAX_POSITION_SIZE',
+  TRADING_RESTRICTED: 'TRADING_RESTRICTED',
+  
+  // システム・レート制限エラー
+  SYSTEM_BUSY: 'SYSTEM_BUSY',
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  MAINTENANCE: 'MAINTENANCE',
+  
+  // 市場関連エラー
+  MARKET_CLOSED: 'MARKET_CLOSED',
+  TRADE_SUSPENDED: 'TRADE_SUSPENDED',
+  PRICE_LIMIT: 'PRICE_LIMIT'
 };
+
+/**
+ * bitflyer APIエラーを堅牢に判定する関数
+ * @param {Error} error - CCXTエラーオブジェクト
+ * @param {string} targetCode - 対象エラーコード
+ * @returns {boolean} エラーコードが一致するかどうか
+ */
+function isBitflyerError(error, targetCode) {
+  if (!error) {
+    return false;
+  }
+
+  // エラーメッセージ内での文字列検索
+  const errorMessage = error.message || '';
+  const lowerMessage = errorMessage.toLowerCase();
+  const lowerTarget = targetCode.toLowerCase();
+
+  // 直接的な文字列マッチング
+  if (lowerMessage.includes(lowerTarget)) {
+    return true;
+  }
+
+  // CCXTのHTTPエラーコード確認
+  if (error.code && error.code.toString() === targetCode) {
+    return true;
+  }
+
+  // レスポンスボディ内のエラーコード確認
+  if (error.response && error.response.error && error.response.error.includes(targetCode)) {
+    return true;
+  }
+
+  return false;
+}
 
 module.exports = {
   BITBANK_ERRORS,
   BITFLYER_ERRORS,
-  isBitbankError
+  isBitbankError,
+  isBitflyerError
 };

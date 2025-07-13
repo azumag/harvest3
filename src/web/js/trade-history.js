@@ -2,7 +2,6 @@ $(document).ready(function() {
   // ナビゲーションバーを読み込む
   $('#navbar-container').load('navbar.html', function() {
     // 現在のページに対応するナビゲーションリンクをアクティブにする
-    // TODO: ナビゲーションバーのHTMLに合わせてIDを修正する必要があるかもしれません
     $('#nav-filled-history').addClass('active');
   });
 

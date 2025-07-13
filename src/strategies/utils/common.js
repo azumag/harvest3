@@ -1160,13 +1160,16 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   // 戦略に買いポジションがある場合、売り注文を作成
   const _netPosition = await getTradeCurrentPosition(exchange, symbol, strategyKey);
 
-  // TODO: use market parameters
-  if (_netPosition < 0.0001) {
-    logger.info(`ポジションがないため、売り注文は発注しません: ${symbol}`);
-    return { success: false, reason: 'no position' };
+  // 市場パラメータから最小取引量を取得
+  const marketParams = await getMarketParameters(exchange, symbol);
+  const minTradeAmount = marketParams?.minTradeAmount || 0.0001; // フォールバック値
+
+  if (_netPosition < minTradeAmount) {
+    logger.info(`ポジションが最小取引量未満のため、売り注文は発注しません: ${symbol} (position: ${_netPosition}, min: ${minTradeAmount})`);
+    return { success: false, reason: 'position below minimum' };
   }
 
-  const netPosition = Math.max(_netPosition !== null && _netPosition !== undefined ? _netPosition.toFixed(4) : 0, 0.0001);
+  const netPosition = Math.max(_netPosition !== null && _netPosition !== undefined ? _netPosition.toFixed(4) : 0, minTradeAmount);
   // 売り注文を作成
   try {
     const order = await exchange.createMarketSellOrder(symbol, netPosition);

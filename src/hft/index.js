@@ -36,13 +36,17 @@ async function startHFTStrategy(config) {
   dataStore = new MarketDataStore();
 
   // OrderProcessor の初期化
-  // TODO: OrderProcessor に必要な依存関係 (APIクライアント, DBマネージャー) を渡す
-  orderProcessor = new OrderProcessor(config);
+  // 取引所インスタンスを取得
+  const exchange = config.exchanges && config.exchanges.bitbank && config.exchanges.bitbank.instance;
+  if (!exchange) {
+    logger.warn('No exchange instance found, OrderProcessor will run in mock mode');
+  }
+  orderProcessor = new OrderProcessor(config, exchange);
 
   // WebSocket クライアントの初期化
   publicClient = new PublicStreamClient(WS_CONFIG.publicStreamEndpoint, WS_CONFIG, dataStore);
-  // TODO: PrivateStreamClient に必要な依存関係 (認証情報, DBマネージャー) を渡す
-  privateClient = new PrivateStreamClient(WS_CONFIG.privateStreamEndpoint, WS_CONFIG);
+  // PrivateStreamClient に認証情報と取引所インスタンスを渡す
+  privateClient = new PrivateStreamClient(WS_CONFIG.privateStreamEndpoint, WS_CONFIG, exchange);
 
 
   try {
@@ -50,14 +54,24 @@ async function startHFTStrategy(config) {
     logger.info('🔌 Connecting to WebSocket streams...');
     await publicClient.connect();
     logger.success('Public stream connected successfully');
-    // TODO: プライベートストリームに接続
-    // await privateClient.connect();
+    
+    // プライベートストリームに接続 (認証情報がある場合のみ)
+    if (exchange && exchange.apiKey && exchange.secret) {
+      try {
+        await privateClient.connect();
+        logger.success('Private stream connected successfully');
+      } catch (error) {
+        logger.warn('Private stream connection failed, continuing with public data only:', error.message);
+      }
+    } else {
+      logger.info('No API credentials provided, running with public data only');
+    }
 
     logger.info('⚙️  Initializing trading strategies...');
     // 取引ペアごとにストラテジー作成と購読開始
     for (const pair of TRADING_PAIRS) {
       // ストラテジーインスタンスの作成
-      // TODO: HFTStrategy に必要な依存関係 (OrderProcessor, DBマネージャーなど) を渡す
+      // OrderProcessor、データストア、設定を渡して初期化
       strategies[pair] = new HFTStrategy(pair, { STRATEGY_PARAMS, ...config }, dataStore, orderProcessor);
       logger.info(`  ✓ Strategy initialized for ${pair.toUpperCase()}`);
 
@@ -65,9 +79,17 @@ async function startHFTStrategy(config) {
       publicClient.subscribePair(pair);
       logger.debug(`  📊 Subscribed to market data for ${pair.toUpperCase()}`);
 
-      // TODO: プライベートチャネルの購読 (必要に応じて)
-      // privateClient.subscribe('my_orders', { pair });
-      // privateClient.subscribe('my_positions', { pair });
+      // プライベートチャネルの購読 (認証済みの場合)
+      if (privateClient && privateClient.isAuthenticated) {
+        try {
+          privateClient.subscribe('orders', { pair });
+          privateClient.subscribe('trades', { pair });
+          privateClient.subscribe('balances');
+          logger.debug(`  🔐 Subscribed to private channels for ${pair.toUpperCase()}`);
+        } catch (error) {
+          logger.warn(`Failed to subscribe to private channels for ${pair}:`, error.message);
+        }
+      }
     }
 
     logger.success('🎯 Bitbank HFT Strategy started successfully');
@@ -79,12 +101,34 @@ async function startHFTStrategy(config) {
         strategies[pair].processMarketData('orderBook', data);
       }
     });
+    
     dataStore.on('tickerUpdate', (pair, data) => {
       if (strategies[pair]) {
         strategies[pair].processMarketData('ticker', data);
       }
     });
-    // TODO: transactionsUpdate イベントのハンドリング
+    
+    // トランザクションイベントのハンドリング
+    dataStore.on('transactionsUpdate', (pair, data) => {
+      if (strategies[pair]) {
+        strategies[pair].processMarketData('transactions', data);
+      }
+    });
+    
+    // エラーイベントのハンドリング
+    dataStore.on('error', (error) => {
+      logger.error('MarketDataStore error:', error);
+    });
+    
+    // パフォーマンス監視
+    setInterval(() => {
+      const stats = {
+        strategies: Object.keys(strategies).length,
+        activeSubscriptions: publicClient ? publicClient.getActiveSubscriptions().length : 0,
+        dataStoreStats: dataStore.getStats()
+      };
+      logger.debug('HFT Performance Stats:', stats);
+    }, 60000); // 1分ごと
 
   } catch (error) {
     logger.error('❌ Failed to start Bitbank HFT Strategy:', error.message);
@@ -110,13 +154,62 @@ function stopHFTStrategy() {
     privateClient = null;
     logger.info('✓ Private stream disconnected');
   }
-  // TODO: その他のリソース解放
+  
+  // ストラテジーのクリーンアップ
+  Object.keys(strategies).forEach(pair => {
+    strategies[pair] = null;
+  });
+  
+  // データストアのクリーンアップ
+  if (dataStore) {
+    dataStore.removeAllListeners();
+    dataStore = null;
+  }
+  
+  // OrderProcessorのクリーンアップ
+  if (orderProcessor) {
+    orderProcessor = null;
+  }
+  
+  logger.info('✓ All resources cleaned up');
   logger.success('🏁 Bitbank HFT Strategy stopped successfully');
   logger.separator();
+}
+
+// ステータス取得関数
+function getHFTStatus() {
+  return {
+    running: publicClient !== null,
+    strategies: Object.keys(strategies).length,
+    publicConnected: publicClient && publicClient.isConnected(),
+    privateConnected: privateClient && privateClient.isAuthenticated,
+    lastUpdate: Date.now()
+  };
+}
+
+// ストラテジー統計取得関数
+function getHFTStats() {
+  const stats = {};
+  
+  Object.keys(strategies).forEach(pair => {
+    const strategy = strategies[pair];
+    if (strategy) {
+      stats[pair] = {
+        tradeCount: strategy.tradeCount || 0,
+        dailyPnL: strategy.dailyPnL || 0,
+        lastTradeTime: strategy.lastTradeTime || 0,
+        activePositions: strategy.positions ? strategy.positions.size : 0
+      };
+    }
+  });
+  
+  return stats;
 }
 
 // src/config.js から呼び出せるようにエクスポート
 module.exports = {
   startHFTStrategy,
-  stopHFTStrategy
+  stopHFTStrategy,
+  getHFTStatus,
+  getHFTStats
 };

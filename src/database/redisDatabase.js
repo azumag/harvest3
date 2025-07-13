@@ -530,39 +530,11 @@ async function saveStrategyParametersRedis(exchangeId, symbol, strategyKey, para
   }
 }
 
-// 型変換用のヘルパー関数
-// TODO: use zod
-function parseParamValue(value) {
-  // null/undefined チェック
-  if (value === null || value === undefined || value === 'null') {
-    return null;
-  }
+// 型変換用のヘルパー関数 - Zod による型安全な解析を使用
+const { parseRedisValue } = require('./schemas');
 
-  // 真偽値チェック
-  if (value === 'true') {
-    return true;
-  }
-  if (value === 'false') {
-    return false;
-  }
-
-  // 数値チェック
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
-    return Number(value);
-  }
-
-  // JSON オブジェクト/配列チェック
-  if ((value.startsWith('{') && value.endsWith('}')) ||
-      (value.startsWith('[') && value.endsWith(']'))) {
-    try {
-      return JSON.parse(value);
-    } catch (e) {
-      // パースに失敗した場合は元の文字列を返す
-    }
-  }
-
-  // その他は文字列として扱う
-  return value;
+function parseParamValue(value, type = 'auto') {
+  return parseRedisValue(value, type);
 }
 
 async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {

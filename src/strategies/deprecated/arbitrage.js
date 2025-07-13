@@ -1,7 +1,7 @@
 /**
  * アービトラージ戦略
  */
-const { formattedAvailableAmount, addOrder } = require('../../database/manager');
+const { formattedAvailableAmount, addOrder, getStrategyParameters } = require('../../database/manager');
 const marketDataProvider = require('../../data/marketDataProvider');
 
 /**
@@ -14,8 +14,10 @@ const marketDataProvider = require('../../data/marketDataProvider');
  * @param {Object} options - その他のオプション
  */
 async function interExchangeArbitrage(exchanges, symbol, minProfitPercent = 1.0, amount, options = {}) {
-  // TODO 一元管理で取得
-  const strategyKey = 'INTER_EXCHANGE_ARBITRAGE';
+  // 一元管理された設定から戦略キーを取得
+  const exchange = exchanges[0]; // 最初の取引所を基準に設定を取得
+  const strategyParams = await getStrategyParameters(exchange, 'INTER_EXCHANGE_ARBITRAGE');
+  const strategyKey = strategyParams?.strategyKey || 'INTER_EXCHANGE_ARBITRAGE';
 
   if (symbol === 'MONA/JPY') {
     console.log('MONA/JPY はアービトラージ戦略の対象外です');
