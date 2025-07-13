@@ -59,8 +59,17 @@ class APICoordinator {
       const totalRequests = this.queue.length + this.activeRequests.size;
       const queueUsageRate = totalRequests / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
       
-      // Issue #438: より積極的な予防策
-      if (queueUsageRate >= 0.75) {
+      
+      // キューが満杯の場合は緊急排出をスキップして直接拒否
+      if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
+        this.stats.rejectedRequests++;
+        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${this.queue.length}, active: ${this.activeRequests.size})`);
+        reject(new Error('API coordinator queue is full'));
+        return;
+      }
+      
+      // Issue #438: より積極的な予防策（キューが満杯でない場合のみ）
+      if (queueUsageRate >= 0.75 && totalRequests < EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
         // 75%以上で緊急排出（従来の90%から引き下げ）
         this.emergencyQueueDrainage();
         
@@ -81,13 +90,6 @@ class APICoordinator {
       } else if (queueUsageRate >= 0.5) {
         // Issue #438: 50%以上で予防警告
         logger.warn(`[Queue Prevention] キュー使用率警告: ${(queueUsageRate * 100).toFixed(1)}%, 予防的監視中...`);
-      }
-      
-      if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
-        this.stats.rejectedRequests++;
-        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${this.queue.length}, active: ${this.activeRequests.size})`);
-        reject(new Error('API coordinator queue is full'));
-        return;
       }
 
       // Issue #440: 動的優先度調整
