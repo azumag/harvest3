@@ -64,7 +64,7 @@ send_startup_error_to_discord() {
                 const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
                 const message = { content: \`${discord_message}\` };
                 
-                axios.post(webhookUrl, message, { timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000 })
+                axios.post(webhookUrl, message, { timeout: 10000 })
                     .then(() => console.log('Discord notification sent successfully'))
                     .catch(err => {
                         console.error('Discord notification failed:', err.message);
@@ -166,22 +166,23 @@ start_application() {
     
     # APIサーバーの起動を待つ（より寛容なタイムアウト設定）
     local api_startup_time=0
-    while [ $api_startup_time -lt $API_STARTUP_TIMEOUT ]; do
+    local max_api_wait=60
+    while [ $api_startup_time -lt $max_api_wait ]; do
         if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
             log "API server is ready on port 3000"
             break
         fi
-        sleep $API_CHECK_INTERVAL
-        api_startup_time=$((api_startup_time + API_CHECK_INTERVAL))
+        sleep 3
+        api_startup_time=$((api_startup_time + 3))
         
         # 進捗ログ
-        if [ $((api_startup_time % PROGRESS_LOG_INTERVAL)) -eq 0 ]; then
-            log "API server startup: ${api_startup_time}/${API_STARTUP_TIMEOUT} seconds elapsed"
+        if [ $((api_startup_time % 15)) -eq 0 ]; then
+            log "API server startup: ${api_startup_time}/${max_api_wait} seconds elapsed"
         fi
     done
     
-    if [ $api_startup_time -ge $API_STARTUP_TIMEOUT ]; then
-        local error_msg="API server failed to start within ${API_STARTUP_TIMEOUT} seconds"
+    if [ $api_startup_time -ge $max_api_wait ]; then
+        local error_msg="API server failed to start within ${max_api_wait} seconds"
         log "ERROR: $error_msg"
         send_startup_error_to_discord "$error_msg" "API server startup timeout"
         exit 1
