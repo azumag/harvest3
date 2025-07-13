@@ -651,6 +651,7 @@ async function deleteOrderByOrderId(orderId) {
 
 /**
  * OHLCVデータをohlcvコレクションに追加する
+ * replaceOne+upsertを使用してレースコンディションを防止し、重複キーエラー(E11000)を根本的に解決
  * @param {Object} ohlcvData
  */
 async function addOhlcvMongoDB(ohlcvData) {
