@@ -108,11 +108,28 @@ pre_startup_checks() {
     
     # Node.js依存関係インストールとチェック
     log "Installing npm dependencies..."
+    
+    # npm installを実行し、失敗した場合はキャッシュクリアして再試行
     if ! npm install; then
-        local error_msg="npm install failed"
-        log "ERROR: $error_msg"
-        send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
-        exit 1
+        log "Initial npm install failed, cleaning cache and retrying..."
+        npm cache clean --force
+        if ! npm install; then
+            local error_msg="npm install failed after cache clean"
+            log "ERROR: $error_msg"
+            send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
+            exit 1
+        fi
+    fi
+    
+    # decimal.jsの存在を具体的にチェック
+    if ! node -e "require('decimal.js'); console.log('decimal.js OK');" 2>/dev/null; then
+        log "decimal.js not found, installing specifically..."
+        if ! npm install decimal.js@^10.6.0; then
+            local error_msg="Failed to install decimal.js specifically"
+            log "ERROR: $error_msg"
+            send_startup_error_to_discord "$error_msg" "decimal.js installation failed"
+            exit 1
+        fi
     fi
     
     if ! npm ls > /dev/null 2>&1; then
