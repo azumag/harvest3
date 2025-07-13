@@ -100,13 +100,56 @@ async function enableStrategy(exchangeId, symbol, strategyKey) {
 }
 
 /**
- * 戦略を無効化する関数
+ * 戦略を無効化する関数（権限チェック付き）
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} symbol - 通貨ペア
+ * @param {string} strategyKey - 戦略キー
+ * @param {Object} config - 設定オブジェクト
+ * @param {boolean} isBacktestParameterUpdate - バックテストのパラメータ更新による無効化かどうか
+ * @returns {Promise<boolean>} 無効化成功/失敗
+ */
+async function disableStrategy(exchangeId, symbol, strategyKey, config = null, isBacktestParameterUpdate = false) {
+  try {
+    // 設定が提供されている場合は権限チェックを実行
+    if (config) {
+      const invalidationConfig = config.global?.backtest?.strategyInvalidation;
+      if (invalidationConfig) {
+        // 手動無効化が禁止されている場合
+        if (!invalidationConfig.allowManualDisable && !isBacktestParameterUpdate) {
+          console.log(`戦略 ${strategyKey} の手動無効化は禁止されています`);
+          return false;
+        }
+        // バックテストパラメータ更新による無効化が禁止されている場合
+        if (!invalidationConfig.allowBacktestParameterDisable && isBacktestParameterUpdate) {
+          console.log(`戦略 ${strategyKey} のバックテストパラメータ更新による無効化は禁止されています`);
+          return false;
+        }
+      }
+    }
+
+    const currentParams = await getStrategyParametersRedis(exchangeId, symbol, strategyKey) || {};
+    currentParams.enabled = false;
+
+    const success = await saveUnifiedStrategyConfig(exchangeId, symbol, strategyKey, currentParams);
+    if (success) {
+      const reason = isBacktestParameterUpdate ? '(バックテストパラメータ更新)' : '(手動)';
+      console.log(`戦略を無効化しました: ${strategyKey} (${exchangeId}:${symbol}) ${reason}`);
+    }
+    return success;
+  } catch (error) {
+    console.error(`戦略の無効化中にエラーが発生しました: ${strategyKey}`, error);
+    return false;
+  }
+}
+
+/**
+ * 戦略を無効化する関数（後方互換性のため）
  * @param {string} exchangeId - 取引所ID
  * @param {string} symbol - 通貨ペア
  * @param {string} strategyKey - 戦略キー
  * @returns {Promise<boolean>} 無効化成功/失敗
  */
-async function disableStrategy(exchangeId, symbol, strategyKey) {
+async function disableStrategyLegacy(exchangeId, symbol, strategyKey) {
   try {
     const currentParams = await getStrategyParametersRedis(exchangeId, symbol, strategyKey) || {};
     currentParams.enabled = false;
@@ -145,5 +188,6 @@ module.exports = {
   saveUnifiedStrategyConfig,
   enableStrategy,
   disableStrategy,
+  disableStrategyLegacy,
   isStrategyEnabled
 };

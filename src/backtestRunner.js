@@ -19,7 +19,8 @@ const { backtestCreateLimitSellOrder,
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { OHLCVTimeFrames } = require('./common/const');
 const { timeframeToMs } = require('./common/utils');
-const { disableStrategy, clearPositionMarket } = require('./strategies/utils/common');
+const { clearPositionMarket } = require('./strategies/utils/common');
+const { disableStrategy } = require('./config/strategyManager');
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
 const { BacktestOptimizer } = require('./optimization');
@@ -219,7 +220,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                     try {
                       if (autoUpdate) {
                         postResultToDiscord(`戦略 ${strategyKey} の ${symbol} のポジションを解消, disable にします`, discordBacktestURL);
-                        await disableStrategy(exchange, symbol, strategyKey, config);
+                        await disableStrategy(exchange.id, symbol, strategyKey, config, true);
                         await clearPositionMarket(exchange, symbol, strategyKey);
                       }
                     } catch (error) {

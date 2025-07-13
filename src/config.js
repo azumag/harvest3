@@ -130,6 +130,11 @@ const config = {
         minBuffer: 50,             // 最小バッファ
         maxBuffer: 500,            // 最大バッファ
         cacheDuration: 300000      // 5分間キャッシュ
+      },
+      // 戦略無効化制御設定（Issue #436）
+      strategyInvalidation: {
+        allowManualDisable: false,           // 手動での戦略無効化を禁止
+        allowBacktestParameterDisable: true  // バックテストによるパラメータ更新時の無効化のみ許可
       }
     },
 
