@@ -56,14 +56,18 @@ class APICoordinator {
       request.reject = reject;
 
       // Issue #438 & #440: システム負荷チェックと適応的制御強化
-      const totalRequests = this.queue.length + this.activeRequests.size;
+      // レビュー対応: Race Condition対策 - 原子的なスナップショット取得
+      const queueSnapshot = {
+        queueLength: this.queue.length,
+        activeCount: this.activeRequests.size
+      };
+      const totalRequests = queueSnapshot.queueLength + queueSnapshot.activeCount;
       const queueUsageRate = totalRequests / EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE;
-      
       
       // キューが満杯の場合は緊急排出をスキップして直接拒否
       if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
         this.stats.rejectedRequests++;
-        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${this.queue.length}, active: ${this.activeRequests.size})`);
+        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${queueSnapshot.queueLength}, active: ${queueSnapshot.activeCount})`);
         reject(new Error('API coordinator queue is full'));
         return;
       }
@@ -442,7 +446,12 @@ class APICoordinator {
     
     if (usageRate >= 0.4) { // 40%以上で予防的制御開始
       shouldWait = true;
-      waitTime = Math.min(2000 + (usageRate * 3000), 8000); // 2-8秒の待機
+      // レビュー対応: マジックナンバーを定数化
+      waitTime = Math.min(
+        EXCHANGE_SETTINGS.CCXT_QUEUE_PROTECTION.WAIT_TIME_BASE_MS + 
+        (usageRate * EXCHANGE_SETTINGS.CCXT_QUEUE_PROTECTION.WAIT_TIME_MULTIPLIER_MS), 
+        EXCHANGE_SETTINGS.CCXT_QUEUE_PROTECTION.WAIT_TIME_MAX_MS
+      );
       logger.warn(`[CCXT Queue Check] 高負荷予防待機: 使用率${(usageRate * 100).toFixed(1)}%, 待機${waitTime}ms`);
     }
     
@@ -473,7 +482,8 @@ class APICoordinator {
     logger.error('[Emergency Queue Clearance] CCXT maxCapacity緊急対応開始');
     
     const queueLength = this.queue.length;
-    const rejectedCount = Math.floor(queueLength * 0.7); // 70%のリクエストを拒否
+    // レビュー対応: マジックナンバーを定数化
+    const rejectedCount = Math.floor(queueLength * EXCHANGE_SETTINGS.CCXT_QUEUE_PROTECTION.EMERGENCY_REJECTION_RATE);
     
     // 低優先度のリクエストを優先的に拒否
     const toReject = [];

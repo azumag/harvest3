@@ -55,6 +55,14 @@ const EXCHANGE_SETTINGS = {
     MAX_CAPACITY_RECOVERY_DELAY: 300000, // maxCapacityエラー時は5分待機（Issue #447: 3分から拡大）
     PREVENTIVE_THROTTLE_THRESHOLD: 200, // 50%で予防的throttle開始（Issue #447: 66%から削減）
     DYNAMIC_RATE_LIMIT_MULTIPLIER: 3.0 // 動的レート制限の倍数（Issue #447: 2.5から増加）
+  },
+  
+  // レビュー対応: マジックナンバーの定数化 (Issue #447)
+  CCXT_QUEUE_PROTECTION: {
+    WAIT_TIME_BASE_MS: 2000, // 予防的待機の基準時間（2秒）
+    WAIT_TIME_MULTIPLIER_MS: 3000, // 使用率による追加待機時間（3秒）
+    WAIT_TIME_MAX_MS: 8000, // 最大待機時間（8秒）
+    EMERGENCY_REJECTION_RATE: 0.7 // 緊急時のリクエスト拒否率（70%）
   }
 };
 
