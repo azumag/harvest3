@@ -224,22 +224,113 @@ npm run auto-update:status
 ## ⚙️ 設定
 
 ### 環境変数
+
+詳細な環境変数設定は`.env.example`ファイルを参照してください。主要なカテゴリと設定項目を以下に示します。
+
+#### 必須設定
+
 ```env
-# 取引所APIキー
+# 基本システム設定
+NODE_ENV=development              # 実行環境 (development/production/test)
+PORT=3000                        # Webサーバーポート
+
+# 取引所APIキー（必須）
 BB_API_KEY=your_bitbank_api_key
 BB_API_SECRET=your_bitbank_api_secret
 BF_API_KEY=your_bitflyer_api_key
 BF_API_SECRET=your_bitflyer_api_secret
 
-# データベース
+# データベース設定
 REDIS_URL=redis://localhost:6379
 MONGO_URL=mongodb://localhost:27017
 MONGO_DB_NAME=harvest3
 
-# Discord通知
+# Discord通知（推奨）
 DISCORD_ERROR_WEBHOOK_URL=your_webhook_url
 DISCORD_ORDER_WEBHOOK_URL=your_webhook_url
 DISCORD_RESULT_WEBHOOK_URL=your_webhook_url
+```
+
+#### オプション設定
+
+**戦略設定**
+```env
+# 基本戦略の有効化
+STRATEGY_MA_ENABLED=true          # 移動平均戦略
+STRATEGY_RSI_ENABLED=true         # RSI戦略
+STRATEGY_BOLLINGER_BANDS_ENABLED=true  # ボリンジャーバンド戦略
+
+# 戦略パラメータ
+RSI_OVERSOLD_THRESHOLD=30         # RSI売られすぎ閾値
+RSI_OVERBOUGHT_THRESHOLD=70       # RSI買われすぎ閾値
+BOLLINGER_BAND_PERIOD=20          # ボリンジャーバンド期間
+```
+
+**リスク管理設定**
+```env
+# ストップロス設定
+FIXED_STOP_LOSS_PERCENT=0.02      # 固定ストップロス（2%）
+TRAILING_STOP_TRIGGER_PERCENT=0.01  # トレーリングストップ発動閾値
+
+# 損失制限
+DAILY_MAX_LOSS_PERCENT=0.05       # 日次最大損失（5%）
+WEEKLY_MAX_LOSS_PERCENT=0.10      # 週次最大損失（10%）
+```
+
+**監視・バランスチェック設定**
+```env
+# バランス監視
+BALANCE_CHECK_INTERVAL=300000     # バランスチェック間隔（5分）
+BALANCE_THRESHOLD=0.01            # 乖離検知閾値
+BALANCE_DEBUG=false               # デバッグモード
+
+# システム監視
+MAX_CONSECUTIVE_FAILURES=3        # 最大連続失敗回数
+MONITORING_ENABLED=true           # 監視機能有効化
+```
+
+**API制限・パフォーマンス設定**
+```env
+# API制限設定
+EXCHANGE_RATE_LIMIT=15000         # API呼び出し間隔（15秒）
+EXCHANGE_TIMEOUT=60000            # APIタイムアウト（60秒）
+MAX_RETRIES=3                     # 最大リトライ回数
+
+# パフォーマンス設定
+PERFORMANCE_LOOKBACK_DAYS=30      # パフォーマンス分析期間
+MAX_CALCULATION_TIME=5000         # 計算時間制限（5秒）
+```
+
+**データ収集・セキュリティ設定**
+```env
+# データ収集
+COLLECTION_INTERVAL=60000         # データ収集間隔（1分）
+DATA_RETENTION_DAYS=30            # データ保持期間
+DATA_DIR=./data                   # データ保存ディレクトリ
+
+# セキュリティ
+ENABLE_ENCRYPTION=false           # データ暗号化
+LOG_SENSITIVE_DATA=false          # 機密データログ出力
+API_KEY_MASK_LENGTH=4             # APIキーマスク文字数
+```
+
+#### 環境別設定例
+
+**開発環境**
+```env
+NODE_ENV=development
+LOG_LEVEL=debug
+BALANCE_DEBUG=true
+LOAD_TEST_ENABLED=false
+```
+
+**本番環境**
+```env
+NODE_ENV=production
+LOG_LEVEL=info
+BALANCE_DEBUG=false
+MONITORING_ENABLED=true
+ALERTS_ENABLED=true
 ```
 
 ### 戦略設定
