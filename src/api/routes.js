@@ -81,23 +81,35 @@ router.get('/filled-positions', riskManagementController.getFilledPositions);
 router.get('/error-stats', errorStatsController.getErrorStats);
 router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
-// ヘルスチェックAPI
+// ヘルスチェックAPI - 軽量版（APIサーバー起動確認用）
 router.get('/health', async (req, res) => {
-  try {
-    const { performHealthCheck } = require('../utils/healthCheck');
-    const healthStatus = await performHealthCheck();
+  const basicHealth = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    server: 'running'
+  };
+  
+  // クエリパラメータで詳細チェックを要求された場合のみDB接続をチェック
+  if (req.query.detailed === 'true') {
+    try {
+      const { performHealthCheck } = require('../utils/healthCheck');
+      const healthStatus = await performHealthCheck();
 
-    if (healthStatus.status === 'error') {
-      res.status(503).json(healthStatus);
-    } else {
-      res.json(healthStatus);
+      if (healthStatus.status === 'error') {
+        res.status(503).json(healthStatus);
+      } else {
+        res.json(healthStatus);
+      }
+    } catch (error) {
+      res.status(503).json({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: error.message
+      });
     }
-  } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error.message
-    });
+  } else {
+    // 基本的なサーバー稼働確認のみ
+    res.json(basicHealth);
   }
 });
 

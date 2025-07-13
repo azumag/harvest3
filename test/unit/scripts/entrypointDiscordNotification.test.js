@@ -34,8 +34,8 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('const axios = require(\'axios\');');
-      expect(entrypointContent).toContain('axios.post(webhookUrl, message, { timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000 })');
+      expect(entrypointContent).toContain('axios = require(\'axios\');');
+      expect(entrypointContent).toContain('await axios.post(webhookUrl, message, { timeout });');
       expect(entrypointContent).toContain('package.json not found');
       expect(entrypointContent).toContain('axios module not available');
     });
@@ -79,15 +79,16 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000');
+      expect(entrypointContent).toContain('const timeout = parseInt(process.argv[3]) * 1000 || 10000;');
     });
   });
 
   describe('タイムアウト値テスト', () => {
-    test('API起動タイムアウト値が60秒に設定されている', () => {
+    test('API起動タイムアウト値が90秒に設定されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
+      expect(entrypointContent).toContain('API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-90}');
       expect(entrypointContent).toContain('max_api_wait=$API_STARTUP_TIMEOUT');
       expect(entrypointContent).toContain('API server failed to start within ${max_api_wait} seconds');
     });
@@ -131,8 +132,29 @@ describe('entrypoint.sh Discord通知機能', () => {
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Environment variable validation failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "File system validation failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Node.js dependency validation failed"');
-      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Database connectivity check failed"');
+      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "API server startup timeout"');
+    });
+    
+    test('改善されたDiscord通知処理が実装されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // Assert - 改善されたDiscord通知機能の確認
+      expect(entrypointContent).toContain('return 0  # 設定されていない場合は正常として扱う');
+      expect(entrypointContent).toContain('temp_script="/tmp/discord_notify_$$.js"');
+      expect(entrypointContent).toContain('WARNING: Discord notification failed (non-critical)');
+      expect(entrypointContent).toContain('rm -f "$temp_script"');
+    });
+    
+    test('データベース接続の改善された処理が実装されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // Assert - 改善されたDB接続チェック
+      expect(entrypointContent).toContain('local redis_failed=false');
+      expect(entrypointContent).toContain('local mongo_failed=false');
+      expect(entrypointContent).toContain('WARNING: Redis connection failed (service will retry later)');
+      expect(entrypointContent).toContain('WARNING: MongoDB connection failed (service will retry later)');
+      expect(entrypointContent).toContain('両方のデータベースが失敗した場合のみエラー終了');
     });
   });
 
