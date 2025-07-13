@@ -1,6 +1,7 @@
 // モジュールのインポート
 const { config } = require('./config');
 const { SETTINGS } = require('./config/settings');
+const { EXCHANGE_SETTINGS } = require('./common/const'); // Issue #431: EXCHANGE_SETTINGS追加
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
 const { unifiedErrorHandler } = require('./common/errorHandler');
@@ -222,17 +223,24 @@ async function executeStrategyCycle() {
       }
     }
 
-    // 各取引所-シンボルの組み合わせに対して並列処理で効率化
-    await Promise.allSettled(allExchangeSymbolPairs.map(async ({ exchangeId, symbol, marketParameters }) => {
+    // Issue #431: throttle queue overflow対策 - 並列処理を順次実行に変更
+    // 各取引所-シンボルの組み合わせを順次処理してAPI呼び出し頻度を制限
+    for (const { exchangeId, symbol, marketParameters } of allExchangeSymbolPairs) {
       const exchangeConfig = config.exchanges[exchangeId];
       if (!exchangeConfig) {
-        return;
+        continue;
       }
 
       const exchangeInstance = exchangeConfig.instance;
       logger.info(`========== 取引所: ${exchangeId} - 通貨ペア: ${symbol} ==========`);
 
       try {
+        // Issue #431: 各ペア処理間に遅延を挿入してthrottle queue圧迫を防ぐ
+        const processingDelay = EXCHANGE_SETTINGS.EXECUTION_DELAY_MS || 5000;
+        if (allExchangeSymbolPairs.indexOf({ exchangeId, symbol, marketParameters }) > 0) {
+          logger.info(`[Issue #431] throttle queue保護のため${processingDelay}ms待機中...`);
+          await new Promise(resolve => setTimeout(resolve, processingDelay));
+        }
         // 約定済み取引の更新
         await updateFilledTrades(exchangeInstance, symbol);
 
@@ -550,7 +558,7 @@ async function executeStrategyCycle() {
           deduplicationWindow: 1800000 // 30分間の重複防止
         });
       }
-    }));
+    } // for ループ終了
 
   } catch (error) {
     const errorMessage = `[戦略実行] エラーが発生しました: ${error.message}`;

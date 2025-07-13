@@ -30,19 +30,26 @@ const exchangeBB = new ccxt.bitbank({
   rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
   timeout: EXCHANGE_SETTINGS.TIMEOUT,
   options: {
-    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
+    // CCXT内部のthrottle queueは1000固定のため、それを超えないよう設定
+    'maxThrottleQueueSize': 800, // 1000未満に制限して安全マージンを確保
     'defaultType': 'spot',
     'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
-    'adjustForTimeDifference': true
+    'adjustForTimeDifference': true,
+    // 追加のthrottle制御オプション
+    'throttle': {
+      'maxCapacity': 800, // 内部キュー最大容量を制限
+      'refillRate': 10, // 1秒あたりのトークン補充率を制限
+      'refillPeriod': 1000 // 補充間隔（ミリ秒）
+    }
   }
 });
 
-// Issue #210対応: CCXT標準rate limiting機能への移行
+// Issue #431対応: throttle queue overflow対策として更に保守的な設定
 // bitbank API制限: 取得系 10回/秒、更新系 6回/秒
-// 安全な設定: 1000ms間隔（1回/秒）で安定運用
-console.log('[Issue #210] CCXT標準rate limitingへ移行');
+// 緊急対応: 2秒間隔（0.5回/秒）で超安全運用
+console.log('[Issue #431] throttle queue overflow対策として超保守的rate limitingを適用');
 exchangeBB.enableRateLimit = true;
-exchangeBB.rateLimit = SETTINGS.EXCHANGE.BITBANK_RATE_LIMIT; // 設定ファイルから取得
+exchangeBB.rateLimit = Math.max(SETTINGS.EXCHANGE.BITBANK_RATE_LIMIT, 2000); // 最低2秒間隔
 exchangeBB.timeout = EXCHANGE_SETTINGS.TIMEOUT;
 
 // CCXT標準機能の設定確認
@@ -480,7 +487,7 @@ const config = {
 
     BOLLINGER_BANDS: {
       type: 'mean_reversion',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // Issue #431対応後テスト用に一時再有効化
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',

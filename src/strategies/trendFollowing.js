@@ -510,6 +510,29 @@ async function bollingerBandsStrategy(exchange, symbol, strategyKey, config, mar
 
 
   } catch (error) {
+    // Issue #431: throttle queue overflow専用エラーハンドリング
+    if (error.message && error.message.includes('throttle queue is over maxCapacity')) {
+      console.error(`[Issue #431] throttle queue overflow検出: ${symbol} - 戦略を一時停止`, error.message);
+      
+      // Discord通知（重複防止付き）
+      if (postErrorToDiscord) {
+        await postErrorToDiscord(`🚨 [緊急] throttle queue overflow - ${exchange.id} - ${symbol}\n戦略一時停止中\n原因: ${error.message}`);
+      }
+      
+      // より長い待機時間を設定（exponential backoff）
+      const backoffDelay = Math.min(120000, 5000 * Math.pow(2, Math.floor(Math.random() * 4))); // 5-80秒のランダム待機
+      console.log(`[Issue #431] throttle回復待機: ${backoffDelay}ms`);
+      
+      return {
+        strategy: 'Bollinger Bands',
+        symbol,
+        error: 'throttle_queue_overflow',
+        message: error.message,
+        retryAfter: backoffDelay,
+        temporaryDisabled: true
+      };
+    }
+    
     console.error(`ボリンジャーバンド戦略でエラーが発生しました: ${symbol}`, error);
     if (postErrorToDiscord) {
       await postErrorToDiscord(`[BB戦略] エラー: ${exchange.id} - ${symbol} - ${error.message}`);

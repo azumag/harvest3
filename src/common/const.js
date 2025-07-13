@@ -16,27 +16,27 @@ function parseEnvInt(envVar, defaultValue, minValue = 0) {
   return parsed;
 }
 
-// API/Exchange設定定数 - 改善されたスロットリング制御
+// API/Exchange設定定数 - Issue #431 throttle queue overflow対策強化
 // bitbank API制限: 取得系 10回/秒、更新系 6回/秒
-// 実測値: 5秒間隔で安定、8秒間隔で確実に問題回避
-// TODO: 実データ分析システムを活用し、安定性を保ちつつパフォーマンス最適化を継続検討（目標: 5-6秒）
+// 緊急対応: throttle queue overflow完全防止のため超保守的設定
+// TODO: システム安定化後に段階的にパフォーマンス最適化を検討
 const EXCHANGE_SETTINGS = {
   // 環境変数対応: バリデーション付きで安全に解析
-  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 15000, 1000), // 緊急対応: 15秒間隔（最小1秒制限）
-  TIMEOUT: parseEnvInt(process.env.EXCHANGE_TIMEOUT, 60000, 5000), // 60秒タイムアウト（最小5秒制限）
-  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 5000, 100), // 最小100に制限
+  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 20000, 2000), // 緊急対応: 20秒間隔（最小2秒制限）
+  TIMEOUT: parseEnvInt(process.env.EXCHANGE_TIMEOUT, 90000, 10000), // 90秒タイムアウト（最小10秒制限）
+  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 500, 50), // 500に削減（最小50に制限）
   RECV_WINDOW: 60000,
-  // 新しい設定: 段階的バックオフ
+  // 新しい設定: 段階的バックオフ強化
   BACKOFF_ENABLED: true,
-  BACKOFF_INITIAL_DELAY: 5000, // 初期遅延 5秒に拡大（緊急対応）
-  BACKOFF_MAX_DELAY: 120000, // 最大遅延 2分に拡大
-  BACKOFF_MULTIPLIER: 3, // 遅延倍数を3に拡大
+  BACKOFF_INITIAL_DELAY: 10000, // 初期遅延 10秒に拡大（緊急対応）
+  BACKOFF_MAX_DELAY: 180000, // 最大遅延 3分に拡大
+  BACKOFF_MULTIPLIER: 4, // 遅延倍数を4に拡大
   // 新しい設定: 接続監視
   HEALTH_CHECK_INTERVAL: 60000, // 1分間隔でヘルスチェック
-  MAX_CONSECUTIVE_FAILURES: 2, // 連続失敗回数の閾値を2に削減（即座に発見）
-  // 新しい設定: 並列実行制限（API負荷軽減）
-  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 1, 1), // 緊急対応: 同時処理を1に制限（最小1、最大並列数制限）
-  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 5000, 1000) // 各ペア処理間の遅延（最小1秒制限）
+  MAX_CONSECUTIVE_FAILURES: 1, // 連続失敗回数の閾値を1に削減（即座に発見）
+  // 新しい設定: 並列実行制限強化（API負荷軽減）
+  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 1, 1), // 緊急対応: 同時処理を1に制限維持
+  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 10000, 2000) // 各ペア処理間の遅延を10秒に拡大（最小2秒制限）
 };
 
 // リスク管理設定定数
