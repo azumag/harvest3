@@ -656,41 +656,29 @@ async function deleteOrderByOrderId(orderId) {
 async function addOhlcvMongoDB(ohlcvData) {
   await connectDB();
   try {
-    // 重複挿入を防ぐために upsert: true を使用するか、事前に findOne で確認する
-    const existingData = await module.exports.ohlcvCollection.findOne({
+    // アトミックなupsert操作を使用して競合状態を回避
+    const filter = {
       exchange: ohlcvData.exchange,
       symbol: ohlcvData.symbol,
       timeframe: ohlcvData.timeframe,
       timestamp: ohlcvData.timestamp
-    });
-    if (existingData) {
-      // console.log('OHLCV data already exists:', ohlcvData.timestamp);
+    };
+    
+    const result = await module.exports.ohlcvCollection.replaceOne(
+      filter,
+      ohlcvData,
+      { upsert: true }
+    );
+    
+    if (result.upsertedCount > 0) {
+      // 新しいドキュメントが挿入された場合
+      return { insertedId: result.upsertedId, ...ohlcvData };
+    } else {
+      // 既存のドキュメントが更新された場合、既存データを返す
+      const existingData = await module.exports.ohlcvCollection.findOne(filter);
       return existingData;
     }
-    // insertOne を使用し、ユニークインデックスで重複エラーをハンドル
-    const result = await module.exports.ohlcvCollection.insertOne(ohlcvData);
-    // console.log('OHLCV added:', result.insertedId);
-    return result;
   } catch (error) {
-    // 重複エラー (E11000 duplicate key error) の場合は既存データを返す
-    if (error.code === 11000) {
-      logger.warn(`[OHLCV] 重複データ検出: ${ohlcvData.exchange}:${ohlcvData.symbol}:${ohlcvData.timeframe}:${new Date(ohlcvData.timestamp).toISOString()}`, 
-        createLogMetadata('addOhlcvMongoDB', error, {
-          collection: 'ohlcv',
-          exchange: ohlcvData.exchange,
-          symbol: ohlcvData.symbol,
-          timeframe: ohlcvData.timeframe,
-          timestamp: ohlcvData.timestamp
-        })
-      );
-      const existingData = await module.exports.ohlcvCollection.findOne({
-        exchange: ohlcvData.exchange,
-        symbol: ohlcvData.symbol,
-        timeframe: ohlcvData.timeframe,
-        timestamp: ohlcvData.timestamp
-      });
-      return existingData;
-    }
     logger.error('Error adding OHLCV:', createLogMetadata('addOhlcvMongoDB', error, {
       exchange: ohlcvData?.exchange,
       symbol: ohlcvData?.symbol,

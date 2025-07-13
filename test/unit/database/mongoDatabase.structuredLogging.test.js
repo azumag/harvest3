@@ -264,7 +264,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
 
   describe('addOhlcvMongoDB', () => {
     describe('🔴 Red: OHLCVデータエラーの構造化ログ', () => {
-      it('OHLCV重複エラー時に構造化されたログ情報を出力すること', async () => {
+      it('OHLCV正常処理時にエラーログが出力されないこと（upsert使用）', async () => {
         const ohlcvData = {
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
@@ -276,31 +276,21 @@ describe('mongoDatabase - 構造化ログ機能', () => {
           close: 4050000,
           volume: 100
         };
-
-        const duplicateError = new Error('Duplicate key error');
-        duplicateError.code = 11000;
-
-        mockCollection.findOne.mockResolvedValueOnce(null);
-        mockCollection.insertOne.mockRejectedValue(duplicateError);
-        mockCollection.findOne.mockResolvedValueOnce(ohlcvData);
-
+        
+        // replaceOneが正常に完了する場合をモック（既存データの更新）
+        mockCollection.replaceOne.mockResolvedValue({
+          upsertedCount: 0,
+          upsertedId: null,
+          modifiedCount: 1,
+          matchedCount: 1
+        });
+        mockCollection.findOne.mockResolvedValue(ohlcvData);
+        
         const result = await addOhlcvMongoDB(ohlcvData);
-
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('[OHLCV] 重複データ検出:'),
-          {
-            operation: 'addOhlcvMongoDB',
-            error: 'Duplicate key error',
-            errorCode: 11000,
-            timestamp: 1673000000000, // This is the timestamp from the ohlcvData, not the log timestamp
-            collection: 'ohlcv',
-            exchange: 'bitbank',
-            symbol: 'BTC/JPY',
-            timeframe: '1h',
-            stack: expect.any(String)
-          }
-        );
-
+        
+        // upsertを使用するため、重複エラーは発生せず警告ログも出力されない
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
         expect(result).toEqual(ohlcvData);
       });
 
@@ -316,8 +306,7 @@ describe('mongoDatabase - 構造化ログ機能', () => {
         generalError.code = 'DB_ERROR';
         generalError.stack = 'Error stack trace';
 
-        mockCollection.findOne.mockResolvedValue(null);
-        mockCollection.insertOne.mockRejectedValue(generalError);
+        mockCollection.replaceOne.mockRejectedValue(generalError);
 
         await expect(addOhlcvMongoDB(ohlcvData)).rejects.toThrow();
 
