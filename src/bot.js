@@ -3,7 +3,7 @@ const { config } = require('./config');
 const { SETTINGS } = require('./config/settings');
 const { postErrorToDiscord, postOrderToDiscord } = require('./common/notifications');
 const { getValidatedConfig } = require('./common/balanceCheckerConfig');
-const { errorHandler } = require('./common/errorHandler');
+const { unifiedErrorHandler } = require('./common/errorHandler');
 const Logger = require('./hft/utils/Logger');
 const logger = new Logger('Bot');
 const {
@@ -533,11 +533,21 @@ async function executeStrategyCycle() {
           try {
             await runStrategy(strategy, supportedExchange, symbol, strategyKey, marketParameters, { allExchangeSymbolPairs, config });
           } catch (error) {
-            await errorHandler.handleError(error, `戦略 ${strategyKey}、通貨ペア ${symbol}`, false);
+            await unifiedErrorHandler.handleError(error, {
+              context: `戦略 ${strategyKey}、通貨ペア ${symbol}`,
+              severity: 'CRITICAL',
+              shouldThrow: false,
+              deduplicationWindow: 600000 // 10分間の重複防止
+            });
           }
         }
       } catch (error) {
-        await errorHandler.handleError(error, `通貨ペア ${symbol}`, false);
+        await unifiedErrorHandler.handleError(error, {
+          context: `通貨ペア ${symbol}`,
+          severity: 'WARNING',
+          shouldThrow: false,
+          deduplicationWindow: 1800000 // 30分間の重複防止
+        });
       }
     }));
 

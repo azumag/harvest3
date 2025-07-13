@@ -1,86 +1,194 @@
-const { postErrorToDiscord } = require('./notifications');
+const rateLimiter = require('./discordRateLimiter');
+const crypto = require('crypto');
+const { discordErrorWebhookUrl } = require('./notifications');
 
 /**
- * エラーハンドラークラス
- * エラーのレート制限、重複除外、Discord通知を管理
+ * 統一エラーハンドラークラス
+ * エラー分類、重複除外、Discord通知の統一管理
+ * DiscordRateLimiterとの統合により、全システムでの一元的なエラー処理を提供
  */
-class ErrorHandler {
+class UnifiedErrorHandler {
   constructor() {
-    this.errorQueue = new Map(); // エラーハッシュ -> 最後の送信時刻
-    this.rateLimitInterval = 60 * 1000; // 1分間
-    this.maxErrorsPerInterval = 1; // 1分間に最大1回
+    // エラー重要度の定義
+    this.severityLevels = {
+      CRITICAL: 1,
+      WARNING: 2,
+      INFO: 3
+    };
+
+    // 重要度別のEmoji
+    this.severityEmojis = {
+      CRITICAL: '🚨',
+      WARNING: '⚠️',
+      INFO: 'ℹ️'
+    };
+
+    // 重要度別のデフォルト重複防止時間（ミリ秒）
+    this.severityDeduplicationWindows = {
+      CRITICAL: 1800000, // 30分
+      WARNING: 3600000,  // 1時間
+      INFO: 7200000      // 2時間
+    };
   }
 
   /**
-   * エラーのハッシュを生成
+   * エラーの重要度を自動判定
    * @param {Error|string} error - エラーオブジェクトまたはメッセージ
-   * @returns {string} エラーハッシュ
+   * @param {string} context - エラーコンテキスト
+   * @returns {string} 重要度レベル (CRITICAL/WARNING/INFO)
    */
-  generateErrorHash(error) {
-    const message = typeof error === 'string' ? error : error.message;
+  determineSeverity(error, context = '') {
+    // null/undefinedのチェック
+    if (!error) {
+      return 'INFO';
+    }
+    const message = typeof error === 'string' ? error : (error.message || '');
+    const lowerMessage = message.toLowerCase();
+    const lowerContext = context.toLowerCase();
+
+    // CRITICAL レベルの条件
+    if (
+      lowerMessage.includes('database') ||
+      lowerMessage.includes('mongodb') ||
+      lowerMessage.includes('redis') ||
+      lowerMessage.includes('connection') ||
+      lowerMessage.includes('authentication') ||
+      lowerMessage.includes('auth') ||
+      lowerMessage.includes('balance') ||
+      lowerMessage.includes('order') ||
+      lowerMessage.includes('trade') ||
+      lowerMessage.includes('position') ||
+      lowerContext.includes('trading') ||
+      lowerContext.includes('order') ||
+      lowerContext.includes('balance')
+    ) {
+      return 'CRITICAL';
+    }
+
+    // WARNING レベルの条件
+    if (
+      lowerMessage.includes('rate limit') ||
+      lowerMessage.includes('429') ||
+      lowerMessage.includes('timeout') ||
+      lowerMessage.includes('network') ||
+      lowerMessage.includes('api') ||
+      lowerMessage.includes('insufficient') ||
+      lowerContext.includes('api') ||
+      lowerContext.includes('network')
+    ) {
+      return 'WARNING';
+    }
+
+    // デフォルトはINFO
+    return 'INFO';
+  }
+
+  /**
+   * 重複防止キーを生成
+   * @param {Error|string} error - エラーオブジェクトまたはメッセージ
+   * @param {string} context - エラーコンテキスト
+   * @returns {string} 重複防止キー
+   */
+  generateDeduplicationKey(error, context = '') {
+    if (!error) {
+      return crypto.createHash('sha256').update(`${context}:undefined_error`).digest('hex');
+    }
+    const message = typeof error === 'string' ? error : (error.message || '');
     const stack = typeof error === 'object' && error.stack ? error.stack : '';
 
-    // エラーメッセージとスタックトレースの最初の3行を使用してハッシュを生成
-    const stackLines = stack.split('\n').slice(0, 3).join('\n');
-    const hashSource = `${message}:${stackLines}`;
+    // エラーメッセージとスタックトレースの最初の5行を使用
+    const stackLines = stack.split('\n').slice(0, 5).join('\n');
+    const hashSource = `${context}:${message}:${stackLines}`;
 
-    // 簡易ハッシュ生成（実際の環境では crypto.createHash を使用することを推奨）
-    let hash = 0;
-    for (let i = 0; i < hashSource.length; i++) {
-      const char = hashSource.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // 32bit整数に変換
-    }
-    return hash.toString();
+    // SHA256ハッシュを生成
+    return crypto.createHash('sha256').update(hashSource).digest('hex');
   }
 
   /**
-   * エラーを処理し、必要に応じてDiscordに通知
+   * エラーを統一的に処理し、適切な重要度でDiscordに通知
    * @param {Error|string} error - エラーオブジェクトまたはメッセージ
-   * @param {string} [context] - エラーコンテキスト
-   * @param {boolean} [shouldThrow=true] - エラーを再throw するかどうか
+   * @param {Object} options - オプション
+   * @param {string} [options.context=''] - エラーコンテキスト
+   * @param {boolean} [options.shouldThrow=true] - エラーを再throw するかどうか
+   * @param {string} [options.severity] - 手動で指定する重要度
+   * @param {number} [options.deduplicationWindow] - 重複防止時間（ミリ秒）
    */
-  async handleError(error, context = '', shouldThrow = true) {
-    const errorHash = this.generateErrorHash(error);
-    const now = Date.now();
-    const lastSent = this.errorQueue.get(errorHash);
+  async handleError(error, options = {}) {
+    const {
+      context = '',
+      shouldThrow = true,
+      severity = null,
+      deduplicationWindow = null
+    } = options;
 
-    // レート制限チェック
-    if (!lastSent || (now - lastSent) >= this.rateLimitInterval) {
-      // Discord通知の作成
-      const message = typeof error === 'string' ? error : error.message;
-      const stack = typeof error === 'object' && error.stack ? error.stack : '';
-
-      let discordMessage = '🚨 **エラー発生**\n';
-      if (context) {
-        discordMessage += `**コンテキスト**: ${context}\n`;
+    // null/undefinedのチェック（空文字列は除外）
+    if (error == null) {
+      const fallbackError = 'Unknown error (null or undefined)';
+      if (shouldThrow) {
+        throw new Error(fallbackError);
       }
-      discordMessage += `**メッセージ**: ${message}\n`;
-      discordMessage += `**時刻**: ${new Date(now).toLocaleString('ja-JP')}\n`;
-
-      if (stack) {
-        // スタックトレースを制限して追加
-        const stackLines = stack.split('\n').slice(0, 10).join('\n');
-        discordMessage += `**スタックトレース**:\n\`\`\`\n${stackLines}\n\`\`\``;
-      }
-
-      try {
-        const { postErrorToDiscord } = require('./notifications');
-        await postErrorToDiscord(discordMessage);
-        this.errorQueue.set(errorHash, now);
-        console.error(`[ErrorHandler] エラーをDiscordに通知: ${message}`);
-      } catch (notificationError) {
-        console.error(`[ErrorHandler] Discord通知に失敗: ${notificationError.message}`);
-      }
-    } else {
-      console.warn(`[ErrorHandler] レート制限によりエラー通知をスキップ: ${typeof error === 'string' ? error : error.message}`);
+      return;
     }
 
-    // コンソールにも出力
-    if (typeof error === 'string') {
-      console.error(`[ErrorHandler] ${context ? `[${context}] ` : ''}${error}`);
+    const message = typeof error === 'string' ? error : (error.message || 'Error without message');
+    const stack = typeof error === 'object' && error.stack ? error.stack : '';
+    const now = Date.now();
+
+    // 重要度を決定（手動指定またはオート判定）
+    const errorSeverity = severity || this.determineSeverity(error, context);
+    const emoji = this.severityEmojis[errorSeverity];
+    const priority = this.severityLevels[errorSeverity];
+    const dedupWindow = deduplicationWindow || this.severityDeduplicationWindows[errorSeverity];
+
+    // 重複防止キーを生成
+    const deduplicationKey = this.generateDeduplicationKey(error, context);
+
+    // Discord通知メッセージを構築
+    let discordMessage = `${emoji} **[${errorSeverity}] エラー発生**\n`;
+    if (context) {
+      discordMessage += `**コンテキスト**: ${context}\n`;
+    }
+    discordMessage += `**メッセージ**: ${message}\n`;
+    discordMessage += `**時刻**: ${new Date(now).toLocaleString('ja-JP')}\n`;
+    discordMessage += `**重要度**: ${errorSeverity}\n`;
+
+    if (stack) {
+      // スタックトレースを制限して追加（重要度に応じて行数を調整）
+      const maxStackLines = errorSeverity === 'CRITICAL' ? 15 : errorSeverity === 'WARNING' ? 10 : 5;
+      const stackLines = stack.split('\n').slice(0, maxStackLines).join('\n');
+      discordMessage += `**スタックトレース**:\n\`\`\`\n${stackLines}\n\`\`\``;
+    }
+
+    // DiscordRateLimiterを使用して通知を送信
+    try {
+      if (!discordErrorWebhookUrl) {
+        console.error('[UnifiedErrorHandler] Discord Webhook URLが設定されていません');
+      } else {
+        const result = await rateLimiter.send(discordErrorWebhookUrl, discordMessage, {
+          priority,
+          deduplicationKey,
+          deduplicationWindow: dedupWindow,
+          maxRetries: errorSeverity === 'CRITICAL' ? 5 : 3
+        });
+
+        if (result.success) {
+          console.error(`[UnifiedErrorHandler] [${errorSeverity}] エラーをDiscordに通知: ${message}`);
+        } else {
+          console.warn(`[UnifiedErrorHandler] Discord通知がスキップされました (${result.reason}): ${message}`);
+        }
+      }
+    } catch (notificationError) {
+      console.error(`[UnifiedErrorHandler] Discord通知に失敗: ${notificationError.message}`);
+    }
+
+    // コンソールにも出力（重要度に応じてログレベルを変更）
+    const logPrefix = `[UnifiedErrorHandler] [${errorSeverity}] ${context ? `[${context}] ` : ''}`;
+    if (errorSeverity === 'CRITICAL') {
+      console.error(`${logPrefix}${message}`, typeof error === 'object' ? error : undefined);
+    } else if (errorSeverity === 'WARNING') {
+      console.warn(`${logPrefix}${message}`);
     } else {
-      console.error(`[ErrorHandler] ${context ? `[${context}] ` : ''}${error.message}`, error);
+      console.log(`${logPrefix}${message}`);
     }
 
     // 必要に応じてエラーを再throw
@@ -95,40 +203,69 @@ class ErrorHandler {
 
   /**
    * 非同期エラーハンドラー（Promise.catch用）
-   * @param {string} [context] - エラーコンテキスト
-   * @param {boolean} [shouldThrow=false] - エラーを再throw するかどうか
+   * @param {Object} options - オプション
    * @returns {Function} エラーハンドラー関数
    */
-  createAsyncHandler(context = '', shouldThrow = false) {
+  createAsyncHandler(options = {}) {
     return async (error) => {
-      await this.handleError(error, context, shouldThrow);
+      await this.handleError(error, { shouldThrow: false, ...options });
     };
   }
 
   /**
-   * 古いエラー記録をクリーンアップ
+   * 旧ErrorHandlerとの互換性を保つためのメソッド
+   * @deprecated 新しいhandleErrorメソッドを使用してください
+   */
+  async handleErrorLegacy(error, context = '', shouldThrow = true) {
+    return this.handleError(error, { context, shouldThrow });
+  }
+
+  /**
+   * エラー統計情報を取得
+   * @returns {Object} 統計情報
+   */
+  getErrorStats() {
+    const rateLimiterStats = rateLimiter.getStats();
+    return {
+      ...rateLimiterStats,
+      unifiedErrorHandler: {
+        severityLevels: this.severityLevels,
+        severityDeduplicationWindows: this.severityDeduplicationWindows
+      }
+    };
+  }
+
+  /**
+   * DiscordRateLimiterのクリーンアップを実行
+   * （UnifiedErrorHandler自体はクリーンアップ不要）
    */
   cleanup() {
-    const now = Date.now();
-    const expiredTime = now - (this.rateLimitInterval * 24); // 24時間以上古いものを削除
-
-    for (const [hash, timestamp] of this.errorQueue.entries()) {
-      if (timestamp < expiredTime) {
-        this.errorQueue.delete(hash);
-      }
-    }
+    rateLimiter.cleanup();
   }
 }
 
 // シングルトンインスタンス
+const unifiedErrorHandler = new UnifiedErrorHandler();
+
+// 旧ErrorHandlerクラスの互換性維持（非推奨）
+class ErrorHandler extends UnifiedErrorHandler {
+  constructor() {
+    super();
+    console.warn('[DEPRECATED] ErrorHandler is deprecated. Use UnifiedErrorHandler instead.');
+  }
+
+  async handleError(error, context = '', shouldThrow = true) {
+    return super.handleError(error, { context, shouldThrow });
+  }
+}
+
+// 旧インスタンスの互換性維持
 const errorHandler = new ErrorHandler();
 
-// 定期的なクリーンアップ（1時間ごと）
-setInterval(() => {
-  errorHandler.cleanup();
-}, 60 * 60 * 1000);
-
 module.exports = {
+  UnifiedErrorHandler,
+  unifiedErrorHandler,
+  // 旧クラス・インスタンスの互換性維持（非推奨）
   ErrorHandler,
   errorHandler
 };
