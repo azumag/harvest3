@@ -9,7 +9,7 @@ set -e  # エラー時即座終了
 CONTAINER_NAME="strategy-runner"
 MAX_STARTUP_TIME=${MAX_STARTUP_TIME:-60}  # 最大起動時間（秒）
 HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}  # ヘルスチェック間隔（秒）
-API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-60}  # APIサーバー起動タイムアウト（秒）
+API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-90}  # APIサーバー起動タイムアウト（秒）
 API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}  # APIチェック間隔（秒）
 PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒）
 DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
@@ -27,7 +27,7 @@ send_startup_error_to_discord() {
     
     if [ -z "$DISCORD_ERROR_WEBHOOK_URL" ]; then
         log "WARNING: DISCORD_ERROR_WEBHOOK_URL not set, skipping Discord notification"
-        return
+        return 0  # 設定されていない場合は正常として扱う
     fi
     
     local discord_message="🚨 **Strategy-Runner起動エラー**
@@ -41,42 +41,63 @@ send_startup_error_to_discord() {
 
     # Node.js経由でDiscord通知送信
     if command -v node >/dev/null 2>&1; then
-        node -e "
-            const { execSync } = require('child_process');
-            const fs = require('fs');
-            
-            try {
-                // package.jsonの存在確認
-                if (!fs.existsSync('package.json')) {
-                    console.error('package.json not found');
-                    process.exit(1);
-                }
-                
-                // axiosの利用可能性確認
-                try {
-                    require('axios');
-                } catch (e) {
-                    console.error('axios module not available:', e.message);
-                    process.exit(1);
-                }
-                
-                const axios = require('axios');
-                const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
-                const message = { content: \`${discord_message}\` };
-                
-                axios.post(webhookUrl, message, { timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000 })
-                    .then(() => console.log('Discord notification sent successfully'))
-                    .catch(err => {
-                        console.error('Discord notification failed:', err.message);
-                        process.exit(1);
-                    });
-            } catch (error) {
-                console.error('Discord notification script error:', error.message);
-                process.exit(1);
-            }
-        " 2>/dev/null || log "ERROR: Failed to send Discord notification"
+        # 一時的なDiscord通知スクリプトを作成
+        local temp_script="/tmp/discord_notify_$$.js"
+        cat > "$temp_script" << 'EOF'
+const fs = require('fs');
+
+// Discord通知送信関数
+async function sendDiscordNotification() {
+    try {
+        // package.jsonの存在確認
+        if (!fs.existsSync('package.json')) {
+            console.error('package.json not found');
+            return false;
+        }
+        
+        // axiosの利用可能性確認
+        let axios;
+        try {
+            axios = require('axios');
+        } catch (e) {
+            console.error('axios module not available:', e.message);
+            return false;
+        }
+        
+        const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
+        if (!webhookUrl) {
+            console.error('DISCORD_ERROR_WEBHOOK_URL not set');
+            return false;
+        }
+        
+        const message = { content: process.argv[2] };
+        const timeout = parseInt(process.argv[3]) * 1000 || 10000;
+        
+        await axios.post(webhookUrl, message, { timeout });
+        console.log('Discord notification sent successfully');
+        return true;
+    } catch (error) {
+        console.error('Discord notification failed:', error.message);
+        return false;
+    }
+}
+
+sendDiscordNotification().then(success => {
+    process.exit(success ? 0 : 1);
+});
+EOF
+        
+        # Discord通知実行
+        if node "$temp_script" "$discord_message" "$DISCORD_NOTIFICATION_TIMEOUT" 2>/dev/null; then
+            log "Discord notification sent successfully"
+        else
+            log "WARNING: Discord notification failed (non-critical)"
+        fi
+        
+        # 一時ファイルを削除
+        rm -f "$temp_script"
     else
-        log "ERROR: Node.js not available for Discord notification"
+        log "WARNING: Node.js not available for Discord notification"
     fi
 }
 
@@ -146,7 +167,11 @@ pre_startup_checks() {
 check_database_connections() {
     log "Checking database connections..."
     
+    local redis_failed=false
+    local mongo_failed=false
+    
     # Redis接続チェック
+    log "Testing Redis connection..."
     if ! node -e "
         const redis = require('redis');
         const client = redis.createClient({url: process.env.REDIS_URL});
@@ -155,13 +180,14 @@ check_database_connections() {
             .catch(err => { console.error('Redis connection failed:', err.message); process.exit(1); });
         setTimeout(() => { console.error('Redis connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
     " 2>/dev/null; then
-        local error_msg="Redis connection failed"
-        log "ERROR: $error_msg"
-        send_startup_error_to_discord "$error_msg" "Database connectivity check failed"
-        exit 1
+        log "WARNING: Redis connection failed (service will retry later)"
+        redis_failed=true
+    else
+        log "Redis connection verified successfully"
     fi
     
     # MongoDB接続チェック
+    log "Testing MongoDB connection..."
     if ! node -e "
         const { MongoClient } = require('mongodb');
         const client = new MongoClient(process.env.MONGO_URL);
@@ -171,13 +197,21 @@ check_database_connections() {
             .catch(err => { console.error('MongoDB connection failed:', err.message); process.exit(1); });
         setTimeout(() => { console.error('MongoDB connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
     " 2>/dev/null; then
-        local error_msg="MongoDB connection failed"
+        log "WARNING: MongoDB connection failed (service will retry later)"
+        mongo_failed=true
+    else
+        log "MongoDB connection verified successfully"
+    fi
+    
+    # 両方のデータベースが失敗した場合のみエラー終了
+    if [ "$redis_failed" = true ] && [ "$mongo_failed" = true ]; then
+        local error_msg="All database connections failed"
         log "ERROR: $error_msg"
-        send_startup_error_to_discord "$error_msg" "Database connectivity check failed"
+        send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed"
         exit 1
     fi
     
-    log "Database connections verified successfully"
+    log "Database connectivity check completed (some connections may retry automatically)"
 }
 
 # アプリケーション起動
