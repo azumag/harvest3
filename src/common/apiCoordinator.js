@@ -52,10 +52,11 @@ class APICoordinator {
       request.resolve = resolve;
       request.reject = reject;
 
-      // Issue #443: queue容量制限チェック
-      if (this.queue.length >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
+      // Issue #443: queue容量制限チェック (queue + activeRequests の合計)
+      const totalRequests = this.queue.length + this.activeRequests.size;
+      if (totalRequests >= EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE) {
         this.stats.rejectedRequests++;
-        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, queue容量: ${this.queue.length}`);
+        logger.warn(`[Queue Full] リクエスト拒否: ${request.id}, 総リクエスト数: ${totalRequests} (queue: ${this.queue.length}, active: ${this.activeRequests.size})`);
         reject(new Error('API coordinator queue is full'));
         return;
       }
@@ -231,9 +232,10 @@ class APICoordinator {
       }
     });
     
+    // 処理を停止してqueueをクリア
+    this.isProcessing = false;
     this.queue = [];
     this.activeRequests.clear();
-    this.isProcessing = false;
     
     logger.info('[Emergency Reset] 完了');
   }
