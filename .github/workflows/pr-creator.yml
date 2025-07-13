@@ -95,10 +95,48 @@ jobs:
               });
 
             } catch (error) {
+              console.error('PR creation error:', error);
+              
+              // エラーメッセージとレスポンスの詳細をログ出力
+              let errorMessage = error.message;
+              let shouldCloseIssue = false;
+              
+              // GitHub API エラーレスポンスの解析
+              if (error.status === 422 && error.response?.data?.errors) {
+                const errors = error.response.data.errors;
+                console.log('Validation errors:', JSON.stringify(errors, null, 2));
+                
+                // headフィールドのinvalidエラーをチェック
+                const headError = errors.find(err => 
+                  err.resource === 'PullRequest' && 
+                  err.field === 'head' && 
+                  err.code === 'invalid'
+                );
+                
+                if (headError) {
+                  shouldCloseIssue = true;
+                  errorMessage = `Invalid head branch: ${headError.message || 'Branch does not exist or is not accessible'}`;
+                }
+              }
+              
+              // エラーコメントを投稿
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.payload.issue.number,
-                body: `❌ Error: ${error.message}`
+                body: `❌ Error: ${errorMessage}${shouldCloseIssue ? '\n\n🔒 Auto-closing issue due to invalid branch reference.' : ''}`
               });
+              
+              // headフィールドエラーの場合はissueを自動クローズ
+              if (shouldCloseIssue) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.issue.number,
+                  state: 'closed',
+                  state_reason: 'not_planned'
+                });
+                
+                console.log('Issue automatically closed due to invalid head branch');
+              }
             }
