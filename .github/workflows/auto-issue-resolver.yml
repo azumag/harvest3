@@ -2,8 +2,8 @@ name: Auto Issue Resolver
 
 on:
     schedule:
-        # 5時間ごとに実行（UTC基準）
-        - cron: '0 0,5,10,15,20 * * *'
+      # 1時間ごとに実行（UTC基準）
+      - cron: '0 * * * *'
     workflow_dispatch: # 手動実行も可能
 
 jobs:
