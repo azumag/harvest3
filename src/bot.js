@@ -493,7 +493,10 @@ async function executeStrategyCycle() {
           // 戦略設定を取得し、統一化された有効性をチェック
           const strategyConfig = await getStrategyConfig(exchangeInstance, symbol, strategyKey, config);
           if (!strategyConfig || !strategyConfig.enabled) {
-            logger.info(`戦略 ${strategyKey} が無効です`);
+            // レガシー戦略の場合はログ出力を抑制（データ整合性のため定義は保持）
+            if (strategy.type !== 'legacy') {
+              logger.info(`戦略 ${strategyKey} が無効です`);
+            }
             continue;
           }
 
