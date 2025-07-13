@@ -74,30 +74,58 @@ class AdaptiveParameterManager {
    * @returns {number} 相関係数
    */
   calculateCorrelation(x, y) {
-    if (x.length !== y.length || x.length === 0) {
+    // 入力検証を強化
+    if (!Array.isArray(x) || !Array.isArray(y) || 
+        x.length !== y.length || x.length === 0) {
       return 0;
     }
 
-    const n = x.length;
-    const xMean = x.reduce((sum, val) => sum + val, 0) / n;
-    const yMean = y.reduce((sum, val) => sum + val, 0) / n;
+    // 数値以外の値をフィルタリング
+    const validPairs = [];
+    for (let i = 0; i < x.length; i++) {
+      if (typeof x[i] === 'number' && typeof y[i] === 'number' && 
+          !isNaN(x[i]) && !isNaN(y[i]) && 
+          isFinite(x[i]) && isFinite(y[i])) {
+        validPairs.push([x[i], y[i]]);
+      }
+    }
+
+    if (validPairs.length < 2) {
+      return 0; // 相関計算には少なくとも2つのデータポイントが必要
+    }
+
+    const n = validPairs.length;
+    const xValues = validPairs.map(pair => pair[0]);
+    const yValues = validPairs.map(pair => pair[1]);
+    
+    const xMean = xValues.reduce((sum, val) => sum + val, 0) / n;
+    const yMean = yValues.reduce((sum, val) => sum + val, 0) / n;
 
     let numerator = 0;
     let xSumSquares = 0;
     let ySumSquares = 0;
 
     for (let i = 0; i < n; i++) {
-      const xDiff = x[i] - xMean;
-      const yDiff = y[i] - yMean;
+      const xDiff = xValues[i] - xMean;
+      const yDiff = yValues[i] - yMean;
       
       numerator += xDiff * yDiff;
       xSumSquares += xDiff * xDiff;
       ySumSquares += yDiff * yDiff;
     }
 
+    // より厳密なゼロ除算チェック
+    const epsilon = 1e-10; // 計算精度の閾値
     const denominator = Math.sqrt(xSumSquares * ySumSquares);
     
-    return denominator === 0 ? 0 : numerator / denominator;
+    if (denominator < epsilon || !isFinite(denominator)) {
+      return 0; // 分散がゼロまたは無限大の場合
+    }
+    
+    const correlation = numerator / denominator;
+    
+    // 相関係数は[-1, 1]の範囲内であることを保証
+    return Math.max(-1, Math.min(1, correlation));
   }
 
   /**
@@ -280,21 +308,23 @@ class AdaptiveParameterManager {
    * @returns {number} 正規分布乱数
    */
   generateNormalRandom(mean, stdDev) {
-    if (this.spareNormal !== undefined) {
-      const normal = this.spareNormal;
-      delete this.spareNormal;
-      return normal * stdDev + mean;
-    }
-
-    const u1 = Math.random();
-    const u2 = Math.random();
+    // より安全な実装：毎回新しいBox-Muller変換を実行
+    // スペアノーマルの管理を避けて状態管理のリスクを排除
+    let u1, u2;
     
-    const magnitude = stdDev * Math.sqrt(-2 * Math.log(u1));
-    const z0 = magnitude * Math.cos(2 * Math.PI * u2) + mean;
-    const z1 = magnitude * Math.sin(2 * Math.PI * u2) + mean;
+    // ゼロ値を避けるため、有効な値が出るまでループ
+    do {
+      u1 = Math.random();
+    } while (u1 === 0);
     
-    this.spareNormal = z1;
-    return z0;
+    do {
+      u2 = Math.random();
+    } while (u2 === 0);
+    
+    // Box-Muller変換
+    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    
+    return z0 * stdDev + mean;
   }
 
   /**

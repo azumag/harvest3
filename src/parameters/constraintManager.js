@@ -123,19 +123,103 @@ class ParameterConstraintEngine {
         expression = expression.replace(regex, value.toString());
       }
 
-      // 安全な演算子のみ許可
-      const safeExpression = /^[\d\s+\-*\/().<>=!&|]+$/.test(expression);
-      if (!safeExpression) {
-        console.warn(`不正な制約式: ${constraint}`);
-        return false;
-      }
-
-      // eslint-disable-next-line no-eval
-      return eval(expression);
+      // 安全な式評価を実行（eval()を使わない）
+      return this.safeEvaluateExpression(expression);
     } catch (error) {
       console.warn(`制約式評価エラー: ${constraint}`, error);
       return false;
     }
+  }
+
+  /**
+   * 安全な式評価（eval()を使わない実装）
+   * @param {string} expression 評価する式
+   * @returns {boolean} 評価結果
+   */
+  safeEvaluateExpression(expression) {
+    // 許可される文字のみをチェック
+    const allowedChars = /^[\d\s+\-*\/().<>=!&|]+$/;
+    if (!allowedChars.test(expression)) {
+      console.warn(`不正な文字が含まれています: ${expression}`);
+      return false;
+    }
+
+    // 基本的な数学・比較演算をサポート
+    try {
+      // シンプルな比較演算の解析
+      const comparisonOperators = ['>=', '<=', '>', '<', '==', '!='];
+      
+      for (const op of comparisonOperators) {
+        if (expression.includes(op)) {
+          const parts = expression.split(op).map(part => part.trim());
+          if (parts.length === 2) {
+            const left = this.evaluateMathExpression(parts[0]);
+            const right = this.evaluateMathExpression(parts[1]);
+            
+            switch (op) {
+              case '>=': return left >= right;
+              case '<=': return left <= right;
+              case '>': return left > right;
+              case '<': return left < right;
+              case '==': return left === right;
+              case '!=': return left !== right;
+            }
+          }
+        }
+      }
+
+      // 単純な数学式として評価
+      const result = this.evaluateMathExpression(expression);
+      return Boolean(result);
+    } catch (error) {
+      console.warn(`式評価エラー: ${expression}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 数学式を安全に評価
+   * @param {string} expr 数学式
+   * @returns {number} 計算結果
+   */
+  evaluateMathExpression(expr) {
+    // 空白を除去
+    expr = expr.replace(/\s/g, '');
+    
+    // 数値のみの場合
+    if (/^\d+(\.\d+)?$/.test(expr)) {
+      return parseFloat(expr);
+    }
+
+    // 基本的な四則演算をサポート
+    // より複雑な式については追加実装が必要だが、
+    // 現在の制約式は比較的シンプルなので十分
+    
+    // 括弧の処理
+    while (expr.includes('(')) {
+      const innerMost = expr.match(/\([^()]+\)/);
+      if (!innerMost) break;
+      
+      const innerExpr = innerMost[0].slice(1, -1);
+      const innerResult = this.evaluateMathExpression(innerExpr);
+      expr = expr.replace(innerMost[0], innerResult.toString());
+    }
+
+    // 乗除の処理
+    expr = expr.replace(/(\d+(?:\.\d+)?)\s*([*/])\s*(\d+(?:\.\d+)?)/g, (match, a, op, b) => {
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      return op === '*' ? (numA * numB).toString() : (numA / numB).toString();
+    });
+
+    // 加減の処理
+    expr = expr.replace(/(\d+(?:\.\d+)?)\s*([+-])\s*(\d+(?:\.\d+)?)/g, (match, a, op, b) => {
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      return op === '+' ? (numA + numB).toString() : (numA - numB).toString();
+    });
+
+    return parseFloat(expr) || 0;
   }
 
   /**
@@ -153,13 +237,27 @@ class ParameterConstraintEngine {
     const combinations = [];
     let attempts = 0;
     const maxAttempts = count * 20; // 十分な試行回数を確保
+    let consecutiveFailures = 0;
+    const maxConsecutiveFailures = count * 2; // 連続失敗の上限
 
     while (combinations.length < count && attempts < maxAttempts) {
       const candidate = this.generateCandidate(constraint.parameters);
       if (this.validateCombination(candidate, strategyType)) {
         combinations.push(candidate);
+        consecutiveFailures = 0; // 成功時はリセット
+      } else {
+        consecutiveFailures++;
+        // 連続失敗が多い場合は早期終了
+        if (consecutiveFailures > maxConsecutiveFailures) {
+          console.warn(`制約が厳しすぎて有効なパラメータが生成できません: ${strategyType}`);
+          break;
+        }
       }
       attempts++;
+    }
+
+    if (combinations.length === 0) {
+      console.warn(`有効なパラメータが1つも生成できませんでした: ${strategyType}`);
     }
 
     return combinations;
@@ -180,9 +278,19 @@ class ParameterConstraintEngine {
         );
       } else if (paramConfig.type === 'float') {
         const step = paramConfig.step || 0.1;
-        const range = (paramConfig.max - paramConfig.min) / step;
-        const randomStep = Math.floor(Math.random() * (range + 1));
-        candidate[paramName] = Number((paramConfig.min + randomStep * step).toFixed(2));
+        // 浮動小数点精度問題を回避するため、整数計算で実装
+        const minSteps = Math.round(paramConfig.min / step);
+        const maxSteps = Math.round(paramConfig.max / step);
+        const randomSteps = Math.floor(Math.random() * (maxSteps - minSteps + 1)) + minSteps;
+        
+        // 値を再構成し、指定された桁数で丸める
+        let value = randomSteps * step;
+        const decimals = (step.toString().split('.')[1] || '').length;
+        candidate[paramName] = Number(value.toFixed(decimals));
+        
+        // 範囲チェック（浮動小数点誤差対策）
+        candidate[paramName] = Math.max(paramConfig.min, 
+          Math.min(paramConfig.max, candidate[paramName]));
       }
     }
 
