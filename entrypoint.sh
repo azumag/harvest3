@@ -308,16 +308,28 @@ trap cleanup SIGTERM SIGINT
 
 # メイン実行
 main() {
-    log "Starting strategy-runner container with enhanced error handling"
-    
-    # 段階的起動プロセス
-    pre_startup_checks
-    check_database_connections
-    start_application
+    if [ "$BACKTEST_MODE" = "true" ]; then
+        log "Starting backtest container with enhanced error handling"
+        
+        # backtest用の段階的起動プロセス
+        pre_startup_checks
+        check_database_connections
+        
+        # backtestの場合は、引数で渡されたコマンドを実行
+        log "Pre-startup checks completed for backtest mode, executing command: $*"
+        exec "$@"
+    else
+        log "Starting strategy-runner container with enhanced error handling"
+        
+        # 段階的起動プロセス
+        pre_startup_checks
+        check_database_connections
+        start_application
+    fi
 }
 
 # エラーハンドリング付きメイン実行
-if ! main; then
+if ! main "$@"; then
     exit_code=$?
     log "FATAL: Container startup failed with exit code $exit_code"
     send_startup_error_to_discord "Container startup failed" "Exit code: $exit_code"
