@@ -170,7 +170,7 @@ class SmartSamplingEngine {
 
     for (const region of promisingRegions) {
       const paramConfig = constraint.parameters[region.parameter];
-      if (!paramConfig) continue;
+      if (!paramConfig) {continue;}
 
       // 有望な領域での細かいグリッド生成
       const regionSamples = this.generateRegionGrid(

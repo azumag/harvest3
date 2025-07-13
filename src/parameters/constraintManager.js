@@ -198,7 +198,7 @@ class ParameterConstraintEngine {
     // 括弧の処理
     while (expr.includes('(')) {
       const innerMost = expr.match(/\([^()]+\)/);
-      if (!innerMost) break;
+      if (!innerMost) {break;}
       
       const innerExpr = innerMost[0].slice(1, -1);
       const innerResult = this.evaluateMathExpression(innerExpr);
@@ -344,14 +344,14 @@ class ParameterConstraintEngine {
    * @returns {number} 多様性スコア (0-1)
    */
   calculateParameterDiversity(parameterSet, parameterDefs) {
-    if (parameterSet.length === 0) return 0;
+    if (parameterSet.length === 0) {return 0;}
 
     const paramNames = Object.keys(parameterDefs);
     let totalVariance = 0;
 
     for (const paramName of paramNames) {
       const values = parameterSet.map(params => params[paramName]).filter(v => v !== undefined);
-      if (values.length === 0) continue;
+      if (values.length === 0) {continue;}
 
       const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
       const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
@@ -373,14 +373,14 @@ class ParameterConstraintEngine {
    * @returns {number} カバー率スコア (0-1)
    */
   assessParameterSpaceCoverage(parameterSet, parameterDefs) {
-    if (parameterSet.length === 0) return 0;
+    if (parameterSet.length === 0) {return 0;}
 
     const paramNames = Object.keys(parameterDefs);
     let totalCoverage = 0;
 
     for (const paramName of paramNames) {
       const values = parameterSet.map(params => params[paramName]).filter(v => v !== undefined);
-      if (values.length === 0) continue;
+      if (values.length === 0) {continue;}
 
       const min = Math.min(...values);
       const max = Math.max(...values);

@@ -210,7 +210,7 @@ class ParticleSwarmOptimization {
    * スワームの多様性計算
    */
   calculateSwarmDiversity() {
-    if (this.swarm.length < 2) return 0;
+    if (this.swarm.length < 2) {return 0;}
 
     const paramNames = Object.keys(this.bounds);
     let totalDistance = 0;
@@ -243,7 +243,7 @@ class ParticleSwarmOptimization {
     
     if (recentHistory.length >= this.options.stagnationLimit) {
       const improvements = recentHistory.filter((current, i) => {
-        if (i === 0) return false;
+        if (i === 0) {return false;}
         return current.best > recentHistory[i - 1].best;
       });
 
@@ -269,7 +269,7 @@ class ParticleSwarmOptimization {
    * 適応的パラメータ調整
    */
   adaptParameters() {
-    if (!this.options.adaptiveParameters) return;
+    if (!this.options.adaptiveParameters) {return;}
 
     const diversity = this.calculateSwarmDiversity();
     const improvementRate = this.calculateImprovementRate();
@@ -291,11 +291,11 @@ class ParticleSwarmOptimization {
    * 改善率の計算
    */
   calculateImprovementRate() {
-    if (this.fitnessHistory.length < 10) return 1;
+    if (this.fitnessHistory.length < 10) {return 1;}
 
     const recent = this.fitnessHistory.slice(-10);
     const improvements = recent.filter((current, i) => {
-      if (i === 0) return false;
+      if (i === 0) {return false;}
       return current.best > recent[i - 1].best;
     });
 
@@ -306,7 +306,7 @@ class ParticleSwarmOptimization {
    * 収束判定
    */
   checkConvergence() {
-    if (this.fitnessHistory.length < 5) return false;
+    if (this.fitnessHistory.length < 5) {return false;}
 
     const recent = this.fitnessHistory.slice(-5);
     const variance = this.calculateVariance(recent.map(h => h.best));
