@@ -106,7 +106,15 @@ pre_startup_checks() {
         fi
     done
     
-    # Node.js依存関係チェック
+    # Node.js依存関係インストールとチェック
+    log "Installing npm dependencies..."
+    if ! npm install; then
+        local error_msg="npm install failed"
+        log "ERROR: $error_msg"
+        send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
+        exit 1
+    fi
+    
     if ! npm ls > /dev/null 2>&1; then
         local error_msg="npm dependencies validation failed"
         log "ERROR: $error_msg"
