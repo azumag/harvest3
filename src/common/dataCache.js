@@ -261,6 +261,29 @@ setInterval(() => {
   }
 }, 300000);
 
+// メモリ使用量監視（1分ごと）
+setInterval(() => {
+  const memUsage = process.memoryUsage();
+  const heapUsedMB = memUsage.heapUsed / 1024 / 1024;
+  const heapTotalMB = memUsage.heapTotal / 1024 / 1024;
+  
+  console.log(`Memory usage: ${heapUsedMB.toFixed(1)}MB / ${heapTotalMB.toFixed(1)}MB`);
+  
+  // 500MB以上使用している場合は強制クリーンアップ
+  if (memUsage.heapUsed > 500 * 1024 * 1024) {
+    console.warn('High memory usage detected, forcing cache cleanup');
+    const cleaned = globalStrategyCache.cleanup();
+    const totalCleaned = Object.values(cleaned).reduce((sum, count) => sum + count, 0);
+    console.log(`Emergency cleanup: removed ${totalCleaned} entries`);
+    
+    // それでもメモリが多い場合はキャッシュをクリア
+    if (process.memoryUsage().heapUsed > 400 * 1024 * 1024) {
+      console.warn('Critical memory usage, clearing all caches');
+      globalStrategyCache.clear();
+    }
+  }
+}, 60000);
+
 module.exports = {
   DataCache,
   StrategyCache,

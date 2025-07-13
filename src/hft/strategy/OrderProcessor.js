@@ -27,6 +27,11 @@ class OrderProcessor {
   async placeBuyOrder(pair, price, amount) {
     this.logger.info(`Placing buy order for ${pair}: price=${price}, amount=${amount}`);
     try {
+      // 残高確認
+      if (!this.mockMode) {
+        await this._verifyBuyOrderBalance(pair, price, amount);
+      }
+      
       let orderResult;
       
       if (this.mockMode) {
@@ -81,6 +86,11 @@ class OrderProcessor {
   async placeSellOrder(pair, price, amount) {
     this.logger.info(`Placing sell order for ${pair}: price=${price}, amount=${amount}`);
     try {
+      // 残高確認
+      if (!this.mockMode) {
+        await this._verifySellOrderBalance(pair, amount);
+      }
+      
       let orderResult;
       
       if (this.mockMode) {
@@ -220,6 +230,52 @@ class OrderProcessor {
       return orders;
     } catch (error) {
       this.logger.error(`Failed to get active orders for ${pair}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 買い注文の残高を確認
+   * @param {string} pair - 通貨ペア
+   * @param {number} price - 注文価格
+   * @param {number} amount - 注文量
+   */
+  async _verifyBuyOrderBalance(pair, price, amount) {
+    try {
+      const balance = await this.exchange.fetchBalance();
+      const requiredAmount = price * amount;
+      const quoteCurrency = pair.split('/')[1]; // 例: BTC/JPY → JPY
+      const availableBalance = balance.free[quoteCurrency] || 0;
+      
+      this.logger.debug(`Balance check for buy order: required=${requiredAmount} ${quoteCurrency}, available=${availableBalance} ${quoteCurrency}`);
+      
+      if (availableBalance < requiredAmount) {
+        throw new Error(`Insufficient balance for buy order: ${availableBalance} ${quoteCurrency} < ${requiredAmount} ${quoteCurrency}`);
+      }
+    } catch (error) {
+      this.logger.error('Balance verification failed for buy order:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 売り注文の残高を確認
+   * @param {string} pair - 通貨ペア
+   * @param {number} amount - 注文量
+   */
+  async _verifySellOrderBalance(pair, amount) {
+    try {
+      const balance = await this.exchange.fetchBalance();
+      const baseCurrency = pair.split('/')[0]; // 例: BTC/JPY → BTC
+      const availableBalance = balance.free[baseCurrency] || 0;
+      
+      this.logger.debug(`Balance check for sell order: required=${amount} ${baseCurrency}, available=${availableBalance} ${baseCurrency}`);
+      
+      if (availableBalance < amount) {
+        throw new Error(`Insufficient balance for sell order: ${availableBalance} ${baseCurrency} < ${amount} ${baseCurrency}`);
+      }
+    } catch (error) {
+      this.logger.error('Balance verification failed for sell order:', error);
       throw error;
     }
   }

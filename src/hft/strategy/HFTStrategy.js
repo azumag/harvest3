@@ -242,8 +242,31 @@ class HFTStrategy {
    * ポジションサイズを計算
    */
   calculatePositionSize(marketData) {
-    // シンプルなポジションサイジング
-    return this.maxPositionSize;
+    const baseSize = this.maxPositionSize;
+    
+    // ボラティリティベースの調整
+    const volatility = this.calculateVolatility();
+    const volatilityAdjustment = Math.max(0.1, 1 - volatility * 2);
+    
+    // 流動性ベースの調整（出来高プロファイル）
+    const volumeProfile = this.analyzeVolumeProfile();
+    const liquidityScore = Math.min(1, volumeProfile.avgVolume / 1000000); // 1M基準で正規化
+    const liquidityAdjustment = Math.max(0.3, liquidityScore);
+    
+    // スプレッドベースの調整
+    const { bestBid, bestAsk } = marketData;
+    let spreadAdjustment = 1;
+    if (bestBid && bestAsk) {
+      const spread = (bestAsk - bestBid) / bestBid;
+      spreadAdjustment = Math.max(0.2, 1 - spread * 10); // 広いスプレッドでサイズ削減
+    }
+    
+    // 最終ポジションサイズ
+    const adjustedSize = baseSize * volatilityAdjustment * liquidityAdjustment * spreadAdjustment;
+    
+    this.logger.debug(`Position sizing: base=${baseSize}, vol_adj=${volatilityAdjustment.toFixed(3)}, liq_adj=${liquidityAdjustment.toFixed(3)}, spread_adj=${spreadAdjustment.toFixed(3)}, final=${adjustedSize.toFixed(6)}`);
+    
+    return Math.max(0.001, adjustedSize); // 最小サイズを保証
   }
   
   /**

@@ -394,7 +394,9 @@ class PrivateStreamClient {
     }
     
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // 指数バックオフ
+    const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    const jitter = Math.random() * 0.1 * baseDelay; // 10%のジッター
+    const delay = baseDelay + jitter; // ジッター付き指数バックオフ
     
     this.logger.info(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
     
