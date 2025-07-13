@@ -17,6 +17,10 @@ const systemHealthController = require('./controllers/systemHealth');
 
 const { getOhlcv } = require('./controllers/ohlcv');
 
+// データベース接続モジュール（パフォーマンス改善のため事前インポート）
+const { client: redisClient } = require('../database/redisDatabase');
+const { isConnected: isMongoConnected } = require('../database/mongoDatabase');
+
 // // 取引履歴API
 // router.get('/history', getHistory);
 
@@ -83,22 +87,42 @@ router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
 // ヘルスチェックAPI
 router.get('/health', async (req, res) => {
-  try {
-    const { performHealthCheck } = require('../utils/healthCheck');
-    const healthStatus = await performHealthCheck();
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {}
+  };
 
-    if (healthStatus.status === 'error') {
-      res.status(503).json(healthStatus);
+  // Redis接続確認
+  try {
+    if (redisClient && redisClient.isReady) {
+      health.services.redis = 'connected';
     } else {
-      res.json(healthStatus);
+      health.services.redis = 'disconnected';
+      health.status = 'degraded';
     }
   } catch (error) {
-    res.status(503).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error.message
-    });
+    health.services.redis = 'error';
+    health.status = 'degraded';
   }
+
+  // MongoDB接続確認
+  try {
+    const connected = await isMongoConnected();
+    if (connected) {
+      health.services.mongodb = 'connected';
+    } else {
+      health.services.mongodb = 'disconnected';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.services.mongodb = 'error';
+    health.status = 'degraded';
+  }
+
+  // レスポンス送信
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // システムヘルスAPI (Phase 3: リアルタイム監視システム)
