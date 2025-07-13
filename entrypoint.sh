@@ -35,15 +35,44 @@ send_startup_error_to_discord() {
 \`\`\`"
 
     # Node.js経由でDiscord通知送信
-    node -e "
-        const axios = require('axios');
-        const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
-        const message = { content: \`${discord_message}\` };
-        
-        axios.post(webhookUrl, message)
-            .then(() => console.log('Discord notification sent successfully'))
-            .catch(err => console.error('Discord notification failed:', err.message));
-    " 2>/dev/null || log "ERROR: Failed to send Discord notification"
+    if command -v node >/dev/null 2>&1; then
+        node -e "
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+            
+            try {
+                // package.jsonの存在確認
+                if (!fs.existsSync('package.json')) {
+                    console.error('package.json not found');
+                    process.exit(1);
+                }
+                
+                // axiosの利用可能性確認
+                try {
+                    require('axios');
+                } catch (e) {
+                    console.error('axios module not available:', e.message);
+                    process.exit(1);
+                }
+                
+                const axios = require('axios');
+                const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
+                const message = { content: \`${discord_message}\` };
+                
+                axios.post(webhookUrl, message, { timeout: 10000 })
+                    .then(() => console.log('Discord notification sent successfully'))
+                    .catch(err => {
+                        console.error('Discord notification failed:', err.message);
+                        process.exit(1);
+                    });
+            } catch (error) {
+                console.error('Discord notification script error:', error.message);
+                process.exit(1);
+            }
+        " 2>/dev/null || log "ERROR: Failed to send Discord notification"
+    else
+        log "ERROR: Node.js not available for Discord notification"
+    fi
 }
 
 # 起動前チェック
@@ -130,19 +159,25 @@ start_application() {
     npm run start-web &
     local api_pid=$!
     
-    # APIサーバーの起動を待つ
+    # APIサーバーの起動を待つ（より寛容なタイムアウト設定）
     local api_startup_time=0
-    while [ $api_startup_time -lt 30 ]; do
+    local max_api_wait=60  # 60秒に増加
+    while [ $api_startup_time -lt $max_api_wait ]; do
         if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
             log "API server is ready on port 3000"
             break
         fi
-        sleep 2
-        api_startup_time=$((api_startup_time + 2))
+        sleep 3  # 少し長めの間隔
+        api_startup_time=$((api_startup_time + 3))
+        
+        # 進捗ログ
+        if [ $((api_startup_time % 15)) -eq 0 ]; then
+            log "API server startup: ${api_startup_time}/${max_api_wait} seconds elapsed"
+        fi
     done
     
-    if [ $api_startup_time -ge 30 ]; then
-        local error_msg="API server failed to start within 30 seconds"
+    if [ $api_startup_time -ge $max_api_wait ]; then
+        local error_msg="API server failed to start within ${max_api_wait} seconds"
         log "ERROR: $error_msg"
         send_startup_error_to_discord "$error_msg" "API server startup timeout"
         exit 1

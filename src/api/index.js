@@ -41,74 +41,26 @@ app.get('/analysis', (req, res) => {
 });
 
 // サーバー起動
-app.listen(PORT, '0.0.0.0', async () => {
+app.listen(PORT, '0.0.0.0', () => {
   // サーバー起動ログはconsole.errorを使用
   console.error(`API & Web Server running on port ${PORT}`);
-
-  // データベースの初期化
-  try {
-    await initializeDB();
-    // データベース初期化成功ログはconsole.errorを使用
-    console.error('データベースが正常に初期化されました');
-  } catch (error) {
-    console.error('データベース初期化エラー:', error);
-  }
+  
+  // データベースの初期化を非同期で実行（サーバー起動をブロックしない）
+  setTimeout(async () => {
+    try {
+      await initializeDB();
+      // データベース初期化成功ログはconsole.errorを使用
+      console.error('データベースが正常に初期化されました');
+    } catch (error) {
+      console.error('データベース初期化エラー:', error);
+    }
+  }, 1000); // 1秒後に初期化開始
 
   if (process.env.USE_LOCALTUNNEL === 'true') {
     // localtunnel無効化通知ログはconsole.errorを使用
     console.error('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
     console.error('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
     // localtunnelは削除されたため、この機能は無効です
-    if (false) {
-      try {
-        const tunnel = await localtunnel({ port: PORT });
-        // Localtunnel URLログはconsole.errorを使用
-        console.error(`Localtunnel URL: ${tunnel.url}`);
-
-        // エラーイベントのハンドリングを追加
-        tunnel.on('error', (err) => {
-          console.error('Localtunnelエラー:', err.message);
-          console.error('Localtunnelエラーが発生しましたが、サーバーは引き続き実行されます');
-        });
-
-        // 接続が閉じられたときのハンドリング
-        tunnel.on('close', () => {
-          console.error('Localtunnel が閉じられました');
-        });
-
-        // Discord への投稿処理
-        const discordWebhookUrl = process.env.DISCORD_WEB_WEBHOOK_URL;
-        if (discordWebhookUrl) {
-          try {
-            const message = `Localtunnel URL: ${tunnel.url}`;
-            const response = await fetch(discordWebhookUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                content: message
-              })
-            });
-
-            if (response.ok) {
-              console.error('Discord に投稿しました');
-            } else {
-              console.error('Discord への投稿に失敗しました:', await response.text());
-            }
-          } catch (fetchError) {
-            console.error('Discord への投稿エラー:', fetchError.message);
-          }
-        } else {
-          console.error('DISCORD_RESULT_WEBHOOK_URL が設定されていません');
-        }
-      } catch (tunnelError) {
-        console.error('Localtunnelの作成に失敗しました:', tunnelError.message);
-        console.error('Localtunnelは使用できませんが、サーバーは引き続き実行されます');
-      }
-    } else {
-      console.error('localtunnel機能は無効になっています');
-    }
   } else {
     console.error('localtunnel機能は無効になっています');
   }
