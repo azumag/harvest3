@@ -35,7 +35,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       
       // Assert
       expect(entrypointContent).toContain('const axios = require(\'axios\');');
-      expect(entrypointContent).toContain('axios.post(webhookUrl, message, { timeout: 10000 })');
+      expect(entrypointContent).toContain('axios.post(webhookUrl, message, { timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000 })');
       expect(entrypointContent).toContain('package.json not found');
       expect(entrypointContent).toContain('axios module not available');
     });
@@ -79,7 +79,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('timeout: 10000');
+      expect(entrypointContent).toContain('timeout: ${DISCORD_NOTIFICATION_TIMEOUT}000');
     });
   });
 
@@ -88,7 +88,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('max_api_wait=60');
+      expect(entrypointContent).toContain('max_api_wait=$API_STARTUP_TIMEOUT');
       expect(entrypointContent).toContain('API server failed to start within ${max_api_wait} seconds');
     });
 
@@ -96,7 +96,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('api_startup_time % 15');
+      expect(entrypointContent).toContain('api_startup_time % PROGRESS_LOG_INTERVAL');
       expect(entrypointContent).toContain('API server startup:');
     });
 
@@ -104,8 +104,8 @@ describe('entrypoint.sh Discord通知機能', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Assert
-      expect(entrypointContent).toContain('sleep 3');
-      expect(entrypointContent).toContain('api_startup_time=$((api_startup_time + 3))');
+      expect(entrypointContent).toContain('sleep $API_CHECK_INTERVAL');
+      expect(entrypointContent).toContain('api_startup_time=$((api_startup_time + API_CHECK_INTERVAL))');
     });
   });
 
