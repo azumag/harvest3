@@ -82,8 +82,23 @@ router.get('/error-stats', errorStatsController.getErrorStats);
 router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
 // ヘルスチェックAPI
-router.get('/health', (req, res) => {
-  res.json({ status: 'ok', database: 'redis' });
+router.get('/health', async (req, res) => {
+  try {
+    const { performHealthCheck } = require('../utils/healthCheck');
+    const healthStatus = await performHealthCheck();
+
+    if (healthStatus.status === 'error') {
+      res.status(503).json(healthStatus);
+    } else {
+      res.json(healthStatus);
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
 });
 
 // システムヘルスAPI (Phase 3: リアルタイム監視システム)
