@@ -38,7 +38,11 @@ class UnifiedErrorHandler {
    * @returns {string} 重要度レベル (CRITICAL/WARNING/INFO)
    */
   determineSeverity(error, context = '') {
-    const message = typeof error === 'string' ? error : error.message;
+    // null/undefinedのチェック
+    if (!error) {
+      return 'INFO';
+    }
+    const message = typeof error === 'string' ? error : (error.message || '');
     const lowerMessage = message.toLowerCase();
     const lowerContext = context.toLowerCase();
 
@@ -86,7 +90,10 @@ class UnifiedErrorHandler {
    * @returns {string} 重複防止キー
    */
   generateDeduplicationKey(error, context = '') {
-    const message = typeof error === 'string' ? error : error.message;
+    if (!error) {
+      return crypto.createHash('sha256').update(`${context}:undefined_error`).digest('hex');
+    }
+    const message = typeof error === 'string' ? error : (error.message || '');
     const stack = typeof error === 'object' && error.stack ? error.stack : '';
 
     // エラーメッセージとスタックトレースの最初の5行を使用
@@ -114,7 +121,16 @@ class UnifiedErrorHandler {
       deduplicationWindow = null
     } = options;
 
-    const message = typeof error === 'string' ? error : error.message;
+    // null/undefinedのチェック
+    if (!error) {
+      const fallbackError = 'Unknown error (null or undefined)';
+      if (shouldThrow) {
+        throw new Error(fallbackError);
+      }
+      return;
+    }
+
+    const message = typeof error === 'string' ? error : (error.message || 'Error without message');
     const stack = typeof error === 'object' && error.stack ? error.stack : '';
     const now = Date.now();
 
@@ -244,7 +260,7 @@ class ErrorHandler extends UnifiedErrorHandler {
 }
 
 // 旧インスタンスの互換性維持
-const errorHandler = unifiedErrorHandler;
+const errorHandler = new ErrorHandler();
 
 module.exports = {
   UnifiedErrorHandler,
