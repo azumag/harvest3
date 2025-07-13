@@ -284,7 +284,7 @@ class ParameterConstraintEngine {
         const randomSteps = Math.floor(Math.random() * (maxSteps - minSteps + 1)) + minSteps;
         
         // 値を再構成し、指定された桁数で丸める
-        let value = randomSteps * step;
+        const value = randomSteps * step;
         const decimals = (step.toString().split('.')[1] || '').length;
         candidate[paramName] = Number(value.toFixed(decimals));
         
