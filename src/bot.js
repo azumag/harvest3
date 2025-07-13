@@ -25,6 +25,7 @@ const {
   checkDrawdown
 } = require('./strategies/utils/riskManagement');
 const { getAllPositionsRedis } = require('./database/redisDatabase');
+const { POSITION_CONTROL_CONSTANTS } = require('./common/const');
 
 // 未約定注文クリーンアップの最終実行時間を記録
 const lastCleanupTime = {}; // exchangeId -> timestamp
@@ -707,10 +708,10 @@ async function executeRiskManagementCheck() {
           try {
             // リスク管理設定を取得
             const riskSettings = {
-              fixedStopLossPercent: 0.03, // 3%のストップロス（より積極的）
-              trailingStopTriggerPercent: 0.02, // 2%の利益でトレーリング発動
-              trailingStopDistancePercent: 0.02, // 最高値から2%下でトレーリング
-              timeBasedStopHours: 24 // 24時間でタイムストップ（より短縮）
+              fixedStopLossPercent: POSITION_CONTROL_CONSTANTS.FIXED_STOP_LOSS_PERCENT,
+              trailingStopTriggerPercent: POSITION_CONTROL_CONSTANTS.TRAILING_STOP_TRIGGER_PERCENT,
+              trailingStopDistancePercent: POSITION_CONTROL_CONSTANTS.TRAILING_STOP_DISTANCE_PERCENT,
+              timeBasedStopHours: POSITION_CONTROL_CONSTANTS.TIME_BASED_STOP_HOURS
             };
 
             // 各ポジションのストップロスをチェック
@@ -722,7 +723,7 @@ async function executeRiskManagementCheck() {
               const currentPrice = ticker.last;
 
               // 時間ベースのストップロスチェック
-              const positionAge = (Date.now() - position.createdAt) / (1000 * 60 * 60); // 時間単位
+              const positionAge = (Date.now() - position.createdAt) / POSITION_CONTROL_CONSTANTS.POSITION_AGE_DIVISOR;
               const timeBasedStop = positionAge >= riskSettings.timeBasedStopHours;
 
               // 価格ベースのストップロスチェック（3%損失）
