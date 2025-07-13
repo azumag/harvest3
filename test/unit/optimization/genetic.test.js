@@ -182,7 +182,7 @@ describe('GeneticAlgorithm', () => {
 
     test('目的関数でエラーが発生しても処理を継続する', async () => {
       const objectiveFunction = (params) => {
-        if (params.x > 8) throw new Error('Test error');
+        if (params.x > 8) {throw new Error('Test error');}
         return params.x;
       };
       const bounds = { x: [0, 10] };

@@ -51,9 +51,11 @@ class AutoUpdateMonitor {
             this.checkForUpdates();
         }, this.config.checkIntervalMs);
 
-        // グレースフルシャットダウン
-        process.on('SIGINT', () => this.stop());
-        process.on('SIGTERM', () => this.stop());
+        // グレースフルシャットダウン（テスト環境では無効化）
+        if (process.env.NODE_ENV !== 'test') {
+            process.on('SIGINT', () => this.stop());
+            process.on('SIGTERM', () => this.stop());
+        }
     }
 
     /**
@@ -73,7 +75,10 @@ class AutoUpdateMonitor {
         }
         
         console.log('✅ 自動更新監視を停止しました');
-        process.exit(0);
+        // テスト環境では process.exit を実行しない
+        if (process.env.NODE_ENV !== 'test') {
+            process.exit(0);
+        }
     }
 
     /**

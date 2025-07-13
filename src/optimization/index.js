@@ -167,7 +167,7 @@ class AdvancedOptimizer {
    * 結果の合意計算
    */
   calculateConsensus(results) {
-    if (results.length < 2) return null;
+    if (results.length < 2) {return null;}
 
     const paramNames = Object.keys(this.bounds);
     const consensus = {};

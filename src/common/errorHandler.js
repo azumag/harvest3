@@ -122,7 +122,7 @@ class UnifiedErrorHandler {
     } = options;
 
     // null/undefinedのチェック（空文字列は除外）
-    if (error == null) {
+    if (error === null || error === undefined) {
       const fallbackError = 'Unknown error (null or undefined)';
       if (shouldThrow) {
         throw new Error(fallbackError);

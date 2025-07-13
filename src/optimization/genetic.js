@@ -170,8 +170,8 @@ class GeneticAlgorithm {
    */
   gaussianRandom() {
     let u = 0, v = 0;
-    while (u === 0) u = Math.random();
-    while (v === 0) v = Math.random();
+    while (u === 0) {u = Math.random();}
+    while (v === 0) {v = Math.random();}
     return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
   }
 
@@ -330,7 +330,7 @@ class GeneticAlgorithm {
 
     const recent = this.fitnessHistory.slice(-10);
     const improvements = recent.filter((current, i) => {
-      if (i === 0) return false;
+      if (i === 0) {return false;}
       return current.best > recent[i - 1].best;
     });
 
@@ -343,7 +343,7 @@ class GeneticAlgorithm {
   getConvergenceInfo() {
     const finalDiversity = this.diversityHistory[this.diversityHistory.length - 1] || 0;
     const improvementGenerations = this.fitnessHistory.filter((current, i) => {
-      if (i === 0) return true;
+      if (i === 0) {return true;}
       return current.best > this.fitnessHistory[i - 1].best;
     }).length;
 
@@ -379,7 +379,7 @@ class GeneticAlgorithm {
    * 多様性トレンドの計算
    */
   calculateDiversityTrend() {
-    if (this.diversityHistory.length < 5) return 0;
+    if (this.diversityHistory.length < 5) {return 0;}
 
     const recent = this.diversityHistory.slice(-5);
     const slope = (recent[recent.length - 1] - recent[0]) / recent.length;
@@ -390,11 +390,11 @@ class GeneticAlgorithm {
    * 改善率の計算
    */
   calculateImprovementRate() {
-    if (this.fitnessHistory.length < 10) return 1;
+    if (this.fitnessHistory.length < 10) {return 1;}
 
     const recent = this.fitnessHistory.slice(-10);
     const improvements = recent.filter((current, i) => {
-      if (i === 0) return false;
+      if (i === 0) {return false;}
       return current.best > recent[i - 1].best;
     });
 
@@ -448,11 +448,11 @@ class MultiObjectiveGA extends GeneticAlgorithm {
       const val2 = solution2[i];
 
       if (obj.minimize) {
-        if (val1 > val2) return false;
-        if (val1 < val2) atLeastOneBetter = true;
+        if (val1 > val2) {return false;}
+        if (val1 < val2) {atLeastOneBetter = true;}
       } else {
-        if (val1 < val2) return false;
-        if (val1 > val2) atLeastOneBetter = true;
+        if (val1 < val2) {return false;}
+        if (val1 > val2) {atLeastOneBetter = true;}
       }
     }
 

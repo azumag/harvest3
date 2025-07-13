@@ -283,7 +283,7 @@ class AdaptiveParameterManager {
 
     for (const region of focusRegions) {
       const paramConfig = constraint.parameters[region.parameter];
-      if (!paramConfig) continue;
+      if (!paramConfig) {continue;}
 
       // 正規分布に従ってサンプリング
       let value = this.generateNormalRandom(region.center, region.radius);
@@ -388,7 +388,7 @@ class AdaptiveParameterManager {
    * @returns {number} 分散
    */
   calculateVariance(values) {
-    if (values.length === 0) return 0;
+    if (values.length === 0) {return 0;}
     
     const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
     return values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
