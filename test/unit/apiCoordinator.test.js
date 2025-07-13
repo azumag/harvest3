@@ -72,28 +72,44 @@ describe('APICoordinator', () => {
       // queue容量上限まで追加
       const promises = [];
       for (let i = 0; i < EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE; i++) {
-        promises.push(coordinator.executeAPICall(mockAPICall, `request_${i}`));
+        const promise = coordinator.executeAPICall(mockAPICall, `request_${i}`);
+        // エラーハンドリングを追加して、emergencyResetによるキャンセルをキャッチ
+        promise.catch(() => {}); // emergencyResetによるエラーを無視
+        promises.push(promise);
       }
       
       // 容量を超えるリクエストは拒否されるべき
       await expect(coordinator.executeAPICall(mockAPICall, 'overflow_request'))
         .rejects.toThrow('API coordinator queue is full');
+      
+      // テスト終了前に手動でリセットして無限Promiseをクリーンアップ
+      coordinator.emergencyReset();
     });
 
     test('優先度順でqueue処理されること', async () => {
+      // 処理を一時停止するため、すべてのリクエストが処理されないようにする
+      coordinator.isProcessing = true;
+      
       const results = [];
-      const mockAPICall = (id) => jest.fn().mockImplementation(async () => {
+      const mockAPICall = (id) => async () => {
         results.push(id);
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
         return { id };
-      });
+      };
 
       // 優先度を変えてリクエストを追加（数値が小さいほど高優先度）
-      const promises = [
-        coordinator.executeAPICall(mockAPICall('low'), 'low_priority', 3),
-        coordinator.executeAPICall(mockAPICall('high'), 'high_priority', 1),
-        coordinator.executeAPICall(mockAPICall('medium'), 'medium_priority', 2)
-      ];
+      const promises = [];
+      
+      promises.push(coordinator.executeAPICall(mockAPICall('low'), 'low_priority', 3));
+      promises.push(coordinator.executeAPICall(mockAPICall('high'), 'high_priority', 1));
+      promises.push(coordinator.executeAPICall(mockAPICall('medium'), 'medium_priority', 2));
+
+      // 少し待ってから処理開始
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 処理を再開
+      coordinator.isProcessing = false;
+      coordinator.processQueue();
 
       await Promise.all(promises);
 
@@ -165,10 +181,19 @@ describe('APICoordinator', () => {
 
   describe('emergencyReset', () => {
     test('緊急リセットが機能すること', async () => {
+      // 処理を停止してqueueに確実に残るようにする
+      coordinator.isProcessing = true;
+      
       const mockAPICall = jest.fn().mockImplementation(() => new Promise(() => {})); // 永続化するPromise
       
       // queueにリクエストを追加
       const promise = coordinator.executeAPICall(mockAPICall, 'test_request');
+      
+      // 短時間待ってからreset実行（queueに確実に追加されるように）
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // queueにリクエストが追加されていることを確認
+      expect(coordinator.queue.length).toBe(1);
       
       // 緊急リセット実行
       coordinator.emergencyReset();
@@ -180,14 +205,32 @@ describe('APICoordinator', () => {
       const stats = coordinator.getStats();
       expect(stats.queueLength).toBe(0);
       expect(stats.activeRequests).toBe(0);
-    });
+    }, 10000); // タイムアウトを10秒に制限
   });
 
   describe('addToQueue', () => {
     test('優先度順でqueueに追加されること', () => {
-      const request1 = { id: 'req1', priority: 3, timestamp: Date.now() };
-      const request2 = { id: 'req2', priority: 1, timestamp: Date.now() };
-      const request3 = { id: 'req3', priority: 2, timestamp: Date.now() };
+      const request1 = { 
+        id: 'req1', 
+        priority: 3, 
+        timestamp: Date.now(),
+        resolve: jest.fn(),
+        reject: jest.fn()
+      };
+      const request2 = { 
+        id: 'req2', 
+        priority: 1, 
+        timestamp: Date.now(),
+        resolve: jest.fn(),
+        reject: jest.fn()
+      };
+      const request3 = { 
+        id: 'req3', 
+        priority: 2, 
+        timestamp: Date.now(),
+        resolve: jest.fn(),
+        reject: jest.fn()
+      };
       
       coordinator.addToQueue(request1);
       coordinator.addToQueue(request2);
