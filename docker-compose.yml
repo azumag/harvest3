@@ -163,7 +163,9 @@ services:
     volumes:
       - ./src:/usr/src/app/src:cached
       - ./data:/usr/src/app/data:cached
-    command: sh -c "npm install && while true; do npm run backtest; sleep 500; done"
+      - ./entrypoint.sh:/usr/src/app/entrypoint.sh:ro
+    entrypoint: ["/usr/src/app/entrypoint.sh"]
+    command: sh -c "while true; do npm run backtest; sleep 500; done"
     # command: sh -c "npm run backtest"
     environment:
       - BACKTEST_MODE=true
