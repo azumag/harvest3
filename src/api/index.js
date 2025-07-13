@@ -40,21 +40,22 @@ app.get('/analysis', (req, res) => {
   res.sendFile(path.join(__dirname, '../web/analysis.html'));
 });
 
-// サーバー起動
-app.listen(PORT, '0.0.0.0', async () => {
-  // サーバー起動ログはconsole.errorを使用
-  console.error(`API & Web Server running on port ${PORT}`);
-
-  // データベースの初期化
+// データベース初期化を先に実行
+async function startServer() {
   try {
+    console.error('データベース初期化を開始します...');
     await initializeDB();
-    // データベース初期化成功ログはconsole.errorを使用
     console.error('データベースが正常に初期化されました');
   } catch (error) {
     console.error('データベース初期化エラー:', error);
+    console.error('データベース初期化に失敗しましたが、サーバーを起動します');
   }
 
-  if (process.env.USE_LOCALTUNNEL === 'true') {
+  // サーバー起動
+  app.listen(PORT, '0.0.0.0', async () => {
+    console.error(`API & Web Server running on port ${PORT}`);
+
+    if (process.env.USE_LOCALTUNNEL === 'true') {
     // localtunnel無効化通知ログはconsole.errorを使用
     console.error('localtunnel機能が有効になっていますが、セキュリティ上の理由で無効化されています');
     console.error('代替手段として、ngrok や cloudflared tunnel の使用を検討してください');
@@ -112,6 +113,13 @@ app.listen(PORT, '0.0.0.0', async () => {
   } else {
     console.error('localtunnel機能は無効になっています');
   }
+  });
+}
+
+// 非同期でサーバー起動
+startServer().catch(error => {
+  console.error('サーバー起動エラー:', error);
+  process.exit(1);
 });
 
-module.exports = app;
+module.exports = { app, startServer };

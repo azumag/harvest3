@@ -82,8 +82,45 @@ router.get('/error-stats', errorStatsController.getErrorStats);
 router.post('/error-stats/reset', errorStatsController.resetErrorStats);
 
 // ヘルスチェックAPI
-router.get('/health', (req, res) => {
-  res.json({ status: 'ok', database: 'redis' });
+router.get('/health', async (req, res) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {}
+  };
+
+  // Redis接続確認
+  try {
+    const { client } = require('../database/redisDatabase');
+    if (client && client.isReady) {
+      health.services.redis = 'connected';
+    } else {
+      health.services.redis = 'disconnected';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.services.redis = 'error';
+    health.status = 'degraded';
+  }
+
+  // MongoDB接続確認
+  try {
+    const { isConnected } = require('../database/mongoDatabase');
+    const connected = await isConnected();
+    if (connected) {
+      health.services.mongodb = 'connected';
+    } else {
+      health.services.mongodb = 'disconnected';
+      health.status = 'degraded';
+    }
+  } catch (error) {
+    health.services.mongodb = 'error';
+    health.status = 'degraded';
+  }
+
+  // レスポンス送信
+  const statusCode = health.status === 'ok' ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // システムヘルスAPI (Phase 3: リアルタイム監視システム)
