@@ -485,7 +485,7 @@ const config = {
 
     BOLLINGER_BANDS: {
       type: 'mean_reversion',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // スロットリング対応完了: APIキャッシュ・分散実行で修復
       period: 20,
       stdDev: 2,
       ohlcvInterval: '15m',
