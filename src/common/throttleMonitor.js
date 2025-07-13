@@ -1,6 +1,6 @@
 /**
- * API スロットリング監視・自動回復システム
- * bitbank API のスロットル状況を監視し、自動的に回復策を実行する
+ * API スロットリング監視・自動回復システム - Issue #443対応
+ * bitbank API のスロットル状況を監視し、APIコーディネーターと連携して自動回復策を実行する
  */
 
 const { postErrorToDiscord } = require('./notifications');
@@ -13,22 +13,30 @@ class ThrottleMonitor {
       throttleErrors: 0,
       consecutiveErrors: 0,
       lastErrorTime: 0,
-      recoveryAttempts: 0
+      recoveryAttempts: 0,
+      // Issue #443: 新しい統計項目
+      queueOverflowErrors: 0,
+      coordinatorErrors: 0,
+      lastQueueOverflow: 0
     };
 
     this.thresholds = {
-      criticalErrorRate: 0.3, // 30% エラー率で危険レベル
-      maxConsecutiveErrors: 10,
-      recoveryDelay: 60000, // 1分間の回復待機時間
-      alertCooldown: NOTIFICATION_SETTINGS.RATE_LIMIT_WINDOW_MS // 設定ファイルから取得
+      criticalErrorRate: 0.2, // Issue #443: 20%エラー率で危険レベル（より厳格に）
+      maxConsecutiveErrors: 5, // Issue #443: 連続エラー閾値を5に削減（早期対応）
+      recoveryDelay: 30000, // Issue #443: 回復待機時間を30秒に短縮
+      alertCooldown: NOTIFICATION_SETTINGS.RATE_LIMIT_WINDOW_MS,
+      // Issue #443: 新しい閾値
+      queueOverflowThreshold: 3, // queue overflow 3回で緊急対応
+      coordinatorResetThreshold: 5 // コーディネーターリセット閾値
     };
 
     this.lastAlertTime = 0;
     this.isRecoveryMode = false;
+    this.apiCoordinator = null; // 後で設定される
   }
 
   /**
-   * API リクエストを記録する
+   * API リクエストを記録する - Issue #443対応
    * @param {boolean} isError - エラーかどうか
    * @param {string} errorType - エラーの種類
    */
@@ -40,8 +48,16 @@ class ThrottleMonitor {
       this.stats.consecutiveErrors++;
       this.stats.lastErrorTime = Date.now();
 
+      // Issue #443: 詳細なエラー分類
       if (errorType.includes('throttle') || errorType.includes('maxCapacity')) {
-        this.handleThrottleError();
+        this.stats.queueOverflowErrors++;
+        this.stats.lastQueueOverflow = Date.now();
+        this.handleThrottleError(errorType);
+      } else if (errorType.includes('coordinator') || errorType.includes('queue is full')) {
+        this.stats.coordinatorErrors++;
+        this.handleCoordinatorError(errorType);
+      } else {
+        this.handleThrottleError(errorType);
       }
     } else {
       this.stats.consecutiveErrors = 0;
@@ -52,10 +68,24 @@ class ThrottleMonitor {
   }
 
   /**
-   * スロットルエラーを処理する
+   * APIコーディネーターとの連携を設定
+   * @param {Object} coordinator - APIコーディネーターインスタンス
    */
-  async handleThrottleError() {
+  setAPICoordinator(coordinator) {
+    this.apiCoordinator = coordinator;
+  }
+
+  /**
+   * スロットルエラーを処理する - Issue #443対応
+   */
+  async handleThrottleError(errorType = '') {
     const errorRate = this.stats.throttleErrors / this.stats.totalRequests;
+
+    // Issue #443: queue overflow の早期検出
+    if (this.stats.queueOverflowErrors >= this.thresholds.queueOverflowThreshold) {
+      await this.handleQueueOverflowCrisis();
+      return;
+    }
 
     // 危険レベルの判定
     if (errorRate > this.thresholds.criticalErrorRate ||
@@ -63,6 +93,56 @@ class ThrottleMonitor {
 
       await this.enterRecoveryMode();
     }
+  }
+
+  /**
+   * APIコーディネーターエラーを処理する - Issue #443対応
+   */
+  async handleCoordinatorError(errorType = '') {
+    console.log(`[ThrottleMonitor] コーディネーターエラー検出: ${errorType}`);
+
+    if (this.stats.coordinatorErrors >= this.thresholds.coordinatorResetThreshold && this.apiCoordinator) {
+      const message = `🚨 **APIコーディネーター緊急リセット**
+      
+**原因**: コーディネーターエラーが閾値(${this.thresholds.coordinatorResetThreshold})に到達
+- コーディネーターエラー数: ${this.stats.coordinatorErrors}
+- 総リクエスト数: ${this.stats.totalRequests}
+
+**対応**: APIコーディネーターの緊急リセットを実行`;
+
+      await this.sendAlert(message);
+      this.apiCoordinator.emergencyReset();
+      
+      // エラーカウントをリセット
+      this.stats.coordinatorErrors = 0;
+    }
+  }
+
+  /**
+   * Queue overflow危機対応 - Issue #443対応
+   */
+  async handleQueueOverflowCrisis() {
+    const message = `🔥 **Throttle Queue Overflow危機**
+    
+**統計:**
+- Queue overflow回数: ${this.stats.queueOverflowErrors}
+- 閾値: ${this.thresholds.queueOverflowThreshold}
+- 最後のOverflow: ${new Date(this.stats.lastQueueOverflow).toLocaleString()}
+
+**緊急対応を実行中...**`;
+
+    await this.sendAlert(message);
+
+    if (this.apiCoordinator) {
+      console.log('[ThrottleMonitor] APIコーディネーター緊急リセット実行');
+      this.apiCoordinator.emergencyReset();
+    }
+
+    // より長い回復時間を設定
+    await new Promise(resolve => setTimeout(resolve, this.thresholds.recoveryDelay * 2));
+    
+    // 統計リセット
+    this.stats.queueOverflowErrors = 0;
   }
 
   /**

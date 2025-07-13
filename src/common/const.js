@@ -16,27 +16,42 @@ function parseEnvInt(envVar, defaultValue, minValue = 0) {
   return parsed;
 }
 
-// API/Exchange設定定数 - 改善されたスロットリング制御
+// API/Exchange設定定数 - Issue #443 throttle queue対応
 // bitbank API制限: 取得系 10回/秒、更新系 6回/秒
-// 実測値: 5秒間隔で安定、8秒間隔で確実に問題回避
-// TODO: 実データ分析システムを活用し、安定性を保ちつつパフォーマンス最適化を継続検討（目標: 5-6秒）
+// CCXTライブラリ内部のthrottle queue capacity: 1000固定
+// 最適化戦略: API呼び出し頻度を制限し、queueオーバーフローを防止
 const EXCHANGE_SETTINGS = {
-  // 環境変数対応: バリデーション付きで安全に解析
-  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 15000, 1000), // 緊急対応: 15秒間隔（最小1秒制限）
+  // Issue #443: CCXTのthrottle queue容量制限(1000)に対応
+  // 安全な間隔で API呼び出しを行い、queue蓄積を防ぐ
+  RATE_LIMIT: parseEnvInt(process.env.EXCHANGE_RATE_LIMIT, 2000, 1000), // 2秒間隔（CCXTqueue対応）
   TIMEOUT: parseEnvInt(process.env.EXCHANGE_TIMEOUT, 60000, 5000), // 60秒タイムアウト（最小5秒制限）
-  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 5000, 100), // 最小100に制限
+  
+  // CCXTライブラリの制限に合わせた設定
+  MAX_THROTTLE_QUEUE_SIZE: parseEnvInt(process.env.EXCHANGE_MAX_THROTTLE_QUEUE_SIZE, 800, 100), // CCXTの1000制限に対して余裕を持った800
+  
   RECV_WINDOW: 60000,
-  // 新しい設定: 段階的バックオフ
+  // 新しい設定: 段階的バックオフ（Issue #443対応）
   BACKOFF_ENABLED: true,
-  BACKOFF_INITIAL_DELAY: 5000, // 初期遅延 5秒に拡大（緊急対応）
-  BACKOFF_MAX_DELAY: 120000, // 最大遅延 2分に拡大
-  BACKOFF_MULTIPLIER: 3, // 遅延倍数を3に拡大
+  BACKOFF_INITIAL_DELAY: 2000, // 初期遅延 2秒（過度なバックオフを回避）
+  BACKOFF_MAX_DELAY: 30000, // 最大遅延 30秒（過度な待機を回避）
+  BACKOFF_MULTIPLIER: 2, // 遅延倍数を2に調整（2秒→4秒→8秒→16秒→30秒）
+  
   // 新しい設定: 接続監視
   HEALTH_CHECK_INTERVAL: 60000, // 1分間隔でヘルスチェック
-  MAX_CONSECUTIVE_FAILURES: 2, // 連続失敗回数の閾値を2に削減（即座に発見）
-  // 新しい設定: 並列実行制限（API負荷軽減）
-  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 1, 1), // 緊急対応: 同時処理を1に制限（最小1、最大並列数制限）
-  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 5000, 1000) // 各ペア処理間の遅延（最小1秒制限）
+  MAX_CONSECUTIVE_FAILURES: 3, // 連続失敗回数の閾値を3に調整
+  
+  // 新しい設定: 並列実行制限（API負荷軽減） - Issue #443対応
+  MAX_CONCURRENT_PAIRS: parseEnvInt(process.env.EXCHANGE_MAX_CONCURRENT_PAIRS, 2, 1), // 同時処理を2に制限（throttle queue負荷軽減）
+  EXECUTION_DELAY_MS: parseEnvInt(process.env.EXCHANGE_EXECUTION_DELAY_MS, 1500, 500), // 各ペア処理間の遅延を1.5秒に短縮
+  
+  // Issue #443: throttle queue管理の強化
+  THROTTLE_QUEUE_MONITORING: {
+    ENABLED: true,
+    CHECK_INTERVAL: 1000, // 1秒間隔でqueue状況監視
+    WARNING_THRESHOLD: 600, // queue使用率60%で警告
+    CRITICAL_THRESHOLD: 800, // queue使用率80%で重要警告
+    EMERGENCY_DELAY: 5000 // 緊急時の待機時間
+  }
 };
 
 // リスク管理設定定数
