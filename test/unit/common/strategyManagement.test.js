@@ -59,7 +59,7 @@ describe('統一戦略管理', () => {
       const outsideStrategy = config.strategies.OUTSIDE;
       expect(outsideStrategy).toBeDefined();
       expect(outsideStrategy.type).toBe('legacy');
-      expect(outsideStrategy.enabled).toBe(false);
+      expect(outsideStrategy.enabled).toBe(true); // Issue #408: レガシー戦略有効化
       expect(outsideStrategy.function).toBe(null);
     });
 
@@ -67,7 +67,7 @@ describe('統一戦略管理', () => {
       const unknownStrategy = config.strategies.UNKNOWN;
       expect(unknownStrategy).toBeDefined();
       expect(unknownStrategy.type).toBe('legacy');
-      expect(unknownStrategy.enabled).toBe(false);
+      expect(unknownStrategy.enabled).toBe(true); // Issue #408: レガシー戦略有効化
       expect(unknownStrategy.function).toBe(null);
     });
 
@@ -89,26 +89,17 @@ describe('統一戦略管理', () => {
       });
     });
 
-    test('レガシー戦略（OUTSIDE, UNKNOWN）は無効化されているが型ベースフィルタリング対象', () => {
+    test('レガシー戦略（OUTSIDE, UNKNOWN）は有効化されており型ベースフィルタリング対象', () => {
       const legacyStrategies = ['OUTSIDE', 'UNKNOWN'];
 
       legacyStrategies.forEach(strategyKey => {
         const strategy = config.strategies[strategyKey];
-        expect(strategy.enabled).toBe(false);
+        expect(strategy.enabled).toBe(true); // Issue #408: レガシー戦略有効化
         expect(strategy.type).toBe('legacy');
         expect(strategy.function).toBe(null);
 
-        // 型ベースフィルタリングでは、有効化されていれば含まれることを確認
-        const mockConfig = {
-          strategies: {
-            [strategyKey]: {
-              ...strategy,
-              enabled: true
-            }
-          }
-        };
-
-        const strategies = getBalanceCheckEligibleStrategies(mockConfig);
+        // 有効化されているため型ベースフィルタリングに含まれることを確認
+        const strategies = getBalanceCheckEligibleStrategies(config);
         expect(strategies).toContain(strategyKey);
       });
     });
