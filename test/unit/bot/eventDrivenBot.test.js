@@ -94,7 +94,8 @@ describe('Event-Driven Bot Architecture', () => {
 
       // sleep(1000)が存在しないことを確認
       expect(botSource).not.toMatch(/await\s+sleep\(1000\)/);
-      expect(botSource).toMatch(/Promise\.allSettled/); // 並列処理の確認
+      // 新しいstrategyExecutionManagerアプローチの確認
+      expect(botSource).toMatch(/strategyExecutionManager/);
     });
 
     test('while(true)ループの排除確認', () => {
@@ -136,14 +137,15 @@ describe('Event-Driven Bot Architecture', () => {
   });
 
   describe('Architecture Validation', () => {
-    test('並列処理の実装確認', () => {
+    test('分散処理の実装確認', () => {
       const fs = require('fs');
       const path = require('path');
       const botPath = path.join(__dirname, '../../../src/bot.js');
       const botSource = fs.readFileSync(botPath, 'utf8');
 
-      // Promise.allSettledが使用されていることを確認
-      expect(botSource).toMatch(/Promise\.allSettled/);
+      // 新しいAPIデータキャッシュと戦略実行管理システムが使用されていることを確認
+      expect(botSource).toMatch(/strategyExecutionManager/);
+      expect(botSource).toMatch(/apiDataCache/);
     });
 
     test('効率的実行エンジンの存在確認', () => {
