@@ -510,7 +510,7 @@ const config = {
     // トレンドフォロー戦略
     MA: {
       type: 'trend_following',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // Issue #408: 戦略有効化
       shortPeriod: 5,
       longPeriod: 20,
       ohlcvInterval: '15m',
@@ -534,7 +534,7 @@ const config = {
 
     OSCILLATOR: {
       type: 'mean_reversion',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // Issue #408: 戦略有効化
       period: 20,
       oversoldThreshold: 20,
       overboughtThreshold: 80,
@@ -585,7 +585,7 @@ const config = {
     // マルチ指標確認戦略（Issue #146）
     MULTI_INDICATOR: {
       type: 'composite',
-      enabled: false, // 緊急停止: throttle queue危機対応
+      enabled: true, // Issue #408: 戦略有効化
       ohlcvInterval: '15m',
       function: multiIndicatorStrategy,
       exchanges: [exchangeBB],
@@ -661,7 +661,7 @@ const config = {
     // レガシー戦略（残高チェック用）
     OUTSIDE: {
       type: 'legacy',
-      enabled: false,
+      enabled: true, // Issue #408: レガシー戦略有効化
       description: 'Legacy strategy for external or manual trades',
       function: null,  // 実行関数なし（レガシー対応）
       exchanges: [exchangeBB]
@@ -669,7 +669,7 @@ const config = {
 
     UNKNOWN: {
       type: 'legacy',
-      enabled: false,
+      enabled: true, // Issue #408: レガシー戦略有効化
       description: 'Legacy strategy for unidentified trades',
       function: null,  // 実行関数なし（レガシー対応）
       exchanges: [exchangeBB]
