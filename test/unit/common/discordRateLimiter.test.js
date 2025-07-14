@@ -9,6 +9,11 @@ describe('DiscordRateLimiter', () => {
   let rateLimiter;
   let mockedAxios;
 
+  beforeAll(() => {
+    // Use fake timers to control setTimeout calls
+    jest.useFakeTimers();
+  });
+
   beforeEach(() => {
     // Clear the module cache to get a fresh instance
     jest.resetModules();
@@ -22,19 +27,24 @@ describe('DiscordRateLimiter', () => {
     rateLimiter = require('../../../src/common/discordRateLimiter');
   });
 
-  afterAll(async () => {
-    // Clean up any remaining timers
+  afterEach(() => {
+    // Clear any pending timers after each test
     jest.clearAllTimers();
-    jest.useRealTimers();
-    jest.restoreAllMocks();
     
     // Clear any cleanup intervals in the rate limiter
     if (rateLimiter && rateLimiter._clearCleanupInterval) {
       rateLimiter._clearCleanupInterval();
     }
+  });
+
+  afterAll(() => {
+    // Clean up any remaining timers
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
     
-    // Force clear any remaining async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Clear module cache one final time
+    jest.resetModules();
   });
 
   describe('validateMessage', () => {
@@ -191,8 +201,8 @@ describe('DiscordRateLimiter', () => {
         deduplicationWindow: shortWindow 
       });
       
-      // Wait for window to expire
-      await new Promise(resolve => setTimeout(resolve, shortWindow + 50));
+      // Fast-forward time to expire the deduplication window
+      jest.advanceTimersByTime(shortWindow + 50);
       
       // Should allow duplicate message after window expires
       const result = await rateLimiter.send(validUrl, validMessage, { 
@@ -245,38 +255,32 @@ describe('DiscordRateLimiter', () => {
     test('removes expired deduplication entries', async () => {
       const deduplicationKey = 'test-cleanup-key';
       
-      // Mock Date.now to control time
-      const originalDateNow = Date.now;
-      let currentTime = 1000000; // Start time
-      Date.now = jest.fn(() => currentTime);
+      // Set a fixed start time
+      const startTime = 1000000;
+      jest.setSystemTime(startTime);
       
-      try {
-        // Add a deduplication entry
-        await rateLimiter.send(
-          'https://discord.com/api/webhooks/123456789/abcdefghijk', 
-          'test message', 
-          { deduplicationKey, deduplicationWindow: 3600000 } // 1 hour
-        );
-        
-        // Move time forward by more than 1 hour
-        currentTime += 3600001; // 1 hour + 1ms
-        
-        // Manually trigger cleanup
-        rateLimiter.cleanup();
-        
-        // Should allow the message again since cleanup removed expired entry
-        const result = await rateLimiter.send(
-          'https://discord.com/api/webhooks/123456789/abcdefghijk', 
-          'test message', 
-          { deduplicationKey }
-        );
-        
-        expect(result.success).toBe(true);
-        expect(result.chunks).toBe(1);
-      } finally {
-        // Restore original Date.now
-        Date.now = originalDateNow;
-      }
+      // Add a deduplication entry
+      await rateLimiter.send(
+        'https://discord.com/api/webhooks/123456789/abcdefghijk', 
+        'test message', 
+        { deduplicationKey, deduplicationWindow: 3600000 } // 1 hour
+      );
+      
+      // Move time forward by more than 1 hour
+      jest.setSystemTime(startTime + 3600001); // 1 hour + 1ms
+      
+      // Manually trigger cleanup
+      rateLimiter.cleanup();
+      
+      // Should allow the message again since cleanup removed expired entry
+      const result = await rateLimiter.send(
+        'https://discord.com/api/webhooks/123456789/abcdefghijk', 
+        'test message', 
+        { deduplicationKey }
+      );
+      
+      expect(result.success).toBe(true);
+      expect(result.chunks).toBe(1);
     });
   });
 
@@ -414,8 +418,8 @@ describe('DiscordRateLimiter', () => {
       expect(result.success).toBe(true);
       expect(result.chunks).toBe(2);
       
-      // Wait a bit to ensure queue processing attempts
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Fast-forward time to ensure queue processing attempts
+      jest.advanceTimersByTime(100);
       
       // キュー統計で確認
       const stats = rateLimiter.getStats();
@@ -630,6 +634,81 @@ describe('DiscordRateLimiter', () => {
       expect(result.error).toBe('ECONNABORTED');
       expect(result.details.message).toBe('Network timeout');
       expect(result.details.code).toBe('ECONNABORTED');
+    });
+  });
+
+  describe('rate limit buffer configuration', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+    const message = 'Test message';
+
+    beforeEach(() => {
+      mockedAxios.post.mockClear();
+    });
+
+    test('uses configured buffer time for rate limit calculation', async () => {
+      // Mock rate limit error response
+      const retryAfterSeconds = 2;
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        data: { retry_after: retryAfterSeconds }
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Verify the rate limit until time includes the configured buffer
+      const expectedMinTime = Date.now() + (retryAfterSeconds * 1000);
+      // The rateLimitUntil should be greater than the retry time alone
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
+    });
+
+    test('handles rate limit with retry-after header', async () => {
+      const retryAfterSeconds = 5;
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        headers: { 'retry-after': retryAfterSeconds.toString() },
+        data: {}
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Verify the rate limit calculation includes buffer time
+      const expectedMinTime = Date.now() + (retryAfterSeconds * 1000);
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
+    });
+
+    test('uses default 1 second when no retry-after is provided', async () => {
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        headers: {},
+        data: {}
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Should use default 1 second + buffer time
+      const expectedMinTime = Date.now() + 1000;
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
     });
   });
 });

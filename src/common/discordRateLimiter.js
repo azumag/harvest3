@@ -3,6 +3,8 @@
  * 複数の通知経路での重複送信を防ぎ、レートリミットを適切に管理
  */
 
+const { SETTINGS } = require('../config/settings');
+
 class DiscordRateLimiter {
   constructor() {
     this.webhookQueues = new Map(); // webhook URL別のキュー
@@ -354,7 +356,7 @@ class DiscordRateLimiter {
         // レートリミット処理
         const retryAfterSeconds = error.response.data?.retry_after ||
                                  parseInt(error.response.headers['retry-after'], 10) || 1;
-        const rateLimitUntil = Date.now() + (retryAfterSeconds * 1000) + 1000; // 1秒の余裕
+        const rateLimitUntil = Date.now() + (retryAfterSeconds * 1000) + SETTINGS.MONITORING.DISCORD_RATE_LIMIT_BUFFER_MS; // 設定可能な余裕時間
 
         return {
           success: false,

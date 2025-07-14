@@ -95,7 +95,10 @@ const MONITORING_SETTINGS = {
   SELF_HEALING_INTERVAL: parseEnvInt('SELF_HEALING_INTERVAL', 1800000, 300000), // 30分
 
   // 実行中タスク待機
-  TASK_WAIT_INTERVAL: parseEnvInt('TASK_WAIT_INTERVAL', 100, 10) // 100ms
+  TASK_WAIT_INTERVAL: parseEnvInt('TASK_WAIT_INTERVAL', 100, 10), // 100ms
+
+  // Discord通知レートリミット設定
+  DISCORD_RATE_LIMIT_BUFFER_MS: parseEnvInt('DISCORD_RATE_LIMIT_BUFFER_MS', 1000, 0) // 1秒のバッファー
 };
 
 // リスク管理設定（高優先度）
