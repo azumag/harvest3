@@ -34,6 +34,9 @@ class DiscordRateLimiter {
       return { success: false, reason: 'duplicate' };
     }
 
+    // メッセージが2000文字を超える場合は分割
+    const messageChunks = this.splitMessage(message);
+
     // webhook URL別のキューに追加
     if (!this.webhookQueues.has(webhookUrl)) {
       this.webhookQueues.set(webhookUrl, {
@@ -54,17 +57,22 @@ class DiscordRateLimiter {
       });
     }
 
-    // キューに追加
-    const notificationTask = {
-      message,
-      priority,
-      maxRetries,
-      deduplicationKey,
-      timestamp: Date.now(),
-      retryCount: 0
-    };
+    // 各チャンクをキューに追加
+    messageChunks.forEach((chunk, index) => {
+      const chunkDeduplicationKey = deduplicationKey ? 
+        `${deduplicationKey}_chunk_${index}` : null;
 
-    webhookQueue.queue.push(notificationTask);
+      const notificationTask = {
+        message: chunk,
+        priority,
+        maxRetries,
+        deduplicationKey: chunkDeduplicationKey,
+        timestamp: Date.now(),
+        retryCount: 0
+      };
+
+      webhookQueue.queue.push(notificationTask);
+    });
 
     // 優先度でソート（数値が小さいほど優先度が高い）
     webhookQueue.queue.sort((a, b) => a.priority - b.priority);
@@ -74,7 +82,7 @@ class DiscordRateLimiter {
       this.processQueue(webhookUrl);
     }
 
-    return { success: true, reason: 'queued' };
+    return { success: true, reason: 'queued', chunks: messageChunks.length };
   }
 
   /**
@@ -189,18 +197,71 @@ class DiscordRateLimiter {
       errors.push('Invalid Discord webhook URL format');
     }
     
-    // メッセージ内容の検証
+    // メッセージ内容の検証（長さ制限は削除 - 自動分割されるため）
     if (message === null || message === undefined) {
       errors.push('Message cannot be null or undefined');
     } else if (typeof message !== 'string') {
       errors.push('Message must be a string');
     } else if (message.trim() === '') {
       errors.push('Message cannot be empty');
-    } else if (message.length > 2000) {
-      errors.push(`Message is too long: ${message.length} characters (max 2000)`);
     }
     
     return errors;
+  }
+
+  /**
+   * メッセージを2000文字以内のチャンクに分割
+   */
+  splitMessage(message) {
+    const MAX_LENGTH = 2000;
+    
+    if (typeof message !== 'string') {
+      message = String(message);
+    }
+    
+    // メッセージが制限内の場合はそのまま返す
+    if (message.length <= MAX_LENGTH) {
+      return [message];
+    }
+    
+    const chunks = [];
+    let currentChunk = '';
+    
+    // メッセージを行ごとに分割
+    const lines = message.split('\n');
+    
+    for (const line of lines) {
+      // 現在のチャンクに次の行を追加しても制限を超えない場合
+      if (currentChunk.length + line.length + 1 <= MAX_LENGTH) { // +1 は改行文字分
+        currentChunk += (currentChunk ? '\n' : '') + line;
+      } else {
+        // 1行だけで制限を超える場合、その行を強制的に分割
+        if (line.length > MAX_LENGTH) {
+          // まず現在のチャンクがあれば送信
+          if (currentChunk) {
+            chunks.push(currentChunk);
+          }
+          // 長い行を分割してチャンクに追加
+          for (let i = 0; i < line.length; i += MAX_LENGTH) {
+            chunks.push(line.substring(i, i + MAX_LENGTH));
+          }
+          currentChunk = ''; // 新しいチャンクを開始
+        } else {
+          // 現在のチャンクを送信リストに追加し、新しいチャンクを開始
+          if (currentChunk) {
+            chunks.push(currentChunk);
+          }
+          currentChunk = line;
+        }
+      }
+    }
+    
+    // 最後のチャンクを追加
+    if (currentChunk) {
+      chunks.push(currentChunk);
+    }
+    
+    return chunks;
   }
 
   /**

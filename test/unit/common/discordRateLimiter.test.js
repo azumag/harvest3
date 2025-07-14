@@ -88,12 +88,12 @@ describe('DiscordRateLimiter', () => {
       expect(errors).toContain('Message must be a string');
     });
 
-    test('returns error for message too long', () => {
+    test('accepts long messages (will be split automatically)', () => {
       const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
       const longMessage = 'a'.repeat(2001);
       const errors = rateLimiter.validateMessage(validUrl, longMessage);
       
-      expect(errors).toContain('Message is too long: 2001 characters (max 2000)');
+      expect(errors).toEqual([]);
     });
 
     test('accepts discordapp.com webhook URL format', () => {
@@ -134,13 +134,16 @@ describe('DiscordRateLimiter', () => {
       expect(result.details).toContain('Message cannot be empty');
     });
 
-    test('returns validation error for message too long', async () => {
+    test('accepts long messages for direct Discord send (validation passes)', async () => {
       const longMessage = 'a'.repeat(2001);
+      
+      // Mock axios to succeed
+      mockedAxios.post.mockResolvedValue({ status: 200 });
+      
       const result = await rateLimiter.sendToDiscord(validUrl, longMessage);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('validation_failed');
-      expect(result.details).toContain('Message is too long: 2001 characters (max 2000)');
+      expect(result.success).toBe(true);
+      // バリデーションエラーではないはず
     });
 
     test('calls axios with correct parameters for valid input', async () => {
@@ -162,6 +165,7 @@ describe('DiscordRateLimiter', () => {
       
       expect(result.success).toBe(true);
       expect(result.reason).toBe('queued');
+      expect(result.chunks).toBe(1);
     });
 
     test('blocks duplicate messages within deduplication window', async () => {
@@ -198,6 +202,7 @@ describe('DiscordRateLimiter', () => {
       
       expect(result.success).toBe(true);
       expect(result.reason).toBe('queued');
+      expect(result.chunks).toBe(1);
     });
 
     test('queues messages with correct priority order', async () => {
@@ -267,6 +272,7 @@ describe('DiscordRateLimiter', () => {
         );
         
         expect(result.success).toBe(true);
+        expect(result.chunks).toBe(1);
       } finally {
         // Restore original Date.now
         Date.now = originalDateNow;
@@ -321,6 +327,112 @@ describe('DiscordRateLimiter', () => {
       const result = rateLimiter.sanitizeMessage(input);
       
       expect(result).toBe('Hello 世界 🌍 café');
+    });
+  });
+
+  describe('splitMessage', () => {
+    test('returns single chunk for short message', () => {
+      const shortMessage = 'This is a short message';
+      const chunks = rateLimiter.splitMessage(shortMessage);
+      
+      expect(chunks).toEqual([shortMessage]);
+    });
+
+    test('splits long message into multiple chunks', () => {
+      const longMessage = 'a'.repeat(2001);
+      const chunks = rateLimiter.splitMessage(longMessage);
+      
+      expect(chunks.length).toBe(2);
+      expect(chunks[0]).toBe('a'.repeat(2000));
+      expect(chunks[1]).toBe('a');
+    });
+
+    test('splits message by lines when possible', () => {
+      const lines = [];
+      for (let i = 0; i < 10; i++) {
+        lines.push('This is line ' + i + ' with some content to make it longer');
+      }
+      const message = lines.join('\n');
+      const chunks = rateLimiter.splitMessage(message);
+      
+      expect(chunks.length).toBeGreaterThan(0);
+      chunks.forEach(chunk => {
+        expect(chunk.length).toBeLessThanOrEqual(2000);
+      });
+    });
+
+    test('handles single line longer than 2000 characters', () => {
+      const longLine = 'a'.repeat(2500);
+      const chunks = rateLimiter.splitMessage(longLine);
+      
+      expect(chunks.length).toBe(2);
+      expect(chunks[0]).toBe('a'.repeat(2000));
+      expect(chunks[1]).toBe('a'.repeat(500));
+    });
+
+    test('handles mixed short and long lines', () => {
+      const shortLine = 'Short line';
+      const longLine = 'b'.repeat(2500);
+      const message = shortLine + '\n' + longLine + '\n' + shortLine;
+      const chunks = rateLimiter.splitMessage(message);
+      
+      expect(chunks.length).toBeGreaterThan(1);
+      chunks.forEach(chunk => {
+        expect(chunk.length).toBeLessThanOrEqual(2000);
+      });
+    });
+
+    test('converts non-string input to string', () => {
+      const numberInput = 12345;
+      const chunks = rateLimiter.splitMessage(numberInput);
+      
+      expect(chunks).toEqual(['12345']);
+    });
+  });
+
+  describe('send with message splitting', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+
+    test('splits long message into multiple chunks automatically', async () => {
+      const longMessage = 'a'.repeat(2001);
+      const result = await rateLimiter.send(validUrl, longMessage);
+      
+      expect(result.success).toBe(true);
+      expect(result.reason).toBe('queued');
+      expect(result.chunks).toBe(2);
+    });
+
+    test('creates unique deduplication keys for each chunk', async () => {
+      const longMessage = 'a'.repeat(2001);
+      const deduplicationKey = 'test-long-message';
+      
+      // Mock axios to make it fail so messages stay in queue
+      mockedAxios.post.mockRejectedValue(new Error('Network error'));
+      
+      const result = await rateLimiter.send(validUrl, longMessage, { deduplicationKey });
+      
+      expect(result.success).toBe(true);
+      expect(result.chunks).toBe(2);
+      
+      // Wait a bit to ensure queue processing attempts
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // キュー統計で確認
+      const stats = rateLimiter.getStats();
+      expect(stats.totalPendingNotifications).toBeGreaterThan(0);
+    });
+
+    test('handles multiline long message correctly', async () => {
+      const lines = [];
+      for (let i = 0; i < 50; i++) {
+        lines.push(`Line ${i}: This is a relatively long line with some content to make the overall message exceed 2000 characters`);
+      }
+      const longMessage = lines.join('\n');
+      const result = await rateLimiter.send(validUrl, longMessage);
+      
+      expect(result.success).toBe(true);
+      expect(result.reason).toBe('queued');
+      expect(result.chunks).toBeGreaterThan(1);
     });
   });
 
