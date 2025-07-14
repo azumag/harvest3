@@ -4,6 +4,10 @@ describe('loadMarkets メソッドのテスト (Issue #880)', () => {
   beforeEach(() => {
     // テスト環境での初期化を確認
     expect(process.env.NODE_ENV).toBe('test');
+    
+    // 各テストの前に markets プロパティを null にリセット
+    // これにより、テストが独立して実行される
+    exchangeBB.markets = null;
   });
 
   test('loadMarkets メソッドが存在すること', () => {
