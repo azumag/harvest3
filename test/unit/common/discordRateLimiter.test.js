@@ -632,4 +632,79 @@ describe('DiscordRateLimiter', () => {
       expect(result.details.code).toBe('ECONNABORTED');
     });
   });
+
+  describe('rate limit buffer configuration', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+    const message = 'Test message';
+
+    beforeEach(() => {
+      mockedAxios.post.mockClear();
+    });
+
+    test('uses configured buffer time for rate limit calculation', async () => {
+      // Mock rate limit error response
+      const retryAfterSeconds = 2;
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        data: { retry_after: retryAfterSeconds }
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Verify the rate limit until time includes the configured buffer
+      const expectedMinTime = Date.now() + (retryAfterSeconds * 1000);
+      // The rateLimitUntil should be greater than the retry time alone
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
+    });
+
+    test('handles rate limit with retry-after header', async () => {
+      const retryAfterSeconds = 5;
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        headers: { 'retry-after': retryAfterSeconds.toString() },
+        data: {}
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Verify the rate limit calculation includes buffer time
+      const expectedMinTime = Date.now() + (retryAfterSeconds * 1000);
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
+    });
+
+    test('uses default 1 second when no retry-after is provided', async () => {
+      const error = new Error('Rate limited');
+      error.response = {
+        status: 429,
+        headers: {},
+        data: {}
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('rate_limit');
+      expect(result.rateLimitUntil).toBeDefined();
+      
+      // Should use default 1 second + buffer time
+      const expectedMinTime = Date.now() + 1000;
+      expect(result.rateLimitUntil).toBeGreaterThan(expectedMinTime);
+    });
+  });
 });
