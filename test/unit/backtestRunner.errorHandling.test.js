@@ -62,7 +62,7 @@ describe('BacktestRunner Error Handling', () => {
     test('未処理のPromise拒否を適切に処理する', async () => {
       // unhandledRejectionイベントをエミット
       const testError = new Error('Test unhandled rejection');
-      const testPromise = Promise.reject(testError);
+      const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
       
       process.emit('unhandledRejection', testError, testPromise);
 
@@ -76,7 +76,7 @@ describe('BacktestRunner Error Handling', () => {
 
     test('Discord通知が利用可能な場合は通知を送信する', async () => {
       const testError = new Error('Test error for Discord');
-      const testPromise = Promise.reject(testError);
+      const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
 
       process.emit('unhandledRejection', testError, testPromise);
 
@@ -92,7 +92,7 @@ describe('BacktestRunner Error Handling', () => {
       delete global.postErrorToDiscord;
 
       const testError = new Error('Test error without Discord');
-      const testPromise = Promise.reject(testError);
+      const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
 
       process.emit('unhandledRejection', testError, testPromise);
 
@@ -196,7 +196,7 @@ describe('BacktestRunner Error Handling', () => {
       const testError2 = new Error('Second error');
       
       process.emit('uncaughtException', testError1);
-      process.emit('unhandledRejection', testError2, Promise.reject(testError2));
+      process.emit('unhandledRejection', testError2, Promise.reject(testError2).catch(() => {})); // Jestによる検出を防ぐ
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
