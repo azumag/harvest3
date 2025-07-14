@@ -26,7 +26,22 @@ const BBApiSecret = process.env.BB_API_SECRET;
 const BFApiKey = process.env.BF_API_KEY;
 const BFApiSecret = process.env.BF_API_SECRET;
 
+// Issue #725: 環境変数の検証を追加
+function validateApiCredentials() {
+  if (!BBApiKey || !BBApiSecret) {
+    console.error('[Issue #725] Bitbank API認証情報が不足しています');
+    console.error(`BB_API_KEY: ${BBApiKey ? '設定済み' : '未設定'}`);
+    console.error(`BB_API_SECRET: ${BBApiSecret ? '設定済み' : '未設定'}`);
+    throw new Error('Bitbank API認証情報が設定されていません。BB_API_KEYとBB_API_SECRETを.envファイルに設定してください。');
+  }
+}
+
+// 認証情報の検証を実行
+validateApiCredentials();
+
 // Issue #443: CCXTインスタンス作成とthrottle queue最適化
+// Issue #725: より詳細な初期化ログを追加
+console.log('[Issue #725] CCXTインスタンスを初期化中...');
 const exchangeBB = new ccxt.bitbank({
   apiKey: BBApiKey,
   secret: BBApiSecret,
@@ -44,6 +59,15 @@ const exchangeBB = new ccxt.bitbank({
     'adjustForTimeDifference': true
   }
 });
+
+// Issue #725: CCXTインスタンスの検証
+if (typeof exchangeBB.fetchBalance !== 'function') {
+  console.error('[Issue #725] CCXT Bitbankインスタンスの初期化に失敗しました');
+  console.error('fetchBalanceメソッドが利用できません');
+  throw new Error('CCXT Bitbankインスタンスが正しく初期化されませんでした');
+}
+
+console.log('[Issue #725] CCXTインスタンスの初期化が正常に完了しました');
 
 // Issue #443対応: throttle queue overflow対策
 console.log('[Issue #443] throttle queue overflow対策を適用');

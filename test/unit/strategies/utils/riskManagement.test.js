@@ -337,7 +337,7 @@ describe('リスク管理機能のテスト', () => {
       // null exchangeのテスト
       expect(() => {
         validateExchangeObject(null);
-      }).toThrow('Exchange object is null or undefined');
+      }).toThrow('[Issue #725] Exchange object is null or undefined');
 
       // fetchBalanceメソッドが存在しない場合のテスト & 機密情報フィルタリングのテスト  
       const invalidExchange = {
@@ -354,12 +354,31 @@ describe('リスク管理機能のテスト', () => {
         // このポイントに到達すべきではない
         expect(true).toBe(false);
       } catch (error) {
+        expect(error.message).toContain('[Issue #725]');
         expect(error.message).toContain('does not have fetchBalance method');
         expect(error.message).toContain('normalProperty');
+        expect(error.message).toContain('Exchange type:');
+        expect(error.message).toContain('fetchBalance type: undefined');
+        expect(error.message).toContain('CCXTインスタンスの初期化失敗');
         expect(error.message).not.toContain('apiKey');
         expect(error.message).not.toContain('secret');
         expect(error.message).not.toContain('password');
       }
+    });
+
+    test('validateExchangeObject with valid CCXT exchange object', () => {
+      // 有効なCCXTライクオブジェクトのテスト
+      const validExchange = {
+        id: 'bitbank',
+        fetchBalance: jest.fn(),
+        enableRateLimit: true,
+        normalProperty: 'safe-value'
+      };
+      
+      // エラーが発生しないことを確認
+      expect(() => {
+        validateExchangeObject(validExchange);
+      }).not.toThrow();
     });
   });
 });

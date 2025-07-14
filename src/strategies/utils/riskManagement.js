@@ -31,7 +31,7 @@ const logger = new Logger('RiskManagement');
  */
 function validateExchangeObject(exchange) {
   if (!exchange) {
-    throw new Error('Exchange object is null or undefined');
+    throw new Error('[Issue #725] Exchange object is null or undefined');
   }
   
   if (typeof exchange.fetchBalance !== 'function') {
@@ -39,7 +39,17 @@ function validateExchangeObject(exchange) {
     const safeKeys = Object.keys(exchange).filter(key => 
       !['apikey', 'secret', 'password', 'token', 'apisecret', 'privatekey'].includes(key.toLowerCase())
     );
-    throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${safeKeys.join(', ')}`);
+    
+    // より詳細なエラー情報を提供
+    const errorDetails = [
+      `[Issue #725] Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method`,
+      `Exchange type: ${exchange.constructor?.name || 'unknown'}`,
+      `Available object keys: ${safeKeys.join(', ')}`,
+      `fetchBalance type: ${typeof exchange.fetchBalance}`,
+      'これは通常、CCXTインスタンスの初期化失敗または環境変数の設定不備が原因です。'
+    ];
+    
+    throw new Error(errorDetails.join('\n'));
   }
 }
 
