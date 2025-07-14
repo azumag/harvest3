@@ -257,6 +257,15 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     // シンボルからベースアセットを抽出（エラーハンドリングでも使用するため外に移動）
     baseAsset = symbol.split('/')[0];
 
+    // 取引所オブジェクトの検証
+    if (!exchange) {
+      throw new Error('Exchange object is null or undefined');
+    }
+    
+    if (typeof exchange.fetchBalance !== 'function') {
+      throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${Object.keys(exchange).join(', ')}`);
+    }
+
     // formattedAvailableAmountを使用して利用可能量を取得
     const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades, acquireDistributedLock, releaseDistributedLock } = require('../../database/manager');
 
@@ -868,7 +877,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
 
     // Discord通知（エラーレベルを強調）
     const discordMessage = '🚨 **[リスク管理] ストップロス重大エラー**\n' +
-                          `取引所: ${exchange.id}\n` +
+                          `取引所: ${exchange ? exchange.id : 'unknown'}\n` +
                           `通貨: ${symbol}\n` +
                           `エラー: ${error.message}${errorDetails}`;
 
@@ -1088,6 +1097,15 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
  */
 async function getCurrentBalance(exchange) {
   try {
+    // 取引所オブジェクトの検証
+    if (!exchange) {
+      throw new Error('Exchange object is null or undefined');
+    }
+    
+    if (typeof exchange.fetchBalance !== 'function') {
+      throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${Object.keys(exchange).join(', ')}`);
+    }
+
     // withBitbankErrorHandlingを使用してAPI呼び出しを実行
     const balance = await withBitbankErrorHandling(
       () => exchange.fetchBalance(),

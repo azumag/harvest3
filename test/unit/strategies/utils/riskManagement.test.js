@@ -269,4 +269,49 @@ describe('リスク管理機能のテスト', () => {
       expect(expectedFeature).toContain('actual balance');
     });
   });
+
+  describe('Exchange validation', () => {
+    test('executeStopLoss should reject null exchange object', async () => {
+      const position = {
+        exchangeId: 'bitbank',
+        symbol: 'BTC/JPY',
+        strategyKey: 'test',
+        amount: 0.01,
+        entryPrice: 1000000,
+        key: 'test-position'
+      };
+      const marketParameters = {
+        amountPrecision: 8,
+        minTradeAmount: 0.0001
+      };
+
+      await expect(
+        executeStopLoss(null, 'BTC/JPY', 'test', position, marketParameters)
+      ).rejects.toThrow('Exchange object is null or undefined');
+    });
+
+    test('executeStopLoss should reject exchange without fetchBalance method', async () => {
+      const invalidExchange = {
+        id: 'bitbank',
+        // fetchBalance method is missing
+      };
+      
+      const position = {
+        exchangeId: 'bitbank',
+        symbol: 'BTC/JPY',
+        strategyKey: 'test',
+        amount: 0.01,
+        entryPrice: 1000000,
+        key: 'test-position'
+      };
+      const marketParameters = {
+        amountPrecision: 8,
+        minTradeAmount: 0.0001
+      };
+
+      await expect(
+        executeStopLoss(invalidExchange, 'BTC/JPY', 'test', position, marketParameters)
+      ).rejects.toThrow('does not have fetchBalance method');
+    });
+  });
 });
