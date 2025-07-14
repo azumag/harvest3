@@ -12,6 +12,9 @@ class DiscordRateLimiter {
       WARNING: 2,
       INFO: 3
     };
+    
+    // 定数定義
+    this.REPLACEMENT_CHAR_ONLY_PATTERN = /^[?]+$/;
   }
 
   /**
@@ -156,6 +159,23 @@ class DiscordRateLimiter {
   }
 
   /**
+   * Webhook URLを安全にログ出力用にマスク
+   */
+  maskWebhookUrl(webhookUrl) {
+    if (!webhookUrl || typeof webhookUrl !== 'string') {
+      return '[INVALID_URL]';
+    }
+    
+    // Discord webhook URLの場合、トークン部分をマスク
+    if (webhookUrl.includes('/api/webhooks/')) {
+      return webhookUrl.replace(/\/[^\/]+$/, '/***');
+    }
+    
+    // その他のURLは最初の50文字のみ表示
+    return webhookUrl.length > 50 ? webhookUrl.substring(0, 50) + '...' : webhookUrl;
+  }
+
+  /**
    * メッセージ内容とWebhook URLのバリデーション
    */
   validateMessage(webhookUrl, message) {
@@ -255,7 +275,7 @@ class DiscordRateLimiter {
     const sanitizedMessage = this.sanitizeMessage(message);
     
     // サニタイズ後に空になった場合、または"?"のみになった場合の処理
-    if (sanitizedMessage.trim() === '' || /^[?]+$/.test(sanitizedMessage.trim())) {
+    if (sanitizedMessage.trim() === '' || this.REPLACEMENT_CHAR_ONLY_PATTERN.test(sanitizedMessage.trim())) {
       console.error('[DISCORD_RATE_LIMITER] Message became empty after sanitization');
       return { 
         success: false, 
@@ -288,7 +308,7 @@ class DiscordRateLimiter {
         console.error('  Status:', error.response.status);
         console.error('  Status Text:', error.response.statusText);
         console.error('  Response Data:', JSON.stringify(error.response.data, null, 2));
-        console.error('  Request URL:', webhookUrl.substring(0, 50) + '...');
+        console.error('  Request URL:', this.maskWebhookUrl(webhookUrl));
         console.error('  Original Message Length:', message.length);
         console.error('  Sanitized Message Length:', sanitizedMessage.length);
         console.error('  Original Message Preview:', message.substring(0, 100));
@@ -320,7 +340,7 @@ class DiscordRateLimiter {
           status: error.response.status,
           statusText: error.response.statusText,
           data: error.response.data,
-          url: webhookUrl.substring(0, 50) + '...'
+          url: this.maskWebhookUrl(webhookUrl)
         });
         return { 
           success: false, 
@@ -337,7 +357,7 @@ class DiscordRateLimiter {
       console.error('[DISCORD_RATE_LIMITER] Network/Other error:', {
         message: error.message,
         code: error.code,
-        url: webhookUrl.substring(0, 50) + '...'
+        url: this.maskWebhookUrl(webhookUrl)
       });
       return { 
         success: false, 

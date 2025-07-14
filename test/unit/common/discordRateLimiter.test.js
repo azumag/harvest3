@@ -395,6 +395,43 @@ describe('DiscordRateLimiter', () => {
     });
   });
 
+  describe('maskWebhookUrl', () => {
+    test('masks Discord webhook token correctly', () => {
+      const webhookUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz';
+      const result = rateLimiter.maskWebhookUrl(webhookUrl);
+      
+      expect(result).toBe('https://discord.com/api/webhooks/123456789/***');
+    });
+
+    test('masks discordapp.com webhook token correctly', () => {
+      const webhookUrl = 'https://discordapp.com/api/webhooks/987654321/secrettoken123';
+      const result = rateLimiter.maskWebhookUrl(webhookUrl);
+      
+      expect(result).toBe('https://discordapp.com/api/webhooks/987654321/***');
+    });
+
+    test('handles non-Discord URLs by truncating to 50 characters', () => {
+      const longUrl = 'https://example.com/very/long/path/that/exceeds/fifty/characters/and/should/be/truncated';
+      const result = rateLimiter.maskWebhookUrl(longUrl);
+      
+      expect(result).toBe('https://example.com/very/long/path/that/exceeds/fi...');
+    });
+
+    test('returns short URLs unchanged if under 50 characters', () => {
+      const shortUrl = 'https://example.com/short';
+      const result = rateLimiter.maskWebhookUrl(shortUrl);
+      
+      expect(result).toBe('https://example.com/short');
+    });
+
+    test('handles invalid inputs gracefully', () => {
+      expect(rateLimiter.maskWebhookUrl(null)).toBe('[INVALID_URL]');
+      expect(rateLimiter.maskWebhookUrl(undefined)).toBe('[INVALID_URL]');
+      expect(rateLimiter.maskWebhookUrl(123)).toBe('[INVALID_URL]');
+      expect(rateLimiter.maskWebhookUrl('')).toBe('[INVALID_URL]');
+    });
+  });
+
   describe('sendToDiscord enhanced error handling', () => {
     const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
 
