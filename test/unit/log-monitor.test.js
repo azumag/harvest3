@@ -170,8 +170,18 @@ describe('DockerLogMonitor', () => {
             expect(errorType).toBe('ProcessExit');
         });
 
+        test('ERROR形式のエラーを正しく識別する', () => {
+            const error1 = 'ERROR Database connection failed';
+            const errorType1 = monitor.extractErrorType(error1);
+            expect(errorType1).toBe('Error');
+
+            const error2 = '[ERROR] Service initialization failed';
+            const errorType2 = monitor.extractErrorType(error2);
+            expect(errorType2).toBe('Error');
+        });
+
         test('不明なエラーはUnknownとして識別する', () => {
-            const error = 'Some unknown error message';
+            const error = 'Some unknown message';
             const errorType = monitor.extractErrorType(error);
             expect(errorType).toBe('Unknown');
         });
@@ -378,6 +388,27 @@ describe('DockerLogMonitor', () => {
             expect(createIssueSpy).toHaveBeenCalledWith(
                 'test-service',
                 'ERROR Database connection failed',
+                expect.any(String)
+            );
+            
+            createIssueSpy.mockRestore();
+            shouldCreateSpy.mockRestore();
+        });
+
+        test('[ERROR]形式のログも検出する', async () => {
+            const createIssueSpy = jest.spyOn(monitor, 'createGitHubIssue').mockResolvedValue('issue-url');
+            const shouldCreateSpy = jest.spyOn(monitor, 'shouldCreateIssue').mockReturnValue(true);
+            
+            await monitor.processLogLine('test-service', '[ERROR] Service initialization failed');
+            
+            expect(shouldCreateSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'test-service',
+                '[ERROR] Service initialization failed'
+            );
+            expect(createIssueSpy).toHaveBeenCalledWith(
+                'test-service',
+                '[ERROR] Service initialization failed',
                 expect.any(String)
             );
             

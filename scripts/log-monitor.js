@@ -19,7 +19,6 @@ class DockerLogMonitor {
                 /SyntaxError:/i,
                 /UnhandledPromiseRejectionWarning/i,
                 /Process exited with code [1-9]/i,
-                /\[ERROR\]/i,
                 /ERROR/i,
                 /FATAL/i,
                 /Uncaught/i
@@ -192,15 +191,14 @@ class DockerLogMonitor {
             { pattern: /EvalError/i, type: 'EvalError' },
             { pattern: /UnhandledPromiseRejectionWarning/i, type: 'UnhandledPromise' },
             { pattern: /Process exited with code/i, type: 'ProcessExit' },
-            { pattern: /\[ERROR\]/i, type: 'GenericError' },
+            { pattern: /ERROR/i, type: 'Error' },
             { pattern: /FATAL/i, type: 'Fatal' },
             { pattern: /Uncaught/i, type: 'Uncaught' },
             { pattern: /Connection\s+(failed|refused|timeout)/i, type: 'ConnectionError' },
             { pattern: /Database\s+error/i, type: 'DatabaseError' },
             { pattern: /Authentication\s+(failed|error)/i, type: 'AuthError' },
             { pattern: /Permission\s+denied/i, type: 'PermissionError' },
-            { pattern: /File\s+not\s+found/i, type: 'FileNotFound' },
-            { pattern: /Error:/i, type: 'Error' }
+            { pattern: /File\s+not\s+found/i, type: 'FileNotFound' }
         ];
 
         for (const { pattern, type } of patterns) {
