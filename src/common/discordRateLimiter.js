@@ -341,7 +341,7 @@ class DiscordRateLimiter {
       return { 
         success: false, 
         error: 'empty_after_sanitization',
-        details: { originalLength: message.length, sanitizedLength: 0 }
+        details: { originalLength: message.length, sanitizedLength: sanitizedMessage.length }
       };
     }
 

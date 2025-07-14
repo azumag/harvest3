@@ -571,7 +571,7 @@ describe('DiscordRateLimiter', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('empty_after_sanitization');
       expect(result.details.originalLength).toBe(3);
-      expect(result.details.sanitizedLength).toBe(0);
+      expect(result.details.sanitizedLength).toBe(2); // '\x01' and '\x02' become '??' after sanitization
     });
 
     test('includes webhook health check in 400 error details', async () => {
