@@ -259,13 +259,13 @@ class ErrorHandler extends UnifiedErrorHandler {
   }
 }
 
-// 旧インスタンスの互換性維持
-const errorHandler = new ErrorHandler();
+// 旧インスタンスの互換性維持（削除済み - 使用されていないため）
+// const errorHandler = new ErrorHandler();
 
 module.exports = {
   UnifiedErrorHandler,
   unifiedErrorHandler,
-  // 旧クラス・インスタンスの互換性維持（非推奨）
-  ErrorHandler,
-  errorHandler
+  // 旧クラスの互換性維持（非推奨）
+  ErrorHandler
+  // errorHandler インスタンスは削除済み（使用されていないため）
 };

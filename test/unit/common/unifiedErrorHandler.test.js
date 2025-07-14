@@ -335,29 +335,6 @@ describe('UnifiedErrorHandler', () => {
     });
   });
 
-  describe('backward compatibility', () => {
-    it('should export ErrorHandler for backward compatibility', () => {
-      const { ErrorHandler, errorHandler } = require('../../../src/common/errorHandler');
-      
-      expect(ErrorHandler).toBeDefined();
-      expect(errorHandler).toBeDefined();
-      expect(errorHandler).toBeInstanceOf(ErrorHandler);
-      expect(errorHandler).toBeInstanceOf(UnifiedErrorHandler);
-    });
-
-    it('should handle legacy handleError signature', async () => {
-      const { errorHandler } = require('../../../src/common/errorHandler');
-      rateLimiter.send.mockResolvedValue({ success: true });
-      
-      await errorHandler.handleError('Test error', 'legacy context', false);
-      
-      expect(rateLimiter.send).toHaveBeenCalledWith(
-        'https://discord.com/api/webhooks/test',
-        expect.stringContaining('legacy context'),
-        expect.any(Object)
-      );
-    });
-  });
 
   describe('edge cases', () => {
     it('should handle undefined error gracefully', async () => {

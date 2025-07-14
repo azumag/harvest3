@@ -3,7 +3,7 @@
  * SQLiteからRedisへの移行の一部として実装
  */
 const { client, getClient: getRedisClientInternal, initRedisClient } = require('./redisClient');
-const { errorHandler } = require('../common/errorHandler');
+const { unifiedErrorHandler } = require('../common/errorHandler');
 const {
   safeValidateTradeSummaryData,
   safeValidatePositionData,
@@ -582,7 +582,11 @@ async function getAllStrategyParametersRedis() {
     logger.info(`全ての戦略パラメータを取得しました (${Object.keys(allParams).length}件)`);
     return allParams;
   } catch (error) {
-    await errorHandler.handleError(error, '全ての戦略パラメータの読み出し', true);
+    await unifiedErrorHandler.handleError(error, {
+      context: '全ての戦略パラメータの読み出し',
+      severity: 'CRITICAL',
+      shouldThrow: true
+    });
   }
 }
 
@@ -623,7 +627,11 @@ async function getTradeKeys() {
 
     return JSON.stringify(exchanges);
   } catch (error) {
-    await errorHandler.handleError(error, '取引所情報の取得', true);
+    await unifiedErrorHandler.handleError(error, {
+      context: '取引所情報の取得',
+      severity: 'CRITICAL',
+      shouldThrow: true
+    });
   }
 }
 
