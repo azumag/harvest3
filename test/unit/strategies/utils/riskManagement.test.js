@@ -420,4 +420,75 @@ describe('リスク管理機能のテスト', () => {
       }).not.toThrow();
     });
   });
+
+  describe('fetchBalance error handling (Issue #735修正)', () => {
+    test('executeStopLoss内でwithBitbankErrorHandlingが使用される', async () => {
+      // withBitbankErrorHandlingが呼ばれることを確認するテスト
+      // 実際のリスク管理コードでwithBitbankErrorHandlingが使用されていることを確認
+      const riskManagementSource = require('fs').readFileSync(
+        require('path').join(__dirname, '../../../../src/strategies/utils/riskManagement.js'),
+        'utf8'
+      );
+
+      // withBitbankErrorHandlingのインポートを確認
+      expect(riskManagementSource).toContain('withBitbankErrorHandling');
+      
+      // withBitbankErrorHandling内でのfetchBalance呼び出しを確認
+      const withBitbankPattern = /withBitbankErrorHandling\s*\(\s*\(\)\s*=>\s*exchange\.fetchBalance\(\)/;
+      expect(riskManagementSource).toMatch(withBitbankPattern);
+    });
+
+    test('fetchBalance関数が直接呼ばれずにエラーハンドラー経由で呼ばれる', () => {
+      // リスク管理モジュール内でfetchBalanceが直接呼ばれないことを確認
+      const riskManagementSource = require('fs').readFileSync(
+        require('path').join(__dirname, '../../../../src/strategies/utils/riskManagement.js'),
+        'utf8'
+      );
+
+      // 各行を分析して直接呼び出しを確認
+      const lines = riskManagementSource.split('\n');
+      let directCallFound = false;
+      let wrappedCallFound = false;
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // withBitbankErrorHandling内のfetchBalance呼び出しをスキップ
+        if (trimmedLine.includes('() => exchange.fetchBalance()')) {
+          wrappedCallFound = true;
+          continue;
+        }
+        
+        // 直接のfetchBalance呼び出しをチェック（withBitbankErrorHandling内でない場合）
+        if (trimmedLine.match(/^[^\/]*exchange\.fetchBalance\(\)/) && !trimmedLine.includes('() =>')) {
+          directCallFound = true;
+          break;
+        }
+      }
+
+      // 直接呼び出しがないことを確認
+      expect(directCallFound).toBe(false);
+      
+      // エラーハンドラー経由の呼び出しが存在することを確認
+      expect(wrappedCallFound).toBe(true);
+    });
+
+    test('fetchBalanceエラー時の適切なエラーハンドリング', async () => {
+      // getCurrentBalanceがエラー時にフォールバック値を返すことを確認
+      const { getCurrentBalance } = require('../../../../src/strategies/utils/riskManagement');
+      
+      // 無効なexchangeオブジェクトを渡してエラーを発生させる
+      const invalidExchange = {
+        id: 'test',
+        fetchBalance: () => {
+          throw new Error('exchange.fetchBalance is not a function');
+        }
+      };
+
+      const result = await getCurrentBalance(invalidExchange);
+
+      // エラー時はフォールバック値(100000)が返されることを確認
+      expect(result).toBe(100000);
+    });
+  });
 });
