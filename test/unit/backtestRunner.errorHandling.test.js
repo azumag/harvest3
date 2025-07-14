@@ -1,5 +1,3 @@
-const { jest } = require('@jest/globals');
-
 describe('BacktestRunner Error Handling', () => {
   let originalConsoleError;
   let originalProcessExit;
