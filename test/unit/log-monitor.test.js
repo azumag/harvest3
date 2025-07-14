@@ -18,7 +18,7 @@ describe('DockerLogMonitor', () => {
         // テスト用の設定でモニターを初期化
         monitor = new DockerLogMonitor({
             services: ['test-service'],
-            errorPatterns: [/Error:/i, /Exception:/i],
+            errorPatterns: [/Error:/i, /Exception:/i, /ERROR/i],
             issueThrottleMs: 1000, // テスト用に短く設定
             issueHistoryFile: TEST_ISSUE_HISTORY_FILE,
             debug: false,
@@ -357,6 +357,27 @@ describe('DockerLogMonitor', () => {
             expect(createIssueSpy).toHaveBeenCalledWith(
                 'test-service',
                 'Error: Test error message',
+                expect.any(String)
+            );
+            
+            createIssueSpy.mockRestore();
+            shouldCreateSpy.mockRestore();
+        });
+
+        test('ERRORログを検出してIssue作成する', async () => {
+            const createIssueSpy = jest.spyOn(monitor, 'createGitHubIssue').mockResolvedValue('issue-url');
+            const shouldCreateSpy = jest.spyOn(monitor, 'shouldCreateIssue').mockReturnValue(true);
+            
+            await monitor.processLogLine('test-service', 'ERROR Database connection failed');
+            
+            expect(shouldCreateSpy).toHaveBeenCalledWith(
+                expect.any(String),
+                'test-service',
+                'ERROR Database connection failed'
+            );
+            expect(createIssueSpy).toHaveBeenCalledWith(
+                'test-service',
+                'ERROR Database connection failed',
                 expect.any(String)
             );
             

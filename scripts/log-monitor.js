@@ -20,6 +20,7 @@ class DockerLogMonitor {
                 /UnhandledPromiseRejectionWarning/i,
                 /Process exited with code [1-9]/i,
                 /\[ERROR\]/i,
+                /ERROR/i,
                 /FATAL/i,
                 /Uncaught/i
             ],
