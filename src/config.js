@@ -180,12 +180,51 @@ if (isTestEnvironment()) {
   };
   
   exchangeBB = {
+    id: 'bitbank',
     fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
     fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
     // Issue #880: loadMarketsメソッドの実装
     loadMarkets: () => {
       exchangeBB.markets = mockMarkets;
       return Promise.resolve(mockMarkets);
+    },
+    // Issue #946: fetchOHLCVメソッドの実装（モックデータを返す）
+    fetchOHLCV: (symbol, timeframe, since, limit) => {
+      // タイムフレームをミリ秒に変換
+      const timeframeMs = (() => {
+        const timeframeMap = {
+          '1m': 60 * 1000,
+          '5m': 5 * 60 * 1000,
+          '15m': 15 * 60 * 1000,
+          '30m': 30 * 60 * 1000,
+          '1h': 60 * 60 * 1000,
+          '4h': 4 * 60 * 60 * 1000,
+          '1d': 24 * 60 * 60 * 1000
+        };
+        return timeframeMap[timeframe] || 60 * 1000; // デフォルトは1分
+      })();
+      
+      // モックOHLCVデータを生成
+      const mockOHLCV = [];
+      const now = Date.now();
+      
+      // limitが指定されていない場合は100をデフォルトとする
+      const dataCount = limit || 100;
+      
+      for (let i = dataCount - 1; i >= 0; i--) {
+        const timestamp = now - (i * timeframeMs);
+        const basePrice = 5000000; // 5,000,000 JPY (BTC/JPY想定)
+        const variation = Math.random() * 100000; // 100,000 JPY の変動
+        const open = basePrice + variation;
+        const close = basePrice + (Math.random() * 100000);
+        const high = Math.max(open, close) + (Math.random() * 50000);
+        const low = Math.min(open, close) - (Math.random() * 50000);
+        const volume = Math.random() * 10;
+        
+        mockOHLCV.push([timestamp, open, high, low, close, volume]);
+      }
+      
+      return Promise.resolve(mockOHLCV);
     },
     markets: null,
     enableRateLimit: true,
