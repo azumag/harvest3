@@ -264,4 +264,66 @@ describe('StrategyExecutionManager', () => {
       consoleLogSpy.mockRestore();
     });
   });
+
+  describe('exchangeInstanceの渡し方', () => {
+    test('戦略関数に実際のexchangeInstance（fetchBalanceメソッド付き）が渡される', async () => {
+      // fetchBalanceメソッドを持つexchangeInstanceをモック
+      const mockExchangeInstance = {
+        id: 'bitbank',
+        fetchTicker: jest.fn(),
+        fetchOHLCV: jest.fn(),
+        fetchBalance: jest.fn().mockResolvedValue({
+          total: { JPY: 100000, BTC: 0.1 }
+        })
+      };
+
+      // supportedExchangeはfetchBalanceメソッドを持たない設定オブジェクト
+      const mockSupportedExchange = { id: 'bitbank' };
+
+      const strategyData = {
+        exchangeId: 'bitbank',
+        symbol: 'BTC/JPY',
+        strategyKey: 'BOLLINGER_BANDS',
+        strategy: {
+          ...mockConfig.strategies.BOLLINGER_BANDS,
+          function: jest.fn().mockResolvedValue({ success: true })
+        },
+        exchangeConfig: {
+          instance: mockExchangeInstance
+        },
+        marketParameters: { precision: 0 },
+        supportedExchange: mockSupportedExchange
+      };
+
+      // APIDataCacheのモック
+      jest.doMock('../../../src/common/apiDataCache', () => ({
+        globalAPIDataCache: {
+          queueRequest: jest.fn()
+            .mockResolvedValueOnce({ symbol: 'BTC/JPY', bid: 5000000, ask: 5001000 })
+            .mockResolvedValueOnce([[Date.now(), 5000000, 5010000, 4990000, 5005000, 1.5]]),
+          getStats: jest.fn().mockReturnValue({
+            hits: 1,
+            misses: 0,
+            requests: 2,
+            hitRate: '100%'
+          })
+        }
+      }));
+
+      await manager.executeStrategyWithCache(strategyData);
+
+      // 戦略関数が呼び出されることを確認
+      expect(strategyData.strategy.function).toHaveBeenCalled();
+
+      // 第1引数（exchange）が実際のexchangeInstanceであることを確認
+      const firstArgument = strategyData.strategy.function.mock.calls[0][0];
+      expect(firstArgument).toBe(mockExchangeInstance);
+      expect(firstArgument.fetchBalance).toBeDefined();
+      expect(typeof firstArgument.fetchBalance).toBe('function');
+
+      // supportedExchangeではないことを確認
+      expect(firstArgument).not.toBe(mockSupportedExchange);
+      expect(firstArgument.id).toBe('bitbank');
+    });
+  });
 });

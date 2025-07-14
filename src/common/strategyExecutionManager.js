@@ -155,7 +155,7 @@ class StrategyExecutionManager {
 
       // 戦略関数の実行（従来の引数形式を維持）
       const result = await strategy.function(
-        supportedExchange,
+        exchangeInstance,
         symbol,
         strategyKey,
         strategy,
