@@ -12,7 +12,6 @@ class DockerLogMonitor {
             services: config.services || ['bot', 'hft', 'backtest', 'web-ui'],
             // 例外パターン（正規表現）
             errorPatterns: config.errorPatterns || [
-                /Error:/i,
                 /Exception:/i,
                 /TypeError:/i,
                 /ReferenceError:/i,

@@ -18,7 +18,7 @@ describe('DockerLogMonitor', () => {
         // テスト用の設定でモニターを初期化
         monitor = new DockerLogMonitor({
             services: ['test-service'],
-            errorPatterns: [/Error:/i, /Exception:/i, /ERROR/i],
+            errorPatterns: [/Exception:/i, /ERROR/i],
             issueThrottleMs: 1000, // テスト用に短く設定
             issueHistoryFile: TEST_ISSUE_HISTORY_FILE,
             debug: false,
