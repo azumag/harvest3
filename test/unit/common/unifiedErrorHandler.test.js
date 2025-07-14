@@ -336,6 +336,37 @@ describe('UnifiedErrorHandler', () => {
   });
 
 
+  describe('backward compatibility', () => {
+    it('should maintain ErrorHandler class functionality', () => {
+      const { ErrorHandler } = require('../../../src/common/errorHandler');
+      const errorHandler = new ErrorHandler();
+      expect(errorHandler).toBeInstanceOf(require('../../../src/common/errorHandler').UnifiedErrorHandler);
+    });
+
+    it('should show deprecation warning for ErrorHandler', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const { ErrorHandler } = require('../../../src/common/errorHandler');
+      new ErrorHandler();
+      
+      expect(consoleSpy).toHaveBeenCalledWith('[DEPRECATED] ErrorHandler is deprecated. Use UnifiedErrorHandler instead.');
+      consoleSpy.mockRestore();
+    });
+
+    it('should maintain ErrorHandler.handleError backward compatibility', async () => {
+      const { ErrorHandler } = require('../../../src/common/errorHandler');
+      const errorHandler = new ErrorHandler();
+      rateLimiter.send.mockResolvedValue({ success: true });
+      
+      await errorHandler.handleError('Test error', 'test context', false);
+      
+      expect(rateLimiter.send).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/test',
+        expect.stringContaining('test context'),
+        expect.any(Object)
+      );
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle undefined error gracefully', async () => {
       await expect(handler.handleError(undefined, { shouldThrow: false }))

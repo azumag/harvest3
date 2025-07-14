@@ -54,8 +54,11 @@ async function fetchTotal(exchange, symbol) {
 
     return totalSell - totalBuy; // 総損益を返す
   } catch (error) {
-    console.error('損益の取得に失敗しました:', error);
-    postErrorToDiscord(`損益の取得に失敗しました ${error.message}`);
+    await unifiedErrorHandler.handleError(error, {
+      context: '損益の取得',
+      severity: 'WARNING',
+      shouldThrow: false
+    });
     return 0; // エラー時は0を返す
   }
 }
