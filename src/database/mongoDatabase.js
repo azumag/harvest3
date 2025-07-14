@@ -12,7 +12,7 @@ dotenv.config();
 const logger = new Logger('MongoDB');
 
 const mongoUrl = process.env.MONGO_URL;
-const mongoDbName = process.env.MONGO_DB_NAME;
+const mongoDbName = process.env.MONGODB_DB_NAME;
 
 // MongoDB接続オプションを追加 - 本番環境向けに最適化
 // レビュー対応: 非対応オプションを削除し、安定した接続設定に変更

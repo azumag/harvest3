@@ -13,7 +13,7 @@ const { createClient } = require('redis');
 
 // MongoDB設定
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://harvest3-mongodb:27017';
-const MONGO_DB_NAME = process.env.MONGO_DB_NAME || 'harvest3';
+const MONGO_DB_NAME = process.env.MONGODB_DB_NAME || 'harvest3';
 
 // Redis設定
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
