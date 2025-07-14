@@ -44,12 +44,82 @@ const STRATEGY_CONSTRAINTS = {
   'BOLLINGER_BANDS': {
     parameters: {
       period: { min: 10, max: 50, type: 'integer' },
-      standardDeviation: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
+      stdDev: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
     },
     constraints: [
       'period >= 10',
-      'standardDeviation >= 1.0',
-      'standardDeviation <= 3.0'
+      'stdDev >= 1.0',
+      'stdDev <= 3.0'
+    ]
+  },
+  'MEAN_REVERSION': {
+    parameters: {
+      period: { min: 10, max: 50, type: 'integer' },
+      deviationThreshold: { min: 1.0, max: 5.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 10',
+      'deviationThreshold >= 1.0',
+      'deviationThreshold <= 5.0'
+    ]
+  },
+  'OSCILLATOR': {
+    parameters: {
+      period: { min: 5, max: 30, type: 'integer' },
+      oversoldThreshold: { min: 10, max: 40, type: 'integer' },
+      overboughtThreshold: { min: 60, max: 90, type: 'integer' }
+    },
+    constraints: [
+      'overboughtThreshold > oversoldThreshold + 20',
+      'oversoldThreshold >= 10',
+      'overboughtThreshold <= 90'
+    ]
+  },
+  'MUTUAL_INFORMATION': {
+    parameters: {
+      period: { min: 10, max: 50, type: 'integer' },
+      threshold: { min: 0.1, max: 1.0, type: 'float', step: 0.05 },
+      correlationWindow: { min: 20, max: 100, type: 'integer' },
+      zScoreThreshold: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 10',
+      'threshold >= 0.1',
+      'threshold <= 1.0',
+      'correlationWindow >= period',
+      'zScoreThreshold >= 1.0'
+    ]
+  },
+  'MULTI_INDICATOR': {
+    parameters: {
+      macdFastPeriod: { min: 5, max: 30, type: 'integer' },
+      macdSlowPeriod: { min: 15, max: 100, type: 'integer' },
+      macdSignalPeriod: { min: 5, max: 30, type: 'integer' },
+      emaShortPeriod: { min: 3, max: 50, type: 'integer' },
+      emaLongPeriod: { min: 10, max: 200, type: 'integer' },
+      rsiPeriod: { min: 5, max: 30, type: 'integer' },
+      adxPeriod: { min: 10, max: 30, type: 'integer' },
+      volumeMAPeriod: { min: 5, max: 50, type: 'integer' }
+    },
+    constraints: [
+      'macdFastPeriod < macdSlowPeriod',
+      'macdSlowPeriod / macdFastPeriod >= 1.5',
+      'macdSignalPeriod >= 3',
+      'emaShortPeriod < emaLongPeriod',
+      'emaLongPeriod / emaShortPeriod >= 1.5',
+      'rsiPeriod >= 5',
+      'adxPeriod >= 10',
+      'volumeMAPeriod >= 5'
+    ]
+  },
+  'GENERIC': {
+    parameters: {
+      period: { min: 5, max: 100, type: 'integer' },
+      threshold: { min: 0.1, max: 5.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 5',
+      'threshold >= 0.1'
     ]
   }
 };
@@ -68,7 +138,42 @@ class ParameterConstraintEngine {
    * @returns {Object|null} 制約定義
    */
   getStrategyConstraints(strategyType) {
-    return this.constraints[strategyType] || null;
+    return this.constraints[strategyType] || this.constraints.GENERIC;
+  }
+
+  /**
+   * パラメータから汎用制約を自動生成
+   * @param {Object} params サンプルパラメータオブジェクト
+   * @returns {Object} 汎用制約定義
+   */
+  generateGenericConstraints(params) {
+    const parameters = {};
+    const constraints = [];
+
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'number' && !['ohlcvInterval', 'amount'].includes(key)) {
+        if (Number.isInteger(value)) {
+          parameters[key] = { 
+            min: Math.max(1, Math.floor(value * 0.1)), 
+            max: Math.ceil(value * 10), 
+            type: 'integer' 
+          };
+        } else {
+          parameters[key] = { 
+            min: Math.max(0.1, value * 0.1), 
+            max: value * 10, 
+            type: 'float', 
+            step: 0.1 
+          };
+        }
+        constraints.push(`${key} >= ${parameters[key].min}`);
+      }
+    }
+
+    return {
+      parameters,
+      constraints
+    };
   }
 
   /**
@@ -126,7 +231,9 @@ class ParameterConstraintEngine {
       // 安全な式評価を実行（eval()を使わない）
       return this.safeEvaluateExpression(expression);
     } catch (error) {
-      console.warn(`制約式評価エラー: ${constraint}`, error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`制約式評価エラー: ${constraint}`, error);
+      }
       return false;
     }
   }
@@ -137,10 +244,12 @@ class ParameterConstraintEngine {
    * @returns {boolean} 評価結果
    */
   safeEvaluateExpression(expression) {
-    // 許可される文字のみをチェック
-    const allowedChars = /^[\d\s+\-*\/().<>=!&|]+$/;
+    // より厳密な許可文字パターン（セキュリティ強化）
+    const allowedChars = /^[\d\s+\-*\/().<>=]+$/;
     if (!allowedChars.test(expression)) {
-      console.warn(`不正な文字が含まれています: ${expression}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`不正な文字が含まれています: ${expression}`);
+      }
       return false;
     }
 
@@ -172,7 +281,9 @@ class ParameterConstraintEngine {
       const result = this.evaluateMathExpression(expression);
       return Boolean(result);
     } catch (error) {
-      console.warn(`式評価エラー: ${expression}`, error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`式評価エラー: ${expression}`, error);
+      }
       return false;
     }
   }
@@ -223,7 +334,7 @@ class ParameterConstraintEngine {
   }
 
   /**
-   * 有効なパラメータ組み合わせを生成
+   * 有効なパラメータ組み合わせを生成（パフォーマンス最適化版）
    * @param {string} strategyType 戦略タイプ
    * @param {number} count 生成数
    * @returns {Array} 有効なパラメータ組み合わせ配列
@@ -236,9 +347,18 @@ class ParameterConstraintEngine {
 
     const combinations = [];
     let attempts = 0;
-    const maxAttempts = count * 20; // 十分な試行回数を確保
+    const maxAttempts = count * 15; // 試行回数を最適化
     let consecutiveFailures = 0;
-    const maxConsecutiveFailures = count * 2; // 連続失敗の上限
+    const maxConsecutiveFailures = Math.min(count, 50); // 連続失敗の上限を調整
+    
+    // 制約の複雑さを事前分析
+    const constraintComplexity = this.analyzeConstraintComplexity(constraint);
+    const shouldUseBatch = constraintComplexity > 0.7 && count > 10;
+
+    // 複雑な制約の場合はバッチ生成を使用
+    if (shouldUseBatch) {
+      return this.generateValidCombinationsBatch(strategyType, count, constraint);
+    }
 
     while (combinations.length < count && attempts < maxAttempts) {
       const candidate = this.generateCandidate(constraint.parameters);
@@ -249,7 +369,9 @@ class ParameterConstraintEngine {
         consecutiveFailures++;
         // 連続失敗が多い場合は早期終了
         if (consecutiveFailures > maxConsecutiveFailures) {
-          console.warn(`制約が厳しすぎて有効なパラメータが生成できません: ${strategyType}`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`制約が厳しすぎて有効なパラメータが生成できません: ${strategyType}`);
+          }
           break;
         }
       }
@@ -257,7 +379,62 @@ class ParameterConstraintEngine {
     }
 
     if (combinations.length === 0) {
-      console.warn(`有効なパラメータが1つも生成できませんでした: ${strategyType}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`有効なパラメータが1つも生成できませんでした: ${strategyType}`);
+      }
+    }
+
+    return combinations;
+  }
+
+  /**
+   * 制約の複雑さを分析
+   * @param {Object} constraint 制約定義
+   * @returns {number} 複雑さスコア (0-1)
+   */
+  analyzeConstraintComplexity(constraint) {
+    const constraintCount = constraint.constraints.length;
+    const paramCount = Object.keys(constraint.parameters).length;
+    
+    // 制約あたりのパラメータ数で複雑さを評価
+    const complexityScore = (constraintCount * 2) / (paramCount + 1);
+    return Math.min(1, complexityScore / 3);
+  }
+
+  /**
+   * バッチ生成による効率的なパラメータ生成
+   * @param {string} strategyType 戦略タイプ
+   * @param {number} count 生成数
+   * @param {Object} constraint 制約定義
+   * @returns {Array} 有効なパラメータ組み合わせ配列
+   */
+  generateValidCombinationsBatch(strategyType, count, constraint) {
+    const combinations = [];
+    const batchSize = Math.min(count * 3, 100); // バッチサイズを制限
+    let totalAttempts = 0;
+    const maxTotalAttempts = count * 10;
+
+    while (combinations.length < count && totalAttempts < maxTotalAttempts) {
+      // バッチで候補を生成
+      const candidates = Array.from({ length: batchSize }, () => 
+        this.generateCandidate(constraint.parameters)
+      );
+
+      // 並列でバリデーション
+      const validCandidates = candidates.filter(candidate => 
+        this.validateCombination(candidate, strategyType)
+      );
+
+      // 必要な数だけ追加
+      const neededCount = count - combinations.length;
+      combinations.push(...validCandidates.slice(0, neededCount));
+
+      totalAttempts += batchSize;
+
+      // 効率が悪い場合は早期終了
+      if (validCandidates.length === 0 && totalAttempts > count * 5) {
+        break;
+      }
     }
 
     return combinations;

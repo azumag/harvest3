@@ -403,19 +403,110 @@ describe('IntelligentParameterManager', () => {
     });
 
     test('BOLLINGER_BANDS戦略が検出される', () => {
-      const config = { period: 20, standardDeviation: 2.0 };
-      const numericKeys = ['period', 'standardDeviation'];
+      const config = { period: 20, stdDev: 2.0 };
+      const numericKeys = ['period', 'stdDev'];
       
       const strategyType = IntelligentParameterManager.detectStrategyType(config, numericKeys);
       expect(strategyType).toBe('BOLLINGER_BANDS');
     });
 
-    test('未知の戦略でnullが返される', () => {
+    test('MEAN_REVERSION戦略が検出される', () => {
+      const config = { period: 20, deviationThreshold: 3.0 };
+      const numericKeys = ['period', 'deviationThreshold'];
+      
+      const strategyType = IntelligentParameterManager.detectStrategyType(config, numericKeys);
+      expect(strategyType).toBe('MEAN_REVERSION');
+    });
+
+    test('MUTUAL_INFORMATION戦略が検出される', () => {
+      const config = { threshold: 0.5, correlationWindow: 30, zScoreThreshold: 2.0 };
+      const numericKeys = ['threshold', 'correlationWindow', 'zScoreThreshold'];
+      
+      const strategyType = IntelligentParameterManager.detectStrategyType(config, numericKeys);
+      expect(strategyType).toBe('MUTUAL_INFORMATION');
+    });
+
+    test('MULTI_INDICATOR戦略が検出される', () => {
+      const config = { macdFastPeriod: 12, emaShortPeriod: 5, rsiPeriod: 14 };
+      const numericKeys = ['macdFastPeriod', 'emaShortPeriod', 'rsiPeriod'];
+      
+      const strategyType = IntelligentParameterManager.detectStrategyType(config, numericKeys);
+      expect(strategyType).toBe('MULTI_INDICATOR');
+    });
+
+    test('未知の戦略でGENERICが返される', () => {
       const config = { unknownParam: 10 };
       const numericKeys = ['unknownParam'];
       
       const strategyType = IntelligentParameterManager.detectStrategyType(config, numericKeys);
-      expect(strategyType).toBeNull();
+      expect(strategyType).toBe('GENERIC');
+    });
+  });
+
+  describe('汎用制約の自動生成', () => {
+    test('GENERIC戦略で自動的に制約が生成される', () => {
+      const sampleConfig = { customPeriod: 20, customThreshold: 2.5 };
+      const numericKeys = ['customPeriod', 'customThreshold'];
+      const manager = new IntelligentParameterManager('GENERIC');
+      
+      const combinations = manager.generateIntelligentParameterCombinations({
+        count: 10,
+        method: 'constraint_aware',
+        sampleConfig
+      });
+      
+      expect(Array.isArray(combinations)).toBe(true);
+      expect(combinations.length).toBeGreaterThan(0);
+      
+      // 生成されたパラメータが期待する範囲内にあることを確認
+      combinations.forEach(combo => {
+        expect(combo.customPeriod).toBeDefined();
+        expect(combo.customThreshold).toBeDefined();
+        expect(typeof combo.customPeriod).toBe('number');
+        expect(typeof combo.customThreshold).toBe('number');
+      });
+    });
+
+    test('品質メトリクスが0.0%以上になる', () => {
+      const sampleConfig = { testParam: 15 };
+      const numericKeys = ['testParam'];
+      const manager = new IntelligentParameterManager('GENERIC');
+      
+      const combinations = manager.generateIntelligentParameterCombinations({
+        count: 5,
+        method: 'constraint_aware',
+        sampleConfig
+      });
+      
+      const report = manager.generateAnalysisReport(combinations);
+      
+      // 品質メトリクスが0.0%以上であることを確認
+      expect(report.quality.validity).toBeGreaterThan(0);
+      expect(report.quality.diversity).toBeGreaterThanOrEqual(0);
+      expect(report.quality.coverage).toBeGreaterThanOrEqual(0);
+    });
+
+    test('レガシーインターフェースでGENERIC戦略が動作する', () => {
+      const defaultConfig = { customParam1: 10, customParam2: 0.5 };
+      const numericKeys = ['customParam1', 'customParam2'];
+      const manager = new IntelligentParameterManager('GENERIC');
+      
+      const combinations = manager.generateParameterCombinations(
+        defaultConfig, 
+        numericKeys, 
+        0.2, 
+        3
+      );
+      
+      expect(Array.isArray(combinations)).toBe(true);
+      expect(combinations.length).toBeGreaterThan(0);
+      
+      combinations.forEach(combo => {
+        expect(combo.customParam1).toBeDefined();
+        expect(combo.customParam2).toBeDefined();
+        expect(typeof combo.customParam1).toBe('number');
+        expect(typeof combo.customParam2).toBe('number');
+      });
     });
   });
 });
@@ -441,13 +532,13 @@ describe('createIntelligentParameterManager', () => {
     expect(manager.strategyType).toBe('RSI');
   });
 
-  test('検出失敗時にnullが設定される', () => {
+  test('検出失敗時にGENERICが設定される', () => {
     const defaultConfig = { unknownParam: 10 };
     const numericKeys = ['unknownParam'];
     
     const manager = createIntelligentParameterManager(defaultConfig, numericKeys);
     
-    expect(manager.strategyType).toBeNull();
+    expect(manager.strategyType).toBe('GENERIC');
   });
 
   test('追加オプションが正しく渡される', () => {

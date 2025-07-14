@@ -27,9 +27,9 @@ describe('ParameterConstraintEngine', () => {
       expect(constraints.constraints).toContain('shortPeriod < longPeriod');
     });
 
-    test('存在しない戦略の制約取得でnullが返される', () => {
+    test('存在しない戦略の制約取得でGENERIC制約が返される', () => {
       const constraints = constraintEngine.getStrategyConstraints('UNKNOWN_STRATEGY');
-      expect(constraints).toBeNull();
+      expect(constraints).toEqual(constraintEngine.getStrategyConstraints('GENERIC'));
     });
 
     test('RSI戦略の制約が正しく定義されている', () => {
@@ -77,8 +77,8 @@ describe('ParameterConstraintEngine', () => {
       expect(isValid).toBe(false);
     });
 
-    test('存在しない戦略に対してtrueが返される', () => {
-      const params = { anyParam: 10 };
+    test('存在しない戦略に対してGENERIC制約で検証される', () => {
+      const params = { period: 10, threshold: 1.0 };
       const isValid = constraintEngine.validateCombination(params, 'UNKNOWN_STRATEGY');
       expect(isValid).toBe(true);
     });
@@ -130,9 +130,14 @@ describe('ParameterConstraintEngine', () => {
       });
     });
 
-    test('存在しない戦略で空配列が返される', () => {
+    test('存在しない戦略でGENERIC制約による組み合わせが生成される', () => {
       const combinations = constraintEngine.generateValidCombinations('UNKNOWN_STRATEGY', 10);
-      expect(combinations).toEqual([]);
+      expect(combinations.length).toBeGreaterThan(0);
+      expect(combinations.length).toBeLessThanOrEqual(10);
+      
+      combinations.forEach(combo => {
+        expect(constraintEngine.validateCombination(combo, 'UNKNOWN_STRATEGY')).toBe(true);
+      });
     });
   });
 

@@ -46,9 +46,15 @@ describe('SmartSamplingEngine', () => {
       });
     });
 
-    test('存在しない戦略で空配列が返される', () => {
+    test('存在しない戦略でGENERIC制約によるサンプルが生成される', () => {
       const samples = samplingEngine.latinHypercubeSampling('UNKNOWN_STRATEGY', 10);
-      expect(samples).toEqual([]);
+      expect(samples.length).toBeGreaterThan(0);
+      expect(samples.length).toBeLessThanOrEqual(10);
+      
+      samples.forEach(sample => {
+        expect(sample.period).toBeDefined();
+        expect(sample.threshold).toBeDefined();
+      });
     });
 
     test('パラメータなしの戦略で空配列が返される', () => {

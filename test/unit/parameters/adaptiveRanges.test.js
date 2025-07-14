@@ -141,11 +141,15 @@ describe('AdaptiveParameterManager', () => {
       }
     });
 
-    test('存在しない戦略で空オブジェクトが返される', () => {
+    test('存在しない戦略でGENERIC制約による範囲調整が行われる', () => {
       const manager = new AdaptiveParameterManager('UNKNOWN_STRATEGY', sampleHistoricalResults);
       const adjustedRanges = manager.adjustRangesBasedOnSensitivity();
       
-      expect(adjustedRanges).toEqual({});
+      expect(adjustedRanges).toBeDefined();
+      expect(typeof adjustedRanges).toBe('object');
+      // GENERIC制約には基本的なperiodとthresholdが含まれているはず
+      expect(adjustedRanges.period).toBeDefined();
+      expect(adjustedRanges.threshold).toBeDefined();
     });
   });
 
