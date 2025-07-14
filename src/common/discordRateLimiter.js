@@ -191,17 +191,21 @@ class DiscordRateLimiter {
       return String(message);
     }
 
-    // 制御文字を除去（改行、タブは保持）
-    let sanitized = message.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // まず\x01と\x02を"?"に置換
+    let sanitized = message.replace(/[\x01\x02]/g, '?');
+    
+    // その後、他の制御文字を完全削除（改行、タブは保持）
+    sanitized = sanitized.replace(/[\x00\x03-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    
+    // その他のサポートされていない文字を"?"に置換
+    // 保持する文字: 印刷可能ASCII (\x20-\x7E)、Unicode (\u00A0-\uFFFF)、改行(\n)、タブ(\t)
+    sanitized = sanitized.replace(/[^\x20-\x7E\u00A0-\uFFFF\n\t]/g, '?');
     
     // 連続する改行を制限（最大3個まで）
     sanitized = sanitized.replace(/\n{4,}/g, '\n\n\n');
     
     // 非表示文字やゼロ幅文字を除去
     sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
-    
-    // Discordが処理できない可能性のある特殊文字をエスケープ
-    sanitized = sanitized.replace(/[^\x20-\x7E\u00A0-\uFFFF\n\t]/g, '?');
     
     return sanitized.trim();
   }
@@ -250,8 +254,8 @@ class DiscordRateLimiter {
     // メッセージをサニタイズ
     const sanitizedMessage = this.sanitizeMessage(message);
     
-    // サニタイズ後に空になった場合の処理
-    if (sanitizedMessage.trim() === '') {
+    // サニタイズ後に空になった場合、または"?"のみになった場合の処理
+    if (sanitizedMessage.trim() === '' || /^[?]+$/.test(sanitizedMessage.trim())) {
       console.error('[DISCORD_RATE_LIMITER] Message became empty after sanitization');
       return { 
         success: false, 
@@ -394,9 +398,22 @@ class DiscordRateLimiter {
 // シングルトンインスタンス
 const instance = new DiscordRateLimiter();
 
-// 1時間ごとにクリーンアップ
-setInterval(() => {
-  instance.cleanup();
-}, 3600000);
+// クリーンアップ用のタイマーID（テスト環境では設定しない）
+let cleanupInterval = null;
+
+// テスト環境でない場合のみクリーンアップタイマーを設定
+if (process.env.NODE_ENV !== 'test' && typeof jest === 'undefined') {
+  cleanupInterval = setInterval(() => {
+    instance.cleanup();
+  }, 3600000);
+}
+
+// テスト用のクリーンアップメソッドを追加
+instance._clearCleanupInterval = () => {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+};
 
 module.exports = instance;

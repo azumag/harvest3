@@ -22,10 +22,19 @@ describe('DiscordRateLimiter', () => {
     rateLimiter = require('../../../src/common/discordRateLimiter');
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     // Clean up any remaining timers
     jest.clearAllTimers();
+    jest.useRealTimers();
     jest.restoreAllMocks();
+    
+    // Clear any cleanup intervals in the rate limiter
+    if (rateLimiter && rateLimiter._clearCleanupInterval) {
+      rateLimiter._clearCleanupInterval();
+    }
+    
+    // Force clear any remaining async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('validateMessage', () => {
