@@ -286,13 +286,53 @@ if (!isTestEnvironment()) {
 let exchangeBF;
 
 if (isTestEnvironment()) {
+  // Issue #874: bitflyer用モックマーケット情報の定義
+  const mockMarketsBF = {
+    'BTC/JPY': {
+      id: 'btc_jpy',
+      symbol: 'BTC/JPY',
+      base: 'BTC',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 8, price: 0 },
+      limits: {
+        amount: { min: 0.001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.001, max: 100000000 }
+      },
+      maker: 0.001,
+      taker: 0.001
+    },
+    'ETH/JPY': {
+      id: 'eth_jpy',
+      symbol: 'ETH/JPY',
+      base: 'ETH',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 8, price: 0 },
+      limits: {
+        amount: { min: 0.01, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.001, max: 100000000 }
+      },
+      maker: 0.001,
+      taker: 0.001
+    }
+  };
+
   // テスト環境またはDocker環境ではモックインスタンスを作成
   exchangeBF = {
     id: 'bitflyer',
     fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
     fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
+    // Issue #874: loadMarketsメソッドの実装
+    loadMarkets: () => {
+      exchangeBF.markets = mockMarketsBF;
+      return Promise.resolve(mockMarketsBF);
+    },
     // Issue #926: fetchOHLCVメソッドの実装（モックデータを返す）
     fetchOHLCV: generateMockOHLCV,
+    markets: null,
     enableRateLimit: true,
     rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT
   };

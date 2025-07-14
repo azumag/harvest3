@@ -149,4 +149,121 @@ describe('Mock Exchange BF (Bitflyer)', () => {
       expect(result.ask).toBeDefined();
     });
   });
+
+  describe('Mock loadMarkets Method (Issue #874)', () => {
+    beforeEach(() => {
+      // 各テストの前に markets プロパティを null にリセット
+      exchangeBF.markets = null;
+    });
+
+    it('should have loadMarkets method', () => {
+      expect(exchangeBF.loadMarkets).toBeDefined();
+      expect(typeof exchangeBF.loadMarkets).toBe('function');
+    });
+
+    it('should return market data', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      expect(markets).toBeDefined();
+      expect(typeof markets).toBe('object');
+      expect(Object.keys(markets).length).toBeGreaterThan(0);
+    });
+
+    it('should set markets property after loading', async () => {
+      // 初期状態では markets は null
+      expect(exchangeBF.markets).toBeNull();
+      
+      // loadMarkets 呼び出し後
+      const markets = await exchangeBF.loadMarkets();
+      
+      expect(exchangeBF.markets).toBeDefined();
+      expect(exchangeBF.markets).toEqual(markets);
+    });
+
+    it('should include BTC/JPY market', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      expect(markets['BTC/JPY']).toBeDefined();
+      
+      const btcJpyMarket = markets['BTC/JPY'];
+      expect(btcJpyMarket.id).toBe('btc_jpy');
+      expect(btcJpyMarket.symbol).toBe('BTC/JPY');
+      expect(btcJpyMarket.base).toBe('BTC');
+      expect(btcJpyMarket.quote).toBe('JPY');
+      expect(btcJpyMarket.active).toBe(true);
+    });
+
+    it('should include ETH/JPY market', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      expect(markets['ETH/JPY']).toBeDefined();
+      
+      const ethJpyMarket = markets['ETH/JPY'];
+      expect(ethJpyMarket.id).toBe('eth_jpy');
+      expect(ethJpyMarket.symbol).toBe('ETH/JPY');
+      expect(ethJpyMarket.base).toBe('ETH');
+      expect(ethJpyMarket.quote).toBe('JPY');
+      expect(ethJpyMarket.active).toBe(true);
+    });
+
+    it('should have correct precision settings', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      // BTC/JPY の精度設定確認
+      expect(markets['BTC/JPY'].precision).toBeDefined();
+      expect(markets['BTC/JPY'].precision.amount).toBe(8);
+      expect(markets['BTC/JPY'].precision.price).toBe(0);
+      
+      // ETH/JPY の精度設定確認
+      expect(markets['ETH/JPY'].precision).toBeDefined();
+      expect(markets['ETH/JPY'].precision.amount).toBe(8);
+      expect(markets['ETH/JPY'].precision.price).toBe(0);
+    });
+
+    it('should have correct fee settings', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      // 手数料情報の確認
+      expect(markets['BTC/JPY'].maker).toBe(0.001);
+      expect(markets['BTC/JPY'].taker).toBe(0.001);
+      expect(markets['ETH/JPY'].maker).toBe(0.001);
+      expect(markets['ETH/JPY'].taker).toBe(0.001);
+    });
+
+    it('should have valid limits', async () => {
+      const markets = await exchangeBF.loadMarkets();
+      
+      ['BTC/JPY', 'ETH/JPY'].forEach(symbol => {
+        const market = markets[symbol];
+        expect(market.limits).toBeDefined();
+        expect(market.limits.amount).toBeDefined();
+        expect(market.limits.price).toBeDefined();
+        expect(market.limits.cost).toBeDefined();
+        
+        // 最小値・最大値が正の値であることを確認
+        expect(market.limits.amount.min).toBeGreaterThan(0);
+        expect(market.limits.amount.max).toBeGreaterThan(0);
+        expect(market.limits.price.min).toBeGreaterThan(0);
+        expect(market.limits.price.max).toBeGreaterThan(0);
+      });
+    });
+
+    it('should work with existing code pattern', async () => {
+      // 既存のコードパターンをシミュレート（DatabaseManagerやredisDatabase.jsで使用）
+      if (!exchangeBF.markets) {
+        await exchangeBF.loadMarkets();
+      }
+      
+      expect(exchangeBF.markets).toBeDefined();
+      expect(exchangeBF.markets['BTC/JPY']).toBeDefined();
+    });
+
+    it('should handle multiple calls correctly', async () => {
+      const markets1 = await exchangeBF.loadMarkets();
+      const markets2 = await exchangeBF.loadMarkets();
+      
+      expect(markets1).toEqual(markets2);
+      expect(exchangeBF.markets).toEqual(markets1);
+    });
+  });
 });
