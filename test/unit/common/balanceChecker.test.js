@@ -538,3 +538,157 @@ describe('BalanceChecker Logger移行のテスト', () => {
     expect(prefixedLoggerCalls).toHaveLength(0);
   });
 });
+
+// Issue #970 ログ出力改善のテスト
+describe('Issue #970: ログ出力改善のテスト', () => {
+  let mockLogger;
+
+  beforeEach(() => {
+    // Logger のモック
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    
+    // Logger クラスのモック
+    const Logger = require('../../../src/hft/utils/Logger');
+    jest.spyOn(Logger.prototype, 'info').mockImplementation(mockLogger.info);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(mockLogger.error);
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(mockLogger.debug);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  it('残高不整合時に改善されたログ形式で出力される', async () => {
+    // 不整合のある残高を設定
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.5, ETH: 10.0, ADA: 0.0016 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.5, // 一致
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',  
+        side: 'buy',
+        amount: 8.0, // 不整合: 取引所10.0 vs BOT8.0
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        side: 'buy',
+        amount: 0, // 不整合: 取引所0.0016 vs BOT0
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 改善されたログ形式が使用されていることを確認
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出: bitbank (2件の不整合)')
+    );
+
+    // 各不整合が個別に詳細ログ出力されていることを確認
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[1\] ETH: 取引所=10, Bot=8, 差異=2 \(25%\)/)
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[2\] ADA: 取引所=0\.0016, Bot=0, 差異=0\.0016 \(100%\)/)
+    );
+
+    // デバッグ用JSONログも出力されていることを確認（debug levelなのでここでは呼ばれないかもしれない）
+    // 実際の環境ではLOG_LEVELによって決まる
+  });
+
+  it('JSON.stringify エラー時の安全な処理', async () => {
+    // 循環参照でJSON.stringify が失敗するオブジェクトを模擬
+    const problematicDiscrepancies = [
+      {
+        currency: 'BTC',
+        exchangeAmount: 1.0,
+        botAmount: 0.5,
+        difference: 0.5,
+        discrepancyPercent: 50
+      }
+    ];
+    
+    // JSON.stringify を一時的にモック
+    const originalStringify = JSON.stringify;
+    jest.spyOn(JSON, 'stringify').mockImplementation(() => {
+      throw new Error('Converting circular structure to JSON');
+    });
+
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 0.5,
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // JSON化エラーが適切にハンドリングされていることを確認
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('残高データのJSON化に失敗 (bitbank):')
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('不整合オブジェクトの構造情報: 件数=1, type=object')
+    );
+
+    // JSON.stringify を元に戻す
+    JSON.stringify = originalStringify;
+  });
+
+  it('残高一致時は改善されたログ形式で正常メッセージが出力される', async () => {
+    // 一致する残高を設定
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.5, ETH: 10.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.5,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 10.0,
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 正常時のログメッセージを確認
+    expect(mockLogger.info).toHaveBeenCalledWith('残高チェック正常: bitbank');
+    
+    // エラーログは出力されていないことを確認
+    expect(mockLogger.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出')
+    );
+  });
+});
