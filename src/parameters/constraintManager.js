@@ -44,12 +44,82 @@ const STRATEGY_CONSTRAINTS = {
   'BOLLINGER_BANDS': {
     parameters: {
       period: { min: 10, max: 50, type: 'integer' },
-      standardDeviation: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
+      stdDev: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
     },
     constraints: [
       'period >= 10',
-      'standardDeviation >= 1.0',
-      'standardDeviation <= 3.0'
+      'stdDev >= 1.0',
+      'stdDev <= 3.0'
+    ]
+  },
+  'MEAN_REVERSION': {
+    parameters: {
+      period: { min: 10, max: 50, type: 'integer' },
+      deviationThreshold: { min: 1.0, max: 5.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 10',
+      'deviationThreshold >= 1.0',
+      'deviationThreshold <= 5.0'
+    ]
+  },
+  'OSCILLATOR': {
+    parameters: {
+      period: { min: 5, max: 30, type: 'integer' },
+      oversoldThreshold: { min: 10, max: 40, type: 'integer' },
+      overboughtThreshold: { min: 60, max: 90, type: 'integer' }
+    },
+    constraints: [
+      'overboughtThreshold > oversoldThreshold + 20',
+      'oversoldThreshold >= 10',
+      'overboughtThreshold <= 90'
+    ]
+  },
+  'MUTUAL_INFORMATION': {
+    parameters: {
+      period: { min: 10, max: 50, type: 'integer' },
+      threshold: { min: 0.1, max: 1.0, type: 'float', step: 0.05 },
+      correlationWindow: { min: 20, max: 100, type: 'integer' },
+      zScoreThreshold: { min: 1.0, max: 3.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 10',
+      'threshold >= 0.1',
+      'threshold <= 1.0',
+      'correlationWindow >= period',
+      'zScoreThreshold >= 1.0'
+    ]
+  },
+  'MULTI_INDICATOR': {
+    parameters: {
+      macdFastPeriod: { min: 5, max: 30, type: 'integer' },
+      macdSlowPeriod: { min: 15, max: 100, type: 'integer' },
+      macdSignalPeriod: { min: 5, max: 30, type: 'integer' },
+      emaShortPeriod: { min: 3, max: 50, type: 'integer' },
+      emaLongPeriod: { min: 10, max: 200, type: 'integer' },
+      rsiPeriod: { min: 5, max: 30, type: 'integer' },
+      adxPeriod: { min: 10, max: 30, type: 'integer' },
+      volumeMAPeriod: { min: 5, max: 50, type: 'integer' }
+    },
+    constraints: [
+      'macdFastPeriod < macdSlowPeriod',
+      'macdSlowPeriod / macdFastPeriod >= 1.5',
+      'macdSignalPeriod >= 3',
+      'emaShortPeriod < emaLongPeriod',
+      'emaLongPeriod / emaShortPeriod >= 1.5',
+      'rsiPeriod >= 5',
+      'adxPeriod >= 10',
+      'volumeMAPeriod >= 5'
+    ]
+  },
+  'GENERIC': {
+    parameters: {
+      period: { min: 5, max: 100, type: 'integer' },
+      threshold: { min: 0.1, max: 5.0, type: 'float', step: 0.1 }
+    },
+    constraints: [
+      'period >= 5',
+      'threshold >= 0.1'
     ]
   }
 };
@@ -68,7 +138,42 @@ class ParameterConstraintEngine {
    * @returns {Object|null} 制約定義
    */
   getStrategyConstraints(strategyType) {
-    return this.constraints[strategyType] || null;
+    return this.constraints[strategyType] || this.constraints.GENERIC;
+  }
+
+  /**
+   * パラメータから汎用制約を自動生成
+   * @param {Object} params サンプルパラメータオブジェクト
+   * @returns {Object} 汎用制約定義
+   */
+  generateGenericConstraints(params) {
+    const parameters = {};
+    const constraints = [];
+
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'number' && !['ohlcvInterval', 'amount'].includes(key)) {
+        if (Number.isInteger(value)) {
+          parameters[key] = { 
+            min: Math.max(1, Math.floor(value * 0.1)), 
+            max: Math.ceil(value * 10), 
+            type: 'integer' 
+          };
+        } else {
+          parameters[key] = { 
+            min: Math.max(0.1, value * 0.1), 
+            max: value * 10, 
+            type: 'float', 
+            step: 0.1 
+          };
+        }
+        constraints.push(`${key} >= ${parameters[key].min}`);
+      }
+    }
+
+    return {
+      parameters,
+      constraints
+    };
   }
 
   /**

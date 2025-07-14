@@ -35,10 +35,23 @@ class IntelligentParameterManager {
       count = 50,
       method = 'hybrid',
       useAdaptive = true,
-      qualityThreshold = 0.7
+      qualityThreshold = 0.3  // 品質閾値を緩和
     } = { ...this.options, ...options };
 
     let combinations = [];
+
+    // 戦略タイプが認識できない場合は制約を自動生成
+    if (this.strategyType === 'GENERIC' && options.sampleConfig) {
+      const numericKeys = Object.keys(options.sampleConfig).filter(key => 
+        typeof options.sampleConfig[key] === 'number'
+      );
+      const generatedConstraints = this.constraintEngine.generateGenericConstraints(
+        options.sampleConfig
+      );
+      
+      // 一時的に制約を追加
+      this.constraintEngine.constraints.GENERIC = generatedConstraints;
+    }
 
     switch (method) {
       case 'constraint_aware':
@@ -89,9 +102,13 @@ class IntelligentParameterManager {
         break;
     }
 
-    // 品質フィルタリング
+    // 品質フィルタリング（低品質閾値でも最低限の品質を保証）
     if (qualityThreshold > 0) {
-      combinations = this.filterByQuality(combinations, qualityThreshold);
+      const filtered = this.filterByQuality(combinations, qualityThreshold);
+      // フィルタリング後も最低5つ以上のパラメータを保持
+      if (filtered.length >= 5) {
+        combinations = filtered;
+      }
     }
 
     return combinations;
@@ -112,7 +129,8 @@ class IntelligentParameterManager {
     
     const combinations = this.generateIntelligentParameterCombinations({
       count: intelligentCount,
-      method: 'constraint_aware'
+      method: 'constraint_aware',
+      sampleConfig: defaultConfig  // サンプル設定を渡す
     });
 
     // レガシー形式に変換（デフォルト設定をベースに調整）
@@ -142,7 +160,8 @@ class IntelligentParameterManager {
     // インテリジェントなランダム生成を使用
     const combinations = this.generateIntelligentParameterCombinations({
       count,
-      method: 'adaptive'
+      method: 'adaptive',
+      sampleConfig: defaultConfig  // サンプル設定を渡す
     });
 
     // レガシー形式に変換
@@ -278,29 +297,49 @@ class IntelligentParameterManager {
    * 戦略タイプを自動検出
    * @param {Object} config 設定オブジェクト
    * @param {Array} numericKeys 数値キー配列
-   * @returns {string|null} 検出された戦略タイプ
+   * @returns {string} 検出された戦略タイプ
    */
   static detectStrategyType(config, numericKeys) {
     // パラメータパターンから戦略を推定
     const keySet = new Set(numericKeys);
 
+    // MA Cross戦略の検出
     if (keySet.has('shortPeriod') && keySet.has('longPeriod')) {
       return 'MA_CROSS';
     }
 
+    // MACD戦略の検出
     if (keySet.has('fastPeriod') && keySet.has('slowPeriod') && keySet.has('signalPeriod')) {
       return 'MACD';
     }
 
+    // RSI戦略の検出
     if (keySet.has('period') && keySet.has('oversoldThreshold') && keySet.has('overboughtThreshold')) {
       return 'RSI';
     }
 
-    if (keySet.has('period') && keySet.has('standardDeviation')) {
+    // ボリンジャーバンド戦略の検出（修正済み）
+    if (keySet.has('period') && keySet.has('stdDev')) {
       return 'BOLLINGER_BANDS';
     }
 
-    return null;
+    // 平均回帰戦略の検出
+    if (keySet.has('period') && keySet.has('deviationThreshold')) {
+      return 'MEAN_REVERSION';
+    }
+
+    // 相互情報量戦略の検出
+    if (keySet.has('threshold') && keySet.has('correlationWindow') && keySet.has('zScoreThreshold')) {
+      return 'MUTUAL_INFORMATION';
+    }
+
+    // マルチ指標戦略の検出
+    if (keySet.has('macdFastPeriod') && keySet.has('emaShortPeriod') && keySet.has('rsiPeriod')) {
+      return 'MULTI_INDICATOR';
+    }
+
+    // フォールバック: 汎用戦略として扱う
+    return 'GENERIC';
   }
 }
 
