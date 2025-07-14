@@ -148,7 +148,21 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     if (discrepancies.length > 0) {
       const message = createDiscrepancyMessage(exchangeId, discrepancies);
       await postOrderToDiscord(message);
-      logger.error(`残高不整合検出: ${exchangeId}`, discrepancies);
+      
+      // 不整合の詳細をログに出力
+      logger.error(`残高不整合検出: ${exchangeId} (${discrepancies.length}件の不整合)`);
+      discrepancies.forEach((disc, index) => {
+        logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+      });
+      
+      // デバッグ用の詳細データ（JSONとして安全に出力）
+      try {
+        const discrepanciesJson = JSON.stringify(discrepancies, null, 2);
+        logger.debug(`残高不整合詳細データ (${exchangeId}):`, discrepanciesJson);
+      } catch (jsonError) {
+        logger.error(`残高データのJSON化に失敗 (${exchangeId}):`, jsonError.message);
+        logger.error(`不整合オブジェクトの構造情報: 件数=${discrepancies.length}, type=${typeof discrepancies}`);
+      }
     } else {
       logger.info(`残高チェック正常: ${exchangeId}`);
     }
@@ -459,7 +473,23 @@ async function compareBalancesRobust(exchangeId) {
     if (shouldNotify && hasAnyIssues) {
       const message = createDetailedDiscrepancyMessage(comparison);
       await postOrderToDiscord(message);
-      logger.error(`Discrepancies detected for ${exchangeId}:`, comparison);
+      // 堅牢チェックでの不整合詳細をログ出力
+      logger.error(`Discrepancies detected for ${exchangeId}: ${comparison.discrepancies.length} discrepancies, ${comparison.internalInconsistencies.length} internal inconsistencies`);
+      
+      // 不整合の詳細を読みやすい形式で出力
+      if (comparison.discrepancies.length > 0) {
+        logger.error(`Exchange vs BOT discrepancies for ${exchangeId}:`);
+        comparison.discrepancies.forEach((disc, index) => {
+          logger.error(`  [${index + 1}] ${disc.currency}: Exchange=${disc.exchange}, MongoDB=${disc.mongodb}, Redis=${disc.redisSummary}, Positions=${disc.redisPositions}`);
+        });
+      }
+      
+      if (comparison.internalInconsistencies.length > 0) {
+        logger.error(`Internal inconsistencies for ${exchangeId}:`);
+        comparison.internalInconsistencies.forEach((inc, index) => {
+          logger.error(`  [${index + 1}] ${inc.currency}: ${inc.type} - difference=${inc.difference}`);
+        });
+      }
     } else if (shouldNotify && !hasAnyIssues) {
       const message = `✅ **残高整合性回復**\n取引所: ${exchangeId}\n時刻: ${new Date().toLocaleString('ja-JP')}`;
       await postOrderToDiscord(message);
