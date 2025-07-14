@@ -36,8 +36,12 @@ function validateApiCredentials() {
   }
 }
 
-// 認証情報の検証を実行（テスト環境ではスキップ）
-if (process.env.NODE_ENV !== 'test') {
+// 認証情報の検証を実行（テスト環境またはDocker環境でAPI認証情報がない場合はスキップ）
+const isTestEnvironment = process.env.NODE_ENV === 'test' || 
+                          (process.env.DOCKER_ENV === 'true') ||
+                          (!BBApiKey && !BBApiSecret && process.env.CI !== 'true');
+
+if (!isTestEnvironment) {
   validateApiCredentials();
 }
 
@@ -45,9 +49,9 @@ if (process.env.NODE_ENV !== 'test') {
 // Issue #725: より詳細な初期化ログを追加
 let exchangeBB;
 
-if (process.env.NODE_ENV === 'test') {
-  // テスト環境ではモックインスタンスを作成
-  console.log('[Issue #725] テスト環境用のモックCCXTインスタンスを初期化中...');
+if (isTestEnvironment) {
+  // テスト環境またはDocker環境ではモックインスタンスを作成
+  console.log('[Issue #725] テスト/Docker環境用のモックCCXTインスタンスを初期化中...');
   exchangeBB = {
     fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
     fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
@@ -61,7 +65,7 @@ if (process.env.NODE_ENV === 'test') {
       'adjustForTimeDifference': true
     }
   };
-  console.log('[Issue #725] テスト環境用モックインスタンスの初期化が完了しました');
+  console.log('[Issue #725] テスト/Docker環境用モックインスタンスの初期化が完了しました');
 } else {
   console.log('[Issue #725] CCXTインスタンスを初期化中...');
   exchangeBB = new ccxt.bitbank({
@@ -98,7 +102,7 @@ console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rat
 console.log(`[Throttle Queue] maxSize: ${exchangeBB.options.maxThrottleQueueSize}, CCXT内部制限: 1000`);
 
 // Issue #440 & #443: throttleMonitorとAPIコーディネーターの双方向連携設定（本番環境のみ）
-if (process.env.NODE_ENV !== 'test') {
+if (!isTestEnvironment) {
   throttleMonitor.setAPICoordinator(apiCoordinator);
   apiCoordinator.setThrottleMonitor(throttleMonitor);
   console.log('[Issue #440] throttleMonitorとAPIコーディネーターの双方向連携を設定');
@@ -106,8 +110,8 @@ if (process.env.NODE_ENV !== 'test') {
 
 let exchangeBF;
 
-if (process.env.NODE_ENV === 'test') {
-  // テスト環境ではモックインスタンスを作成
+if (isTestEnvironment) {
+  // テスト環境またはDocker環境ではモックインスタンスを作成
   exchangeBF = {
     fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
     fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
