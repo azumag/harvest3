@@ -502,7 +502,7 @@ async function executeRiskManagementCheck() {
         const currentPrice = ticker.last;
 
         // ストップロス条件をチェック
-        const stopLossResult = await checkStopLoss(position, currentPrice);
+        const stopLossResult = await checkStopLoss(exchangeInstance, position.symbol, position.strategyKey, currentPrice);
 
         if (stopLossResult.shouldStop) {
           logger.info(`[リスク管理] ストップロス発動: ${position.symbol} @ ${position.exchangeId}`);
@@ -511,7 +511,14 @@ async function executeRiskManagementCheck() {
           logger.info(`  損失: ${stopLossResult.lossAmount} JPY (${stopLossResult.lossPercentage.toFixed(2)}%)`);
 
           try {
-            await executeStopLoss(position, exchangeInstance, currentPrice);
+            // マーケットパラメータを取得
+            const marketParameters = await getMarketParametersByExchangeSymbol(
+              { [position.exchangeId]: [position.symbol] }, 
+              config
+            );
+            const marketParams = marketParameters[position.exchangeId][position.symbol];
+            
+            await executeStopLoss(exchangeInstance, position.symbol, position.strategyKey, position, marketParams);
             stoppedCount++;
             logger.info(`[リスク管理] ストップロス実行完了: ${position.symbol}`);
           } catch (stopLossError) {
@@ -522,13 +529,20 @@ async function executeRiskManagementCheck() {
         }
 
         // ポジション制限チェック
-        const positionLimitResult = await checkPositionLimits(position);
+        const positionLimitResult = await checkPositionLimits(exchangeInstance, position.symbol, position.strategyKey);
         if (positionLimitResult.shouldClose) {
           logger.info(`[リスク管理] ポジション制限超過: ${position.symbol} @ ${position.exchangeId}`);
           logger.info(`  理由: ${positionLimitResult.reason}`);
 
           try {
-            await executeStopLoss(position, exchangeInstance, currentPrice);
+            // マーケットパラメータを取得
+            const marketParameters = await getMarketParametersByExchangeSymbol(
+              { [position.exchangeId]: [position.symbol] }, 
+              config
+            );
+            const marketParams = marketParameters[position.exchangeId][position.symbol];
+            
+            await executeStopLoss(exchangeInstance, position.symbol, position.strategyKey, position, marketParams);
             stoppedCount++;
             logger.info(`[リスク管理] ポジション制限クローズ完了: ${position.symbol}`);
           } catch (limitCloseError) {
@@ -539,16 +553,23 @@ async function executeRiskManagementCheck() {
         }
 
         // ドローダウンチェック
-        const drawdownResult = await checkDrawdown(validPositions);
-        if (drawdownResult.shouldReducePositions) {
-          logger.warn(`[リスク管理] ドローダウン警告: 総ドローダウン ${drawdownResult.totalDrawdownPercentage.toFixed(2)}%`);
-
-          // 最も損失の大きなポジションを優先的にクローズ
-          if (drawdownResult.positionsToClose.includes(position.key)) {
+        try {
+          const drawdownResult = await checkDrawdown(exchangeInstance, position.strategyKey);
+          if (drawdownResult.daily.exceeded || drawdownResult.weekly.exceeded || drawdownResult.monthly.exceeded) {
+            logger.warn(`[リスク管理] ドローダウン警告: 日次=${drawdownResult.daily.loss.toFixed(2)}% 週次=${drawdownResult.weekly.loss.toFixed(2)}% 月次=${drawdownResult.monthly.loss.toFixed(2)}%`);
+            
+            // 制限を超えている場合、このポジションをクローズ
             logger.info(`[リスク管理] ドローダウン制御: ${position.symbol} をクローズ`);
 
             try {
-              await executeStopLoss(position, exchangeInstance, currentPrice);
+              // マーケットパラメータを取得
+              const marketParameters = await getMarketParametersByExchangeSymbol(
+                { [position.exchangeId]: [position.symbol] }, 
+                config
+              );
+              const marketParams = marketParameters[position.exchangeId][position.symbol];
+              
+              await executeStopLoss(exchangeInstance, position.symbol, position.strategyKey, position, marketParams);
               stoppedCount++;
               logger.info(`[リスク管理] ドローダウン制御完了: ${position.symbol}`);
             } catch (drawdownCloseError) {
@@ -556,6 +577,8 @@ async function executeRiskManagementCheck() {
               errorCount++;
             }
           }
+        } catch (drawdownCheckError) {
+          logger.warn(`[リスク管理] ドローダウンチェックエラー: ${drawdownCheckError.message}`);
         }
 
       } catch (error) {
