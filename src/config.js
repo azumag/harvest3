@@ -48,8 +48,9 @@ function isTestEnvironment() {
     return true;
   }
   
-  // API認証情報が未設定かつCI環境でない場合はテスト環境扱い
-  if (!BBApiKey && !BBApiSecret && process.env.CI !== 'true') {
+  // API認証情報が未設定の場合はテスト環境扱い (CI環境でも同様)
+  // Issue #824: CI環境でAPI認証情報が未設定の場合もテスト環境として扱う
+  if (!BBApiKey && !BBApiSecret) {
     return true;
   }
   
@@ -910,5 +911,7 @@ module.exports = {
   getBalanceCheckerConfig,
   getCollectorConfig,
   WS_CONFIG,
-  STRATEGY_PARAMS
+  STRATEGY_PARAMS,
+  // Issue #824: テスト用に関数をエクスポート
+  isTestEnvironment
 };
