@@ -404,8 +404,11 @@ async function startBot() {
       logger.info('\n[システム] イベント駆動型ボット起動完了 - while(true)ループを排除');
       logger.info('[システム] プロセスは継続実行中... (Ctrl+C で停止)');
 
-      // プロセスの継続（以前の while(true) を置き換え）
-      await new Promise(() => {}); // 無限待機（イベント駆動）
+      // プロセスの継続（以前の while(true) を置き換え） - メモリリーク修正
+      await new Promise(resolve => {
+        process.on('SIGTERM', resolve);
+        process.on('SIGINT', resolve);
+      });
 
     } catch (error) {
       const errorMessage = `ボット起動エラー (試行 ${attempt}/${MAX_STARTUP_RETRIES}): ${error.message}`;

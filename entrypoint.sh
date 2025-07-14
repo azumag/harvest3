@@ -41,8 +41,8 @@ send_startup_error_to_discord() {
 
     # Node.js経由でDiscord通知送信
     if command -v node >/dev/null 2>&1; then
-        # 一時的なDiscord通知スクリプトを作成
-        local temp_script="/tmp/discord_notify_$$.js"
+        # 一時的なDiscord通知スクリプトを作成（セキュア）
+        local temp_script=$(mktemp /tmp/discord_notify_XXXXXX.js)
         cat > "$temp_script" << 'EOF'
 const fs = require('fs');
 
@@ -70,8 +70,8 @@ async function sendDiscordNotification() {
             return false;
         }
         
-        const message = { content: process.argv[2] };
-        const timeout = parseInt(process.argv[3]) * 1000 || 10000;
+        const message = { content: process.env.DISCORD_MESSAGE };
+        const timeout = parseInt(process.env.DISCORD_TIMEOUT) * 1000 || 10000;
         
         await axios.post(webhookUrl, message, { timeout });
         console.log('Discord notification sent successfully');
@@ -87,8 +87,8 @@ sendDiscordNotification().then(success => {
 });
 EOF
         
-        # Discord通知実行
-        if node "$temp_script" "$discord_message" "$DISCORD_NOTIFICATION_TIMEOUT" 2>/dev/null; then
+        # Discord通知実行（環境変数経由でセキュア）
+        if DISCORD_MESSAGE="$discord_message" DISCORD_TIMEOUT="$DISCORD_NOTIFICATION_TIMEOUT" node "$temp_script" 2>/dev/null; then
             log "Discord notification sent successfully"
         else
             log "WARNING: Discord notification failed (non-critical)"
@@ -571,12 +571,13 @@ run_diagnostics() {
         log "  package.json: ✗ Not found"
     fi
     
-    # 環境変数チェック
+    # 環境変数チェック（機密情報マスキング）
     log "Environment Variables:"
-    log "  REDIS_URL: ${REDIS_URL:-'Not set'}"
-    log "  MONGO_URL: ${MONGO_URL:-'Not set'}"
+    log "  REDIS_URL: ${REDIS_URL:+***MASKED***}"
+    log "  MONGO_URL: ${MONGO_URL:+***MASKED***}"
     log "  MONGODB_DB_NAME: ${MONGODB_DB_NAME:-'Not set'}"
     log "  NODE_ENV: ${NODE_ENV:-'Not set'}"
+    log "  DISCORD_ERROR_WEBHOOK_URL: ${DISCORD_ERROR_WEBHOOK_URL:+***MASKED***}"
     
     # ファイルシステム権限
     log "File System Permissions:"

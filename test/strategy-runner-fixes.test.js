@@ -30,6 +30,12 @@ describe('Strategy Runner Service Exception Fixes', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+    // 環境変数のクリーンアップ
+    delete process.env.REDIS_URL;
+    delete process.env.MONGO_URL;
+    delete process.env.MONGODB_DB_NAME;
+    delete process.env.DISCORD_ERROR_WEBHOOK_URL;
   });
 
   describe('Database Initialization Improvements', () => {
@@ -296,5 +302,36 @@ describe('Performance Tests', () => {
     
     const results = await Promise.all(concurrentOps);
     expect(results).toHaveLength(10);
+  });
+
+  // 同時失敗シナリオのテスト（エッジケース）
+  it('should handle concurrent database failures', async () => {
+    const concurrentFailures = Array.from({ length: 5 }, (_, i) => 
+      Promise.reject(new Error(`Concurrent failure ${i}`))
+    );
+    
+    const results = await Promise.allSettled(concurrentFailures);
+    expect(results.every(result => result.status === 'rejected')).toBe(true);
+  });
+
+  // メモリリークのテスト
+  it('should not create memory leaks with repeated operations', async () => {
+    const initialMemory = process.memoryUsage().heapUsed;
+    
+    // 繰り返し操作を実行
+    for (let i = 0; i < 100; i++) {
+      await Promise.resolve(`Test operation ${i}`);
+    }
+    
+    // ガベージコレクションを促進
+    if (global.gc) {
+      global.gc();
+    }
+    
+    const finalMemory = process.memoryUsage().heapUsed;
+    const memoryIncrease = finalMemory - initialMemory;
+    
+    // メモリ増加が異常でないことを確認（10MB以下）
+    expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
   });
 });

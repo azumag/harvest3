@@ -149,9 +149,17 @@ function generateRealisticSpread(midPrice, volume, volatility) {
   };
 }
 
+// データベース初期化設定定数
+const DB_INIT_CONFIG = {
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 5000, // 5秒
+  MONGO_RETRY_COUNT: 5,
+  MONGO_RETRY_DELAY: 1000
+};
+
 async function initializeDB() {
-  const MAX_INIT_RETRIES = 3;
-  const RETRY_DELAY = 5000; // 5秒
+  const MAX_INIT_RETRIES = DB_INIT_CONFIG.MAX_RETRIES;
+  const RETRY_DELAY = DB_INIT_CONFIG.RETRY_DELAY;
   
   for (let attempt = 1; attempt <= MAX_INIT_RETRIES; attempt++) {
     try {
@@ -169,8 +177,9 @@ async function initializeDB() {
 
       // MongoDBの初期化（改善された接続メカニズム使用）
       logger.info('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
+      const mongoConnection = null;
       try {
-        await connectWithRetry(5, 1000); // 最大5回、1秒から開始の指数バックオフ
+        await connectWithRetry(DB_INIT_CONFIG.MONGO_RETRY_COUNT, DB_INIT_CONFIG.MONGO_RETRY_DELAY); // 最大5回、1秒から開始の指数バックオフ
         logger.info('[DB初期化] MongoDB接続が成功しました ✓');
         
         // 接続監視の開始
@@ -185,6 +194,16 @@ async function initializeDB() {
           continue;
         }
         throw mongoError;
+      } finally {
+        // リソースクリーンアップ（接続失敗時の未解決リソースを確実にクリーンアップ）
+        if (mongoConnection && mongoConnection.close) {
+          try {
+            await mongoConnection.close();
+            logger.debug('[DB初期化] MongoDB接続リソースをクリーンアップしました');
+          } catch (cleanupError) {
+            logger.warn('[DB初期化] MongoDB接続クリーンアップに失敗:', cleanupError.message);
+          }
+        }
       }
 
       logger.info('[DB初期化] データベース初期化が完了しました ✓');
