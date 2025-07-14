@@ -159,7 +159,7 @@ jobs:
       
     - name: Test Docker container
       run: |
-        docker run --rm -d --name harvest3-test harvest3:test
+        docker run --rm -d -e NODE_ENV=test --name harvest3-test harvest3:test
         sleep 10
         docker logs harvest3-test
         docker stop harvest3-test || true
