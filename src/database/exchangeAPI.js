@@ -293,6 +293,44 @@ async function fetchBitbankHistoricalOHLCVData(pair, candleType, limit) {
 async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, limit) {
   const isBacktest = isBacktestMode();
 
+  // Issue #929: exchangeオブジェクトの検証を追加
+  if (!exchange) {
+    const errorMessage = `fetchStandardHistoricalOHLCVDataエラー: exchangeオブジェクトがnullまたはundefinedです`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', 'exchange is null or undefined');
+    return [];
+  }
+
+  if (typeof exchange !== 'object') {
+    const errorMessage = `fetchStandardHistoricalOHLCVDataエラー: exchangeオブジェクトが無効な型です (${typeof exchange})`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', `exchange type: ${typeof exchange}`);
+    return [];
+  }
+
+  if (!exchange.id) {
+    const errorMessage = `fetchStandardHistoricalOHLCVDataエラー: exchangeオブジェクトにidプロパティがありません`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', 'exchange.id is missing');
+    return [];
+  }
+
+  if (typeof exchange.fetchOHLCV !== 'function') {
+    const errorMessage = `fetchStandardHistoricalOHLCVDataエラー (${symbol} ${timeframe}): exchange.fetchOHLCV is not a function (exchange.id: ${exchange.id})`;
+    logger.error(errorMessage);
+    recordError(exchange.id, 'missing_fetchOHLCV_method', `${symbol} ${timeframe}`);
+    
+    // Issue #929: 詳細なデバッグ情報をログに出力
+    if (!isBacktest) {
+      logger.debug(`Exchange object details:`);
+      logger.debug(`- exchange.id: ${exchange.id}`);
+      logger.debug(`- exchange.fetchOHLCV type: ${typeof exchange.fetchOHLCV}`);
+      logger.debug(`- exchange object keys: ${Object.keys(exchange).join(', ')}`);
+    }
+    
+    return [];
+  }
+
   // Bitbankでサポートされていないタイムフレームの事前チェック
   if (exchange.id === 'bitbank') {
     const supportedTimeframes = ['1m', '5m', '15m', '30m', '1h'];
@@ -369,6 +407,28 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
  */
 async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 100) {
   const isBacktest = isBacktestMode();
+
+  // Issue #929: fetchOHLCVDataAPIでもexchangeオブジェクトの検証を追加
+  if (!exchange) {
+    const errorMessage = `fetchOHLCVDataAPIエラー: exchangeオブジェクトがnullまたはundefinedです`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', 'exchange is null or undefined');
+    return [];
+  }
+
+  if (typeof exchange !== 'object') {
+    const errorMessage = `fetchOHLCVDataAPIエラー: exchangeオブジェクトが無効な型です (${typeof exchange})`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', `exchange type: ${typeof exchange}`);
+    return [];
+  }
+
+  if (!exchange.id) {
+    const errorMessage = `fetchOHLCVDataAPIエラー: exchangeオブジェクトにidプロパティがありません`;
+    logger.error(errorMessage);
+    recordError('unknown', 'invalid_exchange_object', 'exchange.id is missing');
+    return [];
+  }
 
   if (!isBacktest) {
     logger.debug(`fetchOHLCVDataAPI呼び出し: ${exchange.id} ${symbol} ${timeframe} ${limit}`);
