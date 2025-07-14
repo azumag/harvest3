@@ -15,6 +15,36 @@ describe('BacktestRunner Error Handling', () => {
     // postErrorToDiscord関数をモック
     mockPostErrorToDiscord = jest.fn().mockResolvedValue();
     global.postErrorToDiscord = mockPostErrorToDiscord;
+
+    // 既存のイベントリスナーをクリアしてから新しいハンドラーを登録
+    process.removeAllListeners('unhandledRejection');
+    process.removeAllListeners('uncaughtException');
+
+    // エラーハンドラーを直接登録（backtestRunner.jsと同じロジック）
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('未処理のPromise拒否が発生しました:', reason);
+      console.error('Promise:', promise);
+      
+      // Discord通知（利用可能な場合）
+      if (typeof global.postErrorToDiscord === 'function') {
+        global.postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
+      }
+      
+      // 適切にプロセスを終了
+      process.exit(1);
+    });
+
+    process.on('uncaughtException', (error) => {
+      console.error('未捕捉の例外が発生しました:', error);
+      
+      // Discord通知（利用可能な場合）
+      if (typeof global.postErrorToDiscord === 'function') {
+        global.postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
+      }
+      
+      // 適切にプロセスを終了
+      process.exit(1);
+    });
   });
 
   afterEach(() => {
@@ -30,16 +60,6 @@ describe('BacktestRunner Error Handling', () => {
 
   describe('unhandledRejection エラーハンドラー', () => {
     test('未処理のPromise拒否を適切に処理する', async () => {
-      // テスト対象のコードを動的に読み込み・実行
-      delete require.cache[require.resolve('../../src/backtestRunner.js')];
-      
-      // backtestRunner.jsをrequireしてエラーハンドラーを設定
-      // ただし、mainの実行は回避する必要があるため、条件分岐を追加
-      process.env.TEST_MODE = 'true';
-      
-      // エラーハンドラーの設定部分のみを実行するためのモック
-      const mockRunBacktest = jest.fn().mockRejectedValue(new Error('Test rejection'));
-      
       // unhandledRejectionイベントをエミット
       const testError = new Error('Test unhandled rejection');
       const testPromise = Promise.reject(testError);

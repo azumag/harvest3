@@ -1339,5 +1339,7 @@ async function main() {
   }
 }
 
-// バックテストを開始
-main();
+// バックテストを開始（テストモード以外の場合のみ）
+if (process.env.TEST_MODE !== 'true') {
+  main();
+}
