@@ -213,7 +213,7 @@ class UnifiedErrorHandler {
   }
 
   /**
-   * 旧ErrorHandlerとの互換性を保つためのメソッド
+   * レガシーサポート用のエラーハンドリングメソッド
    * @deprecated 新しいhandleErrorメソッドを使用してください
    */
   async handleErrorLegacy(error, context = '', shouldThrow = true) {
@@ -247,25 +247,7 @@ class UnifiedErrorHandler {
 // シングルトンインスタンス
 const unifiedErrorHandler = new UnifiedErrorHandler();
 
-// 旧ErrorHandlerクラスの互換性維持（非推奨）
-// class ErrorHandler extends UnifiedErrorHandler {
-//   constructor() {
-//     super();
-//     console.warn('[DEPRECATED] ErrorHandler is deprecated. Use UnifiedErrorHandler instead.');
-//   }
-
-//   async handleError(error, context = '', shouldThrow = true) {
-//     return super.handleError(error, { context, shouldThrow });
-//   }
-// }
-
-// 旧インスタンスの互換性維持（削除済み - 使用されていないため）
-// const errorHandler = new ErrorHandler();
-
 module.exports = {
   UnifiedErrorHandler,
   unifiedErrorHandler
-  // 旧クラスの互換性維持（非推奨）
-  // ErrorHandler
-  // errorHandler インスタンスは削除済み（使用されていないため）
 };
