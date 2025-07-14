@@ -321,7 +321,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     // 実際の取引所残高も確認
     let actualBalance = 0;
     try {
-      const balance = await exchange.fetchBalance();
+      const balance = await withBitbankErrorHandling(
+        () => exchange.fetchBalance(),
+        exchange.id,
+        'fetchBalance'
+      );
       actualBalance = balance.total[baseAsset] || 0;
     } catch (balanceError) {
       logger.warn(` Failed to fetch actual balance: ${balanceError.message}`);
@@ -476,7 +480,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
           // 実際の取引所残高も確認
           let actualBalance = 0;
           try {
-            const balance = await exchange.fetchBalance();
+            const balance = await withBitbankErrorHandling(
+              () => exchange.fetchBalance(),
+              exchange.id,
+              'fetchBalance'
+            );
             actualBalance = balance.total[baseAsset] || 0;
             logger.info(` Actual exchange balance for ${baseAsset}: ${actualBalance}`);
           } catch (balanceError) {
