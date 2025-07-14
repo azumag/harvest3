@@ -290,11 +290,6 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
      * ログ行を処理
      */
     async processLogLine(service, line) {
-        // デバッグ出力
-        if (this.config.debug) {
-            console.log(`[${service}] ${line}`);
-        }
-
         // エラーパターンチェック
         const hasError = this.config.errorPatterns.some(pattern => pattern.test(line));
         
@@ -303,6 +298,9 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
             const errorType = this.extractErrorType(line);
             
             if (this.shouldCreateIssue(errorHash, service, line)) {
+                // Issue発行時にログを表示
+                console.log(`🚨 ${service}で例外検出 [${errorType}]:`, line);
+                
                 // ログコンテキストを取得（前後数行）
                 const logContext = this.getLogContext(service, line);
                 
@@ -320,9 +318,9 @@ ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
                     });
                     this.saveIssueHistory();
                     
-                    console.log(`🚨 ${service}で例外検出 [${errorType}] -> Issue作成: ${issueUrl}`);
+                    console.log(`✅ Issue作成完了: ${issueUrl}`);
                 } catch (error) {
-                    console.error(`Issue作成失敗 (${service}):`, error.message);
+                    console.error(`❌ Issue作成失敗 (${service}):`, error.message);
                 }
             } else {
                 if (this.config.debug) {
