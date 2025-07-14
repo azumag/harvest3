@@ -36,55 +36,92 @@ function validateApiCredentials() {
   }
 }
 
-// 認証情報の検証を実行
-validateApiCredentials();
+// 認証情報の検証を実行（テスト環境ではスキップ）
+if (process.env.NODE_ENV !== 'test') {
+  validateApiCredentials();
+}
 
 // Issue #443: CCXTインスタンス作成とthrottle queue最適化
 // Issue #725: より詳細な初期化ログを追加
-console.log('[Issue #725] CCXTインスタンスを初期化中...');
-const exchangeBB = new ccxt.bitbank({
-  apiKey: BBApiKey,
-  secret: BBApiSecret,
-  enableRateLimit: true,
-  rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT, // 統一された設定値を使用
-  timeout: EXCHANGE_SETTINGS.TIMEOUT,
-  options: {
-    // Issue #443: CCXTライブラリの制限に合わせたthrottle設定
-    // CCXT制限: 1000, 設定値: 800 (20%安全マージン)
-    // 理由: 高負荷時の一時的なキュー積み上がりやAPIレスポンス遅延を考慮し
-    // overflow回避のため制限値より20%低い値に設定
-    'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
-    'defaultType': 'spot',
-    'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
-    'adjustForTimeDifference': true
+let exchangeBB;
+
+if (process.env.NODE_ENV === 'test') {
+  // テスト環境ではモックインスタンスを作成
+  console.log('[Issue #725] テスト環境用のモックCCXTインスタンスを初期化中...');
+  exchangeBB = {
+    fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
+    fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
+    enableRateLimit: true,
+    rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
+    timeout: EXCHANGE_SETTINGS.TIMEOUT,
+    options: {
+      'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
+      'defaultType': 'spot',
+      'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
+      'adjustForTimeDifference': true
+    }
+  };
+  console.log('[Issue #725] テスト環境用モックインスタンスの初期化が完了しました');
+} else {
+  console.log('[Issue #725] CCXTインスタンスを初期化中...');
+  exchangeBB = new ccxt.bitbank({
+    apiKey: BBApiKey,
+    secret: BBApiSecret,
+    enableRateLimit: true,
+    rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT, // 統一された設定値を使用
+    timeout: EXCHANGE_SETTINGS.TIMEOUT,
+    options: {
+      // Issue #443: CCXTライブラリの制限に合わせたthrottle設定
+      // CCXT制限: 1000, 設定値: 800 (20%安全マージン)
+      // 理由: 高負荷時の一時的なキュー積み上がりやAPIレスポンス遅延を考慮し
+      // overflow回避のため制限値より20%低い値に設定
+      'maxThrottleQueueSize': EXCHANGE_SETTINGS.MAX_THROTTLE_QUEUE_SIZE,
+      'defaultType': 'spot',
+      'recvWindow': EXCHANGE_SETTINGS.RECV_WINDOW,
+      'adjustForTimeDifference': true
+    }
+  });
+
+  // Issue #725: CCXTインスタンスの検証
+  if (typeof exchangeBB.fetchBalance !== 'function') {
+    console.error('[Issue #725] CCXT Bitbankインスタンスの初期化に失敗しました');
+    console.error('fetchBalanceメソッドが利用できません');
+    throw new Error('CCXT Bitbankインスタンスが正しく初期化されませんでした');
   }
-});
 
-// Issue #725: CCXTインスタンスの検証
-if (typeof exchangeBB.fetchBalance !== 'function') {
-  console.error('[Issue #725] CCXT Bitbankインスタンスの初期化に失敗しました');
-  console.error('fetchBalanceメソッドが利用できません');
-  throw new Error('CCXT Bitbankインスタンスが正しく初期化されませんでした');
+  console.log('[Issue #725] CCXTインスタンスの初期化が正常に完了しました');
 }
-
-console.log('[Issue #725] CCXTインスタンスの初期化が正常に完了しました');
 
 // Issue #443対応: throttle queue overflow対策
 console.log('[Issue #443] throttle queue overflow対策を適用');
 console.log(`[Rate Limiting] enableRateLimit: ${exchangeBB.enableRateLimit}, rateLimit: ${exchangeBB.rateLimit}ms, timeout: ${exchangeBB.timeout}ms`);
 console.log(`[Throttle Queue] maxSize: ${exchangeBB.options.maxThrottleQueueSize}, CCXT内部制限: 1000`);
 
-// Issue #440 & #443: throttleMonitorとAPIコーディネーターの双方向連携設定
-throttleMonitor.setAPICoordinator(apiCoordinator);
-apiCoordinator.setThrottleMonitor(throttleMonitor);
-console.log('[Issue #440] throttleMonitorとAPIコーディネーターの双方向連携を設定');
+// Issue #440 & #443: throttleMonitorとAPIコーディネーターの双方向連携設定（本番環境のみ）
+if (process.env.NODE_ENV !== 'test') {
+  throttleMonitor.setAPICoordinator(apiCoordinator);
+  apiCoordinator.setThrottleMonitor(throttleMonitor);
+  console.log('[Issue #440] throttleMonitorとAPIコーディネーターの双方向連携を設定');
+}
 
-const exchangeBF = new ccxt.bitflyer({
-  apiKey: BFApiKey,
-  secret: BFApiSecret,
-  enableRateLimit: true,
-  rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT // 設定ファイルから取得
-});
+let exchangeBF;
+
+if (process.env.NODE_ENV === 'test') {
+  // テスト環境ではモックインスタンスを作成
+  exchangeBF = {
+    fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
+    fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
+    enableRateLimit: true,
+    rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT
+  };
+} else {
+  exchangeBF = new ccxt.bitflyer({
+    apiKey: BFApiKey,
+    secret: BFApiSecret,
+    enableRateLimit: true,
+    rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT // 設定ファイルから取得
+  });
+}
 
 const bitflyerMinTradeAmounts = BITFLYER_MIN_TRADE_AMOUNTS;
 
