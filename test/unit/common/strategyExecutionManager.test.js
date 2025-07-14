@@ -103,6 +103,27 @@ describe('StrategyExecutionManager', () => {
         expect(group.length).toBeLessThanOrEqual(2);
       });
     });
+
+    test('戦略関数がない戦略は除外される', () => {
+      const configWithInvalidStrategy = {
+        ...mockConfig,
+        strategies: {
+          ...mockConfig.strategies,
+          INVALID_STRATEGY: {
+            enabled: true,
+            exchanges: [{ id: 'bitbank' }]
+            // function property missing
+          }
+        }
+      };
+      
+      const groups = manager.groupStrategiesByPriority(mockAllExchangeSymbolPairs, configWithInvalidStrategy);
+      const allStrategies = groups.flat();
+      
+      expect(allStrategies).not.toContainEqual(
+        expect.objectContaining({ strategyKey: 'INVALID_STRATEGY' })
+      );
+    });
   });
 
   describe('戦略実行', () => {
