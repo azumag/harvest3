@@ -28,10 +28,10 @@ const BFApiSecret = process.env.BF_API_SECRET;
 
 // Issue #725: 環境変数の検証を追加
 function validateApiCredentials() {
-  if (!BBApiKey || !BBApiSecret) {
+  if (!process.env.BB_API_KEY || !process.env.BB_API_SECRET) {
     console.error('[Issue #725] Bitbank API認証情報が不足しています');
-    console.error(`BB_API_KEY: ${BBApiKey ? '設定済み' : '未設定'}`);
-    console.error(`BB_API_SECRET: ${BBApiSecret ? '設定済み' : '未設定'}`);
+    console.error(`BB_API_KEY: ${process.env.BB_API_KEY ? '設定済み' : '未設定'}`);
+    console.error(`BB_API_SECRET: ${process.env.BB_API_SECRET ? '設定済み' : '未設定'}`);
     throw new Error('Bitbank API認証情報が設定されていません。BB_API_KEYとBB_API_SECRETを.envファイルに設定してください。');
   }
 }
@@ -48,8 +48,9 @@ function isTestEnvironment() {
     return true;
   }
   
-  // API認証情報が未設定かつCI環境でない場合はテスト環境扱い
-  if (!BBApiKey && !BBApiSecret && process.env.CI !== 'true') {
+  // API認証情報が未設定の場合はテスト環境扱い (CI環境でも同様)
+  // Issue #824: CI環境でAPI認証情報が未設定の場合もテスト環境として扱う
+  if (!process.env.BB_API_KEY || !process.env.BB_API_SECRET) {
     return true;
   }
   
@@ -910,5 +911,7 @@ module.exports = {
   getBalanceCheckerConfig,
   getCollectorConfig,
   WS_CONFIG,
-  STRATEGY_PARAMS
+  STRATEGY_PARAMS,
+  // Issue #824: テスト用に関数をエクスポート
+  isTestEnvironment
 };
