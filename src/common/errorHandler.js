@@ -247,7 +247,18 @@ class UnifiedErrorHandler {
 // シングルトンインスタンス
 const unifiedErrorHandler = new UnifiedErrorHandler();
 
-// 旧ErrorHandlerクラスの互換性維持（非推奨）
+/**
+ * 旧ErrorHandlerクラスの互換性維持（非推奨）
+ * @deprecated v2.0.0から非推奨。unifiedErrorHandlerを使用してください
+ * 
+ * 移行ガイド:
+ * 旧形式: errorHandler.handleError(error, 'context', false)
+ * 新形式: unifiedErrorHandler.handleError(error, { context: 'context', shouldThrow: false })
+ * 
+ * 新しいオプション:
+ * - severity: 'CRITICAL' | 'WARNING' | 'INFO' (自動判定も可能)
+ * - deduplicationWindow: number (重複防止時間、ミリ秒)
+ */
 class ErrorHandler extends UnifiedErrorHandler {
   constructor() {
     super();
