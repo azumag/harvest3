@@ -248,24 +248,24 @@ class UnifiedErrorHandler {
 const unifiedErrorHandler = new UnifiedErrorHandler();
 
 // 旧ErrorHandlerクラスの互換性維持（非推奨）
-class ErrorHandler extends UnifiedErrorHandler {
-  constructor() {
-    super();
-    console.warn('[DEPRECATED] ErrorHandler is deprecated. Use UnifiedErrorHandler instead.');
-  }
+// class ErrorHandler extends UnifiedErrorHandler {
+//   constructor() {
+//     super();
+//     console.warn('[DEPRECATED] ErrorHandler is deprecated. Use UnifiedErrorHandler instead.');
+//   }
 
-  async handleError(error, context = '', shouldThrow = true) {
-    return super.handleError(error, { context, shouldThrow });
-  }
-}
+//   async handleError(error, context = '', shouldThrow = true) {
+//     return super.handleError(error, { context, shouldThrow });
+//   }
+// }
 
 // 旧インスタンスの互換性維持（削除済み - 使用されていないため）
 // const errorHandler = new ErrorHandler();
 
 module.exports = {
   UnifiedErrorHandler,
-  unifiedErrorHandler,
+  unifiedErrorHandler
   // 旧クラスの互換性維持（非推奨）
-  ErrorHandler
+  // ErrorHandler
   // errorHandler インスタンスは削除済み（使用されていないため）
 };
