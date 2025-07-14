@@ -264,4 +264,214 @@ describe('DiscordRateLimiter', () => {
       }
     });
   });
+
+  describe('sanitizeMessage', () => {
+    test('removes control characters while preserving newlines and tabs', () => {
+      const input = 'Hello\x00World\nNew\tLine\x0B\x0C\x0E';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('HelloWorld\nNew\tLine');
+    });
+
+    test('limits consecutive newlines to maximum of 3', () => {
+      const input = 'Line1\n\n\n\n\n\nLine2';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('Line1\n\n\nLine2');
+    });
+
+    test('removes zero-width and invisible characters', () => {
+      const input = 'Hello\u200B\u200C\u200D\uFEFFWorld\u2060';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('HelloWorld');
+    });
+
+    test('replaces unsupported characters with question marks', () => {
+      const input = 'Valid text with \x01unsupported\x02 chars';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('Valid text with ?unsupported? chars');
+    });
+
+    test('converts non-string input to string', () => {
+      const result = rateLimiter.sanitizeMessage(12345);
+      
+      expect(result).toBe('12345');
+    });
+
+    test('trims whitespace from beginning and end', () => {
+      const input = '   Hello World   ';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('Hello World');
+    });
+
+    test('preserves valid Unicode characters', () => {
+      const input = 'Hello 世界 🌍 café';
+      const result = rateLimiter.sanitizeMessage(input);
+      
+      expect(result).toBe('Hello 世界 🌍 café');
+    });
+  });
+
+  describe('testWebhookHealth', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+
+    beforeEach(() => {
+      mockedAxios.post.mockClear();
+    });
+
+    test('returns healthy true for 400 response (URL valid but needs content)', async () => {
+      const error = new Error('Request failed');
+      error.response = { status: 400 };
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(true);
+      expect(result.note).toBe('URL is valid but requires content');
+      expect(mockedAxios.post).toHaveBeenCalledWith(validUrl, { content: '' });
+    });
+
+    test('returns healthy false for 404 response (webhook deleted)', async () => {
+      const error = new Error('Not found');
+      error.response = { status: 404 };
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(false);
+      expect(result.reason).toBe('Webhook not found (deleted)');
+    });
+
+    test('returns healthy false for 401 response (access denied)', async () => {
+      const error = new Error('Unauthorized');
+      error.response = { status: 401 };
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(false);
+      expect(result.reason).toBe('Webhook access denied (permissions)');
+    });
+
+    test('returns healthy false for 403 response (forbidden)', async () => {
+      const error = new Error('Forbidden');
+      error.response = { status: 403 };
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(false);
+      expect(result.reason).toBe('Webhook access denied (permissions)');
+    });
+
+    test('returns healthy false for network error', async () => {
+      const error = new Error('Network error');
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(false);
+      expect(result.reason).toBe('Network error');
+    });
+
+    test('returns healthy true for successful response', async () => {
+      mockedAxios.post.mockResolvedValue({ status: 200 });
+
+      const result = await rateLimiter.testWebhookHealth(validUrl);
+
+      expect(result.healthy).toBe(true);
+    });
+  });
+
+  describe('sendToDiscord enhanced error handling', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+
+    beforeEach(() => {
+      mockedAxios.post.mockClear();
+    });
+
+    test('sanitizes message before sending', async () => {
+      const dirtyMessage = 'Hello\x00World\n\n\n\n\nTest';
+      const expectedSanitized = 'HelloWorld\n\n\nTest';
+      
+      mockedAxios.post.mockResolvedValue({ status: 200 });
+
+      const result = await rateLimiter.sendToDiscord(validUrl, dirtyMessage);
+
+      expect(result.success).toBe(true);
+      expect(mockedAxios.post).toHaveBeenCalledWith(validUrl, { content: expectedSanitized });
+    });
+
+    test('returns error when message becomes empty after sanitization', async () => {
+      const emptyMessage = '\x00\x01\x02'; // Only control characters
+
+      const result = await rateLimiter.sendToDiscord(validUrl, emptyMessage);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('empty_after_sanitization');
+      expect(result.details.originalLength).toBe(3);
+      expect(result.details.sanitizedLength).toBe(0);
+    });
+
+    test('includes webhook health check in 400 error details', async () => {
+      const message = 'Test message';
+      const error = new Error('Bad Request');
+      error.response = {
+        status: 400,
+        statusText: 'Bad Request',
+        data: { error: 'Invalid webhook' }
+      };
+      
+      // Mock axios to fail for actual send but return 404 for health check
+      mockedAxios.post
+        .mockRejectedValueOnce(error) // First call (actual send)
+        .mockRejectedValueOnce({ // Second call (health check)
+          response: { status: 404 }
+        });
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('bad_request');
+      expect(result.details.webhookHealth.healthy).toBe(false);
+      expect(result.details.webhookHealth.reason).toBe('Webhook not found (deleted)');
+    });
+
+    test('handles HTTP errors other than 400 and 429', async () => {
+      const message = 'Test message';
+      const error = new Error('Server Error');
+      error.response = {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: { error: 'Server error' }
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('http_500');
+      expect(result.details.status).toBe(500);
+      expect(result.details.statusText).toBe('Internal Server Error');
+    });
+
+    test('handles network errors without response', async () => {
+      const message = 'Test message';
+      const error = new Error('Network timeout');
+      error.code = 'ECONNABORTED';
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('ECONNABORTED');
+      expect(result.details.message).toBe('Network timeout');
+      expect(result.details.code).toBe('ECONNABORTED');
+    });
+  });
 });
