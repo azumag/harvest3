@@ -1,6 +1,6 @@
 const Logger = require('../hft/utils/Logger');
 const { API_CACHE_SETTINGS } = require('../config/settings');
-const logger = new Logger({ service: 'StrategyExecutionManager' });
+const logger = new Logger('StrategyExecutionManager');
 const { globalAPIDataCache } = require('./apiDataCache');
 
 class StrategyExecutionManager {
@@ -64,6 +64,7 @@ class StrategyExecutionManager {
       for (const strategyKey of Object.keys(config.strategies)) {
         const strategy = config.strategies[strategyKey];
         if (!strategy.enabled) {continue;}
+        if (!strategy.function) {continue;} // 実行関数がない戦略をスキップ
 
         const supportedExchange = strategy.exchanges?.find(e => e.id === exchangeId);
         if (!supportedExchange) {continue;}
