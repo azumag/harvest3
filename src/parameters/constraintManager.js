@@ -231,7 +231,9 @@ class ParameterConstraintEngine {
       // 安全な式評価を実行（eval()を使わない）
       return this.safeEvaluateExpression(expression);
     } catch (error) {
-      console.warn(`制約式評価エラー: ${constraint}`, error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`制約式評価エラー: ${constraint}`, error);
+      }
       return false;
     }
   }
@@ -242,10 +244,12 @@ class ParameterConstraintEngine {
    * @returns {boolean} 評価結果
    */
   safeEvaluateExpression(expression) {
-    // 許可される文字のみをチェック
-    const allowedChars = /^[\d\s+\-*\/().<>=!&|]+$/;
+    // より厳密な許可文字パターン（セキュリティ強化）
+    const allowedChars = /^[\d\s+\-*\/().<>=]+$/;
     if (!allowedChars.test(expression)) {
-      console.warn(`不正な文字が含まれています: ${expression}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`不正な文字が含まれています: ${expression}`);
+      }
       return false;
     }
 
@@ -277,7 +281,9 @@ class ParameterConstraintEngine {
       const result = this.evaluateMathExpression(expression);
       return Boolean(result);
     } catch (error) {
-      console.warn(`式評価エラー: ${expression}`, error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`式評価エラー: ${expression}`, error);
+      }
       return false;
     }
   }
@@ -328,7 +334,7 @@ class ParameterConstraintEngine {
   }
 
   /**
-   * 有効なパラメータ組み合わせを生成
+   * 有効なパラメータ組み合わせを生成（パフォーマンス最適化版）
    * @param {string} strategyType 戦略タイプ
    * @param {number} count 生成数
    * @returns {Array} 有効なパラメータ組み合わせ配列
@@ -341,9 +347,18 @@ class ParameterConstraintEngine {
 
     const combinations = [];
     let attempts = 0;
-    const maxAttempts = count * 20; // 十分な試行回数を確保
+    const maxAttempts = count * 15; // 試行回数を最適化
     let consecutiveFailures = 0;
-    const maxConsecutiveFailures = count * 2; // 連続失敗の上限
+    const maxConsecutiveFailures = Math.min(count, 50); // 連続失敗の上限を調整
+    
+    // 制約の複雑さを事前分析
+    const constraintComplexity = this.analyzeConstraintComplexity(constraint);
+    const shouldUseBatch = constraintComplexity > 0.7 && count > 10;
+
+    // 複雑な制約の場合はバッチ生成を使用
+    if (shouldUseBatch) {
+      return this.generateValidCombinationsBatch(strategyType, count, constraint);
+    }
 
     while (combinations.length < count && attempts < maxAttempts) {
       const candidate = this.generateCandidate(constraint.parameters);
@@ -354,7 +369,9 @@ class ParameterConstraintEngine {
         consecutiveFailures++;
         // 連続失敗が多い場合は早期終了
         if (consecutiveFailures > maxConsecutiveFailures) {
-          console.warn(`制約が厳しすぎて有効なパラメータが生成できません: ${strategyType}`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`制約が厳しすぎて有効なパラメータが生成できません: ${strategyType}`);
+          }
           break;
         }
       }
@@ -362,7 +379,62 @@ class ParameterConstraintEngine {
     }
 
     if (combinations.length === 0) {
-      console.warn(`有効なパラメータが1つも生成できませんでした: ${strategyType}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`有効なパラメータが1つも生成できませんでした: ${strategyType}`);
+      }
+    }
+
+    return combinations;
+  }
+
+  /**
+   * 制約の複雑さを分析
+   * @param {Object} constraint 制約定義
+   * @returns {number} 複雑さスコア (0-1)
+   */
+  analyzeConstraintComplexity(constraint) {
+    const constraintCount = constraint.constraints.length;
+    const paramCount = Object.keys(constraint.parameters).length;
+    
+    // 制約あたりのパラメータ数で複雑さを評価
+    const complexityScore = (constraintCount * 2) / (paramCount + 1);
+    return Math.min(1, complexityScore / 3);
+  }
+
+  /**
+   * バッチ生成による効率的なパラメータ生成
+   * @param {string} strategyType 戦略タイプ
+   * @param {number} count 生成数
+   * @param {Object} constraint 制約定義
+   * @returns {Array} 有効なパラメータ組み合わせ配列
+   */
+  generateValidCombinationsBatch(strategyType, count, constraint) {
+    const combinations = [];
+    const batchSize = Math.min(count * 3, 100); // バッチサイズを制限
+    let totalAttempts = 0;
+    const maxTotalAttempts = count * 10;
+
+    while (combinations.length < count && totalAttempts < maxTotalAttempts) {
+      // バッチで候補を生成
+      const candidates = Array.from({ length: batchSize }, () => 
+        this.generateCandidate(constraint.parameters)
+      );
+
+      // 並列でバリデーション
+      const validCandidates = candidates.filter(candidate => 
+        this.validateCombination(candidate, strategyType)
+      );
+
+      // 必要な数だけ追加
+      const neededCount = count - combinations.length;
+      combinations.push(...validCandidates.slice(0, neededCount));
+
+      totalAttempts += batchSize;
+
+      // 効率が悪い場合は早期終了
+      if (validCandidates.length === 0 && totalAttempts > count * 5) {
+        break;
+      }
     }
 
     return combinations;
