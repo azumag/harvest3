@@ -1,5 +1,5 @@
 const { postErrorToDiscord } = require('./notifications');
-const { errorHandler } = require('./errorHandler');
+const { unifiedErrorHandler } = require('./errorHandler');
 
 /**
  * 加重平均を計算する関数
@@ -137,7 +137,11 @@ async function handleStrategyError(error, strategyName, exchange, symbol, should
   console.error(`[${context}] エラー:`, message);
 
   try {
-    await errorHandler.handleError(error, context, shouldThrow);
+    await unifiedErrorHandler.handleError(error, {
+      context: context,
+      severity: 'WARNING',
+      shouldThrow: shouldThrow
+    });
   } catch (handlerError) {
     console.error(`[${context}] エラーハンドラー自体でエラー:`, handlerError.message);
     await postErrorToDiscord(`${context}: ${message}`);

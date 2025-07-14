@@ -28,10 +28,10 @@ const BFApiSecret = process.env.BF_API_SECRET;
 
 // Issue #725: 環境変数の検証を追加
 function validateApiCredentials() {
-  if (!BBApiKey || !BBApiSecret) {
+  if (!process.env.BB_API_KEY || !process.env.BB_API_SECRET) {
     console.error('[Issue #725] Bitbank API認証情報が不足しています');
-    console.error(`BB_API_KEY: ${BBApiKey ? '設定済み' : '未設定'}`);
-    console.error(`BB_API_SECRET: ${BBApiSecret ? '設定済み' : '未設定'}`);
+    console.error(`BB_API_KEY: ${process.env.BB_API_KEY ? '設定済み' : '未設定'}`);
+    console.error(`BB_API_SECRET: ${process.env.BB_API_SECRET ? '設定済み' : '未設定'}`);
     throw new Error('Bitbank API認証情報が設定されていません。BB_API_KEYとBB_API_SECRETを.envファイルに設定してください。');
   }
 }
@@ -48,8 +48,9 @@ function isTestEnvironment() {
     return true;
   }
   
-  // API認証情報が未設定かつCI環境でない場合はテスト環境扱い
-  if (!BBApiKey && !BBApiSecret && process.env.CI !== 'true') {
+  // API認証情報が未設定の場合はテスト環境扱い (CI環境でも同様)
+  // Issue #824: CI環境でAPI認証情報が未設定の場合もテスト環境として扱う
+  if (!process.env.BB_API_KEY || !process.env.BB_API_SECRET) {
     return true;
   }
   
@@ -68,9 +69,125 @@ let exchangeBB;
 if (isTestEnvironment()) {
   // テスト環境またはDocker環境ではモックインスタンスを作成
   console.log('[Issue #725] テスト/Docker環境用のモックCCXTインスタンスを初期化中...');
+  
+  // Issue #880: モックマーケット情報の定義
+  const mockMarkets = {
+    'BTC/JPY': {
+      id: 'btc_jpy',
+      symbol: 'BTC/JPY',
+      base: 'BTC',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 0 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'ETH/JPY': {
+      id: 'eth_jpy',
+      symbol: 'ETH/JPY',
+      base: 'ETH',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 0 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'XRP/JPY': {
+      id: 'xrp_jpy',
+      symbol: 'XRP/JPY',
+      base: 'XRP',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 3 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 0.001, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'LTC/JPY': {
+      id: 'ltc_jpy',
+      symbol: 'LTC/JPY',
+      base: 'LTC',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 0 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'BCH/JPY': {
+      id: 'bch_jpy',
+      symbol: 'BCH/JPY',
+      base: 'BCH',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 0 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'MONA/JPY': {
+      id: 'mona_jpy',
+      symbol: 'MONA/JPY',
+      base: 'MONA',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 3 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 0.001, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    },
+    'DOT/JPY': {
+      id: 'dot_jpy',
+      symbol: 'DOT/JPY',
+      base: 'DOT',
+      quote: 'JPY',
+      active: true,
+      precision: { amount: 4, price: 0 },
+      limits: {
+        amount: { min: 0.0001, max: 1000000 },
+        price: { min: 1, max: 100000000 },
+        cost: { min: 0.0001, max: 100000000 }
+      },
+      maker: 0.0012,
+      taker: 0.0012
+    }
+  };
+  
   exchangeBB = {
     fetchBalance: () => Promise.resolve({ total: {}, free: {}, used: {} }),
     fetchTicker: () => Promise.resolve({ last: 0, bid: 0, ask: 0 }),
+    // Issue #880: loadMarketsメソッドの実装
+    loadMarkets: () => {
+      exchangeBB.markets = mockMarkets;
+      return Promise.resolve(mockMarkets);
+    },
+    markets: null,
     enableRateLimit: true,
     rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
     timeout: EXCHANGE_SETTINGS.TIMEOUT,
@@ -794,5 +911,7 @@ module.exports = {
   getBalanceCheckerConfig,
   getCollectorConfig,
   WS_CONFIG,
-  STRATEGY_PARAMS
+  STRATEGY_PARAMS,
+  // Issue #824: テスト用に関数をエクスポート
+  isTestEnvironment
 };
