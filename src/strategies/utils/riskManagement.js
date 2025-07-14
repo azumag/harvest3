@@ -25,6 +25,25 @@ const Logger = require('../../hft/utils/Logger');
 const logger = new Logger('RiskManagement');
 
 /**
+ * 取引所オブジェクトの検証を行う
+ * @param {Object} exchange - 取引所オブジェクト
+ * @throws {Error} - 検証に失敗した場合
+ */
+function validateExchangeObject(exchange) {
+  if (!exchange) {
+    throw new Error('Exchange object is null or undefined');
+  }
+  
+  if (typeof exchange.fetchBalance !== 'function') {
+    // 機密情報をフィルタリング
+    const safeKeys = Object.keys(exchange).filter(key => 
+      !['apikey', 'secret', 'password', 'token', 'apisecret', 'privatekey'].includes(key.toLowerCase())
+    );
+    throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${safeKeys.join(', ')}`);
+  }
+}
+
+/**
  * リスク管理設定のデフォルト値
  */
 const DEFAULT_RISK_SETTINGS = {
@@ -258,13 +277,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     baseAsset = symbol.split('/')[0];
 
     // 取引所オブジェクトの検証
-    if (!exchange) {
-      throw new Error('Exchange object is null or undefined');
-    }
-    
-    if (typeof exchange.fetchBalance !== 'function') {
-      throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${Object.keys(exchange).join(', ')}`);
-    }
+    validateExchangeObject(exchange);
 
     // formattedAvailableAmountを使用して利用可能量を取得
     const { formattedAvailableAmount, getTradeCurrentPosition, getOrderStrategyKeyByOrderId, updateFilledTrades, acquireDistributedLock, releaseDistributedLock } = require('../../database/manager');
@@ -1098,13 +1111,7 @@ async function calculatePeriodPnL(exchangeId, strategyKey, days) {
 async function getCurrentBalance(exchange) {
   try {
     // 取引所オブジェクトの検証
-    if (!exchange) {
-      throw new Error('Exchange object is null or undefined');
-    }
-    
-    if (typeof exchange.fetchBalance !== 'function') {
-      throw new Error(`Exchange object (${exchange.id || 'unknown'}) does not have fetchBalance method. Object keys: ${Object.keys(exchange).join(', ')}`);
-    }
+    validateExchangeObject(exchange);
 
     // withBitbankErrorHandlingを使用してAPI呼び出しを実行
     const balance = await withBitbankErrorHandling(
@@ -1636,6 +1643,7 @@ async function repairPositionInconsistency(exchange, symbol, strategyKey, netPos
 
 module.exports = {
   DEFAULT_RISK_SETTINGS,
+  validateExchangeObject, // ヘルパー関数
   savePosition,
   getPosition,
   getStrategyPositions,

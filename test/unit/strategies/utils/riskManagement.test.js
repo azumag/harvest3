@@ -1,5 +1,6 @@
 const {
   DEFAULT_RISK_SETTINGS,
+  validateExchangeObject,
   savePosition,
   getPosition,
   getStrategyPositions,
@@ -10,7 +11,8 @@ const {
   recordPnL,
   clearPositionStore,
   clearPnLTracker,
-  executeStopLoss
+  executeStopLoss,
+  getCurrentBalance
 } = require('../../../../src/strategies/utils/riskManagement');
 
 describe('リスク管理機能のテスト', () => {
@@ -312,6 +314,52 @@ describe('リスク管理機能のテスト', () => {
       await expect(
         executeStopLoss(invalidExchange, 'BTC/JPY', 'test', position, marketParameters)
       ).rejects.toThrow('does not have fetchBalance method');
+    });
+  });
+
+  describe('getCurrentBalance validation', () => {
+    test('getCurrentBalance should return fallback value for null exchange object', async () => {
+      const result = await getCurrentBalance(null);
+      expect(result).toBe(100000); // フォールバック値
+    });
+
+    test('getCurrentBalance should return fallback value for exchange without fetchBalance method', async () => {
+      const invalidExchange = {
+        id: 'bitbank'
+        // fetchBalance method is missing
+      };
+      
+      const result = await getCurrentBalance(invalidExchange);
+      expect(result).toBe(100000); // フォールバック値
+    });
+
+    test('validateExchangeObject helper function works correctly', () => {
+      // null exchangeのテスト
+      expect(() => {
+        validateExchangeObject(null);
+      }).toThrow('Exchange object is null or undefined');
+
+      // fetchBalanceメソッドが存在しない場合のテスト & 機密情報フィルタリングのテスト  
+      const invalidExchange = {
+        id: 'bitbank',
+        apiKey: 'secret-api-key',
+        secret: 'secret-token',
+        password: 'secret-password',
+        normalProperty: 'safe-value'
+        // fetchBalance method is missing
+      };
+      
+      try {
+        validateExchangeObject(invalidExchange);
+        // このポイントに到達すべきではない
+        expect(true).toBe(false);
+      } catch (error) {
+        expect(error.message).toContain('does not have fetchBalance method');
+        expect(error.message).toContain('normalProperty');
+        expect(error.message).not.toContain('apiKey');
+        expect(error.message).not.toContain('secret');
+        expect(error.message).not.toContain('password');
+      }
     });
   });
 });
