@@ -269,4 +269,110 @@ describe('リスク管理機能のテスト', () => {
       expect(expectedFeature).toContain('actual balance');
     });
   });
+
+  describe('fetchBalance error handling (Issue #735修正)', () => {
+    const mockExchange = {
+      id: 'bitbank',
+      fetchBalance: jest.fn()
+    };
+
+    const mockWithBitbankErrorHandling = jest.fn();
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // withBitbankErrorHandlingをモック化
+      jest.doMock('../../../../src/common/bitbankErrorHandler', () => ({
+        withBitbankErrorHandling: mockWithBitbankErrorHandling
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('../../../../src/common/bitbankErrorHandler');
+    });
+
+    test('executeStopLoss内でwithBitbankErrorHandlingが使用される', async () => {
+      // withBitbankErrorHandlingが正常な残高データを返すようにモック
+      mockWithBitbankErrorHandling.mockResolvedValue({
+        total: { BTC: 0.5 }
+      });
+
+      // 必要なその他のモック
+      const mockGetTradeCurrentPosition = jest.fn().mockResolvedValue(0.5);
+      const mockFormattedAvailableAmount = jest.fn().mockResolvedValue(0.5);
+      const mockAcquireDistributedLock = jest.fn().mockResolvedValue({ acquired: true });
+      const mockUpdateFilledTrades = jest.fn().mockResolvedValue();
+
+      jest.doMock('../../../../src/database/manager', () => ({
+        getTradeCurrentPosition: mockGetTradeCurrentPosition,
+        formattedAvailableAmount: mockFormattedAvailableAmount,
+        acquireDistributedLock: mockAcquireDistributedLock,
+        updateFilledTrades: mockUpdateFilledTrades,
+        addOrder: jest.fn(),
+        releaseDistributedLock: jest.fn()
+      }));
+
+      const position = {
+        key: 'test-position',
+        amount: 0.5,
+        entryPrice: 100,
+        orderId: 'test-order'
+      };
+
+      const marketParameters = {
+        amountPrecision: 8,
+        minTradeAmount: 0.001
+      };
+
+      try {
+        await executeStopLoss(mockExchange, 'BTC/JPY', 'testStrategy', position, marketParameters);
+      } catch (error) {
+        // 完全な実行は期待しないが、withBitbankErrorHandlingが呼ばれることを確認
+      }
+
+      // withBitbankErrorHandlingが fetchBalance 呼び出しで使用されることを確認
+      expect(mockWithBitbankErrorHandling).toHaveBeenCalledWith(
+        expect.any(Function),
+        'bitbank',
+        'fetchBalance'
+      );
+    });
+
+    test('fetchBalance関数が直接呼ばれずにエラーハンドラー経由で呼ばれる', () => {
+      // リスク管理モジュール内でfetchBalanceが直接呼ばれないことを確認
+      const riskManagementSource = require('fs').readFileSync(
+        require('path').join(__dirname, '../../../../src/strategies/utils/riskManagement.js'),
+        'utf8'
+      );
+
+      // 直接のfetchBalance呼び出しパターンを検索
+      const directFetchBalancePattern = /exchange\.fetchBalance\(\)/g;
+      const directCalls = riskManagementSource.match(directFetchBalancePattern);
+
+      // withBitbankErrorHandling経由の呼び出しパターンを検索
+      const wrappedFetchBalancePattern = /withBitbankErrorHandling\(\s*\(\)\s*=>\s*exchange\.fetchBalance\(\)/g;
+      const wrappedCalls = riskManagementSource.match(wrappedFetchBalancePattern);
+
+      // 直接呼び出しがないことを確認
+      expect(directCalls).toBeNull();
+      
+      // エラーハンドラー経由の呼び出しが存在することを確認
+      expect(wrappedCalls).not.toBeNull();
+      expect(wrappedCalls.length).toBeGreaterThan(0);
+    });
+
+    test('fetchBalanceエラー時の適切なエラーハンドリング', async () => {
+      // fetchBalanceがエラーを投げるようにモック
+      const fetchBalanceError = new Error('exchange.fetchBalance is not a function');
+      mockWithBitbankErrorHandling.mockRejectedValue(fetchBalanceError);
+
+      // getCurrentBalance関数をテスト（フォールバック値を返すかテスト）
+      const { getCurrentBalance } = require('../../../../src/strategies/utils/riskManagement');
+
+      const result = await getCurrentBalance(mockExchange);
+
+      // エラー時はフォールバック値(100000)が返されることを確認
+      expect(result).toBe(100000);
+      expect(mockWithBitbankErrorHandling).toHaveBeenCalled();
+    });
+  });
 });
