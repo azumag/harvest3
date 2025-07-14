@@ -12,6 +12,9 @@ class DiscordRateLimiter {
       WARNING: 2,
       INFO: 3
     };
+    
+    // 定数定義
+    this.REPLACEMENT_CHAR_ONLY_PATTERN = /^[?]+$/;
   }
 
   /**
@@ -156,6 +159,23 @@ class DiscordRateLimiter {
   }
 
   /**
+   * Webhook URLを安全にログ出力用にマスク
+   */
+  maskWebhookUrl(webhookUrl) {
+    if (!webhookUrl || typeof webhookUrl !== 'string') {
+      return '[INVALID_URL]';
+    }
+    
+    // Discord webhook URLの場合、トークン部分をマスク
+    if (webhookUrl.includes('/api/webhooks/')) {
+      return webhookUrl.replace(/\/[^\/]+$/, '/***');
+    }
+    
+    // その他のURLは最初の50文字のみ表示
+    return webhookUrl.length > 50 ? webhookUrl.substring(0, 50) + '...' : webhookUrl;
+  }
+
+  /**
    * メッセージ内容とWebhook URLのバリデーション
    */
   validateMessage(webhookUrl, message) {
@@ -184,6 +204,59 @@ class DiscordRateLimiter {
   }
 
   /**
+   * メッセージ内容をサニタイズしてDiscordで受け入れられるように調整
+   */
+  sanitizeMessage(message) {
+    if (typeof message !== 'string') {
+      return String(message);
+    }
+
+    // まず\x01と\x02を"?"に置換
+    let sanitized = message.replace(/[\x01\x02]/g, '?');
+    
+    // その後、他の制御文字を完全削除（改行、タブは保持）
+    sanitized = sanitized.replace(/[\x00\x03-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    
+    // その他のサポートされていない文字を"?"に置換
+    // 保持する文字: 印刷可能ASCII (\x20-\x7E)、Unicode (\u00A0-\uFFFF)、改行(\n)、タブ(\t)
+    sanitized = sanitized.replace(/[^\x20-\x7E\u00A0-\uFFFF\n\t]/g, '?');
+    
+    // 連続する改行を制限（最大3個まで）
+    sanitized = sanitized.replace(/\n{4,}/g, '\n\n\n');
+    
+    // 非表示文字やゼロ幅文字を除去
+    sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF\u2060]/g, '');
+    
+    return sanitized.trim();
+  }
+
+  /**
+   * Webhook URLの健全性をテスト
+   */
+  async testWebhookHealth(webhookUrl) {
+    try {
+      const axios = require('axios');
+      
+      // 空のメッセージでテスト（400エラーになるはずだが、URLが有効かわかる）
+      await axios.post(webhookUrl, { content: '' });
+      return { healthy: true };
+    } catch (error) {
+      if (error.response) {
+        // 400エラーでも"Bad Request"なら基本的にはURLは生きている
+        // 404なら完全に無効、401/403なら権限問題
+        if (error.response.status === 400) {
+          return { healthy: true, note: 'URL is valid but requires content' };
+        } else if (error.response.status === 404) {
+          return { healthy: false, reason: 'Webhook not found (deleted)' };
+        } else if (error.response.status === 401 || error.response.status === 403) {
+          return { healthy: false, reason: 'Webhook access denied (permissions)' };
+        }
+      }
+      return { healthy: false, reason: error.message };
+    }
+  }
+
+  /**
    * 実際のDiscord送信処理
    */
   async sendToDiscord(webhookUrl, message) {
@@ -198,9 +271,22 @@ class DiscordRateLimiter {
       };
     }
 
+    // メッセージをサニタイズ
+    const sanitizedMessage = this.sanitizeMessage(message);
+    
+    // サニタイズ後に空になった場合、または"?"のみになった場合の処理
+    if (sanitizedMessage.trim() === '' || this.REPLACEMENT_CHAR_ONLY_PATTERN.test(sanitizedMessage.trim())) {
+      console.error('[DISCORD_RATE_LIMITER] Message became empty after sanitization');
+      return { 
+        success: false, 
+        error: 'empty_after_sanitization',
+        details: { originalLength: message.length, sanitizedLength: 0 }
+      };
+    }
+
     try {
       const axios = require('axios');
-      await axios.post(webhookUrl, { content: message });
+      await axios.post(webhookUrl, { content: sanitizedMessage });
       return { success: true };
     } catch (error) {
       if (error.response && error.response.status === 429) {
@@ -222,9 +308,17 @@ class DiscordRateLimiter {
         console.error('  Status:', error.response.status);
         console.error('  Status Text:', error.response.statusText);
         console.error('  Response Data:', JSON.stringify(error.response.data, null, 2));
-        console.error('  Request URL:', webhookUrl.substring(0, 50) + '...');
-        console.error('  Message Length:', message.length);
-        console.error('  Message Preview:', message.substring(0, 100));
+        console.error('  Request URL:', this.maskWebhookUrl(webhookUrl));
+        console.error('  Original Message Length:', message.length);
+        console.error('  Sanitized Message Length:', sanitizedMessage.length);
+        console.error('  Original Message Preview:', message.substring(0, 100));
+        console.error('  Sanitized Message Preview:', sanitizedMessage.substring(0, 100));
+        
+        // Webhook URLの健全性をテスト
+        const healthCheck = await this.testWebhookHealth(webhookUrl);
+        if (!healthCheck.healthy) {
+          console.error('  Webhook Health:', healthCheck.reason);
+        }
         
         return { 
           success: false, 
@@ -233,13 +327,46 @@ class DiscordRateLimiter {
             status: error.response.status,
             statusText: error.response.statusText,
             data: error.response.data,
-            messageLength: message.length
+            originalMessageLength: message.length,
+            sanitizedMessageLength: sanitizedMessage.length,
+            webhookHealth: healthCheck
           }
         };
       }
 
-      console.error('[DISCORD_RATE_LIMITER] Send error:', error.message);
-      return { success: false, error: error.message };
+      // その他のHTTPエラーの詳細ログ
+      if (error.response) {
+        console.error('[DISCORD_RATE_LIMITER] HTTP error:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          url: this.maskWebhookUrl(webhookUrl)
+        });
+        return { 
+          success: false, 
+          error: `http_${error.response.status}`,
+          details: {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data
+          }
+        };
+      }
+
+      // ネットワークエラーなどの詳細ログ
+      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', {
+        message: error.message,
+        code: error.code,
+        url: this.maskWebhookUrl(webhookUrl)
+      });
+      return { 
+        success: false, 
+        error: error.code || error.message,
+        details: {
+          message: error.message,
+          code: error.code
+        }
+      };
     }
   }
 
@@ -291,9 +418,22 @@ class DiscordRateLimiter {
 // シングルトンインスタンス
 const instance = new DiscordRateLimiter();
 
-// 1時間ごとにクリーンアップ
-setInterval(() => {
-  instance.cleanup();
-}, 3600000);
+// クリーンアップ用のタイマーID（テスト環境では設定しない）
+let cleanupInterval = null;
+
+// テスト環境でない場合のみクリーンアップタイマーを設定
+if (process.env.NODE_ENV !== 'test' && typeof jest === 'undefined') {
+  cleanupInterval = setInterval(() => {
+    instance.cleanup();
+  }, 3600000);
+}
+
+// テスト用のクリーンアップメソッドを追加
+instance._clearCleanupInterval = () => {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+};
 
 module.exports = instance;
