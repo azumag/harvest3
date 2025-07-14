@@ -93,7 +93,7 @@ jest.mock('./src/database/manager');
 process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.MONGO_URL = process.env.MONGO_URL || 'mongodb://harvest3-mongodb:27017';
-process.env.MONGO_DB_NAME = 'test';
+process.env.MONGODB_DB_NAME = 'test';
 
 // Suppress console outputs in CI environment to prevent false test failures
 // Tests legitimately use console.log/warn/error outputs which CI treats as failures

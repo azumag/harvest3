@@ -243,7 +243,7 @@ BF_API_SECRET=your_bitflyer_api_secret
 # データベース設定
 REDIS_URL=redis://localhost:6379
 MONGO_URL=mongodb://localhost:27017
-MONGO_DB_NAME=harvest3
+MONGODB_DB_NAME=harvest3
 
 # Discord通知（推奨）
 DISCORD_ERROR_WEBHOOK_URL=your_webhook_url

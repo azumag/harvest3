@@ -65,7 +65,7 @@ jest.mock('../../../src/hft/utils/Logger', () => {
 
 // 環境変数のセットアップ
 process.env.MONGO_URL = 'mongodb://test:27017';
-process.env.MONGO_DB_NAME = 'test_db';
+process.env.MONGODB_DB_NAME = 'test_db';
 
 // connectDB のモック
 const mockConnectDB = jest.fn().mockResolvedValue();

@@ -969,7 +969,7 @@ async function savePositionHistoryToMongoDB(positionData) {
     // positions履歴コレクションへの保存
     const { MongoClient } = require('mongodb');
     const mongoUrl = process.env.MONGO_URL;
-    const mongoDbName = process.env.MONGO_DB_NAME;
+    const mongoDbName = process.env.MONGODB_DB_NAME;
 
     const client = new MongoClient(mongoUrl);
     await client.connect();
