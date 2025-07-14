@@ -1,7 +1,7 @@
 const { getTradeCurrentPosition, addOrder } = require('../../database/manager');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../common/notifications');
 const { SETTINGS } = require('../../config/settings');
-const { errorHandler } = require('../../common/errorHandler');
+const { unifiedErrorHandler } = require('../../common/errorHandler');
 const marketDataProvider = require('../../data/marketDataProvider');
 const { withBitbankErrorHandling } = require('../../common/bitbankErrorHandler');
 const {
@@ -488,7 +488,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             actualBalance = balance.total[baseAsset] || 0;
             logger.info(` Actual exchange balance for ${baseAsset}: ${actualBalance}`);
           } catch (balanceError) {
-            await errorHandler.handleError(balanceError, `残高取得 - ${baseAsset}`, false);
+            await unifiedErrorHandler.handleError(balanceError, {
+              context: `残高取得 - ${baseAsset}`,
+              severity: 'WARNING',
+              shouldThrow: false
+            });
           }
 
           // ポジション管理の不整合を検出・修復
@@ -587,7 +591,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
               logger.info(` Fallback - Using repaired available amount: ${availableToSell}`);
             }
           } catch (repairError) {
-            await errorHandler.handleError(repairError, 'ポジション修復フォールバック', false);
+            await unifiedErrorHandler.handleError(repairError, {
+              context: 'ポジション修復フォールバック',
+              severity: 'WARNING',
+              shouldThrow: false
+            });
             // 修復失敗時は実際の残高を使用
             if (actualBalance > 0) {
               availableToSell = Math.min(position.amount, actualBalance);
@@ -660,7 +668,11 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
             }
           }
         } catch (notificationError) {
-          await errorHandler.handleError(notificationError, '詳細通知送信', false);
+          await unifiedErrorHandler.handleError(notificationError, {
+            context: '詳細通知送信',
+            severity: 'WARNING',
+            shouldThrow: false
+          });
         }
 
         return {
