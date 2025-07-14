@@ -106,7 +106,7 @@ pre_startup_checks() {
     log "Performing pre-startup checks..."
     
     # 必須環境変数チェック
-    local required_vars=("REDIS_URL" "MONGO_URL" "MONGO_DB_NAME")
+    local required_vars=("REDIS_URL" "MONGO_URL" "MONGODB_DB_NAME")
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
             local error_msg="Required environment variable $var is not set"
