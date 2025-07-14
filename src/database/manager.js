@@ -1205,11 +1205,11 @@ async function prepareRedisOperations(transaction, trade) {
   // 未約定注文削除をトランザクションに追加
   if (trade.orderId && trade.strategy !== 'OUTSIDE') {
     const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-    transaction.hDel(pendingKey, trade.orderId);
+    transaction.hDel(pendingKey, trade.orderId.toString());
   }
 
   // タイムスタンプ更新
-  transaction.hSet(summaryKey, 'updatedAt', Date.now());
+  transaction.hSet(summaryKey, 'updatedAt', Date.now().toString());
 }
 
 /**
