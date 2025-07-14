@@ -150,25 +150,60 @@ function generateRealisticSpread(midPrice, volume, volatility) {
 }
 
 async function initializeDB() {
-  try {
-    logger.info('[DB初期化] データベース接続を開始します...');
+  const MAX_INIT_RETRIES = 3;
+  const RETRY_DELAY = 5000; // 5秒
+  
+  for (let attempt = 1; attempt <= MAX_INIT_RETRIES; attempt++) {
+    try {
+      logger.info(`[DB初期化] データベース接続を開始します... (試行 ${attempt}/${MAX_INIT_RETRIES})`);
 
-    // Redisの初期化
-    logger.info('[DB初期化] Redis接続中...');
-    await initialize();
+      // Redisの初期化（エラーハンドリング強化）
+      logger.info('[DB初期化] Redis接続中...');
+      try {
+        await initialize();
+        logger.info('[DB初期化] Redis接続が成功しました ✓');
+      } catch (redisError) {
+        logger.warn(`[DB初期化] Redis接続に失敗しました（続行します）: ${redisError.message}`);
+        // Redis接続失敗は致命的ではないため、アプリケーションを続行
+      }
 
-    // MongoDBの初期化（改善された接続メカニズム使用）
-    logger.info('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
-    await connectWithRetry(5, 1000); // 最大5回、1秒から開始の指数バックオフ
+      // MongoDBの初期化（改善された接続メカニズム使用）
+      logger.info('[DB初期化] MongoDB接続中（指数バックオフ再試行付き）...');
+      try {
+        await connectWithRetry(5, 1000); // 最大5回、1秒から開始の指数バックオフ
+        logger.info('[DB初期化] MongoDB接続が成功しました ✓');
+        
+        // 接続監視の開始
+        logger.info('[DB初期化] MongoDB接続監視を開始します...');
+        startHealthCheck();
+      } catch (mongoError) {
+        logger.error(`[DB初期化] MongoDB接続に失敗しました: ${mongoError.message}`);
+        
+        if (attempt < MAX_INIT_RETRIES) {
+          logger.info(`[DB初期化] ${RETRY_DELAY}ms後に再試行します...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          continue;
+        }
+        throw mongoError;
+      }
 
-    // 接続監視の開始
-    logger.info('[DB初期化] MongoDB接続監視を開始します...');
-    startHealthCheck();
-
-    logger.info('[DB初期化] データベース初期化が完了しました ✓');
-  } catch (error) {
-    logger.error('[DB初期化] データベース初期化に失敗しました:', error.message);
-    throw new Error(`データベース初期化失敗: ${error.message}`);
+      logger.info('[DB初期化] データベース初期化が完了しました ✓');
+      return; // 成功した場合はここで終了
+      
+    } catch (error) {
+      logger.error(`[DB初期化] データベース初期化に失敗しました (試行 ${attempt}/${MAX_INIT_RETRIES}):`, error.message);
+      
+      if (attempt === MAX_INIT_RETRIES) {
+        // 最終試行でも失敗した場合
+        const finalError = new Error(`データベース初期化失敗 (${MAX_INIT_RETRIES}回試行後): ${error.message}`);
+        finalError.originalError = error;
+        throw finalError;
+      }
+      
+      // 再試行前の待機
+      logger.info(`[DB初期化] ${RETRY_DELAY}ms後に再試行します...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    }
   }
 }
 

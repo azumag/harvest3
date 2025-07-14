@@ -357,45 +357,72 @@ async function executeMaintenance(allExchangeSymbolPairs) {
  * レビュー対応: SchedulingManagerによる効率的スケジューリング
  */
 async function startBot() {
-  initializeDB();
-  try {
-    // コマンドライン引数があるかどうかをチェック
-    logger.info(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
-    if (targetSymbol) {
-      logger.info(`指定された通貨ペア: ${targetSymbol}`);
-    }
-
-    logger.info('\n[システム] イベント駆動型ボット開始...');
-
-    // 効率的な戦略実行スケジューリング（固定間隔を排除）
-    schedulingManager.scheduleIntervalTask('strategy-execution', async () => {
-      await executeStrategyCycle();
-    }, 1, { // 1分間隔をベースに動的調整
-      description: '効率的戦略実行エンジン（動的間隔調整）'
-    });
-
-    // 初回実行（即座に開始）
-    logger.info('[システム] 初回戦略実行を開始します...');
-    setTimeout(async () => {
-      try {
-        await executeStrategyCycle();
-      } catch (error) {
-        logger.error('初回戦略実行エラー:', error.message);
-        await postErrorToDiscord(`初回戦略実行失敗: ${error.message}`);
+  const MAX_STARTUP_RETRIES = 3;
+  const STARTUP_RETRY_DELAY = 10000; // 10秒
+  
+  for (let attempt = 1; attempt <= MAX_STARTUP_RETRIES; attempt++) {
+    try {
+      logger.info(`[システム] ボット起動開始 (試行 ${attempt}/${MAX_STARTUP_RETRIES})...`);
+      
+      // データベース初期化（エラーハンドリング強化）
+      logger.info('[システム] データベース初期化を開始します...');
+      await initializeDB();
+      logger.info('[システム] データベース初期化が完了しました ✓');
+      
+      // コマンドライン引数があるかどうかをチェック
+      logger.info(`コマンドライン引数: ${hasArgs ? '指定あり' : '指定なし'}`);
+      if (targetSymbol) {
+        logger.info(`指定された通貨ペア: ${targetSymbol}`);
       }
-    }, 5000); // 5秒後に初回実行
 
-    logger.info('\n[システム] イベント駆動型ボット起動完了 - while(true)ループを排除');
-    logger.info('[システム] プロセスは継続実行中... (Ctrl+C で停止)');
+      logger.info('\n[システム] イベント駆動型ボット開始...');
 
-    // プロセスの継続（以前の while(true) を置き換え）
-    await new Promise(() => {}); // 無限待機（イベント駆動）
+      // 効率的な戦略実行スケジューリング（固定間隔を排除）
+      schedulingManager.scheduleIntervalTask('strategy-execution', async () => {
+        try {
+          await executeStrategyCycle();
+        } catch (strategyError) {
+          logger.error('戦略実行サイクルエラー:', strategyError.message);
+          await postErrorToDiscord(`戦略実行サイクル失敗: ${strategyError.message}`);
+        }
+      }, 1, { // 1分間隔をベースに動的調整
+        description: '効率的戦略実行エンジン（動的間隔調整）'
+      });
 
-  } catch (error) {
-    const errorMessage = `ボット起動エラー: ${error.message}`;
-    logger.error(errorMessage, error);
-    await postErrorToDiscord(errorMessage);
-    process.exit(1);
+      // 初回実行（即座に開始）
+      logger.info('[システム] 初回戦略実行を開始します...');
+      setTimeout(async () => {
+        try {
+          await executeStrategyCycle();
+          logger.info('[システム] 初回戦略実行が完了しました ✓');
+        } catch (error) {
+          logger.error('初回戦略実行エラー:', error.message);
+          await postErrorToDiscord(`初回戦略実行失敗: ${error.message}`);
+        }
+      }, 5000); // 5秒後に初回実行
+
+      logger.info('\n[システム] イベント駆動型ボット起動完了 - while(true)ループを排除');
+      logger.info('[システム] プロセスは継続実行中... (Ctrl+C で停止)');
+
+      // プロセスの継続（以前の while(true) を置き換え）
+      await new Promise(() => {}); // 無限待機（イベント駆動）
+
+    } catch (error) {
+      const errorMessage = `ボット起動エラー (試行 ${attempt}/${MAX_STARTUP_RETRIES}): ${error.message}`;
+      logger.error(errorMessage, error);
+      
+      if (attempt === MAX_STARTUP_RETRIES) {
+        // 最終試行でも失敗した場合
+        const finalErrorMessage = `ボット起動が${MAX_STARTUP_RETRIES}回失敗しました: ${error.message}`;
+        logger.error(finalErrorMessage);
+        await postErrorToDiscord(finalErrorMessage);
+        process.exit(1);
+      }
+      
+      // 再試行前の待機
+      logger.info(`[システム] ${STARTUP_RETRY_DELAY}ms後に再試行します...`);
+      await new Promise(resolve => setTimeout(resolve, STARTUP_RETRY_DELAY));
+    }
   }
 }
 

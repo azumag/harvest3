@@ -142,16 +142,29 @@ pre_startup_checks() {
         fi
     fi
     
-    # decimal.jsの存在を具体的にチェック
-    if ! node -e "require('decimal.js'); console.log('decimal.js OK');" 2>/dev/null; then
-        log "decimal.js not found, installing specifically..."
-        if ! npm install decimal.js@10.6.0; then
-            local error_msg="Failed to install decimal.js specifically"
-            log "ERROR: $error_msg"
-            send_startup_error_to_discord "$error_msg" "decimal.js installation failed"
-            exit 1
+    # decimal.jsの存在を具体的にチェック（強化版）
+    log "Checking critical dependencies..."
+    local critical_deps=("decimal.js@10.6.0" "ccxt" "mongodb" "redis")
+    for dep in "${critical_deps[@]}"; do
+        local dep_name=$(echo "$dep" | cut -d'@' -f1)
+        if ! node -e "require('$dep_name'); console.log('$dep_name OK');" 2>/dev/null; then
+            log "$dep_name not found, installing specifically..."
+            if ! npm install "$dep"; then
+                local error_msg="Failed to install $dep specifically"
+                log "ERROR: $error_msg"
+                send_startup_error_to_discord "$error_msg" "$dep installation failed"
+                exit 1
+            fi
+            
+            # インストール後の再確認
+            if ! node -e "require('$dep_name'); console.log('$dep_name verified after install');" 2>/dev/null; then
+                local error_msg="$dep_name still not accessible after installation"
+                log "ERROR: $error_msg"
+                send_startup_error_to_discord "$error_msg" "$dep_name accessibility check failed"
+                exit 1
+            fi
         fi
-    fi
+    done
     
     if ! npm ls > /dev/null 2>&1; then
         local error_msg="npm dependencies validation failed"
@@ -163,51 +176,92 @@ pre_startup_checks() {
     log "Pre-startup checks completed successfully"
 }
 
-# データベース接続チェック
+# データベース接続チェック（強化版）
 check_database_connections() {
-    log "Checking database connections..."
+    log "Checking database connections with retry logic..."
     
     local redis_failed=false
     local mongo_failed=false
+    local max_retries=3
+    local retry_delay=5
     
-    # Redis接続チェック
-    log "Testing Redis connection..."
-    if ! node -e "
-        const redis = require('redis');
-        const client = redis.createClient({url: process.env.REDIS_URL});
-        client.connect()
-            .then(() => { console.log('Redis connection OK'); process.exit(0); })
-            .catch(err => { console.error('Redis connection failed:', err.message); process.exit(1); });
-        setTimeout(() => { console.error('Redis connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
-    " 2>/dev/null; then
-        log "WARNING: Redis connection failed (service will retry later)"
-        redis_failed=true
-    else
-        log "Redis connection verified successfully"
-    fi
+    # Redis接続チェック（リトライ付き）
+    log "Testing Redis connection with retry..."
+    local redis_retry=0
+    while [ $redis_retry -lt $max_retries ]; do
+        if node -e "
+            const redis = require('redis');
+            const client = redis.createClient({url: process.env.REDIS_URL});
+            client.connect()
+                .then(() => { 
+                    console.log('Redis connection OK'); 
+                    return client.quit();
+                })
+                .then(() => process.exit(0))
+                .catch(err => { 
+                    console.error('Redis connection failed:', err.message); 
+                    process.exit(1); 
+                });
+            setTimeout(() => { 
+                console.error('Redis connection timeout'); 
+                process.exit(1); 
+            }, ${DATABASE_CONNECTION_TIMEOUT}000);
+        " 2>/dev/null; then
+            log "Redis connection verified successfully (attempt $((redis_retry + 1)))"
+            break
+        else
+            redis_retry=$((redis_retry + 1))
+            if [ $redis_retry -lt $max_retries ]; then
+                log "Redis connection failed (attempt $redis_retry/$max_retries), retrying in ${retry_delay}s..."
+                sleep $retry_delay
+            else
+                log "WARNING: Redis connection failed after $max_retries attempts (service will retry later)"
+                redis_failed=true
+            fi
+        fi
+    done
     
-    # MongoDB接続チェック
-    log "Testing MongoDB connection..."
-    if ! node -e "
-        const { MongoClient } = require('mongodb');
-        const client = new MongoClient(process.env.MONGO_URL);
-        client.connect()
-            .then(() => { console.log('MongoDB connection OK'); return client.close(); })
-            .then(() => process.exit(0))
-            .catch(err => { console.error('MongoDB connection failed:', err.message); process.exit(1); });
-        setTimeout(() => { console.error('MongoDB connection timeout'); process.exit(1); }, ${DATABASE_CONNECTION_TIMEOUT}000);
-    " 2>/dev/null; then
-        log "WARNING: MongoDB connection failed (service will retry later)"
-        mongo_failed=true
-    else
-        log "MongoDB connection verified successfully"
-    fi
+    # MongoDB接続チェック（リトライ付き）
+    log "Testing MongoDB connection with retry..."
+    local mongo_retry=0
+    while [ $mongo_retry -lt $max_retries ]; do
+        if node -e "
+            const { MongoClient } = require('mongodb');
+            const client = new MongoClient(process.env.MONGO_URL);
+            client.connect()
+                .then(() => { 
+                    console.log('MongoDB connection OK'); 
+                    return client.close(); 
+                })
+                .then(() => process.exit(0))
+                .catch(err => { 
+                    console.error('MongoDB connection failed:', err.message); 
+                    process.exit(1); 
+                });
+            setTimeout(() => { 
+                console.error('MongoDB connection timeout'); 
+                process.exit(1); 
+            }, ${DATABASE_CONNECTION_TIMEOUT}000);
+        " 2>/dev/null; then
+            log "MongoDB connection verified successfully (attempt $((mongo_retry + 1)))"
+            break
+        else
+            mongo_retry=$((mongo_retry + 1))
+            if [ $mongo_retry -lt $max_retries ]; then
+                log "MongoDB connection failed (attempt $mongo_retry/$max_retries), retrying in ${retry_delay}s..."
+                sleep $retry_delay
+            else
+                log "WARNING: MongoDB connection failed after $max_retries attempts (service will retry later)"
+                mongo_failed=true
+            fi
+        fi
+    done
     
     # 両方のデータベースが失敗した場合のみエラー終了
     if [ "$redis_failed" = true ] && [ "$mongo_failed" = true ]; then
-        local error_msg="All database connections failed"
+        local error_msg="All database connections failed after retry attempts"
         log "ERROR: $error_msg"
-        send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed"
+        send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed after retries"
         exit 1
     fi
     
@@ -281,27 +335,256 @@ start_application() {
     
     log "Application started successfully (Bot PID: $app_pid, API PID: $api_pid)"
     
-    # 両方のプロセスを監視
+    # プロセス監視と自動回復機能
+    local process_restart_count=0
+    local max_process_restarts=3
+    local restart_cooldown=30
+    
     while true; do
+        # ボットプロセスの監視
         if ! kill -0 $app_pid 2>/dev/null; then
-            log "Bot process died, exiting..."
-            kill $api_pid 2>/dev/null
-            exit 1
+            log "Bot process died, attempting recovery..."
+            
+            # API プロセスも停止
+            if kill -0 $api_pid 2>/dev/null; then
+                log "Stopping API process for coordinated restart..."
+                kill $api_pid 2>/dev/null
+                wait $api_pid 2>/dev/null
+            fi
+            
+            # 再起動制限チェック
+            if [ $process_restart_count -lt $max_process_restarts ]; then
+                process_restart_count=$((process_restart_count + 1))
+                log "Restarting processes (attempt $process_restart_count/$max_process_restarts)..."
+                
+                # クールダウン期間
+                sleep $restart_cooldown
+                
+                # API サーバーを再起動
+                log "Restarting API server..."
+                npm run start-web &
+                api_pid=$!
+                
+                # APIの起動を確認
+                sleep 10
+                if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+                    log "API server failed to restart, giving up..."
+                    exit 1
+                fi
+                
+                # ボットを再起動
+                log "Restarting bot application..."
+                npm run start &
+                app_pid=$!
+                
+                log "Processes restarted successfully (Bot PID: $app_pid, API PID: $api_pid)"
+            else
+                log "Maximum restart attempts reached, exiting..."
+                exit 1
+            fi
         fi
+        
+        # APIプロセスの監視
         if ! kill -0 $api_pid 2>/dev/null; then
-            log "API process died, exiting..."
-            kill $app_pid 2>/dev/null
-            exit 1
+            log "API process died, attempting recovery..."
+            
+            # ボットプロセスも停止
+            if kill -0 $app_pid 2>/dev/null; then
+                log "Stopping bot process for coordinated restart..."
+                kill $app_pid 2>/dev/null
+                wait $app_pid 2>/dev/null
+            fi
+            
+            # 再起動制限チェック
+            if [ $process_restart_count -lt $max_process_restarts ]; then
+                process_restart_count=$((process_restart_count + 1))
+                log "Restarting processes (attempt $process_restart_count/$max_process_restarts)..."
+                
+                # クールダウン期間
+                sleep $restart_cooldown
+                
+                # API サーバーを再起動
+                log "Restarting API server..."
+                npm run start-web &
+                api_pid=$!
+                
+                # APIの起動を確認
+                sleep 10
+                if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+                    log "API server failed to restart, giving up..."
+                    exit 1
+                fi
+                
+                # ボットを再起動
+                log "Restarting bot application..."
+                npm run start &
+                app_pid=$!
+                
+                log "Processes restarted successfully (Bot PID: $app_pid, API PID: $api_pid)"
+            else
+                log "Maximum restart attempts reached, exiting..."
+                exit 1
+            fi
         fi
+        
+        # 定期的なヘルスチェック
+        if [ $(($(date +%s) % 60)) -eq 0 ]; then
+            log "Processes health check: Bot PID $app_pid, API PID $api_pid"
+            if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+                log "WARNING: API health check failed"
+            fi
+        fi
+        
         sleep 5
     done
 }
 
-# シグナルハンドラー
+# シグナルハンドラー（強化版）
 cleanup() {
     log "Received termination signal, shutting down gracefully..."
-    # 必要に応じてクリーンアップ処理
+    
+    # 診断情報を記録
+    log "=== SHUTDOWN DIAGNOSTICS ==="
+    log "Process status at shutdown:"
+    if [ -n "$app_pid" ]; then
+        if kill -0 $app_pid 2>/dev/null; then
+            log "  Bot process (PID: $app_pid): Running"
+        else
+            log "  Bot process (PID: $app_pid): Not running"
+        fi
+    fi
+    
+    if [ -n "$api_pid" ]; then
+        if kill -0 $api_pid 2>/dev/null; then
+            log "  API process (PID: $api_pid): Running"
+        else
+            log "  API process (PID: $api_pid): Not running"
+        fi
+    fi
+    
+    # リソース使用状況
+    log "Memory usage:"
+    free -h | head -2
+    
+    log "Disk usage:"
+    df -h / | tail -1
+    
+    # プロセスの優雅な終了
+    if [ -n "$app_pid" ] && kill -0 $app_pid 2>/dev/null; then
+        log "Sending SIGTERM to bot process (PID: $app_pid)..."
+        kill -TERM $app_pid 2>/dev/null
+        
+        # プロセスが終了するまで待つ（最大15秒）
+        local wait_count=0
+        while kill -0 $app_pid 2>/dev/null && [ $wait_count -lt 15 ]; do
+            sleep 1
+            wait_count=$((wait_count + 1))
+        done
+        
+        # まだ動いている場合は強制終了
+        if kill -0 $app_pid 2>/dev/null; then
+            log "Bot process did not exit gracefully, force killing..."
+            kill -KILL $app_pid 2>/dev/null
+        fi
+    fi
+    
+    if [ -n "$api_pid" ] && kill -0 $api_pid 2>/dev/null; then
+        log "Sending SIGTERM to API process (PID: $api_pid)..."
+        kill -TERM $api_pid 2>/dev/null
+        
+        # プロセスが終了するまで待つ（最大10秒）
+        local wait_count=0
+        while kill -0 $api_pid 2>/dev/null && [ $wait_count -lt 10 ]; do
+            sleep 1
+            wait_count=$((wait_count + 1))
+        done
+        
+        # まだ動いている場合は強制終了
+        if kill -0 $api_pid 2>/dev/null; then
+            log "API process did not exit gracefully, force killing..."
+            kill -KILL $api_pid 2>/dev/null
+        fi
+    fi
+    
+    log "Graceful shutdown completed"
     exit 0
+}
+
+# 診断機能（強化版）
+run_diagnostics() {
+    log "=== COMPREHENSIVE DIAGNOSTICS ==="
+    
+    # システム情報
+    log "System Information:"
+    log "  OS: $(uname -a)"
+    log "  Node.js: $(node --version 2>/dev/null || echo 'Not available')"
+    log "  NPM: $(npm --version 2>/dev/null || echo 'Not available')"
+    log "  Container: $(hostname)"
+    
+    # メモリとリソース
+    log "Resource Usage:"
+    free -h | head -2 | while read line; do
+        log "  $line"
+    done
+    
+    log "Disk Space:"
+    df -h / | tail -1 | while read line; do
+        log "  $line"
+    done
+    
+    # プロセス情報
+    log "Process Information:"
+    ps aux | head -1 | while read line; do
+        log "  $line"
+    done
+    ps aux | grep -E "(node|npm)" | grep -v grep | while read line; do
+        log "  $line"
+    done
+    
+    # ネットワーク接続
+    log "Network Connectivity:"
+    
+    # Redis接続テスト
+    if nc -z redis 6379 2>/dev/null; then
+        log "  Redis (redis:6379): ✓ Reachable"
+    else
+        log "  Redis (redis:6379): ✗ Not reachable"
+    fi
+    
+    # MongoDB接続テスト
+    if nc -z mongodb 27017 2>/dev/null; then
+        log "  MongoDB (mongodb:27017): ✓ Reachable"
+    else
+        log "  MongoDB (mongodb:27017): ✗ Not reachable"
+    fi
+    
+    # パッケージ情報
+    log "Package Information:"
+    if [ -f "package.json" ]; then
+        log "  package.json: ✓ Found"
+        if npm ls decimal.js 2>/dev/null | grep -q decimal.js; then
+            log "  decimal.js: ✓ Installed"
+        else
+            log "  decimal.js: ✗ Not found"
+        fi
+    else
+        log "  package.json: ✗ Not found"
+    fi
+    
+    # 環境変数チェック
+    log "Environment Variables:"
+    log "  REDIS_URL: ${REDIS_URL:-'Not set'}"
+    log "  MONGO_URL: ${MONGO_URL:-'Not set'}"
+    log "  MONGODB_DB_NAME: ${MONGODB_DB_NAME:-'Not set'}"
+    log "  NODE_ENV: ${NODE_ENV:-'Not set'}"
+    
+    # ファイルシステム権限
+    log "File System Permissions:"
+    log "  Current directory: $(pwd)"
+    log "  Directory permissions: $(ls -ld . | awk '{print $1}')"
+    log "  Owner: $(ls -ld . | awk '{print $3":"$4}')"
+    
+    log "=== DIAGNOSTICS COMPLETE ==="
 }
 
 trap cleanup SIGTERM SIGINT
@@ -320,6 +603,9 @@ main() {
         exec "$@"
     else
         log "Starting strategy-runner container with enhanced error handling"
+        
+        # 初期診断の実行
+        run_diagnostics
         
         # 段階的起動プロセス
         pre_startup_checks
