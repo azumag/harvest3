@@ -6,6 +6,27 @@
 const { ParameterConstraintEngine } = require('./constraintManager');
 
 /**
+ * ハイブリッドサンプリングの設定定数
+ */
+const HYBRID_SAMPLING_CONFIG = {
+  DEFAULT_LATIN_HYPERCUBE_RATIO: 0.5,   // ラテン超方体サンプリングの比率
+  DEFAULT_DIVERSITY_RATIO: 0.35,        // 多様性サンプリングの比率
+  DEFAULT_RANDOM_RATIO: 0.15,           // ランダムサンプリングの比率
+  DEFAULT_MIN_DISTANCE: 0.12,           // 最小距離（生成性向上のため緩和）
+  FOCUS_RATIO: 0.6                      // 有望領域への集中度
+};
+
+/**
+ * サンプリングエンジンの設定定数
+ */
+const SAMPLING_ENGINE_CONFIG = {
+  MAX_ATTEMPTS_MULTIPLIER: 50,          // 最大試行回数の倍数
+  ENHANCED_ATTEMPTS_MULTIPLIER: 100,    // 強化版サンプリングの試行回数倍数
+  DISTANCE_RELAXATION_STEPS: [1.0, 0.8, 0.6, 0.4], // 距離緩和ステップ
+  DISTANCE_RELAXATION_THRESHOLD: 20     // 距離緩和しきい値
+};
+
+/**
  * スマートサンプリングエンジン
  */
 class SmartSamplingEngine {
@@ -131,7 +152,7 @@ class SmartSamplingEngine {
     }
 
     const samples = [];
-    const focusRatio = 0.6; // 有望な領域への集中度
+    const focusRatio = HYBRID_SAMPLING_CONFIG.FOCUS_RATIO; // 有望な領域への集中度
     const focusCount = Math.floor(count * focusRatio);
     const explorationCount = count - focusCount;
 
@@ -237,7 +258,7 @@ class SmartSamplingEngine {
     }
 
     const samples = [];
-    const maxAttempts = count * 50;
+    const maxAttempts = count * SAMPLING_ENGINE_CONFIG.MAX_ATTEMPTS_MULTIPLIER;
     let attempts = 0;
 
     while (samples.length < count && attempts < maxAttempts) {
@@ -318,11 +339,11 @@ class SmartSamplingEngine {
    */
   hybridSampling(strategyType, count = 50, options = {}) {
     const {
-      latinHypercubeRatio = 0.5,  // より多様性を重視
-      diversityRatio = 0.35,      // 多様性サンプリングを増加
-      randomRatio = 0.15,         // ランダム部分を減少
+      latinHypercubeRatio = HYBRID_SAMPLING_CONFIG.DEFAULT_LATIN_HYPERCUBE_RATIO,
+      diversityRatio = HYBRID_SAMPLING_CONFIG.DEFAULT_DIVERSITY_RATIO,
+      randomRatio = HYBRID_SAMPLING_CONFIG.DEFAULT_RANDOM_RATIO,
       promisingRegions = [],
-      minDistance = 0.12          // 最小距離を少し緩和して生成性を向上
+      minDistance = HYBRID_SAMPLING_CONFIG.DEFAULT_MIN_DISTANCE
     } = options;
 
     const samples = [];
@@ -392,12 +413,12 @@ class SmartSamplingEngine {
     }
 
     const samples = [];
-    const maxAttempts = count * 100; // 試行回数を増加
+    const maxAttempts = count * SAMPLING_ENGINE_CONFIG.ENHANCED_ATTEMPTS_MULTIPLIER; // 試行回数を増加
     let attempts = 0;
     let currentMinDistance = minDistance;
 
     // 段階的に最小距離を緩和して生成性を向上
-    const distanceSteps = [minDistance, minDistance * 0.8, minDistance * 0.6, minDistance * 0.4];
+    const distanceSteps = SAMPLING_ENGINE_CONFIG.DISTANCE_RELAXATION_STEPS.map(factor => minDistance * factor);
     let stepIndex = 0;
 
     while (samples.length < count && attempts < maxAttempts && stepIndex < distanceSteps.length) {
@@ -417,7 +438,7 @@ class SmartSamplingEngine {
         attempts++;
         
         // 一定試行後に最小距離を緩和
-        if (attempts > count * 20 && stepIndex < distanceSteps.length - 1) {
+        if (attempts > count * SAMPLING_ENGINE_CONFIG.DISTANCE_RELAXATION_THRESHOLD && stepIndex < distanceSteps.length - 1) {
           stepIndex++;
           currentMinDistance = distanceSteps[stepIndex];
           attempts = 0;
@@ -571,5 +592,7 @@ class SmartSamplingEngine {
 }
 
 module.exports = {
-  SmartSamplingEngine
+  SmartSamplingEngine,
+  HYBRID_SAMPLING_CONFIG,
+  SAMPLING_ENGINE_CONFIG
 };
