@@ -41,8 +41,11 @@ send_startup_error_to_discord() {
 
     # Node.js経由でDiscord通知送信
     if command -v node >/dev/null 2>&1; then
-        # 一時的なDiscord通知スクリプトを作成
-        local temp_script="/tmp/discord_notify_$$.js"
+        # セキュアな一時ファイル作成
+        local temp_script=$(mktemp "/tmp/discord_notify_XXXXXX.js")
+        # 一時ファイルのクリーンアップを保証
+        trap "rm -f \"$temp_script\"" EXIT ERR
+        
         cat > "$temp_script" << 'EOF'
 const fs = require('fs');
 
@@ -94,8 +97,10 @@ EOF
             log "WARNING: Discord notification failed (non-critical)"
         fi
         
-        # 一時ファイルを削除
+        # 一時ファイルを削除（trapでも削除されるが、明示的に削除）
         rm -f "$temp_script"
+        # trapをリセット（この関数内での処理完了）
+        trap - EXIT ERR
     else
         log "WARNING: Node.js not available for Discord notification"
     fi
