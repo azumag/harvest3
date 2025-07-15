@@ -36,7 +36,9 @@ describe('残高チェッカー設定のテスト', () => {
     it('デフォルト設定が正しく定義されている', () => {
       expect(BALANCE_CHECKER_CONFIG.thresholds.significantBalance).toBe(0.00001);
       expect(BALANCE_CHECKER_CONFIG.thresholds.highDiscrepancyPercent).toBe(10);
-      expect(BALANCE_CHECKER_CONFIG.thresholds.balanceComparisonTolerance).toBe(0);
+      expect(BALANCE_CHECKER_CONFIG.thresholds.balanceComparisonTolerance).toBe(1);
+      expect(BALANCE_CHECKER_CONFIG.thresholds.externalTradeThreshold).toBe(50);
+      expect(BALANCE_CHECKER_CONFIG.thresholds.currencySpecificTolerance).toEqual({});
 
       expect(BALANCE_CHECKER_CONFIG.distributedLock.lockKeyPrefix).toBe('balance_checker_lock');
       expect(BALANCE_CHECKER_CONFIG.distributedLock.stateKey).toBe('balance_checker_state');
@@ -87,6 +89,20 @@ describe('残高チェッカー設定のテスト', () => {
       expect(config.intervals.robustCheck).toBe(3600000);
     });
 
+    it('tolerancePercent設定', () => {
+      process.env.BALANCE_CHECKER_TOLERANCE_PERCENT = '2.5';
+
+      const config = getBalanceCheckerConfig();
+      expect(config.thresholds.balanceComparisonTolerance).toBe(2.5);
+    });
+
+    it('externalTradeThreshold設定', () => {
+      process.env.BALANCE_CHECKER_EXTERNAL_TRADE_THRESHOLD = '75';
+
+      const config = getBalanceCheckerConfig();
+      expect(config.thresholds.externalTradeThreshold).toBe(75);
+    });
+
     it('デバッグモード有効化', () => {
       process.env.BALANCE_CHECKER_DEBUG = 'true';
 
@@ -114,7 +130,8 @@ describe('残高チェッカー設定のテスト', () => {
         thresholds: {
           significantBalance: 0.00001,
           highDiscrepancyPercent: 10,
-          balanceComparisonTolerance: 0
+          balanceComparisonTolerance: 1,
+          externalTradeThreshold: 50
         },
         distributedLock: {
           defaultTtl: 300000
@@ -198,6 +215,35 @@ describe('残高チェッカー設定のテスト', () => {
       };
 
       expect(() => validateConfig(invalidConfig)).toThrow('robustCheck interval must be at least 5 minutes');
+    });
+
+    it('無効なbalanceComparisonToleranceでエラーを投げる', () => {
+      const invalidConfig = {
+        thresholds: {
+          significantBalance: 0.001,
+          highDiscrepancyPercent: 10,
+          balanceComparisonTolerance: 150 // 100%を超える
+        },
+        distributedLock: { defaultTtl: 300000 },
+        intervals: { lightweightCheck: 300000, robustCheck: 3600000 }
+      };
+
+      expect(() => validateConfig(invalidConfig)).toThrow('balanceComparisonTolerance must be between 0 and 100');
+    });
+
+    it('無効なexternalTradeThresholdでエラーを投げる', () => {
+      const invalidConfig = {
+        thresholds: {
+          significantBalance: 0.001,
+          highDiscrepancyPercent: 10,
+          balanceComparisonTolerance: 1,
+          externalTradeThreshold: -10 // 負の値
+        },
+        distributedLock: { defaultTtl: 300000 },
+        intervals: { lightweightCheck: 300000, robustCheck: 3600000 }
+      };
+
+      expect(() => validateConfig(invalidConfig)).toThrow('externalTradeThreshold must be between 0 and 100');
     });
 
     it('複数のエラーがある場合、全てのエラーを報告する', () => {
