@@ -10,6 +10,7 @@ const {
   getAllPositionsRedis,
   getAllTradeSummaries
 } = require('../database/redisDatabase');
+const { initRedisClient } = require('../database/redisClient');
 const {
   getTradeCurrentPosition
 } = require('../database/manager');
@@ -21,6 +22,34 @@ const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 
 // 設定の取得
 const BALANCE_CONFIG = getValidatedConfig();
+
+/**
+ * Redis接続を確実に確立する
+ * @returns {Promise<void>}
+ */
+async function ensureRedisConnection() {
+  const redisClient = getRedisClient();
+  
+  // 既に接続済みの場合は何もしない
+  if (redisClient && redisClient.isReady) {
+    return;
+  }
+  
+  // 接続を試行
+  logger.info('Redis接続を確立中...');
+  
+  try {
+    const client = await initRedisClient();
+    if (!client || !client.isReady) {
+      throw new Error('Redis接続の初期化に失敗しました');
+    }
+    
+    logger.info('Redis接続が正常に確立されました');
+  } catch (error) {
+    logger.error('Redis接続の確立に失敗:', error.message);
+    throw new Error(`Redis接続エラー: ${error.message}`);
+  }
+}
 
 /**
  * 取引所残高を取得する
@@ -57,8 +86,29 @@ async function getExchangeBalance(exchangeId) {
  */
 async function getBotManagedBalance() {
   try {
+    // Redis接続状態を確認し、必要に応じて初期化
+    await ensureRedisConnection();
+
     // Redisから全ポジションを取得
     const allPositions = await getAllPositionsRedis();
+
+    // Redis接続問題でデータが取得できない場合のチェック
+    if (!Array.isArray(allPositions)) {
+      throw new Error('Redisからポジションデータを取得できませんでした（データ形式エラー）');
+    }
+
+    // ポジションデータが空の場合の詳細ログ
+    if (allPositions.length === 0) {
+      const redisClient = getRedisClient();
+      const isConnected = redisClient && redisClient.isReady;
+      
+      if (!isConnected) {
+        throw new Error('Redis接続が確立されていないため、ポジションデータを取得できません');
+      }
+      
+      // Redis接続はあるがデータが空の場合は正常な状態として扱う
+      logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
+    }
 
     // 買いポジション（未売却）のみを抽出
     const buyPositions = allPositions.filter(position =>
@@ -80,10 +130,16 @@ async function getBotManagedBalance() {
       currencyBalances[baseCurrency] += position.amount || 0;
     });
 
-    logger.info('Bot管理残高計算完了:', currencyBalances);
+    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
     return currencyBalances;
   } catch (error) {
     logger.error('Bot管理残高取得エラー:', error.message);
+    
+    // Redis接続エラーの場合は詳細情報を追加
+    const redisClient = getRedisClient();
+    const redisStatus = redisClient ? (redisClient.isReady ? '接続済み' : '未接続') : 'null';
+    logger.error(`Redis状態: ${redisStatus}`);
+    
     throw error;
   }
 }
@@ -174,7 +230,14 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     };
 
   } catch (error) {
-    const errorMessage = `残高比較エラー (${exchangeId}): ${error.message}`;
+    let errorMessage = `残高比較エラー (${exchangeId}): ${error.message}`;
+    
+    // Redis接続エラーの場合は特別な処理
+    if (error.message.includes('Redis')) {
+      errorMessage = `🔌 Redis接続エラー (${exchangeId}): ${error.message}\n⚠️ strategy-runnerサービスとRedisサービス間の接続を確認してください`;
+      logger.error(`Redis接続問題を検出 - Docker環境の確認が必要: ${error.message}`);
+    }
+    
     logger.error(errorMessage);
     await postErrorToDiscord(errorMessage);
     throw error;
@@ -689,5 +752,7 @@ module.exports = {
   getBotManagedBalanceDetailed,
   getCheckerState,
   resetCheckerState,
+  // Redis接続管理
+  ensureRedisConnection,
   STATE
 };
