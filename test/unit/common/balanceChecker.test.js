@@ -47,7 +47,12 @@ jest.mock('../../../src/database/manager', () => ({
 }));
 
 jest.mock('../../../src/database/redisClient', () => ({
-  initRedisClient: jest.fn()
+  initRedisClient: jest.fn(() => ({
+    isReady: true,
+    set: jest.fn(),
+    get: jest.fn(),
+    eval: jest.fn()
+  }))
 }));
 
 jest.mock('../../../src/common/balanceCheckerConfig', () => ({
@@ -109,6 +114,15 @@ const { postOrderToDiscord, postErrorToDiscord } = require('../../../src/common/
 describe('残高チェッカーのテスト', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Redis client mock の再設定
+    const { getClient } = require('../../../src/database/redisDatabase');
+    getClient.mockReturnValue({
+      set: jest.fn(),
+      get: jest.fn(),
+      eval: jest.fn(),
+      isReady: true
+    });
   });
 
   describe('getExchangeBalance', () => {
