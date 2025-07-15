@@ -350,8 +350,14 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
     const maxAmount = Math.max(exchangeAmount, botAmount);
     const discrepancyPercent = maxAmount > 0 ? parseFloat(((difference / maxAmount) * 100).toFixed(2)) : 0;
 
-    // 完全一致でない場合は全て通知
-    if (difference > 0) {
+    // 許容誤差の計算（通貨固有 > 全体設定の順で適用）
+    const currencyTolerance = BALANCE_CONFIG.thresholds.currencySpecificTolerance[normalizedCurrency];
+    const tolerancePercent = currencyTolerance !== undefined 
+      ? currencyTolerance 
+      : BALANCE_CONFIG.thresholds.balanceComparisonTolerance;
+
+    // 許容誤差を超えた場合のみ通知
+    if (discrepancyPercent > tolerancePercent) {
       const discrepancyEntry = {
         currency: normalizedCurrency,
         originalCurrency: currency, // 元の通貨名を保持
@@ -359,6 +365,8 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
         botAmount: parseFloat(botAmount.toFixed(DECIMAL_PRECISION)),
         difference,
         discrepancyPercent,
+        tolerancePercent,
+        isExternalTradeSuspected: discrepancyPercent >= BALANCE_CONFIG.thresholds.externalTradeThreshold,
         timestamp: Date.now(),
         exchangeId
       };
@@ -450,12 +458,27 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   
   // 不整合の重要度に応じてログレベルを決定
   const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
-  const isHighDiscrepancy = uniqueDiscrepancies.some(disc => 
+  const externalTradeThreshold = BALANCE_CONFIG.thresholds.externalTradeThreshold;
+  
+  const highDiscrepancies = uniqueDiscrepancies.filter(disc => 
     disc.discrepancyPercent >= highDiscrepancyThreshold
   );
+  const externalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.isExternalTradeSuspected
+  );
 
-  const logLevel = isHighDiscrepancy ? 'error' : 'warn';
-  const severityText = isHighDiscrepancy ? '高度不整合' : '軽微な不整合';
+  let logLevel, severityText;
+  if (highDiscrepancies.length > 0) {
+    logLevel = 'error';
+    severityText = externalTradeDiscrepancies.length > 0 
+      ? '高度不整合（外部取引の可能性含む）' 
+      : '高度不整合';
+  } else {
+    logLevel = 'warn';
+    severityText = externalTradeDiscrepancies.length > 0 
+      ? '軽微な不整合（外部取引の可能性）' 
+      : '軽微な不整合';
+  }
   
   const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
   logger[logLevel](message_text);
@@ -469,7 +492,9 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     const logIndex = index + 1;
     
     if (!loggedCurrencies.has(normalizedCurrency)) {
-      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`;
+      const toleranceInfo = disc.tolerancePercent > 0 ? ` [許容誤差: ${disc.tolerancePercent}%]` : '';
+      const externalTradeInfo = disc.isExternalTradeSuspected ? ' ⚠️外部取引の可能性' : '';
+      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)${toleranceInfo}${externalTradeInfo}`;
       logEntries.push(logEntry);
       loggedCurrencies.set(normalizedCurrency, {
         logIndex,
@@ -613,10 +638,18 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   const displayDiscrepancies = discrepancies.slice(0, maxDisplay);
   
   displayDiscrepancies.forEach(disc => {
-    message += `**${disc.currency}**\n`;
+    const externalTradeWarning = disc.isExternalTradeSuspected ? ' ⚠️' : '';
+    message += `**${disc.currency}${externalTradeWarning}**\n`;
     message += `・取引所残高: ${disc.exchangeAmount.toFixed(DECIMAL_PRECISION)}\n`;
     message += `・Bot管理残高: ${disc.botAmount.toFixed(DECIMAL_PRECISION)}\n`;
-    message += `・差異: ${disc.difference.toFixed(DECIMAL_PRECISION)} (${disc.discrepancyPercent}%)\n\n`;
+    message += `・差異: ${disc.difference.toFixed(DECIMAL_PRECISION)} (${disc.discrepancyPercent}%)\n`;
+    if (disc.tolerancePercent > 0) {
+      message += `・許容誤差: ${disc.tolerancePercent}%\n`;
+    }
+    if (disc.isExternalTradeSuspected) {
+      message += `・⚠️ 外部取引の可能性が高い差異です\n`;
+    }
+    message += '\n';
   });
 
   if (discrepancies.length > maxDisplay) {
@@ -629,6 +662,12 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
     message += `・取引所通貨数: ${diagnosticInfo.exchangeBalanceKeys.length}\n`;
     message += `・Bot管理通貨数: ${diagnosticInfo.botBalanceKeys.length}\n`;
     
+    // 外部取引の可能性がある通貨を表示
+    const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
+    if (externalTradeDiscrepancies.length > 0) {
+      message += `・外部取引の可能性: ${externalTradeDiscrepancies.map(d => `${d.currency}(${d.discrepancyPercent}%)`).join(', ')}\n`;
+    }
+    
     // 高い不整合率の通貨を強調
     const highDiscrepancies = discrepancies.filter(d => d.discrepancyPercent > 50);
     if (highDiscrepancies.length > 0) {
@@ -637,8 +676,21 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
     message += '\n';
   }
 
-  message += '⚠️ **緊急対応が必要です。**\n';
-  message += '詳細な調査とRedisデータの確認を行ってください。';
+  // 外部取引の可能性に応じて対応メッセージを調整
+  const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
+  if (externalTradeDiscrepancies.length === discrepancies.length) {
+    // 全て外部取引の可能性
+    message += '💡 **外部取引が原因の可能性があります。**\n';
+    message += '取引所での手動取引履歴を確認し、必要に応じてボット設定を調整してください。';
+  } else if (externalTradeDiscrepancies.length > 0) {
+    // 一部が外部取引の可能性
+    message += '⚠️ **調査が必要です。**\n';
+    message += '外部取引の可能性がある通貨とシステム不整合の可能性がある通貨が混在しています。詳細な調査とRedisデータの確認を行ってください。';
+  } else {
+    // 外部取引ではない可能性が高い
+    message += '🚨 **緊急対応が必要です。**\n';
+    message += 'システム不整合の可能性が高いです。詳細な調査とRedisデータの確認を行ってください。';
+  }
 
   return message;
 }
