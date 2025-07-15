@@ -998,5 +998,7 @@ module.exports = {
   WS_CONFIG,
   STRATEGY_PARAMS,
   // Issue #824: テスト用に関数をエクスポート
-  isTestEnvironment
+  isTestEnvironment,
+  // Issue #948: バックテスト用のモックOHLCV生成関数をエクスポート
+  generateMockOHLCV
 };
