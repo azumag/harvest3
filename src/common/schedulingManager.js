@@ -234,20 +234,16 @@ class SchedulingManager {
 
     // 軽量チェック（設定間隔）
     this.scheduleIntervalTask('lightweight-balance-check', async () => {
-      // 循環依存を避けるため、実行時に動的にrequireする
+      // 軽量残高チェック: 単一取引所の残高チェックを実行
       try {
-        const botModule = require('../bot');
-        if (typeof botModule.executeRiskManagementCheck === 'function') {
-          await botModule.executeRiskManagementCheck();
-        } else {
-          throw new Error('executeRiskManagementCheck is not a function');
-        }
+        const { checkAllExchangeBalances } = require('../common/balanceChecker');
+        await checkAllExchangeBalances();
       } catch (error) {
-        logger.error('executeRiskManagementCheck の実行に失敗しました:', error.message);
+        logger.error('軽量残高チェックの実行に失敗しました:', error.message);
         throw error;
       }
     }, lightweightIntervalMinutes, {
-      description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
+      description: `軽量残高チェック（${lightweightIntervalMinutes}分間隔）`
     });
   }
 
