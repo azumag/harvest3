@@ -156,12 +156,15 @@ async function getBotManagedBalance() {
         }
 
         const amount = parseFloat(position.amount) || 0;
-        currencyBalances[baseCurrency] += amount;
+        // 浮動小数点精度の問題を修正
+        const precisionAmount = Math.round(amount * 100000000) / 100000000;
+        currencyBalances[baseCurrency] += precisionAmount;
         
         // 処理詳細を記録
         processingDetails.push({
           currency: baseCurrency,
-          amount,
+          amount: precisionAmount,
+          originalAmount: amount,
           symbol: position.symbol,
           status: position.status,
           exchangeId: position.exchangeId
@@ -169,6 +172,11 @@ async function getBotManagedBalance() {
       } catch (error) {
         logger.error('ポジション処理エラー:', error.message, position);
       }
+    });
+
+    // 最終的な精度調整
+    Object.keys(currencyBalances).forEach(currency => {
+      currencyBalances[currency] = Math.round(currencyBalances[currency] * 100000000) / 100000000;
     });
 
     // 結果の詳細ログ
@@ -255,13 +263,18 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
         continue;
       }
 
-      // 差異の計算（完全一致チェック）
-      const difference = Math.abs(exchangeAmount - botAmount);
-      const maxAmount = Math.max(exchangeAmount, botAmount);
+      // 精度調整を適用
+      const precisionExchangeAmount = Math.round(exchangeAmount * 100000000) / 100000000;
+      const precisionBotAmount = Math.round(botAmount * 100000000) / 100000000;
+      
+      // 差異の計算（精度調整後）
+      const difference = Math.abs(precisionExchangeAmount - precisionBotAmount);
+      const maxAmount = Math.max(precisionExchangeAmount, precisionBotAmount);
       const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
 
-      // 完全一致でない場合は全て通知（閾値0%）
-      if (difference > 0) {
+      // 極小な差異は無視（浮動小数点精度エラー対策）
+      const minDifference = 1e-8; // 0.00000001
+      if (difference > minDifference) {
         // discrepancies配列での重複チェック（追加の安全措置）
         const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
         if (existingDiscrepancy) {
@@ -271,12 +284,14 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
         const discrepancyEntry = {
           currency,
-          exchangeAmount,
-          botAmount,
+          exchangeAmount: precisionExchangeAmount,
+          botAmount: precisionBotAmount,
           difference,
           discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
           timestamp: Date.now(),
-          exchangeId
+          exchangeId,
+          originalExchangeAmount: exchangeAmount,
+          originalBotAmount: botAmount
         };
         
         discrepancies.push(discrepancyEntry);
@@ -286,16 +301,24 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
     // 不整合があればDiscordに通知
     if (discrepancies.length > 0) {
-      // 最終的な重複チェック（念のため）
+      // 強化された重複チェック（通貨名とタイムスタンプでソート）
+      const sortedDiscrepancies = discrepancies.sort((a, b) => {
+        if (a.currency !== b.currency) {
+          return a.currency.localeCompare(b.currency);
+        }
+        return a.timestamp - b.timestamp;
+      });
+      
       const uniqueDiscrepancies = [];
       const seenCurrencies = new Set();
       
-      for (const disc of discrepancies) {
-        if (!seenCurrencies.has(disc.currency)) {
+      for (const disc of sortedDiscrepancies) {
+        const currencyKey = `${disc.currency}_${disc.exchangeId}`;
+        if (!seenCurrencies.has(currencyKey)) {
           uniqueDiscrepancies.push(disc);
-          seenCurrencies.add(disc.currency);
+          seenCurrencies.add(currencyKey);
         } else {
-          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency}`);
+          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} - 差異=${disc.difference}`);
         }
       }
       
@@ -315,7 +338,16 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
       logger[logLevel](message_text);
       
       uniqueDiscrepancies.forEach((disc, index) => {
-        logger[logLevel](`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+        const formattedExchange = disc.exchangeAmount.toFixed(8).replace(/\.?0+$/, '');
+        const formattedBot = disc.botAmount.toFixed(8).replace(/\.?0+$/, '');
+        const formattedDifference = disc.difference.toFixed(8).replace(/\.?0+$/, '');
+        
+        logger[logLevel](`  [${index + 1}] ${disc.currency}: 取引所=${formattedExchange}, Bot=${formattedBot}, 差異=${formattedDifference} (${disc.discrepancyPercent}%)`);
+        
+        // デバッグ用の詳細情報（精度修正前の値も含む）
+        if (disc.originalExchangeAmount !== disc.exchangeAmount || disc.originalBotAmount !== disc.botAmount) {
+          logger.debug(`  [${index + 1}] ${disc.currency} 精度修正前: 取引所=${disc.originalExchangeAmount}, Bot=${disc.originalBotAmount}`);
+        }
       });
       
       // 元の配列を修正されたものに置き換え

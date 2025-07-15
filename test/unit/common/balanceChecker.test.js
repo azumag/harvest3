@@ -1014,12 +1014,12 @@ describe('Issue #970: ログ出力改善のテスト', () => {
       expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
     );
 
-    // 各不整合が個別に詳細ログ出力されていることを確認
+    // 各不整合が個別に詳細ログ出力されていることを確認（アルファベット順でソート）
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringMatching(/\s+\[1\] ETH: 取引所=10, Bot=8, 差異=2 \(20%\)/)
+      expect.stringMatching(/\s+\[1\] ADA: 取引所=0\.0016, Bot=0, 差異=0\.0016 \(100%\)/)
     );
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringMatching(/\s+\[2\] ADA: 取引所=0\.0016, Bot=0, 差異=0\.0016 \(100%\)/)
+      expect.stringMatching(/\s+\[2\] ETH: 取引所=10, Bot=8, 差異=2 \(20%\)/)
     );
 
     // デバッグ用JSONログも出力されていることを確認（debug levelなのでここでは呼ばれないかもしれない）
@@ -1233,5 +1233,167 @@ describe('Issue #983: AVAX重複ログエラー修正テスト', () => {
       expect(firstDiscrepancy).toHaveProperty('exchangeId');
       expect(firstDiscrepancy.exchangeId).toBe('bitbank');
     }
+  });
+});
+
+// Issue #1243: strategy-runnerサービスで例外が発生のテスト
+describe('Issue #1243: strategy-runnerサービスで例外が発生の修正テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('浮動小数点精度の問題が修正される', async () => {
+    // Issue #1243の実際の問題データを再現
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        MANA: 4.4588,
+        AVAX: 0.0141,
+        AXS: 0.1488
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      // 浮動小数点精度の問題がある値
+      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.009000000000000001, status: 'open' },
+      { exchange: 'bitbank', symbol: 'AVAX/JPY', side: 'buy', amount: 0.0002, status: 'open' },
+      { exchange: 'bitbank', symbol: 'AXS/JPY', side: 'buy', amount: 0.0021000000000000003, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // 不整合が正しく検出されることを確認
+    expect(result.discrepancies).toHaveLength(3);
+    
+    // MANAの精度修正が正しく適用されていることを確認
+    const manaDiscrepancy = result.discrepancies.find(d => d.currency === 'MANA');
+    expect(manaDiscrepancy).toBeTruthy();
+    expect(manaDiscrepancy.botAmount).toBe(0.009); // 精度修正後の値
+    expect(manaDiscrepancy.originalBotAmount).toBe(0.009); // 精度修正後の値（元の値と同じ）
+    
+    // AXSの精度修正が正しく適用されていることを確認
+    const axsDiscrepancy = result.discrepancies.find(d => d.currency === 'AXS');
+    expect(axsDiscrepancy).toBeTruthy();
+    expect(axsDiscrepancy.botAmount).toBe(0.0021); // 精度修正後の値
+    expect(axsDiscrepancy.originalBotAmount).toBe(0.0021); // 精度修正後の値（元の値と同じ）
+  });
+
+  it('極小な差異が適切に無視される', async () => {
+    // 極小な浮動小数点精度エラーをテスト
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.00000001 } // 極小な差異
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 1.0, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // 極小な差異は無視されることを確認
+    expect(result.discrepancies).toHaveLength(0);
+    expect(result.isHealthy).toBe(true);
+    
+    // 正常メッセージが出力されることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith('残高チェック正常: bitbank');
+  });
+
+  it('重複ログエントリの完全な防止', async () => {
+    // 重複ログエントリの問題を再現
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { MANA: 4.4588 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.009, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // MANAの不整合が1件のみ検出されることを確認
+    const manaDiscrepancies = result.discrepancies.filter(d => d.currency === 'MANA');
+    expect(manaDiscrepancies).toHaveLength(1);
+    
+    // 重複チェックの強化で、重複エントリが適切に除去されることを確認
+    const allCurrencies = result.discrepancies.map(d => d.currency);
+    const uniqueCurrencies = [...new Set(allCurrencies)];
+    expect(allCurrencies).toHaveLength(uniqueCurrencies.length);
+  });
+
+  it('フォーマット改善で不要な桁数が除去される', async () => {
+    // フォーマット改善のテスト
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.50000000 } // 不要なゼロが多い
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 1.0, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // 不整合が検出されることを確認
+    expect(result.discrepancies).toHaveLength(1);
+    
+    // フォーマット改善によりログが整理されることを確認
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringMatching(/BTC: 取引所=1\.5, Bot=1, 差異=0\.5 \(33\.33%\)/)
+    );
+  });
+
+  it('ソート機能でログがアルファベット順に出力される', async () => {
+    // ソート機能のテスト
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        ZZZ: 1.0, // アルファベット順で最後
+        AAA: 1.0, // アルファベット順で最初
+        MMM: 1.0  // アルファベット順で中間
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'ZZZ/JPY', side: 'buy', amount: 0.5, status: 'open' },
+      { exchange: 'bitbank', symbol: 'AAA/JPY', side: 'buy', amount: 0.5, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MMM/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // アルファベット順にソートされていることを確認
+    expect(result.discrepancies).toHaveLength(3);
+    const currencies = result.discrepancies.map(d => d.currency);
+    expect(currencies).toEqual(['AAA', 'MMM', 'ZZZ']);
+    
+    // ログもアルファベット順に出力されることを確認
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[1\] AAA:/)
+    );
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[2\] MMM:/)
+    );
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringMatching(/\[3\] ZZZ:/)
+    );
+  });
+
+  it('デバッグ情報の強化が正しく機能する', async () => {
+    // デバッグ情報の強化テスト
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // 不整合エントリに新しいフィールドが含まれていることを確認
+    const btcDiscrepancy = result.discrepancies.find(d => d.currency === 'BTC');
+    expect(btcDiscrepancy).toHaveProperty('originalExchangeAmount');
+    expect(btcDiscrepancy).toHaveProperty('originalBotAmount');
+    expect(btcDiscrepancy).toHaveProperty('timestamp');
+    expect(btcDiscrepancy).toHaveProperty('exchangeId');
+    expect(btcDiscrepancy.exchangeId).toBe('bitbank');
   });
 });
