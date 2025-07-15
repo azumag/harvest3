@@ -782,6 +782,125 @@ describe('Issue #984: 重複スケジューリング修正のテスト', () => {
   });
 });
 
+// Issue #1447: CYBER重複ログエラー修正テスト
+describe('Issue #1447: CYBER重複ログエラー修正テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('CYBERトークンの重複ログエントリが適切に除去される', async () => {
+    // Issue #1447で報告されたCYBERの具体的なケースを再現
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: {
+        BNB: 0.0008,
+        OP: 2.0372,
+        ARB: 4.6001,
+        KLAY: 0.3721,
+        IMX: 0.4499,
+        MASK: 0.2854,
+        POL: 26.6617,
+        SOL: 0.0759,
+        CYBER: 0.1531
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BNB/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'OP/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ARB/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'KLAY/JPY', side: 'buy', amount: 0.0202, status: 'open' },
+      { exchange: 'bitbank', symbol: 'IMX/JPY', side: 'buy', amount: 0.0041, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MASK/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'POL/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'SOL/JPY', side: 'buy', amount: 0.0001, status: 'open' },
+      { exchange: 'bitbank', symbol: 'CYBER/JPY', side: 'buy', amount: 0.0074, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // CYBERの不整合が1件のみ検出されることを確認
+    const cyberDiscrepancies = result.discrepancies.filter(d => d.currency === 'CYBER');
+    expect(cyberDiscrepancies).toHaveLength(1);
+
+    // CYBERの値が正しいことを確認
+    const cyberDiscrepancy = cyberDiscrepancies[0];
+    expect(cyberDiscrepancy.exchangeAmount).toBe(0.1531);
+    expect(cyberDiscrepancy.botAmount).toBe(0.0074);
+    expect(cyberDiscrepancy.difference).toBe(0.1457);
+    expect(cyberDiscrepancy.discrepancyPercent).toBe(95.17);
+
+    // 全体として重複がないことを確認
+    const allCurrencies = result.discrepancies.map(d => d.currency);
+    const uniqueCurrencies = [...new Set(allCurrencies)];
+    expect(allCurrencies).toHaveLength(uniqueCurrencies.length);
+
+    // 各通貨が1回のみ登場することを確認
+    const currencyCount = {};
+    result.discrepancies.forEach(disc => {
+      currencyCount[disc.currency] = (currencyCount[disc.currency] || 0) + 1;
+    });
+    
+    for (const [currency, count] of Object.entries(currencyCount)) {
+      expect(count).toBe(1); // 各通貨は1回のみ
+    }
+
+    // 特にCYBERが1回のみログ出力されることを確認
+    const errorCalls = mockLoggerInstance.error.mock.calls;
+    const cyberLogCount = errorCalls.filter(call => 
+      call[0] && typeof call[0] === 'string' && call[0].includes('CYBER:')
+    ).length;
+    expect(cyberLogCount).toBe(1);
+  });
+
+  it('重複検出ログメッセージの確認', async () => {
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 正常なケースでは重複警告は出ないことを確認
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('通貨の重複処理を検出しスキップ')
+    );
+    
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('最終段階で重複エントリを検出し除去')
+    );
+    
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('ログ出力時に重複を検出しスキップ')
+    );
+  });
+
+  it('新しい統計情報ログが適切に出力される', async () => {
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0, ETH: 2.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.5, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 1.0, status: 'open' }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // デバッグレベルのログが適切に出力されることを確認
+    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+      expect.stringContaining('不整合検出開始 (bitbank):')
+    );
+    
+    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+      expect.stringContaining('不整合検出完了 (bitbank):')
+    );
+  });
+});
+
 // Logger移行のテスト - 新規追加
 describe('BalanceChecker Logger移行のテスト', () => {
   let Logger;
