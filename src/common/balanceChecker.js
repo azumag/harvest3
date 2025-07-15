@@ -104,27 +104,83 @@ async function getBotManagedBalance() {
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
 
-    // 買いポジション（未売却）のみを抽出
-    const buyPositions = allPositions.filter(position =>
-      position.side === 'buy' &&
-      position.status !== 'closed' // クローズされていないポジション
-    );
+    // 詳細なポジション統計を収集
+    const positionStats = {
+      total: allPositions.length,
+      byStatus: {},
+      bySide: {},
+      byExchange: {}
+    };
+
+    allPositions.forEach(position => {
+      // ステータス別統計
+      positionStats.byStatus[position.status] = (positionStats.byStatus[position.status] || 0) + 1;
+      // サイド別統計
+      positionStats.bySide[position.side] = (positionStats.bySide[position.side] || 0) + 1;
+      // 取引所別統計
+      positionStats.byExchange[position.exchangeId] = (positionStats.byExchange[position.exchangeId] || 0) + 1;
+    });
+
+    logger.debug('ポジション統計:', positionStats);
+
+    // 有効な買いポジションのみを抽出（より厳密な条件）
+    const validBuyPositions = allPositions.filter(position => {
+      // 基本的な必須フィールドのチェック
+      if (!position.symbol || !position.side || !position.amount || !position.status) {
+        logger.warn('不完全なポジションデータを除外:', position);
+        return false;
+      }
+
+      // 買いポジションで、かつ有効なステータスのもの
+      return position.side === 'buy' && 
+             ['open', 'pending'].includes(position.status) &&
+             position.amount > 0;
+    });
 
     // 通貨別に集計
     const currencyBalances = {};
+    const processingDetails = [];
 
-    buyPositions.forEach(position => {
-      // シンボルから基軸通貨を抽出 (例: BTC/JPY -> BTC)
-      const [baseCurrency] = position.symbol.split('/');
+    validBuyPositions.forEach(position => {
+      try {
+        // シンボルから基軸通貨を抽出 (例: BTC/JPY -> BTC)
+        const [baseCurrency] = position.symbol.split('/');
+        
+        if (!baseCurrency) {
+          logger.warn('シンボルの解析に失敗:', position.symbol);
+          return;
+        }
 
-      if (!currencyBalances[baseCurrency]) {
-        currencyBalances[baseCurrency] = 0;
+        if (!currencyBalances[baseCurrency]) {
+          currencyBalances[baseCurrency] = 0;
+        }
+
+        const amount = parseFloat(position.amount) || 0;
+        currencyBalances[baseCurrency] += amount;
+        
+        // 処理詳細を記録
+        processingDetails.push({
+          currency: baseCurrency,
+          amount,
+          symbol: position.symbol,
+          status: position.status,
+          exchangeId: position.exchangeId
+        });
+      } catch (error) {
+        logger.error('ポジション処理エラー:', error.message, position);
       }
-
-      currencyBalances[baseCurrency] += position.amount || 0;
     });
 
-    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
+    // 結果の詳細ログ
+    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${validBuyPositions.length}/${allPositions.length}`);
+    
+    // 有意な残高がある通貨のみログ出力
+    Object.entries(currencyBalances).forEach(([currency, balance]) => {
+      if (balance >= BALANCE_CONFIG.thresholds.significantBalance) {
+        logger.info(`${currency}: ${balance.toFixed(8)} (${processingDetails.filter(d => d.currency === currency).length}ポジション)`);
+      }
+    });
+
     return currencyBalances;
   } catch (error) {
     logger.error('Bot管理残高取得エラー:', error.message);
@@ -144,6 +200,8 @@ async function getBotManagedBalance() {
  * @param {number} thresholdPercent - 許容誤差（パーセント）- 完全一致チェックのため0
  */
 async function compareBalances(exchangeId, _thresholdPercent = 0) {
+  const comparisonStartTime = Date.now();
+  
   try {
     logger.info(`残高比較開始: ${exchangeId}`);
 
@@ -153,12 +211,22 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     // Bot管理残高を取得
     const botBalance = await getBotManagedBalance();
 
+    // 診断情報を収集
+    const diagnosticInfo = {
+      exchangeId,
+      timestamp: comparisonStartTime,
+      exchangeBalanceKeys: Object.keys(exchangeBalance.total || {}),
+      botBalanceKeys: Object.keys(botBalance || {}),
+      exchangeTotal: exchangeBalance.total || {},
+      botTotal: botBalance || {}
+    };
+
     // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
     const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
-    const exchangeCurrencies = Object.keys(exchangeBalance.total).filter(
-      currency => exchangeBalance.total[currency] >= significantThreshold
+    const exchangeCurrencies = Object.keys(exchangeBalance.total || {}).filter(
+      currency => (exchangeBalance.total[currency] || 0) >= significantThreshold
     );
-    const botCurrencies = Object.keys(botBalance);
+    const botCurrencies = Object.keys(botBalance || {});
     const allCurrencies = [...new Set([...exchangeCurrencies, ...botCurrencies])];
 
     const discrepancies = [];
@@ -231,7 +299,7 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
         }
       }
       
-      const message = createDiscrepancyMessage(exchangeId, uniqueDiscrepancies);
+      const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
       await postOrderToDiscord(message);
       
       // 不整合の重要度に応じてログレベルを決定（Issue #1108の修正）
@@ -269,7 +337,8 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     return {
       exchangeId,
       discrepancies,
-      isHealthy: discrepancies.length === 0
+      isHealthy: discrepancies.length === 0,
+      diagnosticInfo
     };
 
   } catch (error) {
@@ -305,6 +374,52 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
   });
 
   message += '⚠️ 手動確認と調整が必要です。';
+
+  return message;
+}
+
+/**
+ * 拡張された不整合メッセージを作成する（診断情報付き）
+ * @param {string} exchangeId - 取引所ID
+ * @param {Array} discrepancies - 不整合データ
+ * @param {Object} diagnosticInfo - 診断情報
+ * @returns {string} Discord用メッセージ
+ */
+function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo) {
+  let message = `🚨 **残高不整合検出** (${exchangeId})\n`;
+  message += `検出時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n\n`;
+
+  // 上位5件の不整合を表示
+  const maxDisplay = 5;
+  const displayDiscrepancies = discrepancies.slice(0, maxDisplay);
+  
+  displayDiscrepancies.forEach(disc => {
+    message += `**${disc.currency}**\n`;
+    message += `・取引所残高: ${disc.exchangeAmount.toFixed(8)}\n`;
+    message += `・Bot管理残高: ${disc.botAmount.toFixed(8)}\n`;
+    message += `・差異: ${disc.difference.toFixed(8)} (${disc.discrepancyPercent}%)\n\n`;
+  });
+
+  if (discrepancies.length > maxDisplay) {
+    message += `...他 ${discrepancies.length - maxDisplay} 件の不整合\n\n`;
+  }
+
+  // 診断情報を追加
+  if (diagnosticInfo) {
+    message += `**🔍 診断情報:**\n`;
+    message += `・取引所通貨数: ${diagnosticInfo.exchangeBalanceKeys.length}\n`;
+    message += `・Bot管理通貨数: ${diagnosticInfo.botBalanceKeys.length}\n`;
+    
+    // 高い不整合率の通貨を強調
+    const highDiscrepancies = discrepancies.filter(d => d.discrepancyPercent > 50);
+    if (highDiscrepancies.length > 0) {
+      message += `・高不整合率通貨: ${highDiscrepancies.map(d => `${d.currency}(${d.discrepancyPercent}%)`).join(', ')}\n`;
+    }
+    message += '\n';
+  }
+
+  message += '⚠️ **緊急対応が必要です。**\n';
+  message += '詳細な調査とRedisデータの確認を行ってください。';
 
   return message;
 }
