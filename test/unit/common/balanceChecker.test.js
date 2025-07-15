@@ -100,16 +100,13 @@ const {
   getExchangeBalance,
   getBotManagedBalance,
   compareBalances,
-  compareBalancesRobust,
-  getBotManagedBalanceDetailed,
-  getCheckerState,
-  resetCheckerState,
-  STATE
+  checkAllExchangeBalances,
+  checkSingleExchange,
+  ensureRedisConnection
 } = require('../../../src/common/balanceChecker');
 
 const { config } = require('../../../src/config');
-const { getAllPositionsRedis, getAllTradeSummaries } = require('../../../src/database/redisDatabase');
-const { getTradeCurrentPosition } = require('../../../src/database/manager');
+const { getAllPositionsRedis } = require('../../../src/database/redisDatabase');
 const { postOrderToDiscord, postErrorToDiscord } = require('../../../src/common/notifications');
 
 describe('残高チェッカーのテスト', () => {
@@ -281,133 +278,8 @@ describe('残高チェッカーのテスト', () => {
     });
   });
 
-  describe('getBotManagedBalanceDetailed', () => {
-    beforeEach(() => {
-      // MongoDB calculation mock
-      getTradeCurrentPosition
-        .mockResolvedValueOnce(1.0) // BTC/JPY MA
-        .mockResolvedValueOnce(0.5) // BTC/JPY BOLLINGER_BANDS
-        .mockResolvedValueOnce(0.0) // BTC/JPY MULTI_INDICATOR
-        .mockResolvedValueOnce(0.0) // BTC/JPY OSCILLATOR
-        .mockResolvedValueOnce(0.0) // BTC/JPY MUTUAL_INFO
-        .mockResolvedValueOnce(0.0) // BTC/JPY OUTSIDE
-        .mockResolvedValueOnce(0.0); // BTC/JPY UNKNOWN
 
-      // Redis summary mock
-      getAllTradeSummaries.mockResolvedValue([
-        {
-          exchange: 'bitbank',
-          symbol: 'BTC/JPY',
-          strategy: 'MA',
-          netPosition: 1.2
-        }
-      ]);
 
-      // Redis positions mock
-      getAllPositionsRedis.mockResolvedValue([
-        {
-          exchange: 'bitbank',
-          symbol: 'BTC/JPY',
-          side: 'buy',
-          amount: 1.3,
-          status: 'open'
-        }
-      ]);
-    });
-
-    it('3つのソースから詳細残高取得', async () => {
-      const result = await getBotManagedBalanceDetailed('bitbank');
-
-      expect(result.exchangeId).toBe('bitbank');
-      expect(result.mongodb).toBeDefined();
-      expect(result.redisSummary).toBeDefined();
-      expect(result.redisPositions).toBeDefined();
-
-      // MongoDB計算: MA(1.0) + BOLLINGER_BANDS(0.5) = 1.5
-      expect(result.mongodb.BTC).toBe(1.5);
-
-      // Redis summary: MA netPosition 1.2
-      expect(result.redisSummary.BTC).toBe(1.2);
-
-      // Redis positions: 1.3
-      expect(result.redisPositions.BTC).toBe(1.3);
-    });
-  });
-
-  describe('compareBalancesRobust', () => {
-    it('分散ロックを取得して堅牢な比較を実行する', async () => {
-      const mockRedisClient = {
-        set: jest.fn().mockResolvedValue('OK'), // ロック取得成功
-        get: jest.fn().mockResolvedValue(JSON.stringify({ state: STATE.OK })),
-        eval: jest.fn().mockResolvedValue(1) // ロック解放成功
-      };
-
-      require('../../../src/database/redisDatabase').getClient.mockReturnValue(mockRedisClient);
-
-      // 取引所残高
-      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
-        total: { BTC: 1.5 }
-      });
-
-      // MongoDB, Redis, Positions を設定（一致させる）
-      getTradeCurrentPosition.mockResolvedValue(1.5);
-      getAllTradeSummaries.mockResolvedValue([
-        { exchange: 'bitbank', symbol: 'BTC/JPY', netPosition: 1.5 }
-      ]);
-      getAllPositionsRedis.mockResolvedValue([
-        { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 1.5, status: 'open' }
-      ]);
-
-      const result = await compareBalancesRobust('bitbank');
-
-      expect(result.success).toBe(true);
-      // 実装の詳細によって内部不整合が検出される可能性があるため、成功のみチェック
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
-        'balance_checker_lock',
-        expect.any(String),
-        'PX',
-        300000,
-        'NX'
-      );
-    });
-
-    it('ロック取得失敗時はスキップする', async () => {
-      const mockRedisClient = {
-        set: jest.fn().mockResolvedValue(null) // ロック取得失敗
-      };
-
-      require('../../../src/database/redisDatabase').getClient.mockReturnValue(mockRedisClient);
-
-      const result = await compareBalancesRobust('bitbank');
-
-      expect(result.skipped).toBe(true);
-      expect(result.reason).toBe('another_check_running');
-    });
-  });
-
-  describe('状態管理', () => {
-    it('チェック状態を正しく取得・設定する', async () => {
-      const mockRedisClient = {
-        get: jest.fn().mockResolvedValue(JSON.stringify({
-          state: STATE.ERROR,
-          timestamp: Date.now(),
-          details: { error: 'test error' }
-        })),
-        set: jest.fn().mockResolvedValue('OK')
-      };
-
-      require('../../../src/database/redisDatabase').getClient.mockReturnValue(mockRedisClient);
-
-      const state = await getCheckerState();
-      expect(state.state).toBe(STATE.ERROR);
-
-      await resetCheckerState();
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
-        'balance_checker_state',
-        expect.stringContaining(STATE.OK)
-      );
-    });
-  });
 
   describe('エラーケース', () => {
     describe('ネットワークエラー', () => {
@@ -419,33 +291,9 @@ describe('残高チェッカーのテスト', () => {
         await expect(compareBalances('bitbank')).rejects.toThrow('Network timeout');
       });
 
-      it('Redis接続失敗（堅牢比較）', async () => {
-        const mockRedisClient = {
-          set: jest.fn().mockRejectedValue(new Error('Redis connection failed'))
-        };
-
-        require('../../../src/database/redisDatabase').getClient.mockReturnValue(mockRedisClient);
-
-        await expect(compareBalancesRobust('bitbank')).rejects.toThrow('Redis connection failed');
-      });
     });
 
     describe('データ不整合', () => {
-      it('MongoDB履歴破損時の処理', async () => {
-        getAllTradeSummaries.mockResolvedValue([]);
-        getAllPositionsRedis.mockResolvedValue([]);
-        getTradeCurrentPosition.mockRejectedValue(new Error('MongoDB connection error'));
-
-        const result = await getBotManagedBalanceDetailed('bitbank');
-        expect(result.mongodb).toEqual({});
-        expect(result.exchangeId).toBe('bitbank');
-      });
-
-      it('RedisSummaryデータ破損', async () => {
-        getAllTradeSummaries.mockRejectedValue(new Error('Redis summary corrupted'));
-
-        await expect(getBotManagedBalanceDetailed('bitbank')).rejects.toThrow('Redis summary corrupted');
-      });
 
       it('RedisPositionsデータ破損', async () => {
         getAllPositionsRedis.mockRejectedValue(new Error('Redis positions corrupted'));
@@ -456,34 +304,7 @@ describe('残高チェッカーのテスト', () => {
 
     describe('設定エラー', () => {
       it('存在しない取引所', async () => {
-        getAllTradeSummaries.mockResolvedValue([]);
-        getAllPositionsRedis.mockResolvedValue([]);
-        getTradeCurrentPosition.mockResolvedValue(0);
-
-        await expect(getBotManagedBalanceDetailed('nonexistent_exchange')).resolves.toEqual(
-          expect.objectContaining({
-            exchangeId: 'nonexistent_exchange',
-            mongodb: {},
-            redisSummary: {},
-            redisPositions: expect.any(Object)
-          })
-        );
-      });
-
-      it('戦略設定破損', async () => {
-        const originalStrategies = config.strategies;
-        config.strategies = null;
-
-        // 戦略設定がnullの場合、空の残高が返されることを確認
-        const result = await getBotManagedBalanceDetailed('bitbank');
-        expect(result).toMatchObject({
-          exchangeId: 'bitbank',
-          mongodb: {},
-          redisSummary: {},
-          redisPositions: {}
-        });
-
-        config.strategies = originalStrategies;
+        await expect(getExchangeBalance('nonexistent_exchange')).rejects.toThrow('Exchange nonexistent_exchange not found in config');
       });
     });
 
@@ -546,6 +367,179 @@ describe('残高チェッカーのテスト', () => {
 
         await expect(compareBalances('bitbank')).rejects.toThrow('Discord API error');
       });
+    });
+  });
+
+  // Issue #1108: 残高不整合ログレベル修正のテスト
+  describe('Issue #1108: 残高不整合ログレベル修正', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      postOrderToDiscord.mockResolvedValue();
+    });
+
+    it('軽微な不整合（10%未満）は WARN レベルで出力される', async () => {
+      // 軽微な不整合（5%の差異）を設定
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0 }
+      });
+
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.95, // 5%の差異
+          status: 'open'
+        }
+      ]);
+
+      const result = await compareBalances('bitbank');
+
+      // 1件の不整合が検出されることを確認
+      expect(result.discrepancies).toHaveLength(1);
+      
+      // 軽微な不整合として WARN レベルで出力されることを確認
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank (1件の軽微な不整合)')
+      );
+      
+      // 詳細が WARN レベルで出力されることを確認
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/BTC: 取引所=1, Bot=0\.95, 差異=0\.05\d* \(5%\)/)
+      );
+      
+      // ERROR レベルでは出力されていないことを確認
+      expect(mockLoggerInstance.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank')
+      );
+    });
+
+    it('高度不整合（10%以上）は ERROR レベルで出力される', async () => {
+      // 高度不整合（50%の差異）を設定
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0 }
+      });
+
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.5, // 50%の差異
+          status: 'open'
+        }
+      ]);
+
+      const result = await compareBalances('bitbank');
+
+      // 1件の不整合が検出されることを確認
+      expect(result.discrepancies).toHaveLength(1);
+      
+      // 高度不整合として ERROR レベルで出力されることを確認
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank (1件の高度不整合)')
+      );
+      
+      // 詳細が ERROR レベルで出力されることを確認
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringMatching(/BTC: 取引所=1, Bot=0\.5, 差異=0\.5 \(50%\)/)
+      );
+    });
+
+    it('境界値：ちょうど10%の不整合は高度不整合として扱われる', async () => {
+      // ちょうど10%の不整合
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0 }
+      });
+
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.9, // 10%の差異
+          status: 'open'
+        }
+      ]);
+
+      const result = await compareBalances('bitbank');
+
+      // 1件の不整合が検出されることを確認
+      expect(result.discrepancies).toHaveLength(1);
+      
+      // 高度不整合として ERROR レベルで出力されることを確認
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank (1件の高度不整合)')
+      );
+    });
+
+    it('境界値：9.9%の不整合は軽微として扱われる', async () => {
+      // 9.9%の不整合
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0 }
+      });
+
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.901, // 9.9%の差異
+          status: 'open'
+        }
+      ]);
+
+      const result = await compareBalances('bitbank');
+
+      // 1件の不整合が検出されることを確認
+      expect(result.discrepancies).toHaveLength(1);
+      
+      // 軽微な不整合として WARN レベルで出力されることを確認
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank (1件の軽微な不整合)')
+      );
+    });
+
+    it('混合ケース：軽微と高度の不整合が混在する場合、高度不整合として扱われる', async () => {
+      // 軽微な不整合と高度不整合の混在
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0, ETH: 10.0 }
+      });
+
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.95, // 5%の差異（軽微）
+          status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ETH/JPY',
+          side: 'buy',
+          amount: 6.0, // 40%の差異（高度）
+          status: 'open'
+        }
+      ]);
+
+      const result = await compareBalances('bitbank');
+
+      // 2件の不整合が検出されることを確認
+      expect(result.discrepancies).toHaveLength(2);
+      
+      // 高度不整合として ERROR レベルで出力されることを確認（高度不整合が含まれるため）
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('残高不整合検出: bitbank (2件の高度不整合)')
+      );
+      
+      // 両方の通貨が ERROR レベルで出力されることを確認
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringMatching(/BTC: 取引所=1, Bot=0\.95, 差異=0\.05\d* \(5%\)/)
+      );
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringMatching(/ETH: 取引所=10, Bot=6, 差異=4 \(40%\)/)
+      );
     });
   });
 });

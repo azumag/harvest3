@@ -1,24 +1,17 @@
 /**
  * 残高チェッカー - 取引所残高とbot管理残高の比較・監視
- * geminiの指摘に基づく堅牢な実装（設定外部化対応）
  */
-const crypto = require('crypto');
 const { config } = require('../config');
 const { getValidatedConfig } = require('./balanceCheckerConfig');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
 const {
   getClient: getRedisClient,
-  getAllPositionsRedis,
-  getAllTradeSummaries
+  getAllPositionsRedis
 } = require('../database/redisDatabase');
 const { initRedisClient } = require('../database/redisClient');
-const {
-  getTradeCurrentPosition
-} = require('../database/manager');
 const Logger = require('../hft/utils/Logger');
 
 const logger = new Logger('BalanceChecker');
-const { getBalanceCheckEligibleStrategies } = require('./strategyUtils');
 const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 
 // 設定の取得
@@ -241,29 +234,21 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
       const message = createDiscrepancyMessage(exchangeId, uniqueDiscrepancies);
       await postOrderToDiscord(message);
       
-      // 不整合の重要度に応じてログレベルを決定
+      // 不整合の重要度に応じてログレベルを決定（Issue #1108の修正）
       const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
-      const highDiscrepancies = uniqueDiscrepancies.filter(disc => disc.discrepancyPercent >= highDiscrepancyThreshold);
-      const lowDiscrepancies = uniqueDiscrepancies.filter(disc => disc.discrepancyPercent < highDiscrepancyThreshold);
+      const isHighDiscrepancy = uniqueDiscrepancies.some(disc => 
+        disc.discrepancyPercent >= highDiscrepancyThreshold
+      );
+
+      const logLevel = isHighDiscrepancy ? 'error' : 'warn';
+      const severityText = isHighDiscrepancy ? '高度不整合' : '軽微な不整合';
       
-      // 高度不整合がある場合は ERROR レベル、軽微な不整合のみの場合は WARN レベル
-      if (highDiscrepancies.length > 0) {
-        logger.error(`残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の不整合、うち${highDiscrepancies.length}件が高度不整合)`);
-        highDiscrepancies.forEach((disc, index) => {
-          logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-        });
-        if (lowDiscrepancies.length > 0) {
-          logger.warn(`軽微な不整合 (${highDiscrepancyThreshold}%未満):`);
-          lowDiscrepancies.forEach((disc, index) => {
-            logger.warn(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-          });
-        }
-      } else {
-        logger.warn(`軽微な残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の軽微な不整合)`);
-        uniqueDiscrepancies.forEach((disc, index) => {
-          logger.warn(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-        });
-      }
+      const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
+      logger[logLevel](message_text);
+      
+      uniqueDiscrepancies.forEach((disc, index) => {
+        logger[logLevel](`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+      });
       
       // 元の配列を修正されたものに置き換え
       discrepancies.length = 0;
@@ -382,435 +367,12 @@ async function checkSingleExchange(exchangeId) {
   }
 }
 
-/**
- * チェック状態の管理（Redis）- 設定から取得
- */
-const CHECKER_STATE_KEY = BALANCE_CONFIG.distributedLock.stateKey;
-const CHECKER_LOCK_KEY = BALANCE_CONFIG.distributedLock.lockKeyPrefix;
-const LOCK_TTL = BALANCE_CONFIG.distributedLock.defaultTtl;
-
-/**
- * チェック状態
- */
-const STATE = {
-  OK: 'OK',
-  ERROR: 'ERROR',
-  PROCESSING: 'PROCESSING'
-};
-
-/**
- * 分散ロックを取得
- */
-async function acquireCheckerLock() {
-  const redisClient = getRedisClient();
-  const lockValue = `${Date.now()}_${crypto.randomUUID()}`;
-
-  const result = await redisClient.set(CHECKER_LOCK_KEY, lockValue, 'PX', LOCK_TTL, 'NX');
-
-  return {
-    acquired: result === 'OK',
-    lockValue,
-    release: async () => {
-      const script = `
-        if redis.call("get", KEYS[1]) == ARGV[1] then
-          return redis.call("del", KEYS[1])
-        else
-          return 0
-        end
-      `;
-      return await redisClient.eval(script, 1, CHECKER_LOCK_KEY, lockValue);
-    }
-  };
-}
-
-/**
- * チェック状態を取得
- */
-async function getCheckerState() {
-  const redisClient = getRedisClient();
-  const state = await redisClient.get(CHECKER_STATE_KEY);
-  return state ? JSON.parse(state) : { state: STATE.OK };
-}
-
-/**
- * チェック状態を設定
- */
-async function setCheckerState(state, details = null) {
-  const redisClient = getRedisClient();
-  const stateData = {
-    state,
-    timestamp: Date.now(),
-    details
-  };
-  await redisClient.set(CHECKER_STATE_KEY, JSON.stringify(stateData));
-}
-
-/**
- * BOT管理残高を3つのソースから取得
- * 1. MongoDB取引履歴から再計算
- * 2. Redisサマリーキャッシュ
- * 3. Redisポジションデータ
- */
-async function getBotManagedBalanceDetailed(exchangeId) {
-  try {
-    logger.info(`Calculating detailed BOT managed balance for ${exchangeId}`);
-
-    // 1. MongoDB取引履歴から再計算
-    const mongoBalances = await calculateBalanceFromMongoDB(exchangeId);
-
-    // 2. Redisサマリーから取得
-    const redisBalances = await calculateBalanceFromRedisSummary(exchangeId);
-
-    // 3. Redisポジションから取得（既存の関数を流用）
-    const positionBalances = await getBotManagedBalance();
-
-    const snapshot = {
-      timestamp: Date.now(),
-      exchangeId,
-      mongodb: mongoBalances,
-      redisSummary: redisBalances,
-      redisPositions: positionBalances
-    };
-
-    logger.info(`Detailed BOT balance calculated: ${exchangeId}`);
-    return snapshot;
-  } catch (error) {
-    logger.error(`Detailed BOT balance error (${exchangeId}):`, error.message);
-    throw error;
-  }
-}
-
-/**
- * MongoDBの取引履歴から残高を再計算
- */
-async function calculateBalanceFromMongoDB(exchangeId) {
-  const balances = {};
-
-  try {
-    // 設定から対象シンボルを取得
-    const exchangeConfig = config.exchanges[exchangeId];
-    if (!exchangeConfig || !exchangeConfig.symbols) {
-      return balances;
-    }
-
-    // 残高チェック対象の戦略を取得（新しいヘルパー関数を使用）
-    const strategies = getBalanceCheckEligibleStrategies(config);
-
-    for (const symbol of exchangeConfig.symbols) {
-      const [baseCurrency] = symbol.split('/');
-
-      // 全戦略の合計残高を取得
-      let totalBalance = 0;
-
-      for (const strategy of strategies) {
-        try {
-          const position = await getTradeCurrentPosition(exchangeId, symbol, strategy);
-          totalBalance += position || 0;
-        } catch (error) {
-          logger.warn(`Error getting position for ${strategy}:`, error.message);
-        }
-      }
-
-      if (totalBalance > 0) {
-        balances[baseCurrency] = (balances[baseCurrency] || 0) + totalBalance;
-      }
-    }
-
-    return balances;
-  } catch (error) {
-    logger.error('MongoDB calculation error:', error.message);
-    throw error;
-  }
-}
-
-/**
- * Redisサマリーから残高を計算
- */
-async function calculateBalanceFromRedisSummary(exchangeId) {
-  try {
-    const summaries = await getAllTradeSummaries();
-    const balances = {};
-
-    for (const summary of summaries) {
-      if (summary.exchange === exchangeId) {
-        const [baseCurrency] = summary.symbol.split('/');
-        const netPosition = summary.netPosition || 0;
-
-        if (netPosition > 0) {
-          balances[baseCurrency] = (balances[baseCurrency] || 0) + netPosition;
-        }
-      }
-    }
-
-    return balances;
-  } catch (error) {
-    logger.error('Redis summary calculation error:', error.message);
-    throw error;
-  }
-}
-
-/**
- * 堅牢な残高比較（分散ロック付き）
- */
-async function compareBalancesRobust(exchangeId) {
-  const lock = await acquireCheckerLock();
-
-  if (!lock.acquired) {
-    logger.warn('Another check is already running, skipping');
-    return { skipped: true, reason: 'another_check_running' };
-  }
-
-  try {
-    logger.info(`Starting robust balance check for ${exchangeId}`);
-
-    // 現在の状態を取得
-    const currentStateData = await getCheckerState();
-    const currentState = currentStateData.state;
-
-    // PROCESSING状態に設定
-    await setCheckerState(STATE.PROCESSING, { exchangeId, startTime: Date.now() });
-
-    // 取引所残高とBOT詳細残高を取得
-    const [exchangeBalance, botDetailedBalance] = await Promise.all([
-      getExchangeBalance(exchangeId),
-      getBotManagedBalanceDetailed(exchangeId)
-    ]);
-
-    // 詳細比較を実行
-    const comparison = await performDetailedComparison(exchangeBalance, botDetailedBalance);
-
-    // 結果の判定
-    const hasDiscrepancies = comparison.discrepancies.length > 0;
-    const hasInternalInconsistencies = comparison.internalInconsistencies.length > 0;
-    const hasAnyIssues = hasDiscrepancies || hasInternalInconsistencies;
-
-    // 状態遷移の判定
-    const newState = hasAnyIssues ? STATE.ERROR : STATE.OK;
-
-    // 初回エラー検出または状態変化時のみ通知
-    const shouldNotify = (currentState === STATE.OK && newState === STATE.ERROR) ||
-                        (currentState === STATE.ERROR && newState === STATE.OK);
-
-    if (shouldNotify && hasAnyIssues) {
-      const message = createDetailedDiscrepancyMessage(comparison);
-      await postOrderToDiscord(message);
-      // 堅牢チェックでの不整合詳細をログ出力
-      logger.error(`Discrepancies detected for ${exchangeId}: ${comparison.discrepancies.length} discrepancies, ${comparison.internalInconsistencies.length} internal inconsistencies`);
-      
-      // 不整合の詳細を読みやすい形式で出力
-      if (comparison.discrepancies.length > 0) {
-        logger.error(`Exchange vs BOT discrepancies for ${exchangeId}:`);
-        comparison.discrepancies.forEach((disc, index) => {
-          logger.error(`  [${index + 1}] ${disc.currency}: Exchange=${disc.exchange}, MongoDB=${disc.mongodb}, Redis=${disc.redisSummary}, Positions=${disc.redisPositions}`);
-        });
-      }
-      
-      if (comparison.internalInconsistencies.length > 0) {
-        logger.error(`Internal inconsistencies for ${exchangeId}:`);
-        comparison.internalInconsistencies.forEach((inc, index) => {
-          logger.error(`  [${index + 1}] ${inc.currency}: ${inc.type} - difference=${inc.difference}`);
-        });
-      }
-    } else if (shouldNotify && !hasAnyIssues) {
-      const message = `✅ **残高整合性回復**\n取引所: ${exchangeId}\n時刻: ${new Date().toLocaleString('ja-JP')}`;
-      await postOrderToDiscord(message);
-      logger.info(`Balance consistency restored for ${exchangeId}`);
-    }
-
-    // 状態を更新
-    await setCheckerState(newState, {
-      exchangeId,
-      lastCheck: Date.now(),
-      hasDiscrepancies,
-      hasInternalInconsistencies,
-      comparison: hasAnyIssues ? comparison : null
-    });
-
-    return {
-      exchangeId,
-      success: true,
-      hasDiscrepancies,
-      hasInternalInconsistencies,
-      comparison,
-      stateChanged: currentState !== newState
-    };
-
-  } catch (error) {
-    logger.error(`Robust check failed for ${exchangeId}:`, error.message);
-
-    // エラー状態に設定
-    await setCheckerState(STATE.ERROR, {
-      exchangeId,
-      error: error.message,
-      timestamp: Date.now()
-    });
-
-    // エラー通知
-    const errorMessage = `❌ **残高チェックエラー**\n取引所: ${exchangeId}\nエラー: ${error.message}`;
-    await postErrorToDiscord(errorMessage);
-
-    throw error;
-  } finally {
-    await lock.release();
-  }
-}
-
-/**
- * 残高の詳細比較と分析
- */
-async function performDetailedComparison(exchangeSnapshot, botSnapshot) {
-  const comparison = {
-    timestamp: Date.now(),
-    exchangeData: exchangeSnapshot,
-    botData: botSnapshot,
-    discrepancies: [],
-    internalInconsistencies: []
-  };
-
-  // 取引所残高 vs BOT残高の比較
-  const exchangeBalances = exchangeSnapshot.total;
-  const mongoBalances = botSnapshot.mongodb;
-  const redisBalances = botSnapshot.redisSummary;
-  const positionBalances = botSnapshot.redisPositions;
-
-  // 全ての通貨を取得
-  const allCurrencies = new Set([
-    ...Object.keys(exchangeBalances),
-    ...Object.keys(mongoBalances),
-    ...Object.keys(redisBalances),
-    ...Object.keys(positionBalances)
-  ]);
-
-  for (const currency of allCurrencies) {
-    // JPYは除外
-    if (currency === 'JPY') {
-      continue;
-    }
-
-    const exchangeAmount = exchangeBalances[currency] || 0;
-    const mongoAmount = mongoBalances[currency] || 0;
-    const redisAmount = redisBalances[currency] || 0;
-    const positionAmount = positionBalances[currency] || 0;
-
-    // 有意な残高がある場合のみチェック
-    const maxAmount = Math.max(exchangeAmount, mongoAmount, redisAmount, positionAmount);
-    if (maxAmount < BALANCE_CONFIG.thresholds.significantBalance) {
-      continue;
-    }
-
-    const currencyComparison = {
-      currency,
-      exchange: exchangeAmount,
-      mongodb: mongoAmount,
-      redisSummary: redisAmount,
-      redisPositions: positionAmount,
-      discrepancies: {}
-    };
-
-    // 各ソース間の比較
-    if (Math.abs(exchangeAmount - mongoAmount) > 0) {
-      currencyComparison.discrepancies.exchangeVsMongo = exchangeAmount - mongoAmount;
-    }
-
-    if (Math.abs(mongoAmount - redisAmount) > 0) {
-      currencyComparison.discrepancies.mongoVsRedis = mongoAmount - redisAmount;
-      comparison.internalInconsistencies.push({
-        currency,
-        type: 'mongo_redis_mismatch',
-        mongo: mongoAmount,
-        redis: redisAmount,
-        difference: mongoAmount - redisAmount
-      });
-    }
-
-    if (Math.abs(redisAmount - positionAmount) > 0) {
-      currencyComparison.discrepancies.redisVsPosition = redisAmount - positionAmount;
-      comparison.internalInconsistencies.push({
-        currency,
-        type: 'redis_position_mismatch',
-        summary: redisAmount,
-        positions: positionAmount,
-        difference: redisAmount - positionAmount
-      });
-    }
-
-    if (Object.keys(currencyComparison.discrepancies).length > 0) {
-      comparison.discrepancies.push(currencyComparison);
-    }
-  }
-
-  return comparison;
-}
-
-/**
- * 詳細なDiscordメッセージを作成
- */
-function createDetailedDiscrepancyMessage(comparison) {
-  const { exchangeData, discrepancies, internalInconsistencies } = comparison;
-
-  let message = '🚨 **残高整合性エラー検出**\n';
-  message += `取引所: ${exchangeData.id || 'Unknown'}\n`;
-  message += `検出時刻: ${new Date(comparison.timestamp).toLocaleString('ja-JP')}\n\n`;
-
-  if (discrepancies.length > 0) {
-    message += '**🔍 残高乖離詳細:**\n';
-    const maxCurrencies = BALANCE_CONFIG.notifications.maxCurrenciesToShow;
-    for (const disc of discrepancies.slice(0, maxCurrencies)) {
-      message += `**${disc.currency}:**\n`;
-      message += `  取引所: ${disc.exchange.toFixed(8)}\n`;
-      message += `  MongoDB: ${disc.mongodb.toFixed(8)}\n`;
-      message += `  Redis: ${disc.redisSummary.toFixed(8)}\n`;
-      message += `  ポジション: ${disc.redisPositions.toFixed(8)}\n`;
-
-      if (disc.discrepancies.exchangeVsMongo) {
-        message += `  ⚠️ 取引所-MongoDB差異: ${disc.discrepancies.exchangeVsMongo.toFixed(8)}\n`;
-      }
-      message += '\n';
-    }
-
-    if (discrepancies.length > maxCurrencies) {
-      message += `...他${discrepancies.length - maxCurrencies}通貨でも乖離あり\n\n`;
-    }
-  }
-
-  if (internalInconsistencies.length > 0) {
-    message += '**⚠️ 内部データ不整合:**\n';
-    const maxInconsistencies = BALANCE_CONFIG.notifications.maxInconsistenciesToShow;
-    for (const inc of internalInconsistencies.slice(0, maxInconsistencies)) {
-      message += `  ${inc.currency}: ${inc.type} (差異: ${inc.difference.toFixed(8)})\n`;
-    }
-
-    if (internalInconsistencies.length > maxInconsistencies) {
-      message += `...他${internalInconsistencies.length - maxInconsistencies}件の不整合あり\n`;
-    }
-    message += '\n';
-  }
-
-  message += '**🔧 緊急対応が必要です**';
-
-  return message;
-}
-
-/**
- * チェック状態の手動リセット（開発者用）
- */
-async function resetCheckerState() {
-  await setCheckerState(STATE.OK, { reset: true, timestamp: Date.now() });
-  logger.info('State manually reset to OK');
-}
-
 module.exports = {
   getExchangeBalance,
   getBotManagedBalance,
   compareBalances,
   checkAllExchangeBalances,
   checkSingleExchange,
-  // 新しい堅牢な機能
-  compareBalancesRobust,
-  getBotManagedBalanceDetailed,
-  getCheckerState,
-  resetCheckerState,
   // Redis接続管理
-  ensureRedisConnection,
-  STATE
+  ensureRedisConnection
 };
