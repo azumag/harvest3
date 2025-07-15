@@ -16,42 +16,33 @@ describe('改善されたサンプリング手法', () => {
 
   describe('hybridSampling改善版', () => {
     test('改善前後で多様性スコアが向上する', () => {
-      // 改善前の設定（元の比率）
-      const oldRatioSamples = samplingEngine.hybridSampling('MA_CROSS', 20, {
-        latinHypercubeRatio: 0.4,
-        diversityRatio: 0.3,
-        randomRatio: 0.3,
-        minDistance: 0.15
-      });
-
-      // 改善後の設定（新しい比率）
-      const newRatioSamples = samplingEngine.hybridSampling('MA_CROSS', 20, {
-        latinHypercubeRatio: 0.5,
-        diversityRatio: 0.35,
-        randomRatio: 0.15,
-        minDistance: 0.12
-      });
-
-      const constraint = constraintEngine.getStrategyConstraints('MA_CROSS');
+      // より大きなサンプルサイズでテストの安定性を向上
+      const sampleSize = 50;
+      const iterations = 10; // テスト回数を増加
       
-      const oldDiversity = constraintEngine.calculateParameterDiversity(
-        oldRatioSamples, 
-        constraint.parameters
-      );
-      const newDiversity = constraintEngine.calculateParameterDiversity(
-        newRatioSamples, 
-        constraint.parameters
-      );
-
       // 新しい手法の方が多様性が高いことを期待（確率的なので複数回テスト）
       let improvementCount = 0;
-      for (let i = 0; i < 5; i++) {
-        const testOld = samplingEngine.hybridSampling('MA_CROSS', 20, {
+      let totalOldDiversity = 0;
+      let totalNewDiversity = 0;
+      
+      for (let i = 0; i < iterations; i++) {
+        // 改善前の設定（元の比率）
+        const testOld = samplingEngine.hybridSampling('MA_CROSS', sampleSize, {
           latinHypercubeRatio: 0.4,
           diversityRatio: 0.3,
-          randomRatio: 0.3
+          randomRatio: 0.3,
+          minDistance: 0.15
         });
-        const testNew = samplingEngine.hybridSampling('MA_CROSS', 20);
+        
+        // 改善後の設定（新しい比率、デフォルト値）
+        const testNew = samplingEngine.hybridSampling('MA_CROSS', sampleSize, {
+          latinHypercubeRatio: 0.5,
+          diversityRatio: 0.35,
+          randomRatio: 0.15,
+          minDistance: 0.12
+        });
+        
+        const constraint = constraintEngine.getStrategyConstraints('MA_CROSS');
         
         const testOldDiversity = constraintEngine.calculateParameterDiversity(
           testOld, 
@@ -62,13 +53,21 @@ describe('改善されたサンプリング手法', () => {
           constraint.parameters
         );
         
+        totalOldDiversity += testOldDiversity;
+        totalNewDiversity += testNewDiversity;
+        
         if (testNewDiversity >= testOldDiversity) {
           improvementCount++;
         }
       }
 
-      // 5回中3回以上で改善されることを期待
-      expect(improvementCount).toBeGreaterThanOrEqual(3);
+      // より現実的な期待値：10回中6回以上で改善されることを期待
+      // かつ平均的な多様性も向上していることを確認
+      const avgOldDiversity = totalOldDiversity / iterations;
+      const avgNewDiversity = totalNewDiversity / iterations;
+      
+      expect(improvementCount).toBeGreaterThanOrEqual(6);
+      expect(avgNewDiversity).toBeGreaterThan(avgOldDiversity);
     });
 
     test('小さなサンプルサイズでも適切に動作する', () => {
