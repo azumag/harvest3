@@ -549,6 +549,116 @@ describe('残高チェッカーのテスト', () => {
   });
 });
 
+// Issue #984: 重複スケジューリング修正のテスト - 新規追加
+describe('Issue #984: 重複スケジューリング修正のテスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset notification mocks to resolved state
+    postOrderToDiscord.mockResolvedValue();
+    postErrorToDiscord.mockResolvedValue();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('残高不整合ログが正常に出力される', async () => {
+    // 取引所残高設定
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { CYBER: 0.1531, BTC: 1.0 }
+    });
+
+    // Bot残高設定（CYBER：合計0.0148、BTC：合計1.0で一致）
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'CYBER/JPY',
+        side: 'buy',
+        amount: 0.0074,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'CYBER/JPY',
+        side: 'buy',
+        amount: 0.0074,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // CYBERは不整合として検出される（0.1531 vs 0.0148）
+    expect(result.discrepancies).toHaveLength(1);
+    expect(result.discrepancies[0].currency).toBe('CYBER');
+    
+    // 不整合が1件検出されたことをログで確認
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出: bitbank (1件の不整合)')
+    );
+  });
+
+  it('複数通貨の不整合が正常に検出される', async () => {
+    // 複数通貨での不整合を設定
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.5, ETH: 10.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0, // 不整合
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 8.0, // 不整合
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 2件の不整合が正常に検出されていることを確認
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出: bitbank (2件の不整合)')
+    );
+  });
+
+  it('残高一致時は正常ログが出力される', async () => {
+    // 残高が一致する設定
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.5 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.5, // 一致
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 正常メッセージが出力されていることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith('残高チェック正常: bitbank');
+  });
+});
+
 // Logger移行のテスト - 新規追加
 describe('BalanceChecker Logger移行のテスト', () => {
   let Logger;
