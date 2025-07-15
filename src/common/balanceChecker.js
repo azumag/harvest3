@@ -83,9 +83,10 @@ async function getExchangeBalance(exchangeId) {
 
 /**
  * botで管理している未売却ポジションから計算した残高を取得する
+ * @param {string} exchangeId - 取引所ID（指定された場合は該当取引所のみ）
  * @returns {Object} 通貨別の未売却ポジション残高
  */
-async function getBotManagedBalance() {
+async function getBotManagedBalance(exchangeId = null) {
   try {
     // Redis接続状態を確認し、必要に応じて初期化
     await ensureRedisConnection();
@@ -111,11 +112,12 @@ async function getBotManagedBalance() {
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
 
-    // 買いポジション（未売却）のみを抽出
-    const buyPositions = allPositions.filter(position =>
-      position.side === 'buy' &&
-      position.status !== 'closed' // クローズされていないポジション
-    );
+    // 買いポジション（未売却）のみを抽出し、必要に応じて取引所別にフィルタリング
+    const buyPositions = allPositions.filter(position => {
+      const isBuyPosition = position.side === 'buy' && position.status !== 'closed';
+      const isTargetExchange = !exchangeId || position.exchangeId === exchangeId;
+      return isBuyPosition && isTargetExchange;
+    });
 
     // 通貨別に集計
     const currencyBalances = {};
@@ -131,7 +133,8 @@ async function getBotManagedBalance() {
       currencyBalances[baseCurrency] += position.amount || 0;
     });
 
-    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
+    const exchangeInfo = exchangeId ? ` (${exchangeId})` : ' (全取引所)';
+    logger.info(`Bot管理残高計算完了${exchangeInfo}: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
     return currencyBalances;
   } catch (error) {
     logger.error('Bot管理残高取得エラー:', error.message);
@@ -157,8 +160,8 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     // 取引所残高を取得
     const exchangeBalance = await getExchangeBalance(exchangeId);
 
-    // Bot管理残高を取得
-    const botBalance = await getBotManagedBalance();
+    // Bot管理残高を取得（取引所別）
+    const botBalance = await getBotManagedBalance(exchangeId);
 
     // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
     const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
@@ -444,7 +447,7 @@ async function getBotManagedBalanceDetailed(exchangeId) {
     const redisBalances = await calculateBalanceFromRedisSummary(exchangeId);
 
     // 3. Redisポジションから取得（既存の関数を流用）
-    const positionBalances = await getBotManagedBalance();
+    const positionBalances = await getBotManagedBalance(exchangeId);
 
     const snapshot = {
       timestamp: Date.now(),

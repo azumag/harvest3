@@ -156,6 +156,7 @@ describe('残高チェッカーのテスト', () => {
     it('BOT管理残高を正常に計算する', async () => {
       const mockPositions = [
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           side: 'buy',
@@ -163,6 +164,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'ETH/JPY',
           side: 'buy',
@@ -170,6 +172,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'GRT/JPY',
           side: 'buy',
@@ -195,6 +198,99 @@ describe('残高チェッカーのテスト', () => {
 
       expect(result).toEqual({});
     });
+
+    // Issue #987: 取引所別フィルタリング機能のテスト
+    describe('取引所別フィルタリング機能 (Issue #987)', () => {
+      it('指定された取引所のポジションのみを集計する', async () => {
+        const mockPositions = [
+          {
+            exchangeId: 'bitbank',
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 1.5,
+            status: 'open'
+          },
+          {
+            exchangeId: 'bitflyer',
+            exchange: 'bitflyer',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 0.8,
+            status: 'open'
+          },
+          {
+            exchangeId: 'bitbank',
+            exchange: 'bitbank',
+            symbol: 'ETH/JPY',
+            side: 'buy',
+            amount: 10.0,
+            status: 'open'
+          }
+        ];
+
+        getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+        // bitbankのみの残高を取得
+        const bitbankResult = await getBotManagedBalance('bitbank');
+        expect(bitbankResult).toEqual({
+          BTC: 1.5,
+          ETH: 10.0
+        });
+
+        // bitflyerのみの残高を取得
+        const bitflyerResult = await getBotManagedBalance('bitflyer');
+        expect(bitflyerResult).toEqual({
+          BTC: 0.8
+        });
+      });
+
+      it('存在しない取引所を指定した場合は空のオブジェクトを返す', async () => {
+        const mockPositions = [
+          {
+            exchangeId: 'bitbank',
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 1.5,
+            status: 'open'
+          }
+        ];
+
+        getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+        const result = await getBotManagedBalance('nonexistent');
+        expect(result).toEqual({});
+      });
+
+      it('exchangeIdが未設定の場合は全取引所の残高を返す（後方互換性）', async () => {
+        const mockPositions = [
+          {
+            exchangeId: 'bitbank',
+            exchange: 'bitbank',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 1.5,
+            status: 'open'
+          },
+          {
+            exchangeId: 'bitflyer',
+            exchange: 'bitflyer',
+            symbol: 'BTC/JPY',
+            side: 'buy',
+            amount: 0.8,
+            status: 'open'
+          }
+        ];
+
+        getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+        const result = await getBotManagedBalance();
+        expect(result).toEqual({
+          BTC: 2.3 // 1.5 + 0.8
+        });
+      });
+    });
   });
 
   describe('compareBalances', () => {
@@ -205,6 +301,7 @@ describe('残高チェッカーのテスト', () => {
 
       getAllPositionsRedis.mockResolvedValue([
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           side: 'buy',
@@ -212,6 +309,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'ETH/JPY',
           side: 'buy',
@@ -219,6 +317,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'GRT/JPY',
           side: 'buy',
@@ -250,6 +349,7 @@ describe('残高チェッカーのテスト', () => {
       // 一致するよう修正
       getAllPositionsRedis.mockResolvedValue([
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           side: 'buy',
@@ -257,6 +357,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'ETH/JPY',
           side: 'buy',
@@ -264,6 +365,7 @@ describe('残高チェッカーのテスト', () => {
           status: 'open'
         },
         {
+          exchangeId: 'bitbank',
           exchange: 'bitbank',
           symbol: 'GRT/JPY',
           side: 'buy',
