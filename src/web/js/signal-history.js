@@ -5,7 +5,6 @@ $(document).ready(function() {
     $('#nav-signal-history').addClass('active');
   });
 
-  let signalsTable; // ordersTable から signalsTable に変更
   let exchanges = [];
   let symbols = [];
 
@@ -86,7 +85,7 @@ $(document).ready(function() {
   // シグナル履歴データをロードしてDataTablesに表示
   // DataTablesを初期化
   // サーバーサイド処理に変更
-  signalsTable = $('#signals-table').DataTable({
+  const signalsTable = $('#signals-table').DataTable({
     processing: true, // 処理中の表示
     serverSide: true, // サーバーサイド処理を有効化
     pageLength: 50, // 1ページあたりの表示件数を50に設定
