@@ -5,6 +5,7 @@ $(document).ready(function() {
     $('#nav-signal-history').addClass('active');
   });
 
+  // eslint-disable-next-line prefer-const
   let signalsTable; // ordersTable から signalsTable に変更
   let exchanges = [];
   let symbols = [];

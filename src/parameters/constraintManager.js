@@ -346,7 +346,7 @@ class ParameterConstraintEngine {
       // 現在の制約式は比較的シンプルなので十分
       
       // 無限ループ防止のための試行回数制限
-      let maxIterations = 50;
+      const maxIterations = 50;
       let iterations = 0;
       
       // 括弧の処理
