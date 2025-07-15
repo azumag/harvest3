@@ -35,6 +35,8 @@ jest.mock('../../../src/database/redisDatabase', () => ({
     set: jest.fn(),
     get: jest.fn(),
     eval: jest.fn(),
+    keys: jest.fn().mockResolvedValue([]), // 新しく追加されたメソッド
+    hgetall: jest.fn().mockResolvedValue({}), // 新しく追加されたメソッド
     isReady: true // Redis接続済み状態をデフォルトに設定
   })),
   getAllPositionsRedis: jest.fn(),
@@ -51,7 +53,9 @@ jest.mock('../../../src/database/redisClient', () => ({
     isReady: true,
     set: jest.fn(),
     get: jest.fn(),
-    eval: jest.fn()
+    eval: jest.fn(),
+    keys: jest.fn().mockResolvedValue([]), // 新しく追加されたメソッド
+    hgetall: jest.fn().mockResolvedValue({}) // 新しく追加されたメソッド
   }))
 }));
 

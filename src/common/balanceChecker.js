@@ -319,6 +319,9 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
             logger.info('代替手段でBot残高を取得しました');
             break;
           }
+          
+          // 代替手段でも残高が取得できない場合、retryCountを増加
+          retryCount++;
         } else {
           break;
         }
