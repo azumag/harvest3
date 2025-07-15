@@ -234,8 +234,18 @@ class SchedulingManager {
 
     // 軽量チェック（設定間隔）
     this.scheduleIntervalTask('lightweight-balance-check', async () => {
-      const { executeRiskManagementCheck } = require('../bot');
-      await executeRiskManagementCheck();
+      // 循環依存を避けるため、実行時に動的にrequireする
+      try {
+        const botModule = require('../bot');
+        if (typeof botModule.executeRiskManagementCheck === 'function') {
+          await botModule.executeRiskManagementCheck();
+        } else {
+          throw new Error('executeRiskManagementCheck is not a function');
+        }
+      } catch (error) {
+        logger.error('executeRiskManagementCheck の実行に失敗しました:', error.message);
+        throw error;
+      }
     }, lightweightIntervalMinutes, {
       description: `軽量リスク管理チェック（${lightweightIntervalMinutes}分間隔）`
     });
