@@ -219,11 +219,31 @@ async function initializeDB() {
 **/
 async function loadHistoricalOHLCVToBacktestRedis(exchange, symbol, timeframe, limit = 100) {
   try {
-    const ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
+    let ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
+    
     if (!ohlcvs || ohlcvs.length === 0) {
-      logger.info(`${symbol} - ${timeframe}: データが見つかりませんでした。`);
-      return [];
+      logger.info(`${symbol} - ${timeframe}: データが見つかりませんでした。データを自動取得を試行します...`);
+      
+      try {
+        // 欠損データの自動取得を試行
+        const autoFetchLimit = Math.max(limit, 1000); // 十分なデータ量を確保
+        await fetchOHLCVData(exchange, symbol, timeframe, autoFetchLimit, { forceUpdate: true });
+        
+        // 再度MongoDBから取得を試行
+        ohlcvs = await fetchHistoricalOHLCVData(exchange.id, symbol, timeframe, limit);
+        
+        if (ohlcvs && ohlcvs.length > 0) {
+          logger.info(`${symbol} - ${timeframe}: データ自動取得成功 (${ohlcvs.length}件)`);
+        } else {
+          logger.warn(`${symbol} - ${timeframe}: データ自動取得失敗。空のデータセットを返します。`);
+          return [];
+        }
+      } catch (autoFetchError) {
+        logger.warn(`${symbol} - ${timeframe}: データ自動取得中にエラー: ${autoFetchError.message}`);
+        return [];
+      }
     }
+    
     // Redisに保存
     await updateBacktestOHLCVRedisSortedSet(exchange.id, symbol, timeframe, ohlcvs);
     logger.info(`RedisにOHLCVデータを保存しました: ${exchange.id} ${symbol} ${timeframe} ${ohlcvs.length}件`);
