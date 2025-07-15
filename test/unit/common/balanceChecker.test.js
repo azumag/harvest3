@@ -1238,6 +1238,272 @@ describe('Issue #970: ログ出力改善のテスト', () => {
   });
 });
 
+// Issue #1691: 未知のステータス値への対応テスト
+describe('Issue #1691: 未知のステータス値への対応テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('未知のステータス値を持つポジションを適切に処理する', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'active' // 未知のステータス
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 2.0,
+        status: 'running' // 未知のステータス
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        side: 'buy',
+        amount: 3.0,
+        status: 'unknown' // 未知のステータス
+      }
+    ]);
+
+    const result = await getBotManagedBalance();
+
+    // 未知のステータスでも保守的に残高に含まれることを確認
+    expect(result).toEqual({
+      BTC: 1.0,
+      ETH: 2.0,
+      ADA: 3.0
+    });
+
+    // 未知のステータスに対する警告ログが出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: unknown (ADA/JPY)')
+    );
+  });
+
+  it('詳細なポジション統計情報が正しく出力される', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 2.0,
+        status: 'pending'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        side: 'sell',
+        amount: 3.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'DOT/JPY',
+        side: 'buy',
+        amount: 1.5,
+        status: 'closed'
+      }
+    ]);
+
+    await getBotManagedBalance();
+
+    // 詳細なポジション統計情報が出力されることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith('ポジション詳細統計:');
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith('  総ポジション数: 4');
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringContaining('  ステータス別: {')
+    );
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringContaining('  サイド別: {')
+    );
+  });
+
+  it('除外されたポジションの統計情報が正しく出力される', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 2.0,
+        status: 'closed' // 除外される
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        side: 'sell', // 除外される
+        amount: 3.0,
+        status: 'open'
+      }
+    ]);
+
+    await getBotManagedBalance();
+
+    // 除外されたポジションの統計情報が出力されることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith('除外されたポジション: 2件');
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringContaining('  除外理由 - ステータス別:')
+    );
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringContaining('  除外理由 - サイド別:')
+    );
+  });
+
+  it('残高ゼロの場合の診断情報が正しく出力される', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'closed' // 全て除外される
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'sell', // 全て除外される
+        amount: 2.0,
+        status: 'open'
+      }
+    ]);
+
+    const result = await getBotManagedBalance();
+
+    // 残高がゼロであることを確認
+    expect(result).toEqual({});
+
+    // 診断情報が出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。以下の可能性があります:');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  1. 全ポジションが決済済み (status="closed")');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  2. 売りポジションのみが存在');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  3. データベース接続またはデータ整合性の問題');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  4. ポジションデータの形式変更');
+  });
+
+  it('データ検証エラーが適切に報告される', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        // symbol欠落
+        side: 'buy',
+        amount: 2.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        // side欠落
+        amount: 3.0,
+        status: 'open'
+      }
+    ]);
+
+    await getBotManagedBalance();
+
+    // データ検証エラーが報告されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('データ検証エラー: 2件');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringContaining('[1] missing_fields:')
+    );
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringContaining('[2] missing_fields:')
+    );
+  });
+
+  it('拡張されたvalidStatusesリストが機能する', async () => {
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ETH/JPY',
+        side: 'buy',
+        amount: 2.0,
+        status: 'pending'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'ADA/JPY',
+        side: 'buy',
+        amount: 3.0,
+        status: 'active'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'DOT/JPY',
+        side: 'buy',
+        amount: 4.0,
+        status: 'opened'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'SOL/JPY',
+        side: 'buy',
+        amount: 5.0,
+        status: 'running'
+      }
+    ]);
+
+    const result = await getBotManagedBalance();
+
+    // 拡張されたvalidStatusesリストのステータスが全て処理されることを確認
+    expect(result).toEqual({
+      BTC: 1.0,
+      ETH: 2.0,
+      ADA: 3.0,
+      DOT: 4.0,
+      SOL: 5.0
+    });
+
+    // 既知のステータスに対しては警告が出ないことを確認
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: open')
+    );
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: pending')
+    );
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: active')
+    );
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: opened')
+    );
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('未知のステータスを持つ買いポジション: running')
+    );
+  });
+});
+
 // Issue #983: AVAX重複ログエラー修正のテスト
 describe('Issue #983: AVAX重複ログエラー修正テスト', () => {
   beforeEach(() => {
