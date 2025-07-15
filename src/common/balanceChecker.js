@@ -2,6 +2,7 @@
  * 残高チェッカー - 取引所残高とbot管理残高の比較・監視
  * geminiの指摘に基づく堅牢な実装（設定外部化対応）
  */
+const crypto = require('crypto');
 const { config } = require('../config');
 const { getValidatedConfig } = require('./balanceCheckerConfig');
 const { postErrorToDiscord, postOrderToDiscord } = require('./notifications');
@@ -345,7 +346,7 @@ const STATE = {
  */
 async function acquireCheckerLock() {
   const redisClient = getRedisClient();
-  const lockValue = `${Date.now()}_${Math.random()}`;
+  const lockValue = `${Date.now()}_${crypto.randomUUID()}`;
 
   const result = await redisClient.set(CHECKER_LOCK_KEY, lockValue, 'PX', LOCK_TTL, 'NX');
 
