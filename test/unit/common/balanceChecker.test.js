@@ -34,7 +34,8 @@ jest.mock('../../../src/database/redisDatabase', () => ({
   getClient: jest.fn(() => ({
     set: jest.fn(),
     get: jest.fn(),
-    eval: jest.fn()
+    eval: jest.fn(),
+    isReady: true // Redis接続済み状態をデフォルトに設定
   })),
   getAllPositionsRedis: jest.fn(),
   getAllTradeSummaries: jest.fn()
@@ -43,6 +44,38 @@ jest.mock('../../../src/database/redisDatabase', () => ({
 jest.mock('../../../src/database/manager', () => ({
   getAllTradeSummaries: jest.fn(),
   getTradeCurrentPosition: jest.fn()
+}));
+
+jest.mock('../../../src/database/redisClient', () => ({
+  initRedisClient: jest.fn()
+}));
+
+jest.mock('../../../src/common/balanceCheckerConfig', () => ({
+  getValidatedConfig: jest.fn(() => ({
+    thresholds: {
+      significantBalance: 0.0001
+    },
+    intervals: {
+      exchangeCheckDelay: 1000
+    },
+    distributedLock: {
+      stateKey: 'balance_checker_state',
+      lockKeyPrefix: 'balance_checker_lock',
+      defaultTtl: 300000
+    },
+    notifications: {
+      maxCurrenciesToShow: 5,
+      maxInconsistenciesToShow: 3
+    }
+  }))
+}));
+
+jest.mock('../../../src/common/bitbankErrorHandler', () => ({
+  withBitbankErrorHandling: jest.fn((fn) => fn())
+}));
+
+jest.mock('../../../src/common/strategyUtils', () => ({
+  getBalanceCheckEligibleStrategies: jest.fn(() => ['MA', 'BOLLINGER_BANDS', 'MULTI_INDICATOR', 'OSCILLATOR', 'MUTUAL_INFO'])
 }));
 
 // Logger のモック
