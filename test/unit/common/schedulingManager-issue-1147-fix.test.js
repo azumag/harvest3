@@ -7,7 +7,13 @@ const { getSchedulingManager } = require('../../../src/common/schedulingManager'
 jest.mock('../../../src/common/balanceChecker', () => ({
   checkAllExchangeBalances: jest.fn().mockResolvedValue([
     { exchangeId: 'bitbank', isHealthy: true, discrepancies: [] }
-  ])
+  ]),
+  checkSingleExchange: jest.fn().mockResolvedValue({
+    exchangeId: 'bitbank',
+    isHealthy: true,
+    discrepancyCount: 0,
+    discrepancies: []
+  })
 }));
 
 jest.mock('../../../src/bot', () => ({
@@ -46,7 +52,7 @@ describe('Issue #1147 修正: lightweight-balance-checkタスクの重複実行�
     
     // lightweight-balance-checkタスクが存在することを確認
     expect(lightweightTask).toBeDefined();
-    expect(lightweightTask.description).toBe('軽量残高チェック（5分間隔）');
+    expect(lightweightTask.description).toBe('軽量残高チェック（主要取引所・5分間隔）');
     expect(lightweightTask.type).toBe('interval');
   });
 
@@ -62,7 +68,7 @@ describe('Issue #1147 修正: lightweight-balance-checkタスクの重複実行�
     
     // robust-balance-checkタスクが存在することを確認
     expect(robustTask).toBeDefined();
-    expect(robustTask.description).toBe('堅牢残高整合性チェック（毎時0分実行）');
+    expect(robustTask.description).toBe('堅牢残高整合性チェック（全取引所・毎時0分実行）');
     expect(robustTask.type).toBe('hourly');
     expect(robustTask.cronExpression).toBe('0 0 * * * *');
   });
@@ -105,7 +111,7 @@ describe('Issue #1147 修正: lightweight-balance-checkタスクの重複実行�
     
     // 修正後の動作確認
     expect(lightweightTask).toBeDefined();
-    expect(lightweightTask.description).toBe('軽量残高チェック（5分間隔）');
+    expect(lightweightTask.description).toBe('軽量残高チェック（主要取引所・5分間隔）');
     
     // 修正前の問題（重複実行）は解消されている
     // 軽量チェックは残高チェックに専念し、リスク管理チェックとは異なる機能になっている

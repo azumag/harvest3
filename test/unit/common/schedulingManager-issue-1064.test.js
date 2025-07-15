@@ -23,9 +23,10 @@ jest.mock('../../../src/common/balanceCheckerConfig', () => ({
   }))
 }));
 
-// balanceChecker のモック（Issue #1064 修正の対象、Issue #1147修正後）
+// balanceChecker のモック（Issue #1064 修正の対象、Issue #1147修正後のリファクタリング対応）
 const mockBalanceChecker = {
-  checkAllExchangeBalances: jest.fn()
+  checkAllExchangeBalances: jest.fn(),
+  checkSingleExchange: jest.fn()
 };
 
 jest.mock('../../../src/common/balanceChecker', () => mockBalanceChecker);
@@ -71,8 +72,14 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
 
     schedulingManager = new SchedulingManager();
     
-    // mockBalanceChecker.checkAllExchangeBalances の初期化（Issue #1147修正後）
-    mockBalanceChecker.checkAllExchangeBalances = jest.fn().mockResolvedValue();
+    // mockBalanceChecker の初期化（Issue #1147修正後のリファクタリング対応）
+    mockBalanceChecker.checkAllExchangeBalances = jest.fn().mockResolvedValue([]);
+    mockBalanceChecker.checkSingleExchange = jest.fn().mockResolvedValue({
+      exchangeId: 'bitbank',
+      isHealthy: true,
+      discrepancyCount: 0,
+      discrepancies: []
+    });
     mockBotModule.executeRiskManagementCheck = jest.fn().mockResolvedValue();
   });
 
@@ -81,7 +88,7 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
   });
 
   describe('lightweight-balance-check スケジューラーの修正', () => {
-    it('checkAllExchangeBalances が正常に呼び出される', async () => {
+    it('checkSingleExchange が正常に呼び出される（軽量チェック）', async () => {
       // デフォルト残高チェックタスクを設定
       schedulingManager.setupDefaultBalanceTasks();
 
@@ -107,14 +114,17 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       // タスク関数を実行
       await taskFunction();
 
-      // checkAllExchangeBalances が呼び出されたことを確認
-      expect(mockBalanceChecker.checkAllExchangeBalances).toHaveBeenCalledTimes(1);
+      // checkSingleExchange が bitbank で呼び出されたことを確認（軽量チェック）
+      expect(mockBalanceChecker.checkSingleExchange).toHaveBeenCalledTimes(1);
+      expect(mockBalanceChecker.checkSingleExchange).toHaveBeenCalledWith('bitbank');
+      // checkAllExchangeBalances は呼び出されないことを確認
+      expect(mockBalanceChecker.checkAllExchangeBalances).not.toHaveBeenCalled();
     });
 
-    it('checkAllExchangeBalances でエラーが発生した場合の処理', async () => {
-      // checkAllExchangeBalances でエラーを発生させる
-      const testError = new Error('Test checkAllExchangeBalances error');
-      mockBalanceChecker.checkAllExchangeBalances = jest.fn().mockRejectedValue(testError);
+    it('checkSingleExchange でエラーが発生した場合の処理', async () => {
+      // checkSingleExchange でエラーを発生させる
+      const testError = new Error('Test checkSingleExchange error');
+      mockBalanceChecker.checkSingleExchange = jest.fn().mockRejectedValue(testError);
 
       schedulingManager.setupDefaultBalanceTasks();
 
@@ -133,14 +143,14 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       // エラーログが出力されたことを確認（実際の実装に合わせる）
       expect(mockLoggerInstance.error).toHaveBeenCalledWith(
         'lightweight-balance-check 実行エラー:',
-        'Test checkAllExchangeBalances error'
+        'Test checkSingleExchange error'
       );
     });
 
     it('軽量残高チェックで例外が発生した場合の処理', async () => {
-      // checkAllExchangeBalances で例外を発生させる
+      // checkSingleExchange で例外を発生させる
       const testError = new Error('軽量残高チェックの実行に失敗しました');
-      mockBalanceChecker.checkAllExchangeBalances = jest.fn().mockRejectedValue(testError);
+      mockBalanceChecker.checkSingleExchange = jest.fn().mockRejectedValue(testError);
 
       schedulingManager.setupDefaultBalanceTasks();
 
@@ -163,7 +173,7 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       );
     });
 
-    it('robust-balance-check は影響を受けない', async () => {
+    it('robust-balance-check は影響を受けない（包括的チェック）', async () => {
       schedulingManager.setupDefaultBalanceTasks();
 
       // robust-balance-check タスクが登録されたことを確認
@@ -188,8 +198,10 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       // タスク関数を実行
       await taskFunction();
 
-      // checkAllExchangeBalances が呼び出されたことを確認
+      // checkAllExchangeBalances が呼び出されたことを確認（包括的チェック）
       expect(mockBalanceChecker.checkAllExchangeBalances).toHaveBeenCalledTimes(1);
+      // checkSingleExchange は呼び出されないことを確認
+      expect(mockBalanceChecker.checkSingleExchange).not.toHaveBeenCalled();
       
       // executeRiskManagementCheck は呼び出されないことを確認（robust-balance-check用）
       expect(mockBotModule.executeRiskManagementCheck).not.toHaveBeenCalled();
@@ -215,9 +227,10 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       );
       await robustTaskCall[1]();
 
-      // それぞれの関数が1回ずつ呼び出されたことを確認
-      expect(mockBalanceChecker.checkAllExchangeBalances).toHaveBeenCalledTimes(2); // lightweight と robust 両方
-      expect(mockBotModule.executeRiskManagementCheck).toHaveBeenCalledTimes(0); // robust-balance-checkは元の実装と異なりcheckAllExchangeBalancesを呼ぶ
+      // それぞれの関数が適切に呼び出されたことを確認
+      expect(mockBalanceChecker.checkSingleExchange).toHaveBeenCalledTimes(1); // lightweight のみ
+      expect(mockBalanceChecker.checkAllExchangeBalances).toHaveBeenCalledTimes(1); // robust のみ
+      expect(mockBotModule.executeRiskManagementCheck).toHaveBeenCalledTimes(0); // どちらも呼び出さない
     });
   });
 
@@ -227,7 +240,7 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
 
       const taskInfo = schedulingManager.scheduledTasks.get('lightweight-balance-check');
       expect(taskInfo).toBeDefined();
-      expect(taskInfo.options.description).toBe('軽量残高チェック（5分間隔）');
+      expect(taskInfo.options.description).toBe('軽量残高チェック（主要取引所・5分間隔）');
     });
 
     it('robust-balance-check タスクの説明文が正しい', () => {
@@ -235,7 +248,7 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
 
       const taskInfo = schedulingManager.scheduledTasks.get('robust-balance-check');
       expect(taskInfo).toBeDefined();
-      expect(taskInfo.options.description).toBe('堅牢残高整合性チェック（毎時0分実行）');
+      expect(taskInfo.options.description).toBe('堅牢残高整合性チェック（全取引所・毎時0分実行）');
     });
 
     it('タスクの種類が正しく設定されている', () => {
@@ -275,14 +288,14 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       );
 
       const taskInfo = schedulingManager.scheduledTasks.get('lightweight-balance-check');
-      expect(taskInfo.options.description).toBe('軽量残高チェック（5分間隔）');
+      expect(taskInfo.options.description).toBe('軽量残高チェック（主要取引所・5分間隔）');
     });
   });
 
-  describe('循環依存の回避', () => {
-    it('balanceChecker が実行時に動的にrequireされる', async () => {
-      // 循環依存を回避するため、タスク実行時に動的にrequireすることを確認
-      // 実際の実装では、require('../common/balanceChecker')が各タスク実行時に呼び出される
+  describe('DRY原則対応', () => {
+    it('balanceChecker がコンストラクタで一度だけrequireされる', async () => {
+      // DRY原則に従い、コンストラクタで一度だけrequireすることを確認
+      // 実際の実装では、this.balanceCheckerがコンストラクタで設定される
       
       schedulingManager.setupDefaultBalanceTasks();
 
@@ -296,9 +309,9 @@ describe('Issue #1064: schedulingManager lightweight-balance-check修正テス�
       // タスク関数を実行
       await taskFunction();
 
-      // checkAllExchangeBalances が呼び出されたことで、
-      // 動的require が機能していることを間接的に確認
-      expect(mockBalanceChecker.checkAllExchangeBalances).toHaveBeenCalledTimes(1);
+      // checkSingleExchange が呼び出されたことで、
+      // this.balanceChecker が機能していることを間接的に確認
+      expect(mockBalanceChecker.checkSingleExchange).toHaveBeenCalledTimes(1);
     });
   });
 });

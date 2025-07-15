@@ -15,6 +15,8 @@ class SchedulingManager {
     this.scheduledTasks = new Map();
     this.config = getValidatedConfig();
     this.isShutdown = false;
+    // DRY原則: 共通のモジュールを一度だけrequire
+    this.balanceChecker = require('../common/balanceChecker');
   }
 
   /**
@@ -212,6 +214,41 @@ class SchedulingManager {
   }
 
   /**
+   * 軽量残高チェックを実行
+   * 主要取引所のみを高速でチェック
+   */
+  async _executeLightweightBalanceCheck() {
+    try {
+      logger.info('軽量残高チェック実行中...');
+      // 軽量チェック: 主要取引所（bitbank）のみをチェック
+      const result = await this.balanceChecker.checkSingleExchange('bitbank');
+      logger.info(`軽量残高チェック完了: ${result.isHealthy ? '正常' : `不整合${result.discrepancyCount}件`}`);
+      return result;
+    } catch (error) {
+      logger.error('軽量残高チェックの実行に失敗しました:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 堅牢残高チェックを実行
+   * 全取引所の包括的なチェック
+   */
+  async _executeRobustBalanceCheck() {
+    try {
+      logger.info('堅牢残高チェック実行中...');
+      // 堅牢チェック: 全取引所の包括的チェック
+      const results = await this.balanceChecker.checkAllExchangeBalances();
+      const healthyCount = results.filter(r => r.isHealthy).length;
+      logger.info(`堅牢残高チェック完了: ${healthyCount}/${results.length}取引所が正常`);
+      return results;
+    } catch (error) {
+      logger.error('堅牢残高チェックの実行に失敗しました:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * デフォルト残高チェックタスクの設定
    */
   setupDefaultBalanceTasks() {
@@ -221,29 +258,20 @@ class SchedulingManager {
     const lightweightIntervalMinutes = Math.round(this.config.intervals.lightweightCheck / (1000 * 60));
     const robustIntervalMinutes = Math.round(this.config.intervals.robustCheck / (1000 * 60));
 
-    logger.info(`軽量チェック: ${lightweightIntervalMinutes}分間隔`);
-    logger.info(`堅牢チェック: ${robustIntervalMinutes}分間隔 (毎時0分)`);
+    logger.info(`軽量チェック: ${lightweightIntervalMinutes}分間隔 (単一取引所)`);
+    logger.info(`堅牢チェック: ${robustIntervalMinutes}分間隔 (全取引所包括的)`);
 
     // 毎時0分の堅牢残高チェック
-    this.scheduleHourlyTask('robust-balance-check', async () => {
-      const { checkAllExchangeBalances } = require('../common/balanceChecker');
-      await checkAllExchangeBalances();
-    }, {
-      description: '堅牢残高整合性チェック（毎時0分実行）'
+    this.scheduleHourlyTask('robust-balance-check', 
+      () => this._executeRobustBalanceCheck(), {
+      description: '堅牢残高整合性チェック（全取引所・毎時0分実行）'
     });
 
     // 軽量チェック（設定間隔）
-    this.scheduleIntervalTask('lightweight-balance-check', async () => {
-      // 軽量残高チェック: 単一取引所の残高チェックを実行
-      try {
-        const { checkAllExchangeBalances } = require('../common/balanceChecker');
-        await checkAllExchangeBalances();
-      } catch (error) {
-        logger.error('軽量残高チェックの実行に失敗しました:', error.message);
-        throw error;
-      }
-    }, lightweightIntervalMinutes, {
-      description: `軽量残高チェック（${lightweightIntervalMinutes}分間隔）`
+    this.scheduleIntervalTask('lightweight-balance-check', 
+      () => this._executeLightweightBalanceCheck(), 
+      lightweightIntervalMinutes, {
+      description: `軽量残高チェック（主要取引所・${lightweightIntervalMinutes}分間隔）`
     });
   }
 
