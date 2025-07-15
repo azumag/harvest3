@@ -59,7 +59,10 @@ jest.mock('../../../src/common/balanceCheckerConfig', () => ({
   getValidatedConfig: jest.fn(() => ({
     thresholds: {
       significantBalance: 0.0001,
-      highDiscrepancyPercent: 10
+      highDiscrepancyPercent: 10,
+      balanceComparisonTolerance: 1,
+      externalTradeThreshold: 50,
+      currencySpecificTolerance: {}
     },
     intervals: {
       exchangeCheckDelay: 1000
@@ -565,7 +568,7 @@ describe('残高チェッカーのテスト', () => {
       
       // 高度不整合として ERROR レベルで出力されることを確認
       expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-        expect.stringContaining('残高不整合検出: bitbank (1件の高度不整合)')
+        expect.stringMatching(/残高不整合検出: bitbank \(1件の高度不整合.*\)/)
       );
       
       // 詳細が ERROR レベルで出力されることを確認
