@@ -41,8 +41,11 @@ send_startup_error_to_discord() {
 
     # Node.js経由でDiscord通知送信
     if command -v node >/dev/null 2>&1; then
-        # 一時的なDiscord通知スクリプトを作成
-        local temp_script="/tmp/discord_notify_$$.js"
+        # セキュアな一時ファイル作成
+        local temp_script=$(mktemp "/tmp/discord_notify_XXXXXX.js")
+        # 一時ファイルのクリーンアップを保証
+        trap "rm -f \"$temp_script\"" EXIT ERR
+        
         cat > "$temp_script" << 'EOF'
 const fs = require('fs');
 
@@ -94,8 +97,10 @@ EOF
             log "WARNING: Discord notification failed (non-critical)"
         fi
         
-        # 一時ファイルを削除
+        # 一時ファイルを削除（trapでも削除されるが、明示的に削除）
         rm -f "$temp_script"
+        # trapをリセット（この関数内での処理完了）
+        trap - EXIT ERR
     else
         log "WARNING: Node.js not available for Discord notification"
     fi
@@ -335,64 +340,53 @@ start_application() {
     
     log "Application started successfully (Bot PID: $app_pid, API PID: $api_pid)"
     
-    # プロセス監視と自動回復機能
+    # プロセス監視と自動回復機能（レースコンディション対策版）
     local process_restart_count=0
     local max_process_restarts=3
     local restart_cooldown=30
+    local restart_in_progress=false
+    local last_restart_time=0
     
     while true; do
-        # ボットプロセスの監視
+        local current_time=$(date +%s)
+        local bot_alive=true
+        local api_alive=true
+        
+        # プロセス状態の確認
         if ! kill -0 $app_pid 2>/dev/null; then
-            log "Bot process died, attempting recovery..."
-            
-            # API プロセスも停止
-            if kill -0 $api_pid 2>/dev/null; then
-                log "Stopping API process for coordinated restart..."
-                kill $api_pid 2>/dev/null
-                wait $api_pid 2>/dev/null
-            fi
-            
-            # 再起動制限チェック
-            if [ $process_restart_count -lt $max_process_restarts ]; then
-                process_restart_count=$((process_restart_count + 1))
-                log "Restarting processes (attempt $process_restart_count/$max_process_restarts)..."
-                
-                # クールダウン期間
-                sleep $restart_cooldown
-                
-                # API サーバーを再起動
-                log "Restarting API server..."
-                npm run start-web &
-                api_pid=$!
-                
-                # APIの起動を確認
-                sleep 10
-                if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
-                    log "API server failed to restart, giving up..."
-                    exit 1
-                fi
-                
-                # ボットを再起動
-                log "Restarting bot application..."
-                npm run start &
-                app_pid=$!
-                
-                log "Processes restarted successfully (Bot PID: $app_pid, API PID: $api_pid)"
-            else
-                log "Maximum restart attempts reached, exiting..."
-                exit 1
-            fi
+            bot_alive=false
         fi
         
-        # APIプロセスの監視
         if ! kill -0 $api_pid 2>/dev/null; then
-            log "API process died, attempting recovery..."
+            api_alive=false
+        fi
+        
+        # 両方のプロセスが死んでいる場合、または一方が死んでいる場合の処理
+        if [ "$bot_alive" = false ] || [ "$api_alive" = false ]; then
+            # レースコンディション防止：再起動が進行中の場合はスキップ
+            if [ "$restart_in_progress" = true ]; then
+                log "Restart already in progress, skipping..."
+                sleep 5
+                continue
+            fi
             
-            # ボットプロセスも停止
-            if kill -0 $app_pid 2>/dev/null; then
-                log "Stopping bot process for coordinated restart..."
-                kill $app_pid 2>/dev/null
-                wait $app_pid 2>/dev/null
+            # 頻繁な再起動を防ぐ（最後の再起動から30秒以内は再起動しない）
+            if [ $((current_time - last_restart_time)) -lt 30 ]; then
+                log "Too soon since last restart, waiting..."
+                sleep 5
+                continue
+            fi
+            
+            restart_in_progress=true
+            last_restart_time=$current_time
+            
+            # どちらのプロセスが死んだかログ出力
+            if [ "$bot_alive" = false ] && [ "$api_alive" = false ]; then
+                log "Both processes died, attempting coordinated restart..."
+            elif [ "$bot_alive" = false ]; then
+                log "Bot process died, attempting recovery..."
+            else
+                log "API process died, attempting recovery..."
             fi
             
             # 再起動制限チェック
@@ -400,7 +394,21 @@ start_application() {
                 process_restart_count=$((process_restart_count + 1))
                 log "Restarting processes (attempt $process_restart_count/$max_process_restarts)..."
                 
+                # 生きているプロセスを停止
+                if [ "$bot_alive" = true ]; then
+                    log "Stopping bot process for coordinated restart..."
+                    kill $app_pid 2>/dev/null
+                    wait $app_pid 2>/dev/null
+                fi
+                
+                if [ "$api_alive" = true ]; then
+                    log "Stopping API process for coordinated restart..."
+                    kill $api_pid 2>/dev/null
+                    wait $api_pid 2>/dev/null
+                fi
+                
                 # クールダウン期間
+                log "Waiting for ${restart_cooldown}s cooldown period..."
                 sleep $restart_cooldown
                 
                 # API サーバーを再起動
@@ -408,12 +416,26 @@ start_application() {
                 npm run start-web &
                 api_pid=$!
                 
-                # APIの起動を確認
-                sleep 10
-                if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
-                    log "API server failed to restart, giving up..."
-                    exit 1
-                fi
+                # APIの起動を確認（より堅牢な確認）
+                local api_startup_attempts=0
+                local max_api_startup_attempts=6
+                while [ $api_startup_attempts -lt $max_api_startup_attempts ]; do
+                    sleep 5
+                    api_startup_attempts=$((api_startup_attempts + 1))
+                    
+                    if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+                        log "API server health check passed (attempt $api_startup_attempts)"
+                        break
+                    fi
+                    
+                    if [ $api_startup_attempts -eq $max_api_startup_attempts ]; then
+                        log "API server failed to start after $max_api_startup_attempts attempts, giving up..."
+                        restart_in_progress=false
+                        exit 1
+                    fi
+                    
+                    log "API server health check failed, waiting... (attempt $api_startup_attempts/$max_api_startup_attempts)"
+                done
                 
                 # ボットを再起動
                 log "Restarting bot application..."
@@ -421,14 +443,16 @@ start_application() {
                 app_pid=$!
                 
                 log "Processes restarted successfully (Bot PID: $app_pid, API PID: $api_pid)"
+                restart_in_progress=false
             else
                 log "Maximum restart attempts reached, exiting..."
+                restart_in_progress=false
                 exit 1
             fi
         fi
         
-        # 定期的なヘルスチェック
-        if [ $(($(date +%s) % 60)) -eq 0 ]; then
+        # 定期的なヘルスチェック（60秒間隔）
+        if [ $((current_time % 60)) -eq 0 ]; then
             log "Processes health check: Bot PID $app_pid, API PID $api_pid"
             if ! curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
                 log "WARNING: API health check failed"
