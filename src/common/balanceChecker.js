@@ -17,6 +17,19 @@ const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 // 設定の取得
 const BALANCE_CONFIG = getValidatedConfig();
 
+// 定数定義
+const DECIMAL_PRECISION = 8;
+const EXCLUDED_CURRENCIES = ['JPY'];
+
+/**
+ * 通貨名を正規化する
+ * @param {string} currency - 通貨名
+ * @returns {string} 正規化された通貨名（トリム + 大文字）
+ */
+function normalizeCurrency(currency) {
+  return currency.trim().toUpperCase();
+}
+
 /**
  * Redis接続を確実に確立する
  * @returns {Promise<void>}
@@ -195,6 +208,157 @@ async function getBotManagedBalance() {
 }
 
 /**
+ * 比較対象の通貨一覧を取得する
+ * @param {Object} exchangeBalance - 取引所残高
+ * @param {Object} botBalance - Bot管理残高
+ * @returns {Array} 比較対象の通貨一覧
+ */
+function getComparisonCurrencies(exchangeBalance, botBalance) {
+  const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
+  const exchangeCurrencies = Object.keys(exchangeBalance.total || {}).filter(
+    currency => (exchangeBalance.total[currency] || 0) >= significantThreshold
+  );
+  const botCurrencies = Object.keys(botBalance || {});
+  return [...new Set([...exchangeCurrencies, ...botCurrencies])];
+}
+
+/**
+ * 残高の不整合を検出する
+ * @param {Array} allCurrencies - 比較対象の通貨一覧
+ * @param {Object} exchangeBalance - 取引所残高
+ * @param {Object} botBalance - Bot管理残高
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Array} 不整合データの配列
+ */
+function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchangeId) {
+  const discrepancies = [];
+  const processedCurrencies = new Set();
+  const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
+
+  for (const currency of allCurrencies) {
+    // 除外する通貨をチェック
+    if (EXCLUDED_CURRENCIES.includes(currency)) {
+      continue;
+    }
+
+    // 通貨名の正規化
+    const normalizedCurrency = normalizeCurrency(currency);
+
+    // 重複処理の防止
+    if (processedCurrencies.has(normalizedCurrency)) {
+      logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency}`);
+      continue;
+    }
+    processedCurrencies.add(normalizedCurrency);
+
+    const exchangeAmount = exchangeBalance.total[currency] || 0;
+    const botAmount = botBalance[currency] || 0;
+
+    // 有意な差がある場合のみチェック
+    if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
+      continue;
+    }
+
+    // 差異の計算（浮動小数点精度問題の修正）
+    const difference = Math.abs(parseFloat((exchangeAmount - botAmount).toFixed(DECIMAL_PRECISION)));
+    const maxAmount = Math.max(exchangeAmount, botAmount);
+    const discrepancyPercent = maxAmount > 0 ? parseFloat(((difference / maxAmount) * 100).toFixed(2)) : 0;
+
+    // 完全一致でない場合は全て通知
+    if (difference > 0) {
+      const discrepancyEntry = {
+        currency: normalizedCurrency,
+        exchangeAmount: parseFloat(exchangeAmount.toFixed(DECIMAL_PRECISION)),
+        botAmount: parseFloat(botAmount.toFixed(DECIMAL_PRECISION)),
+        difference,
+        discrepancyPercent,
+        timestamp: Date.now(),
+        exchangeId
+      };
+      
+      discrepancies.push(discrepancyEntry);
+      logger.debug(`不整合エントリ追加 (${exchangeId}): ${normalizedCurrency} - 差異=${difference}`);
+    }
+  }
+
+  return discrepancies;
+}
+
+/**
+ * 不整合データから重複を除去する
+ * @param {Array} discrepancies - 不整合データの配列
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Array} 重複を除去した不整合データの配列
+ */
+function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
+  const uniqueDiscrepancies = [];
+  const seenCurrencies = new Set();
+  
+  for (const disc of discrepancies) {
+    const normalizedDiscCurrency = normalizeCurrency(disc.currency);
+    if (!seenCurrencies.has(normalizedDiscCurrency)) {
+      uniqueDiscrepancies.push({
+        ...disc,
+        currency: normalizedDiscCurrency
+      });
+      seenCurrencies.add(normalizedDiscCurrency);
+    } else {
+      logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency}`);
+    }
+  }
+  
+  return uniqueDiscrepancies;
+}
+
+/**
+ * 不整合データを処理し、Discord通知を送信する
+ * @param {Array} discrepancies - 不整合データの配列
+ * @param {string} exchangeId - 取引所ID
+ * @param {Object} diagnosticInfo - 診断情報
+ * @returns {Array} 処理された不整合データの配列
+ */
+async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
+  if (discrepancies.length === 0) {
+    logger.info(`残高チェック正常: ${exchangeId}`);
+    return discrepancies;
+  }
+
+  // 重複を除去
+  const uniqueDiscrepancies = removeDuplicateDiscrepancies(discrepancies, exchangeId);
+  
+  // Discord通知を送信
+  const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
+  await postOrderToDiscord(message);
+  
+  // 不整合の重要度に応じてログレベルを決定
+  const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
+  const isHighDiscrepancy = uniqueDiscrepancies.some(disc => 
+    disc.discrepancyPercent >= highDiscrepancyThreshold
+  );
+
+  const logLevel = isHighDiscrepancy ? 'error' : 'warn';
+  const severityText = isHighDiscrepancy ? '高度不整合' : '軽微な不整合';
+  
+  const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
+  logger[logLevel](message_text);
+  
+  uniqueDiscrepancies.forEach((disc, index) => {
+    logger[logLevel](`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+  });
+  
+  // デバッグ用の詳細データ
+  try {
+    const discrepanciesJson = JSON.stringify(uniqueDiscrepancies, null, 2);
+    logger.debug(`残高不整合詳細データ (${exchangeId}):`, discrepanciesJson);
+  } catch (jsonError) {
+    logger.error(`残高データのJSON化に失敗 (${exchangeId}):`, jsonError.message);
+    logger.error(`不整合オブジェクトの構造情報: 件数=${uniqueDiscrepancies.length}, type=${typeof uniqueDiscrepancies}`);
+  }
+  
+  return uniqueDiscrepancies;
+}
+
+/**
  * 残高を比較し、不整合があればDiscordに通知する
  * @param {string} exchangeId - 取引所ID
  * @param {number} thresholdPercent - 許容誤差（パーセント）- 完全一致チェックのため0
@@ -221,130 +385,21 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
       botTotal: botBalance || {}
     };
 
-    // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
-    const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
-    const exchangeCurrencies = Object.keys(exchangeBalance.total || {}).filter(
-      currency => (exchangeBalance.total[currency] || 0) >= significantThreshold
-    );
-    const botCurrencies = Object.keys(botBalance || {});
-    const allCurrencies = [...new Set([...exchangeCurrencies, ...botCurrencies])];
-
-    const discrepancies = [];
-    const processedCurrencies = new Set(); // 重複処理防止用
+    // 比較対象の通貨一覧を取得
+    const allCurrencies = getComparisonCurrencies(exchangeBalance, botBalance);
 
     logger.debug(`残高比較対象通貨 (${exchangeId}): ${allCurrencies.length}通貨 - ${allCurrencies.join(', ')}`);
 
-    for (const currency of allCurrencies) {
-      // JPYは残高チェックから除外
-      if (currency === 'JPY') {
-        continue;
-      }
+    // 不整合を検出
+    const discrepancies = detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchangeId);
 
-      // 通貨名の正規化（大文字小文字とトリム）
-      const normalizedCurrency = currency.trim().toUpperCase();
-
-      // 重複処理の防止（正規化されたキーを使用）
-      if (processedCurrencies.has(normalizedCurrency)) {
-        logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency}`);
-        continue;
-      }
-      processedCurrencies.add(normalizedCurrency);
-
-      const exchangeAmount = exchangeBalance.total[currency] || 0;
-      const botAmount = botBalance[currency] || 0;
-
-      // 有意な差がある場合のみチェック
-      if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
-        continue;
-      }
-
-      // 差異の計算（完全一致チェック）- 浮動小数点精度の問題を修正
-      const difference = Math.abs(parseFloat((exchangeAmount - botAmount).toFixed(8)));
-      const maxAmount = Math.max(exchangeAmount, botAmount);
-      const discrepancyPercent = maxAmount > 0 ? parseFloat(((difference / maxAmount) * 100).toFixed(2)) : 0;
-
-      // 完全一致でない場合は全て通知（閾値0%）
-      if (difference > 0) {
-        // discrepancies配列での重複チェック（正規化されたキーを使用）
-        const existingDiscrepancy = discrepancies.find(disc => disc.currency === normalizedCurrency);
-        if (existingDiscrepancy) {
-          logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
-          continue;
-        }
-
-        const discrepancyEntry = {
-          currency: normalizedCurrency,
-          exchangeAmount: parseFloat(exchangeAmount.toFixed(8)),
-          botAmount: parseFloat(botAmount.toFixed(8)),
-          difference,
-          discrepancyPercent,
-          timestamp: Date.now(),
-          exchangeId
-        };
-        
-        discrepancies.push(discrepancyEntry);
-        logger.debug(`不整合エントリ追加 (${exchangeId}): ${normalizedCurrency} - 差異=${difference}`);
-      }
-    }
-
-    // 不整合があればDiscordに通知
-    if (discrepancies.length > 0) {
-      // 最終的な重複チェック（念のため）- 正規化された通貨名を使用
-      const uniqueDiscrepancies = [];
-      const seenCurrencies = new Set();
-      
-      for (const disc of discrepancies) {
-        const normalizedDiscCurrency = disc.currency.trim().toUpperCase();
-        if (!seenCurrencies.has(normalizedDiscCurrency)) {
-          uniqueDiscrepancies.push({
-            ...disc,
-            currency: normalizedDiscCurrency
-          });
-          seenCurrencies.add(normalizedDiscCurrency);
-        } else {
-          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency}`);
-        }
-      }
-      
-      const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
-      await postOrderToDiscord(message);
-      
-      // 不整合の重要度に応じてログレベルを決定（Issue #1108の修正）
-      const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
-      const isHighDiscrepancy = uniqueDiscrepancies.some(disc => 
-        disc.discrepancyPercent >= highDiscrepancyThreshold
-      );
-
-      const logLevel = isHighDiscrepancy ? 'error' : 'warn';
-      const severityText = isHighDiscrepancy ? '高度不整合' : '軽微な不整合';
-      
-      const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
-      logger[logLevel](message_text);
-      
-      uniqueDiscrepancies.forEach((disc, index) => {
-        logger[logLevel](`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-      });
-      
-      // 元の配列を修正されたものに置き換え
-      discrepancies.length = 0;
-      discrepancies.push(...uniqueDiscrepancies);
-      
-      // デバッグ用の詳細データ（JSONとして安全に出力）
-      try {
-        const discrepanciesJson = JSON.stringify(discrepancies, null, 2);
-        logger.debug(`残高不整合詳細データ (${exchangeId}):`, discrepanciesJson);
-      } catch (jsonError) {
-        logger.error(`残高データのJSON化に失敗 (${exchangeId}):`, jsonError.message);
-        logger.error(`不整合オブジェクトの構造情報: 件数=${discrepancies.length}, type=${typeof discrepancies}`);
-      }
-    } else {
-      logger.info(`残高チェック正常: ${exchangeId}`);
-    }
+    // 不整合を処理
+    const processedDiscrepancies = await processDiscrepancies(discrepancies, exchangeId, diagnosticInfo);
 
     return {
       exchangeId,
-      discrepancies,
-      isHealthy: discrepancies.length === 0,
+      discrepancies: processedDiscrepancies,
+      isHealthy: processedDiscrepancies.length === 0,
       diagnosticInfo
     };
 
@@ -375,9 +430,9 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
 
   discrepancies.forEach(disc => {
     message += `**${disc.currency}**\n`;
-    message += `・取引所残高: ${disc.exchangeAmount.toFixed(6)}\n`;
-    message += `・Bot管理残高: ${disc.botAmount.toFixed(6)}\n`;
-    message += `・差異: ${disc.difference.toFixed(6)} (${disc.discrepancyPercent}%)\n\n`;
+    message += `・取引所残高: ${disc.exchangeAmount.toFixed(DECIMAL_PRECISION)}\n`;
+    message += `・Bot管理残高: ${disc.botAmount.toFixed(DECIMAL_PRECISION)}\n`;
+    message += `・差異: ${disc.difference.toFixed(DECIMAL_PRECISION)} (${disc.discrepancyPercent}%)\n\n`;
   });
 
   message += '⚠️ 手動確認と調整が必要です。';
@@ -402,9 +457,9 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   
   displayDiscrepancies.forEach(disc => {
     message += `**${disc.currency}**\n`;
-    message += `・取引所残高: ${disc.exchangeAmount.toFixed(8)}\n`;
-    message += `・Bot管理残高: ${disc.botAmount.toFixed(8)}\n`;
-    message += `・差異: ${disc.difference.toFixed(8)} (${disc.discrepancyPercent}%)\n\n`;
+    message += `・取引所残高: ${disc.exchangeAmount.toFixed(DECIMAL_PRECISION)}\n`;
+    message += `・Bot管理残高: ${disc.botAmount.toFixed(DECIMAL_PRECISION)}\n`;
+    message += `・差異: ${disc.difference.toFixed(DECIMAL_PRECISION)} (${disc.discrepancyPercent}%)\n\n`;
   });
 
   if (discrepancies.length > maxDisplay) {
