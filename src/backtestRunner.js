@@ -1331,26 +1331,168 @@ process.on('uncaughtException', (error) => {
   console.log('例外が発生しましたが、プロセスを継続します...');
 });
 
-// メイン実行関数
-async function main() {
-  try {
-    await runBacktest(targetSymbol, autoUpdate);
-    console.log('バックテスト正常完了');
-  } catch (error) {
-    console.error('バックテスト実行エラー:', error);
-    console.error('エラースタック:', error.stack);
+// 設定の外部化
+const BACKTEST_INTERVAL = parseInt(process.env.BACKTEST_INTERVAL || '500') * 1000;
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const MEMORY_THRESHOLD = parseInt(process.env.MEMORY_THRESHOLD || '1073741824'); // 1GB
+const HEALTH_CHECK_PORT = parseInt(process.env.HEALTH_CHECK_PORT || '8080');
+
+// ヘルスチェック用のHTTPサーバー
+let healthCheckServer;
+const healthStatus = {
+  status: 'starting',
+  lastRun: null,
+  uptime: process.uptime(),
+  memoryUsage: null,
+  errorCount: 0
+};
+
+function startHealthCheckServer() {
+  const http = require('http');
+  
+  healthCheckServer = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ...healthStatus,
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage()
+      }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  });
+  
+  healthCheckServer.listen(HEALTH_CHECK_PORT, () => {
+    logWithLevel('info', `ヘルスチェックサーバーがポート${HEALTH_CHECK_PORT}で起動しました`);
+  });
+}
+
+// ログレベル制御
+function shouldLog(level) {
+  const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+  return levels[level] <= levels[LOG_LEVEL];
+}
+
+function logWithLevel(level, ...args) {
+  if (shouldLog(level)) {
+    console.log(...args);
+  }
+}
+
+// メモリ監視機能
+function checkMemoryUsage() {
+  const memoryUsage = process.memoryUsage();
+  logWithLevel('debug', `メモリ使用量: ${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`);
+  
+  if (memoryUsage.heapUsed > MEMORY_THRESHOLD) {
+    logWithLevel('warn', `メモリ使用量が閾値を超えています: ${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`);
     
-    // Discord通知（利用可能な場合）
-    if (typeof postErrorToDiscord === 'function') {
-      await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+    // 積極的なガベージコレクション
+    if (global.gc) {
+      global.gc();
+      logWithLevel('info', 'ガベージコレクションを実行しました');
+    }
+  }
+  
+  return memoryUsage;
+}
+
+// メイン実行関数（長時間実行型）
+async function main() {
+  console.log('バックテストサービスを開始します（長時間実行モード）');
+  logWithLevel('info', `実行間隔: ${BACKTEST_INTERVAL / 1000}秒`);
+  logWithLevel('info', `ログレベル: ${LOG_LEVEL}`);
+  logWithLevel('info', `メモリ閾値: ${Math.round(MEMORY_THRESHOLD / 1024 / 1024)}MB`);
+  
+  // ヘルスチェックサーバーを起動
+  startHealthCheckServer();
+  healthStatus.status = 'running';
+  
+  // グレースフルシャットダウンのためのフラグ
+  let isShuttingDown = false;
+  let lastExecutionTime = null;
+  
+  // シグナルハンドラーの設定
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM受信: グレースフルシャットダウンを開始します');
+    isShuttingDown = true;
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('SIGINT受信: グレースフルシャットダウンを開始します');
+    isShuttingDown = true;
+  });
+  
+  while (!isShuttingDown) {
+    try {
+      const startTime = Date.now();
+      console.log(`[${new Date().toISOString()}] バックテスト実行を開始します`);
+      
+      await runBacktest(targetSymbol, autoUpdate);
+      
+      const endTime = Date.now();
+      const executionTime = Math.round((endTime - startTime) / 1000);
+      console.log(`[${new Date().toISOString()}] バックテスト正常完了 (実行時間: ${executionTime}秒)`);
+      
+      // ヘルスステータスを更新
+      healthStatus.lastRun = new Date().toISOString();
+      healthStatus.status = 'running';
+      
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] バックテスト実行エラー:`, error);
+      console.error('エラースタック:', error.stack);
+      
+      // ヘルスステータスを更新
+      healthStatus.errorCount++;
+      healthStatus.status = 'error';
+      
+      // Discord通知（利用可能な場合）
+      if (typeof postErrorToDiscord === 'function') {
+        await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+      }
+      
+      console.log('エラーが発生しましたが、プロセスを継続します...');
+      
+      // エラー発生時は短い待機時間
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
-    // プロセスを終了せず、エラーログを出力
-    console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+    // シャットダウンフラグをチェック
+    if (isShuttingDown) {
+      break;
+    }
     
-    // エラー発生時は少し待機してからリターン（Docker composeのループで再実行される）
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // 実行後にメモリ使用量をチェック
+    checkMemoryUsage();
+    lastExecutionTime = new Date().toISOString();
+    
+    // 次の実行まで待機
+    logWithLevel('info', `[${new Date().toISOString()}] 次の実行まで${BACKTEST_INTERVAL / 1000}秒待機します`);
+    
+    // 待機をシャットダウン可能にする（10秒ごとにチェック）
+    const totalWaitTime = BACKTEST_INTERVAL;
+    const checkInterval = 10 * 1000; // 10秒ごとにチェック
+    
+    for (let waitTime = 0; waitTime < totalWaitTime && !isShuttingDown; waitTime += checkInterval) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(checkInterval, totalWaitTime - waitTime)));
+    }
   }
+  
+  console.log('バックテストサービスを終了します');
+  
+  // ヘルスチェックサーバーを停止
+  healthStatus.status = 'stopping';
+  if (healthCheckServer) {
+    healthCheckServer.close(() => {
+      logWithLevel('info', 'ヘルスチェックサーバーを停止しました');
+    });
+  }
+  
+  // 終了前のメモリ使用量レポート
+  const finalMemory = checkMemoryUsage();
+  logWithLevel('info', `終了時メモリ使用量: ${Math.round(finalMemory.heapUsed / 1024 / 1024)}MB`);
 }
 
 // バックテストを開始（テストモード以外の場合のみ）
