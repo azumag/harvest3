@@ -354,6 +354,7 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
     if (difference > 0) {
       const discrepancyEntry = {
         currency: normalizedCurrency,
+        originalCurrency: currency, // 元の通貨名を保持
         exchangeAmount: parseFloat(exchangeAmount.toFixed(DECIMAL_PRECISION)),
         botAmount: parseFloat(botAmount.toFixed(DECIMAL_PRECISION)),
         difference,
@@ -374,33 +375,54 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
 }
 
 /**
- * 不整合データから重複を除去する
+ * 不整合データから重複を除去する（強化版）
  * @param {Array} discrepancies - 不整合データの配列
  * @param {string} exchangeId - 取引所ID
  * @returns {Array} 重複を除去した不整合データの配列
  */
 function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
   const uniqueDiscrepancies = [];
-  const seenCurrencies = new Set();
+  const seenCurrencies = new Map(); // Set から Map に変更して詳細情報を保持
   let duplicateCount = 0;
   
   for (const disc of discrepancies) {
     const normalizedDiscCurrency = normalizeCurrency(disc.currency);
+    
     if (!seenCurrencies.has(normalizedDiscCurrency)) {
-      uniqueDiscrepancies.push({
+      const enhancedDisc = {
         ...disc,
-        currency: normalizedDiscCurrency
+        currency: normalizedDiscCurrency,
+        originalCurrency: disc.originalCurrency || disc.currency, // 既存のoriginalCurrencyを優先
+        processedAt: Date.now() // 処理時刻を記録
+      };
+      uniqueDiscrepancies.push(enhancedDisc);
+      seenCurrencies.set(normalizedDiscCurrency, {
+        index: uniqueDiscrepancies.length - 1,
+        originalCurrency: disc.currency,
+        processedAt: enhancedDisc.processedAt
       });
-      seenCurrencies.add(normalizedDiscCurrency);
     } else {
       duplicateCount++;
-      logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency}`);
+      const existingInfo = seenCurrencies.get(normalizedDiscCurrency);
+      logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency} (既存: ${existingInfo.originalCurrency}, インデックス: ${existingInfo.index})`);
     }
   }
   
   // 重複が検出された場合は統計情報をログ出力
   if (duplicateCount > 0) {
     logger.warn(`重複エントリ除去統計 (${exchangeId}): 元の件数=${discrepancies.length}, 重複除去後=${uniqueDiscrepancies.length}, 除去された重複=${duplicateCount}`);
+  }
+  
+  // 最終的な一意性チェック
+  const finalCheck = new Set(uniqueDiscrepancies.map(d => d.currency));
+  if (finalCheck.size !== uniqueDiscrepancies.length) {
+    logger.error(`重複除去後も重複が残存 (${exchangeId}): 期待数=${finalCheck.size}, 実際数=${uniqueDiscrepancies.length}`);
+    // 緊急対応として完全重複除去を実行
+    const emergencyUnique = Array.from(finalCheck).map(currency => 
+      uniqueDiscrepancies.find(d => d.currency === currency)
+    );
+    logger.warn(`緊急重複除去を実行 (${exchangeId}): ${uniqueDiscrepancies.length} -> ${emergencyUnique.length}`);
+    return emergencyUnique;
   }
   
   return uniqueDiscrepancies;
@@ -438,17 +460,37 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
   logger[logLevel](message_text);
   
-  // ログ出力時の追加的な重複防止チェック
-  const loggedCurrencies = new Set();
+  // ログ出力時の強化された重複防止チェック
+  const loggedCurrencies = new Map(); // Set から Map に変更
+  const logEntries = [];
+  
   uniqueDiscrepancies.forEach((disc, index) => {
     const normalizedCurrency = normalizeCurrency(disc.currency);
+    const logIndex = index + 1;
+    
     if (!loggedCurrencies.has(normalizedCurrency)) {
-      logger[logLevel](`  [${index + 1}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-      loggedCurrencies.add(normalizedCurrency);
+      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`;
+      logEntries.push(logEntry);
+      loggedCurrencies.set(normalizedCurrency, {
+        logIndex,
+        originalCurrency: disc.originalCurrency || disc.currency,
+        processedAt: disc.processedAt || Date.now()
+      });
     } else {
-      logger.warn(`ログ出力時に重複を検出しスキップ (${exchangeId}): ${disc.currency} -> ${normalizedCurrency}`);
+      const existingInfo = loggedCurrencies.get(normalizedCurrency);
+      logger.warn(`ログ出力時に重複を検出しスキップ (${exchangeId}): ${disc.currency} -> ${normalizedCurrency} (既存ログ: [${existingInfo.logIndex}], 元通貨: ${existingInfo.originalCurrency})`);
     }
   });
+  
+  // 実際のログ出力（重複なしが保証された状態）
+  logEntries.forEach(logEntry => {
+    logger[logLevel](logEntry);
+  });
+  
+  // 最終検証: ログ出力数と期待数の一致確認
+  if (logEntries.length !== loggedCurrencies.size) {
+    logger.error(`ログ出力数不整合 (${exchangeId}): 出力数=${logEntries.length}, 通貨数=${loggedCurrencies.size}`);
+  }
   
   // デバッグ用の詳細データ（開発環境のみ、機密情報をマスク）
   if (process.env.NODE_ENV === 'development') {
