@@ -159,14 +159,14 @@ services:
   backtest:
     image: harvest3-bot-image
     container_name: backtest
-    restart: always
+    restart: on-failure:5
     volumes:
       - ./src:/usr/src/app/src:cached
       - ./data:/usr/src/app/data:cached
       - ./entrypoint.sh:/usr/src/app/entrypoint.sh:ro
     entrypoint: ["/usr/src/app/entrypoint.sh"]
-    command: sh -c "while true; do npm run backtest; sleep 500; done"
-    # command: sh -c "npm run backtest"
+    command: npm run backtest
+    # 長時間実行モードに変更: バックテストランナー内部でループを制御
     environment:
       - BACKTEST_MODE=true
       - REDIS_URL=redis://redis:6379

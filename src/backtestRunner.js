@@ -1331,26 +1331,68 @@ process.on('uncaughtException', (error) => {
   console.log('例外が発生しましたが、プロセスを継続します...');
 });
 
-// メイン実行関数
+// メイン実行関数（長時間実行型）
 async function main() {
-  try {
-    await runBacktest(targetSymbol, autoUpdate);
-    console.log('バックテスト正常完了');
-  } catch (error) {
-    console.error('バックテスト実行エラー:', error);
-    console.error('エラースタック:', error.stack);
-    
-    // Discord通知（利用可能な場合）
-    if (typeof postErrorToDiscord === 'function') {
-      await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+  console.log('バックテストサービスを開始します（長時間実行モード）');
+  
+  // グレースフルシャットダウンのためのフラグ
+  let isShuttingDown = false;
+  
+  // シグナルハンドラーの設定
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM受信: グレースフルシャットダウンを開始します');
+    isShuttingDown = true;
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('SIGINT受信: グレースフルシャットダウンを開始します');
+    isShuttingDown = true;
+  });
+  
+  while (!isShuttingDown) {
+    try {
+      const startTime = Date.now();
+      console.log(`[${new Date().toISOString()}] バックテスト実行を開始します`);
+      
+      await runBacktest(targetSymbol, autoUpdate);
+      
+      const endTime = Date.now();
+      const executionTime = Math.round((endTime - startTime) / 1000);
+      console.log(`[${new Date().toISOString()}] バックテスト正常完了 (実行時間: ${executionTime}秒)`);
+      
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] バックテスト実行エラー:`, error);
+      console.error('エラースタック:', error.stack);
+      
+      // Discord通知（利用可能な場合）
+      if (typeof postErrorToDiscord === 'function') {
+        await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+      }
+      
+      console.log('エラーが発生しましたが、プロセスを継続します...');
+      
+      // エラー発生時は短い待機時間
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
-    // プロセスを終了せず、エラーログを出力
-    console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+    // シャットダウンフラグをチェック
+    if (isShuttingDown) {
+      break;
+    }
     
-    // エラー発生時は少し待機してからリターン（Docker composeのループで再実行される）
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // 次の実行まで500秒待機
+    console.log(`[${new Date().toISOString()}] 次の実行まで500秒待機します`);
+    
+    // 500秒の待機をシャットダウン可能にする（10秒ごとにチェック）
+    const totalWaitTime = 500 * 1000; // 500秒
+    const checkInterval = 10 * 1000; // 10秒ごとにチェック
+    
+    for (let waitTime = 0; waitTime < totalWaitTime && !isShuttingDown; waitTime += checkInterval) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(checkInterval, totalWaitTime - waitTime)));
+    }
   }
+  
+  console.log('バックテストサービスを終了します');
 }
 
 // バックテストを開始（テストモード以外の場合のみ）
