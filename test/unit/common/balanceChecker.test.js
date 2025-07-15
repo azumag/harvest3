@@ -58,7 +58,8 @@ jest.mock('../../../src/database/redisClient', () => ({
 jest.mock('../../../src/common/balanceCheckerConfig', () => ({
   getValidatedConfig: jest.fn(() => ({
     thresholds: {
-      significantBalance: 0.0001
+      significantBalance: 0.0001,
+      highDiscrepancyPercent: 10
     },
     intervals: {
       exchangeCheckDelay: 1000
@@ -601,10 +602,7 @@ describe('Issue #984: 重複スケジューリング修正のテスト', () => {
     
     // 高度不整合（90%以上）として ERROR レベルで出力されることを確認
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('残高不整合検出: bitbank')
-    );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('高度不整合')
+      expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
     );
   });
 
@@ -635,10 +633,7 @@ describe('Issue #984: 重複スケジューリング修正のテスト', () => {
 
     // 2件の高度不整合が正常に検出されていることを確認
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('残高不整合検出: bitbank')
-    );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('高度不整合')
+      expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
     );
   });
 
@@ -894,10 +889,7 @@ describe('Issue #970: ログ出力改善のテスト', () => {
 
     // 改善されたログ形式が使用されていることを確認
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('残高不整合検出: bitbank')
-    );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('高度不整合')
+      expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
     );
 
     // 各不整合が個別に詳細ログ出力されていることを確認
@@ -963,10 +955,7 @@ describe('Issue #970: ログ出力改善のテスト', () => {
     // そのため、このテストは調整が必要
     // 代わりに正常なログ出力を確認
     expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('残高不整合検出: bitbank')
-    );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('高度不整合')
+      expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
     );
 
     // JSON.stringify を元に戻す
