@@ -241,11 +241,29 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
       const message = createDiscrepancyMessage(exchangeId, uniqueDiscrepancies);
       await postOrderToDiscord(message);
       
-      // 不整合の詳細をログに出力 (Issue #983: 重複ログ修正済み)
-      logger.error(`残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の不整合)`);
-      uniqueDiscrepancies.forEach((disc, index) => {
-        logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
-      });
+      // 不整合の重要度に応じてログレベルを決定
+      const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
+      const highDiscrepancies = uniqueDiscrepancies.filter(disc => disc.discrepancyPercent >= highDiscrepancyThreshold);
+      const lowDiscrepancies = uniqueDiscrepancies.filter(disc => disc.discrepancyPercent < highDiscrepancyThreshold);
+      
+      // 高度不整合がある場合は ERROR レベル、軽微な不整合のみの場合は WARN レベル
+      if (highDiscrepancies.length > 0) {
+        logger.error(`残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の不整合、うち${highDiscrepancies.length}件が高度不整合)`);
+        highDiscrepancies.forEach((disc, index) => {
+          logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+        });
+        if (lowDiscrepancies.length > 0) {
+          logger.warn(`軽微な不整合 (${highDiscrepancyThreshold}%未満):`);
+          lowDiscrepancies.forEach((disc, index) => {
+            logger.warn(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+          });
+        }
+      } else {
+        logger.warn(`軽微な残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の軽微な不整合)`);
+        uniqueDiscrepancies.forEach((disc, index) => {
+          logger.warn(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
+        });
+      }
       
       // 元の配列を修正されたものに置き換え
       discrepancies.length = 0;
