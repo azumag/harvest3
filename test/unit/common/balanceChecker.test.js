@@ -278,6 +278,134 @@ describe('残高チェッカーのテスト', () => {
       expect(result.discrepancies).toHaveLength(0);
       expect(result.isHealthy).toBe(true);
     });
+
+    it('診断情報を正しく含む', async () => {
+      const result = await compareBalances('bitbank');
+
+      expect(result.diagnosticInfo).toBeDefined();
+      expect(result.diagnosticInfo.exchangeId).toBe('bitbank');
+      expect(result.diagnosticInfo.timestamp).toBeDefined();
+      expect(result.diagnosticInfo.exchangeBalanceKeys).toEqual(['BTC', 'ETH', 'GRT']);
+      expect(result.diagnosticInfo.botBalanceKeys).toEqual(['BTC', 'ETH', 'GRT']);
+    });
+
+    it('不完全なポジションデータを正しく処理する', async () => {
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.5,
+          status: 'open'
+        },
+        {
+          // 不完全なデータ（symbolが欠落）
+          exchange: 'bitbank',
+          side: 'buy',
+          amount: 2.0,
+          status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ETH/JPY',
+          side: 'buy',
+          amount: 10.0,
+          status: 'open'
+        }
+      ]);
+
+      const result = await getBotManagedBalance();
+
+      expect(result).toEqual({
+        BTC: 1.5,
+        ETH: 10.0
+      });
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+        '不完全なポジションデータを除外:', 
+        expect.objectContaining({
+          exchange: 'bitbank',
+          side: 'buy',
+          amount: 2.0,
+          status: 'open'
+        })
+      );
+    });
+
+    it('pending状態のポジションを正しく処理する', async () => {
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.5,
+          status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ETH/JPY',
+          side: 'buy',
+          amount: 2.0,
+          status: 'pending'
+        }
+      ]);
+
+      const result = await getBotManagedBalance();
+
+      expect(result).toEqual({
+        BTC: 1.5,
+        ETH: 2.0
+      });
+    });
+
+    it('売りポジションを除外する', async () => {
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.5,
+          status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ETH/JPY',
+          side: 'sell',
+          amount: 2.0,
+          status: 'open'
+        }
+      ]);
+
+      const result = await getBotManagedBalance();
+
+      expect(result).toEqual({
+        BTC: 1.5
+      });
+    });
+
+    it('ゼロ残高を除外する', async () => {
+      getAllPositionsRedis.mockResolvedValue([
+        {
+          exchange: 'bitbank',
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.5,
+          status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ETH/JPY',
+          side: 'buy',
+          amount: 0,
+          status: 'open'
+        }
+      ]);
+
+      const result = await getBotManagedBalance();
+
+      expect(result).toEqual({
+        BTC: 1.5
+      });
+    });
   });
 
   describe('getBotManagedBalanceDetailed', () => {
