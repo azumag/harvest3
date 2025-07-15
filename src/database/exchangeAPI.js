@@ -320,12 +320,24 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
     logger.error(errorMessage);
     recordError(exchange.id, 'missing_fetchOHLCV_method', `${symbol} ${timeframe}`);
     
-    // Issue #929: 詳細なデバッグ情報をログに出力
-    if (!isBacktest) {
-      logger.debug(`Exchange object details:`);
-      logger.debug(`- exchange.id: ${exchange.id}`);
-      logger.debug(`- exchange.fetchOHLCV type: ${typeof exchange.fetchOHLCV}`);
-      logger.debug(`- exchange object keys: ${Object.keys(exchange).join(', ')}`);
+    // Issue #948: バックテストモードでも詳細なデバッグ情報をログに出力
+    logger.debug(`Exchange object details:`);
+    logger.debug(`- exchange.id: ${exchange.id}`);
+    logger.debug(`- exchange.fetchOHLCV type: ${typeof exchange.fetchOHLCV}`);
+    logger.debug(`- exchange object keys: ${Object.keys(exchange).join(', ')}`);
+    
+    // Issue #948: バックテストモードの場合、モックOHLCVデータで代替
+    if (isBacktest) {
+      logger.info(`[Issue #948] バックテストモード: モックOHLCVデータで代替処理を実行`);
+      try {
+        const { generateMockOHLCV } = require('../config');
+        const mockData = await generateMockOHLCV(symbol, timeframe, null, limit);
+        logger.debug(`[Issue #948] モックOHLCVデータ生成成功: ${mockData.length}件`);
+        return mockData;
+      } catch (mockError) {
+        logger.error(`[Issue #948] モックOHLCVデータ生成失敗: ${mockError.message}`);
+        return [];
+      }
     }
     
     return [];
