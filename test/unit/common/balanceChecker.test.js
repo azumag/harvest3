@@ -708,6 +708,138 @@ describe('BalanceChecker Logger移行のテスト', () => {
   });
 });
 
+// Issue #978 重複エラーメッセージ修正のテスト
+describe('Issue #978: ENJ重複エラーメッセージ修正テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('重複した通貨データが適切にフィルタリングされる', async () => {
+    // 取引所残高でENJが1つだけ存在
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { ENJ: 33.5976, BTC: 1.0 }
+    });
+
+    // Bot残高で何らかの理由でENJが重複した状況を模擬
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'ENJ/JPY',
+        side: 'buy',
+        amount: 0.0014,
+        status: 'open'
+      },
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 1.0,
+        status: 'open'
+      }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // ENJの不整合が1件のみ検出されることを確認
+    const enjoinDiscrepancies = result.discrepancies.filter(d => d.currency === 'ENJ');
+    expect(enjoinDiscrepancies).toHaveLength(1);
+
+    // 全体でも重複がないことを確認
+    const currencies = result.discrepancies.map(d => d.currency);
+    const uniqueCurrencies = [...new Set(currencies)];
+    expect(currencies).toHaveLength(uniqueCurrencies.length);
+
+    // ENJの不整合データが正しいことを確認
+    const enjDiscrepancy = enjoinDiscrepancies[0];
+    expect(enjDiscrepancy.exchangeAmount).toBe(33.5976);
+    expect(enjDiscrepancy.botAmount).toBe(0.0014);
+    expect(enjDiscrepancy.difference).toBe(33.5962);
+  });
+
+  it('Issue #978で報告されたENJケースの再現と修正確認', async () => {
+    // Issue #978で報告された具体的なケースを再現
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        XLM: 13.0594,
+        QTUM: 6.0666,
+        BAT: 5.6061,
+        OMG: 0.9147,
+        XYM: 235.6213,
+        LINK: 0.1798,
+        MKR: 0.0093,
+        BOBA: 9.8464,
+        ENJ: 33.5976 // 問題のENJ
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'XLM/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'QTUM/JPY', side: 'buy', amount: 0.0001, status: 'open' },
+      { exchange: 'bitbank', symbol: 'BAT/JPY', side: 'buy', amount: 0.017, status: 'open' },
+      { exchange: 'bitbank', symbol: 'OMG/JPY', side: 'buy', amount: 0.0271, status: 'open' },
+      { exchange: 'bitbank', symbol: 'XYM/JPY', side: 'buy', amount: 0.4081, status: 'open' },
+      { exchange: 'bitbank', symbol: 'LINK/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MKR/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'BOBA/JPY', side: 'buy', amount: 0.07239999999999999, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ENJ/JPY', side: 'buy', amount: 0.0014, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // ENJが1回のみ検出されることを確認
+    const enjDiscrepancies = result.discrepancies.filter(d => d.currency === 'ENJ');
+    expect(enjDiscrepancies).toHaveLength(1);
+
+    // ENJの値が正しいことを確認
+    const enjDiscrepancy = enjDiscrepancies[0];
+    expect(enjDiscrepancy.exchangeAmount).toBe(33.5976);
+    expect(enjDiscrepancy.botAmount).toBe(0.0014);
+    expect(enjDiscrepancy.difference).toBe(33.5962);
+    expect(enjDiscrepancy.discrepancyPercent).toBe(100);
+
+    // 全体として重複がないことを確認
+    const allCurrencies = result.discrepancies.map(d => d.currency);
+    const uniqueCurrencies = [...new Set(allCurrencies)];
+    expect(allCurrencies).toHaveLength(uniqueCurrencies.length);
+
+    // ENJのログが1回のみ出力されることを間接的に確認
+    const errorCalls = mockLoggerInstance.error.mock.calls;
+    const enjLogCount = errorCalls.filter(call => 
+      call[0] && typeof call[0] === 'string' && call[0].includes('ENJ:')
+    ).length;
+    expect(enjLogCount).toBe(1);
+  });
+
+  it('重複警告ログが必要に応じて出力される', async () => {
+    // 正常なケースでは重複警告は出ないことを確認
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      {
+        exchange: 'bitbank',
+        symbol: 'BTC/JPY',
+        side: 'buy',
+        amount: 0.5,
+        status: 'open'
+      }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 正常なケースでは重複警告は出ないはず
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('通貨の重複処理を検出しスキップ')
+    );
+    
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('discrepancies配列で重複検出しスキップ')
+    );
+  });
+});
+
 // Issue #970 ログ出力改善のテスト
 describe('Issue #970: ログ出力改善のテスト', () => {
   beforeEach(() => {

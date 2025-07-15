@@ -169,12 +169,20 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     const allCurrencies = [...new Set([...exchangeCurrencies, ...botCurrencies])];
 
     const discrepancies = [];
+    const processedCurrencies = new Set(); // 重複処理防止用
 
     for (const currency of allCurrencies) {
       // JPYは残高チェックから除外
       if (currency === 'JPY') {
         continue;
       }
+
+      // 重複処理の防止
+      if (processedCurrencies.has(currency)) {
+        logger.warn(`通貨の重複処理を検出しスキップ: ${currency}`);
+        continue;
+      }
+      processedCurrencies.add(currency);
 
       const exchangeAmount = exchangeBalance.total[currency] || 0;
       const botAmount = botBalance[currency] || 0;
@@ -191,6 +199,13 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
       // 完全一致でない場合は全て通知（閾値0%）
       if (difference > 0) {
+        // discrepancies配列での重複チェック（追加の安全措置）
+        const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
+        if (existingDiscrepancy) {
+          logger.warn(`discrepancies配列で重複検出しスキップ: ${currency}`);
+          continue;
+        }
+
         discrepancies.push({
           currency,
           exchangeAmount,
