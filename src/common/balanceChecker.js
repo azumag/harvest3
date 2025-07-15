@@ -136,6 +136,44 @@ async function getBotManagedBalance() {
 
     logger.debug('ポジション統計:', positionStats);
 
+    // 全ポジションの統計情報を詳細に収集
+    const statusBreakdown = {};
+    const sideBreakdown = {};
+    const validationIssues = [];
+
+    allPositions.forEach(position => {
+      // ステータス別統計
+      statusBreakdown[position.status || 'undefined'] = (statusBreakdown[position.status || 'undefined'] || 0) + 1;
+      // サイド別統計
+      sideBreakdown[position.side || 'undefined'] = (sideBreakdown[position.side || 'undefined'] || 0) + 1;
+      
+      // データ検証
+      if (!position.symbol || !position.side || !position.amount || !position.status) {
+        validationIssues.push({
+          issue: 'missing_fields',
+          position: {
+            symbol: position.symbol || 'missing',
+            side: position.side || 'missing',
+            amount: position.amount || 'missing',
+            status: position.status || 'missing'
+          }
+        });
+      }
+    });
+
+    // 詳細な統計情報をログ出力
+    logger.info('ポジション詳細統計:');
+    logger.info(`  総ポジション数: ${allPositions.length}`);
+    logger.info(`  ステータス別: ${JSON.stringify(statusBreakdown, null, 2)}`);
+    logger.info(`  サイド別: ${JSON.stringify(sideBreakdown, null, 2)}`);
+    
+    if (validationIssues.length > 0) {
+      logger.warn(`データ検証エラー: ${validationIssues.length}件`);
+      validationIssues.slice(0, 5).forEach((issue, index) => {
+        logger.warn(`  [${index + 1}] ${issue.issue}: ${JSON.stringify(issue.position)}`);
+      });
+    }
+
     // 有効な買いポジションのみを抽出（より厳密な条件）
     const validBuyPositions = allPositions.filter(position => {
       // 基本的な必須フィールドのチェック
@@ -145,8 +183,19 @@ async function getBotManagedBalance() {
       }
 
       // 買いポジションで、かつ有効なステータスのもの
+      // 'open' と 'pending' 以外のステータスも考慮する
+      const validStatuses = ['open', 'pending', 'active', 'opened', 'running'];
+      const isValidStatus = validStatuses.includes(position.status);
+      const isClosedStatus = position.status === 'closed';
+      
+      if (position.side === 'buy' && !isValidStatus && !isClosedStatus) {
+        logger.warn(`未知のステータスを持つ買いポジション: ${position.status} (${position.symbol})`);
+        // 未知のステータスでも買いポジションは残高計算に含める（保守的なアプローチ）
+        return position.amount > 0;
+      }
+      
       return position.side === 'buy' && 
-             ['open', 'pending'].includes(position.status) &&
+             isValidStatus &&
              position.amount > 0;
     });
 
@@ -171,14 +220,16 @@ async function getBotManagedBalance() {
         const amount = parseFloat(position.amount) || 0;
         currencyBalances[baseCurrency] += amount;
         
-        // 処理詳細を記録
-        processingDetails.push({
-          currency: baseCurrency,
-          amount,
-          symbol: position.symbol,
-          status: position.status,
-          exchangeId: position.exchangeId
-        });
+        // 処理詳細を記録（開発環境のみ）
+        if (process.env.NODE_ENV === 'development') {
+          processingDetails.push({
+            currency: baseCurrency,
+            amount,
+            symbol: position.symbol,
+            status: position.status,
+            exchangeId: position.exchangeId
+          });
+        }
       } catch (error) {
         logger.error('ポジション処理エラー:', error.message, position);
       }
@@ -187,12 +238,43 @@ async function getBotManagedBalance() {
     // 結果の詳細ログ
     logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${validBuyPositions.length}/${allPositions.length}`);
     
+    // 除外されたポジションの統計（効率的な処理のためSetを使用）
+    const excludedPositions = allPositions.length - validBuyPositions.length;
+    if (excludedPositions > 0) {
+      logger.info(`除外されたポジション: ${excludedPositions}件`);
+      const excludedByStatus = {};
+      const excludedBySide = {};
+      const validPositionSet = new Set(validBuyPositions);
+      
+      allPositions.forEach(position => {
+        if (!validPositionSet.has(position)) {
+          excludedByStatus[position.status || 'undefined'] = (excludedByStatus[position.status || 'undefined'] || 0) + 1;
+          excludedBySide[position.side || 'undefined'] = (excludedBySide[position.side || 'undefined'] || 0) + 1;
+        }
+      });
+      
+      logger.info(`  除外理由 - ステータス別: ${JSON.stringify(excludedByStatus, null, 2)}`);
+      logger.info(`  除外理由 - サイド別: ${JSON.stringify(excludedBySide, null, 2)}`);
+    }
+    
     // 有意な残高がある通貨のみログ出力
     Object.entries(currencyBalances).forEach(([currency, balance]) => {
       if (balance >= BALANCE_CONFIG.thresholds.significantBalance) {
-        logger.info(`${currency}: ${balance.toFixed(8)} (${processingDetails.filter(d => d.currency === currency).length}ポジション)`);
+        const positionCount = process.env.NODE_ENV === 'development' 
+          ? processingDetails.filter(d => d.currency === currency).length
+          : validBuyPositions.filter(p => p.symbol.split('/')[0] === currency).length;
+        logger.info(`${currency}: ${balance.toFixed(8)} (${positionCount}ポジション)`);
       }
     });
+    
+    // 残高ゼロの通貨について追加情報を提供
+    if (Object.keys(currencyBalances).length === 0) {
+      logger.warn('Bot管理残高が0の状態です。以下の可能性があります:');
+      logger.warn('  1. 全ポジションが決済済み (status="closed")');
+      logger.warn('  2. 売りポジションのみが存在');
+      logger.warn('  3. データベース接続またはデータ整合性の問題');
+      logger.warn('  4. ポジションデータの形式変更');
+    }
 
     return currencyBalances;
   } catch (error) {
@@ -368,13 +450,24 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     }
   });
   
-  // デバッグ用の詳細データ
-  try {
-    const discrepanciesJson = JSON.stringify(uniqueDiscrepancies, null, 2);
-    logger.debug(`残高不整合詳細データ (${exchangeId}):`, discrepanciesJson);
-  } catch (jsonError) {
-    logger.error(`残高データのJSON化に失敗 (${exchangeId}):`, jsonError.message);
-    logger.error(`不整合オブジェクトの構造情報: 件数=${uniqueDiscrepancies.length}, type=${typeof uniqueDiscrepancies}`);
+  // デバッグ用の詳細データ（開発環境のみ、機密情報をマスク）
+  if (process.env.NODE_ENV === 'development') {
+    try {
+      const maskedDiscrepancies = uniqueDiscrepancies.map(disc => ({
+        currency: disc.currency,
+        exchangeAmount: '***',
+        botAmount: '***',
+        difference: '***',
+        discrepancyPercent: disc.discrepancyPercent,
+        timestamp: disc.timestamp,
+        exchangeId: disc.exchangeId
+      }));
+      const discrepanciesJson = JSON.stringify(maskedDiscrepancies, null, 2);
+      logger.debug(`残高不整合詳細データ (${exchangeId}):`, discrepanciesJson);
+    } catch (jsonError) {
+      logger.error(`残高データのJSON化に失敗 (${exchangeId}):`, jsonError.message);
+      logger.error(`不整合オブジェクトの構造情報: 件数=${uniqueDiscrepancies.length}, type=${typeof uniqueDiscrepancies}`);
+    }
   }
   
   return uniqueDiscrepancies;
