@@ -1301,41 +1301,49 @@ function calculateLimit(timeframe, days) {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('未処理のPromise拒否が発生しました:', reason);
   console.error('Promise:', promise);
+  console.error('エラースタック:', reason?.stack || 'スタックトレースなし');
   
   // Discord通知（利用可能な場合）
   if (typeof postErrorToDiscord === 'function') {
     postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
   }
   
-  // 適切にプロセスを終了
-  process.exit(1);
+  // プロセスを終了せず、エラーログを出力して継続
+  console.log('エラーが発生しましたが、プロセスを継続します...');
 });
 
 process.on('uncaughtException', (error) => {
   console.error('未捕捉の例外が発生しました:', error);
+  console.error('エラースタック:', error.stack);
   
   // Discord通知（利用可能な場合）
   if (typeof postErrorToDiscord === 'function') {
     postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
   }
   
-  // 適切にプロセスを終了
-  process.exit(1);
+  // プロセスを終了せず、エラーログを出力して継続
+  console.log('例外が発生しましたが、プロセスを継続します...');
 });
 
 // メイン実行関数
 async function main() {
   try {
     await runBacktest(targetSymbol, autoUpdate);
+    console.log('バックテスト正常完了');
   } catch (error) {
     console.error('バックテスト実行エラー:', error);
+    console.error('エラースタック:', error.stack);
     
     // Discord通知（利用可能な場合）
     if (typeof postErrorToDiscord === 'function') {
       await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
     }
     
-    process.exit(1);
+    // プロセスを終了せず、エラーログを出力
+    console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+    
+    // エラー発生時は少し待機してからリターン（Docker composeのループで再実行される）
+    await new Promise(resolve => setTimeout(resolve, 5000));
   }
 }
 

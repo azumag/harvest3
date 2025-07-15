@@ -1,12 +1,15 @@
 describe('BacktestRunner Error Handling', () => {
   let originalConsoleError;
+  let originalConsoleLog;
   let originalProcessExit;
   let mockPostErrorToDiscord;
 
   beforeEach(() => {
-    // コンソールエラーをモック
+    // コンソールエラーとログをモック
     originalConsoleError = console.error;
+    originalConsoleLog = console.log;
     console.error = jest.fn();
+    console.log = jest.fn();
 
     // process.exitをモック
     originalProcessExit = process.exit;
@@ -24,32 +27,35 @@ describe('BacktestRunner Error Handling', () => {
     process.on('unhandledRejection', (reason, promise) => {
       console.error('未処理のPromise拒否が発生しました:', reason);
       console.error('Promise:', promise);
+      console.error('エラースタック:', reason?.stack || 'スタックトレースなし');
       
       // Discord通知（利用可能な場合）
       if (typeof global.postErrorToDiscord === 'function') {
         global.postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
       }
       
-      // 適切にプロセスを終了
-      process.exit(1);
+      // プロセスを終了せず、エラーログを出力して継続
+      console.log('エラーが発生しましたが、プロセスを継続します...');
     });
 
     process.on('uncaughtException', (error) => {
       console.error('未捕捉の例外が発生しました:', error);
+      console.error('エラースタック:', error.stack);
       
       // Discord通知（利用可能な場合）
       if (typeof global.postErrorToDiscord === 'function') {
         global.postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
       }
       
-      // 適切にプロセスを終了
-      process.exit(1);
+      // プロセスを終了せず、エラーログを出力して継続
+      console.log('例外が発生しましたが、プロセスを継続します...');
     });
   });
 
   afterEach(() => {
     // オリジナルの関数を復元
     console.error = originalConsoleError;
+    console.log = originalConsoleLog;
     process.exit = originalProcessExit;
     delete global.postErrorToDiscord;
 
@@ -59,7 +65,7 @@ describe('BacktestRunner Error Handling', () => {
   });
 
   describe('unhandledRejection エラーハンドラー', () => {
-    test('未処理のPromise拒否を適切に処理する', async () => {
+    test('未処理のPromise拒否を適切に処理し、プロセスを継続する', async () => {
       // unhandledRejectionイベントをエミット
       const testError = new Error('Test unhandled rejection');
       const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
@@ -71,10 +77,12 @@ describe('BacktestRunner Error Handling', () => {
 
       expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
       expect(console.error).toHaveBeenCalledWith('Promise:', testPromise);
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
+      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
 
-    test('Discord通知が利用可能な場合は通知を送信する', async () => {
+    test('Discord通知が利用可能な場合は通知を送信し、プロセスを継続する', async () => {
       const testError = new Error('Test error for Discord');
       const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
 
@@ -84,10 +92,11 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト未処理エラー: Test error for Discord');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
 
-    test('Discord関数が利用できない場合でも正常に動作する', async () => {
+    test('Discord関数が利用できない場合でも正常に動作し、プロセスを継続する', async () => {
       // postErrorToDiscord関数を削除
       delete global.postErrorToDiscord;
 
@@ -99,12 +108,14 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
+      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
   });
 
   describe('uncaughtException エラーハンドラー', () => {
-    test('未捕捉の例外を適切に処理する', async () => {
+    test('未捕捉の例外を適切に処理し、プロセスを継続する', async () => {
       const testError = new Error('Test uncaught exception');
 
       process.emit('uncaughtException', testError);
@@ -112,10 +123,12 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(console.error).toHaveBeenCalledWith('未捕捉の例外が発生しました:', testError);
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
+      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
 
-    test('Discord通知が利用可能な場合は通知を送信する', async () => {
+    test('Discord通知が利用可能な場合は通知を送信し、プロセスを継続する', async () => {
       const testError = new Error('Test exception for Discord');
 
       process.emit('uncaughtException', testError);
@@ -123,37 +136,45 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト例外: Test exception for Discord');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
   });
 
   describe('main関数のエラーハンドリング', () => {
-    test('runBacktest関数のエラーを適切にキャッチする', async () => {
-      // main関数を模擬
+    test('runBacktest関数のエラーを適切にキャッチし、プロセスを継続する', async () => {
+      // main関数を模擬（新しいエラーハンドリング仕様に合わせて）
       const mockRunBacktest = jest.fn().mockRejectedValue(new Error('Backtest execution error'));
       
       const main = async () => {
         try {
           await mockRunBacktest();
+          console.log('バックテスト正常完了');
         } catch (error) {
           console.error('バックテスト実行エラー:', error);
+          console.error('エラースタック:', error.stack);
           
           if (typeof global.postErrorToDiscord === 'function') {
             await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
           }
           
-          process.exit(1);
+          console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+          
+          // エラー発生時は少し待機してからリターン（Docker composeのループで再実行される）
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
       };
 
       await main();
 
       expect(console.error).toHaveBeenCalledWith('バックテスト実行エラー:', expect.any(Error));
+      expect(console.error).toHaveBeenCalledWith('エラースタック:', expect.any(String));
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト実行エラー: Backtest execution error');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.log).toHaveBeenCalledWith('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
 
-    test('Discord通知でエラーが発生しても main のエラーハンドリングが継続する', async () => {
+    test('Discord通知でエラーが発生しても main のエラーハンドリングが継続し、プロセスを継続する', async () => {
       // Discord通知でエラーが発生するケース
       const mockPostErrorToDiscordFailing = jest.fn().mockRejectedValue(new Error('Discord error'));
       global.postErrorToDiscord = mockPostErrorToDiscordFailing;
@@ -163,35 +184,42 @@ describe('BacktestRunner Error Handling', () => {
       const main = async () => {
         try {
           await mockRunBacktest();
+          console.log('バックテスト正常完了');
         } catch (error) {
           console.error('バックテスト実行エラー:', error);
+          console.error('エラースタック:', error.stack);
           
           if (typeof global.postErrorToDiscord === 'function') {
             await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
           }
           
-          process.exit(1);
+          console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+          
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
       };
 
       await main();
 
       expect(console.error).toHaveBeenCalledWith('バックテスト実行エラー:', expect.any(Error));
+      expect(console.error).toHaveBeenCalledWith('エラースタック:', expect.any(String));
       expect(mockPostErrorToDiscordFailing).toHaveBeenCalled();
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.log).toHaveBeenCalledWith('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
   });
 
-  describe('プロセス終了コード', () => {
-    test('エラー時は適切にexit code 1で終了する', () => {
+  describe('エラー回復性', () => {
+    test('エラー時はプロセスを終了せず、継続処理を行う', () => {
       const testError = new Error('Test error');
       
       process.emit('uncaughtException', testError);
       
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
 
-    test('複数のエラーが発生しても適切に処理される', async () => {
+    test('複数のエラーが発生しても適切に処理され、プロセスが継続される', async () => {
       const testError1 = new Error('First error');
       const testError2 = new Error('Second error');
       
@@ -200,8 +228,10 @@ describe('BacktestRunner Error Handling', () => {
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // 最初のエラーでprocess.exitが呼ばれる
-      expect(process.exit).toHaveBeenCalledWith(1);
+      // 両方のエラーに対して継続メッセージが出力される
+      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(process.exit).not.toHaveBeenCalled();
     });
   });
 });
