@@ -141,7 +141,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       
       // Assert - 改善されたDiscord通知機能の確認
       expect(entrypointContent).toContain('return 0  # 設定されていない場合は正常として扱う');
-      expect(entrypointContent).toContain('temp_script="/tmp/discord_notify_$$.js"');
+      expect(entrypointContent).toContain('local temp_script=$(mktemp "/tmp/discord_notify_XXXXXX.js")');
       expect(entrypointContent).toContain('WARNING: Discord notification failed (non-critical)');
       expect(entrypointContent).toContain('rm -f "$temp_script"');
     });
