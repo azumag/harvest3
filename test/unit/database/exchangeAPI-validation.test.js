@@ -49,6 +49,32 @@ describe('ExchangeAPI - Issue #929: Exchange Validation Integration', () => {
       expect(recordError).toHaveBeenCalledWith('unknown', 'invalid_exchange_object', 'exchange is null or undefined');
     });
 
+    // Issue #933: fetchOHLCV関数の存在チェック
+    test('should handle exchange object without fetchOHLCV function', async () => {
+      const mockExchange = {
+        id: 'bitbank',
+        // fetchOHLCV関数が存在しない
+      };
+      
+      const result = await fetchOHLCVDataAPI(mockExchange, 'BTC/JPY', '1m', 100);
+      
+      expect(result).toEqual([]);
+      expect(recordError).toHaveBeenCalledWith('bitbank', 'missing_fetchOHLCV_method', 'BTC/JPY 1m');
+    });
+
+    // Issue #933: fetchOHLCVが関数でない場合
+    test('should handle exchange object with non-function fetchOHLCV', async () => {
+      const mockExchange = {
+        id: 'bitbank',
+        fetchOHLCV: 'not a function' // 関数ではない
+      };
+      
+      const result = await fetchOHLCVDataAPI(mockExchange, 'DOT/JPY', '1m', 100);
+      
+      expect(result).toEqual([]);
+      expect(recordError).toHaveBeenCalledWith('bitbank', 'missing_fetchOHLCV_method', 'DOT/JPY 1m');
+    });
+
     test('should handle undefined exchange object', async () => {
       const result = await fetchOHLCVDataAPI(undefined, 'BTC/JPY', '1m', 100);
       
