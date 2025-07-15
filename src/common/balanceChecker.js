@@ -25,6 +25,16 @@ const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 const BALANCE_CONFIG = getValidatedConfig();
 
 /**
+ * Redis接続状態を統一的にチェックする
+ * Issue #1008: Redis接続状態チェックの不整合を修正
+ * @param {Object} client - Redisクライアント
+ * @returns {boolean} 接続状態
+ */
+function isRedisConnected(client) {
+  return client && client.isReady && client.isOpen;
+}
+
+/**
  * Redis接続を確実に確立する
  * @returns {Promise<void>}
  */
@@ -32,7 +42,7 @@ async function ensureRedisConnection() {
   const redisClient = getRedisClient();
   
   // 既に接続済みの場合は何もしない
-  if (redisClient && redisClient.isReady) {
+  if (isRedisConnected(redisClient)) {
     return;
   }
   
@@ -41,7 +51,7 @@ async function ensureRedisConnection() {
   
   try {
     const client = await initRedisClient();
-    if (!client || !client.isReady) {
+    if (!isRedisConnected(client)) {
       throw new Error('Redis接続の初期化に失敗しました');
     }
     
@@ -101,7 +111,7 @@ async function getBotManagedBalance() {
     // ポジションデータが空の場合の詳細ログ
     if (allPositions.length === 0) {
       const redisClient = getRedisClient();
-      const isConnected = redisClient && redisClient.isReady;
+      const isConnected = isRedisConnected(redisClient);
       
       if (!isConnected) {
         throw new Error('Redis接続が確立されていないため、ポジションデータを取得できません');
@@ -111,14 +121,55 @@ async function getBotManagedBalance() {
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
 
-    // 買いポジション（未売却）のみを抽出
-    const buyPositions = allPositions.filter(position =>
-      position.side === 'buy' &&
-      position.status !== 'closed' // クローズされていないポジション
-    );
+    // 買いポジション（実際に保有している）のみを抽出
+    // Issue #1008: pendingポジション（未約定注文）を除外し、openポジションのみを対象とする
+    const buyPositions = allPositions.filter(position => {
+      // 基本的なフィルタリング条件
+      if (position.side !== 'buy' || position.status !== 'open') {
+        return false;
+      }
+      
+      // データ検証：必須フィールドの確認
+      if (!position.symbol || !position.amount) {
+        logger.warn(`無効なポジションデータを検出してスキップ: ${JSON.stringify(position)}`);
+        return false;
+      }
+      
+      // データ検証：数量の妥当性確認
+      const amount = parseFloat(position.amount);
+      if (isNaN(amount) || amount <= 0) {
+        logger.warn(`無効なamount値を持つポジションをスキップ: amount=${position.amount}, key=${position.key}`);
+        return false;
+      }
+      
+      return true;
+    });
 
     // 通貨別に集計
     const currencyBalances = {};
+    const debugInfo = { // Issue #1008: デバッグ情報の追加
+      totalPositions: allPositions.length,
+      validBuyPositions: buyPositions.length,
+      filteredOutBreakdown: {
+        notBuyOrNotOpen: 0,
+        invalidData: 0,
+        invalidAmount: 0
+      }
+    };
+
+    // フィルタリングされたポジションの詳細を記録（デバッグ用）
+    allPositions.forEach(position => {
+      if (position.side !== 'buy' || position.status !== 'open') {
+        debugInfo.filteredOutBreakdown.notBuyOrNotOpen++;
+      } else if (!position.symbol || !position.amount) {
+        debugInfo.filteredOutBreakdown.invalidData++;
+      } else {
+        const amount = parseFloat(position.amount);
+        if (isNaN(amount) || amount <= 0) {
+          debugInfo.filteredOutBreakdown.invalidAmount++;
+        }
+      }
+    });
 
     buyPositions.forEach(position => {
       // シンボルから基軸通貨を抽出 (例: BTC/JPY -> BTC)
@@ -128,17 +179,21 @@ async function getBotManagedBalance() {
         currencyBalances[baseCurrency] = 0;
       }
 
-      currencyBalances[baseCurrency] += position.amount || 0;
+      const amount = parseFloat(position.amount);
+      currencyBalances[baseCurrency] += amount;
     });
 
-    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
+    logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, {
+      currencyBalances,
+      debugInfo
+    });
     return currencyBalances;
   } catch (error) {
     logger.error('Bot管理残高取得エラー:', error.message);
     
     // Redis接続エラーの場合は詳細情報を追加
     const redisClient = getRedisClient();
-    const redisStatus = redisClient ? (redisClient.isReady ? '接続済み' : '未接続') : 'null';
+    const redisStatus = redisClient ? (isRedisConnected(redisClient) ? '接続済み' : '未接続') : 'null';
     logger.error(`Redis状態: ${redisStatus}`);
     
     throw error;
