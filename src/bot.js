@@ -811,3 +811,8 @@ if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
     description: '初回リスク管理チェック（30秒後実行）'
   });
 }
+
+// エクスポート
+module.exports = {
+  executeRiskManagementCheck
+};
