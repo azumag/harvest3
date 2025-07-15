@@ -289,7 +289,7 @@ describe('Walk-Forward Analysis 包括テストスイート', () => {
         }
       } catch (error) {
         // エラーがthrowされた場合は期待するメッセージを確認
-        expect(error.message).toContain('パラメータドリフト');
+        expect(error.message).toMatch(/パラメータドリフト/);
       }
     });
 
