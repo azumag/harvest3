@@ -522,25 +522,92 @@ class ParameterConstraintEngine {
    */
   calculateParameterDiversity(parameterSet, parameterDefs) {
     if (parameterSet.length === 0) {return 0;}
+    if (parameterSet.length === 1) {return 0.1;} // 単一パラメータの場合は最小値
 
     const paramNames = Object.keys(parameterDefs);
-    let totalVariance = 0;
+    if (paramNames.length === 0) {return 0;}
+
+    let totalDiversityScore = 0;
 
     for (const paramName of paramNames) {
       const values = parameterSet.map(params => params[paramName]).filter(v => v !== undefined);
-      if (values.length === 0) {continue;}
+      if (values.length <= 1) {continue;}
 
-      const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-      
-      // 正規化された分散
-      const paramRange = parameterDefs[paramName].max - parameterDefs[paramName].min;
-      const normalizedVariance = variance / Math.pow(paramRange, 2);
-      
-      totalVariance += normalizedVariance;
+      const diversityScore = this.calculateSingleParameterDiversity(values, parameterDefs[paramName]);
+      totalDiversityScore += diversityScore;
     }
 
-    return Math.min(1, totalVariance / paramNames.length);
+    return Math.min(1, totalDiversityScore / paramNames.length);
+  }
+
+  /**
+   * 単一パラメータの多様性を計算
+   * @param {Array} values パラメータ値の配列
+   * @param {Object} paramDef パラメータ定義
+   * @returns {number} 多様性スコア (0-1)
+   */
+  calculateSingleParameterDiversity(values, paramDef) {
+    if (values.length <= 1) {return 0;}
+
+    const sortedValues = [...values].sort((a, b) => a - b);
+    const uniqueValues = [...new Set(sortedValues)];
+    
+    // 1. 一意値の比率（重複を考慮）
+    const uniquenessRatio = uniqueValues.length / values.length;
+    
+    // 2. 範囲カバー率
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const paramRange = paramDef.max - paramDef.min;
+    const coverageRatio = paramRange > 0 ? (maxValue - minValue) / paramRange : 0;
+    
+    // 3. 分布の均一性（ヒストグラム分析）
+    const distributionScore = this.calculateDistributionUniformity(uniqueValues, paramDef);
+    
+    // 4. 標準偏差による散らばり度
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    const stdDev = Math.sqrt(variance);
+    const normalizedStdDev = paramRange > 0 ? stdDev / paramRange : 0;
+    
+    // より直感的な多様性スコア計算
+    // 各要素に重みを付けて組み合わせ
+    const diversityScore = (
+      uniquenessRatio * 0.25 +           // 一意性 25%
+      coverageRatio * 0.35 +             // カバー率 35%
+      distributionScore * 0.25 +         // 分布均一性 25%
+      Math.min(1, normalizedStdDev * 4) * 0.15 // 散らばり度 15%
+    );
+    
+    return Math.min(1, Math.max(0, diversityScore));
+  }
+
+  /**
+   * パラメータ値の分布の均一性を計算
+   * @param {Array} uniqueValues ユニークな値の配列（ソート済み）
+   * @param {Object} paramDef パラメータ定義
+   * @returns {number} 分布均一性スコア (0-1)
+   */
+  calculateDistributionUniformity(uniqueValues, paramDef) {
+    if (uniqueValues.length <= 2) {return uniqueValues.length === 2 ? 0.5 : 0;}
+
+    // パラメータ範囲を等分割した場合の理想的な間隔
+    const paramRange = paramDef.max - paramDef.min;
+    const idealInterval = paramRange / (uniqueValues.length - 1);
+    
+    // 実際の間隔と理想間隔の差を計算
+    let totalDeviation = 0;
+    for (let i = 1; i < uniqueValues.length; i++) {
+      const actualInterval = uniqueValues[i] - uniqueValues[i - 1];
+      const deviation = Math.abs(actualInterval - idealInterval);
+      totalDeviation += deviation;
+    }
+    
+    // 正規化（最大偏差は全体の範囲）
+    const normalizedDeviation = totalDeviation / (paramRange * (uniqueValues.length - 1));
+    
+    // 均一性スコア（偏差が小さいほど高い）
+    return Math.max(0, 1 - normalizedDeviation);
   }
 
   /**

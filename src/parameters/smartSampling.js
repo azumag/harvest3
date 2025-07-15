@@ -318,42 +318,173 @@ class SmartSamplingEngine {
    */
   hybridSampling(strategyType, count = 50, options = {}) {
     const {
-      latinHypercubeRatio = 0.4,
-      diversityRatio = 0.3,
-      randomRatio = 0.3,
-      promisingRegions = []
+      latinHypercubeRatio = 0.5,  // より多様性を重視
+      diversityRatio = 0.35,      // 多様性サンプリングを増加
+      randomRatio = 0.15,         // ランダム部分を減少
+      promisingRegions = [],
+      minDistance = 0.12          // 最小距離を少し緩和して生成性を向上
     } = options;
 
     const samples = [];
     
-    // ラテン超方体サンプリング
+    // ラテン超方体サンプリング（高品質な基盤サンプル）
     const lhsCount = Math.floor(count * latinHypercubeRatio);
-    const lhsSamples = this.latinHypercubeSampling(strategyType, lhsCount);
-    samples.push(...lhsSamples);
+    if (lhsCount > 0) {
+      const lhsSamples = this.latinHypercubeSampling(strategyType, lhsCount);
+      samples.push(...lhsSamples);
+    }
 
-    // 多様性ベースサンプリング
+    // 多様性ベースサンプリング（既存サンプルを考慮）
     const diversityCount = Math.floor(count * diversityRatio);
-    const diversitySamples = this.diversityBasedSampling(
-      strategyType, 
-      diversityCount, 
-      0.15
-    );
-    samples.push(...diversitySamples);
+    if (diversityCount > 0) {
+      const diversitySamples = this.enhancedDiversityBasedSampling(
+        strategyType, 
+        diversityCount, 
+        minDistance,
+        samples  // 既存サンプルとの距離を考慮
+      );
+      samples.push(...diversitySamples);
+    }
 
-    // 適応的グリッドサンプリング（ランダム部分を含む）
+    // 残りをランダム/適応的サンプリングで補完
     const remainingCount = count - samples.length;
-    const adaptiveSamples = this.adaptiveGridSampling(
-      strategyType, 
-      promisingRegions, 
-      remainingCount
-    );
-    samples.push(...adaptiveSamples);
+    if (remainingCount > 0) {
+      if (promisingRegions.length > 0) {
+        // 有望な領域がある場合は適応的サンプリング
+        const adaptiveSamples = this.adaptiveGridSampling(
+          strategyType, 
+          promisingRegions, 
+          remainingCount
+        );
+        samples.push(...adaptiveSamples);
+      } else {
+        // ランダムサンプリングで補完
+        const randomSamples = this.constraintEngine.generateValidCombinations(
+          strategyType, 
+          remainingCount
+        );
+        samples.push(...randomSamples);
+      }
+    }
 
-    // 重複除去とシャッフル
+    // 重複除去（最終的な多様性確保）
     const uniqueSamples = this.removeDuplicates(samples);
-    this.shuffleArray(uniqueSamples);
+    
+    // 多様性を最大化するための後処理
+    const optimizedSamples = this.optimizeSampleDiversity(uniqueSamples, strategyType, count);
 
-    return uniqueSamples.slice(0, count);
+    return optimizedSamples.slice(0, count);
+  }
+
+  /**
+   * 強化された多様性ベースサンプリング
+   * 既存サンプルとの距離を考慮してより多様なサンプルを生成
+   * @param {string} strategyType 戦略タイプ
+   * @param {number} count サンプル数
+   * @param {number} minDistance 最小距離
+   * @param {Array} existingSamples 既存サンプル
+   * @returns {Array} サンプル配列
+   */
+  enhancedDiversityBasedSampling(strategyType, count, minDistance, existingSamples = []) {
+    const constraint = this.constraintEngine.getStrategyConstraints(strategyType);
+    if (!constraint) {
+      return [];
+    }
+
+    const samples = [];
+    const maxAttempts = count * 100; // 試行回数を増加
+    let attempts = 0;
+    let currentMinDistance = minDistance;
+
+    // 段階的に最小距離を緩和して生成性を向上
+    const distanceSteps = [minDistance, minDistance * 0.8, minDistance * 0.6, minDistance * 0.4];
+    let stepIndex = 0;
+
+    while (samples.length < count && attempts < maxAttempts && stepIndex < distanceSteps.length) {
+      const candidate = this.constraintEngine.generateCandidate(constraint.parameters);
+      
+      if (!this.constraintEngine.validateCombination(candidate, strategyType)) {
+        attempts++;
+        continue;
+      }
+
+      // 既存のすべてのサンプル（外部＋内部）との距離をチェック
+      const allSamples = [...existingSamples, ...samples];
+      if (this.checkMinimumDistance(candidate, allSamples, constraint.parameters, currentMinDistance)) {
+        samples.push(candidate);
+        attempts = 0; // 成功時はリセット
+      } else {
+        attempts++;
+        
+        // 一定試行後に最小距離を緩和
+        if (attempts > count * 20 && stepIndex < distanceSteps.length - 1) {
+          stepIndex++;
+          currentMinDistance = distanceSteps[stepIndex];
+          attempts = 0;
+        }
+      }
+    }
+
+    return samples;
+  }
+
+  /**
+   * サンプルの多様性を最適化
+   * @param {Array} samples サンプル配列
+   * @param {string} strategyType 戦略タイプ
+   * @param {number} targetCount 目標サンプル数
+   * @returns {Array} 最適化されたサンプル配列
+   */
+  optimizeSampleDiversity(samples, strategyType, targetCount) {
+    if (samples.length <= targetCount) {
+      return samples;
+    }
+
+    const constraint = this.constraintEngine.getStrategyConstraints(strategyType);
+    if (!constraint) {
+      return samples.slice(0, targetCount);
+    }
+
+    // グリーディアルゴリズムで多様性を最大化
+    const selected = [];
+    const remaining = [...samples];
+
+    // 最初のサンプルはランダムに選択
+    const firstIndex = Math.floor(Math.random() * remaining.length);
+    selected.push(remaining.splice(firstIndex, 1)[0]);
+
+    // 残りのサンプルは既存サンプルとの距離を最大化
+    while (selected.length < targetCount && remaining.length > 0) {
+      let bestCandidate = null;
+      let bestDistance = -1;
+      let bestIndex = -1;
+
+      for (let i = 0; i < remaining.length; i++) {
+        const candidate = remaining[i];
+        
+        // 既存サンプルとの最小距離を計算
+        const minDistanceToSelected = Math.min(
+          ...selected.map(selectedSample => 
+            this.calculateNormalizedDistance(candidate, selectedSample, constraint.parameters)
+          )
+        );
+
+        if (minDistanceToSelected > bestDistance) {
+          bestDistance = minDistanceToSelected;
+          bestCandidate = candidate;
+          bestIndex = i;
+        }
+      }
+
+      if (bestCandidate) {
+        selected.push(bestCandidate);
+        remaining.splice(bestIndex, 1);
+      } else {
+        break;
+      }
+    }
+
+    return selected;
   }
 
   /**
