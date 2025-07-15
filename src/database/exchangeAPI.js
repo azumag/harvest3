@@ -352,6 +352,11 @@ async function fetchStandardHistoricalOHLCVData(exchange, symbol, timeframe, lim
       logger.info(`[標準API] ${exchange.id}のCCXT標準APIを使用`);
     }
 
+    // Issue #933: 実際の呼び出し直前にも再度チェック
+    if (typeof exchange.fetchOHLCV !== 'function') {
+      throw new Error(`exchange.fetchOHLCV is not a function (double check)`);
+    }
+
     // 標準CCXT API呼び出し
     const ohlcv = await exchange.fetchOHLCV(symbol, timeframe, undefined, limit);
 
@@ -427,6 +432,23 @@ async function fetchOHLCVDataAPI(exchange, symbol, timeframe = '15m', limit = 10
     const errorMessage = `fetchOHLCVDataAPIエラー: exchangeオブジェクトにidプロパティがありません`;
     logger.error(errorMessage);
     recordError('unknown', 'invalid_exchange_object', 'exchange.id is missing');
+    return [];
+  }
+
+  // Issue #933: fetchOHLCV関数の存在確認を追加
+  if (typeof exchange.fetchOHLCV !== 'function') {
+    const errorMessage = `fetchOHLCVDataAPIエラー (${symbol} ${timeframe}): exchange.fetchOHLCV is not a function (exchange.id: ${exchange.id})`;
+    logger.error(errorMessage);
+    recordError(exchange.id, 'missing_fetchOHLCV_method', `${symbol} ${timeframe}`);
+    
+    // 詳細なデバッグ情報をログに出力
+    if (!isBacktest) {
+      logger.debug(`Exchange object details:`);
+      logger.debug(`- exchange.id: ${exchange.id}`);
+      logger.debug(`- exchange.fetchOHLCV type: ${typeof exchange.fetchOHLCV}`);
+      logger.debug(`- exchange object keys: ${Object.keys(exchange).join(', ')}`);
+    }
+    
     return [];
   }
 
