@@ -151,7 +151,11 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
                 dynamicBuffer = calculateDynamicLimit(timeframe, days, maxPeriod, options);
               }
             }
-          } catch {
+          } catch (error) {
+            console.error('Dynamic Period計算中にエラーが発生しました:', error);
+            if (typeof postErrorToDiscord === 'function') {
+              await postErrorToDiscord(`Dynamic Period計算エラー: ${error.message}`);
+            }
             // Dynamic Period計算エラー時はフォールバック値を使用
           }
 
@@ -264,9 +268,11 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     // }
 
     // バックテスト完了
-  } catch {
-    // エラーログを記録
-    // await postErrorToDiscord(errorMessage);
+  } catch (error) {
+    console.error('バックテスト実行中にエラーが発生しました:', error);
+    if (typeof postErrorToDiscord === 'function') {
+      await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`);
+    }
   } finally {
     // バックテスト終了後の処理
     process.exit(0);
