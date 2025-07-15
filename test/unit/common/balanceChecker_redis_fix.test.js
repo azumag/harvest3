@@ -31,7 +31,8 @@ describe('BalanceChecker Redis接続修正テスト (Issue #998)', () => {
     // Redisクライアントモック
     mockRedisClient = {
       isReady: false,
-      isOpen: false
+      isOpen: false,
+      ping: jest.fn().mockResolvedValue('PONG')
     };
     
     mockGetClient = require('../../../src/database/redisDatabase').getClient;
@@ -57,7 +58,7 @@ describe('BalanceChecker Redis接続修正テスト (Issue #998)', () => {
       mockRedisClient.isReady = false;
       
       // 初期化成功をモック
-      const connectedClient = { isReady: true };
+      const connectedClient = { isReady: true, ping: jest.fn().mockResolvedValue('PONG') };
       mockInitRedisClient.mockResolvedValue(connectedClient);
       
       await ensureRedisConnection();
@@ -73,7 +74,7 @@ describe('BalanceChecker Redis接続修正テスト (Issue #998)', () => {
       // 初期化失敗をモック
       mockInitRedisClient.mockRejectedValue(new Error('接続失敗'));
       
-      await expect(ensureRedisConnection()).rejects.toThrow('Redis接続エラー: 接続失敗');
+      await expect(ensureRedisConnection()).rejects.toThrow('Redis接続エラー（3回試行後）: 接続失敗');
     });
 
     test('クライアントがnullの場合はエラーを投げる', async () => {
@@ -83,7 +84,7 @@ describe('BalanceChecker Redis接続修正テスト (Issue #998)', () => {
       // nullクライアントをモック
       mockInitRedisClient.mockResolvedValue(null);
       
-      await expect(ensureRedisConnection()).rejects.toThrow('Redis接続エラー: Redis接続の初期化に失敗しました');
+      await expect(ensureRedisConnection()).rejects.toThrow('Redis接続エラー（3回試行後）: Redis接続の初期化に失敗しました');
     });
   });
 
@@ -129,7 +130,7 @@ describe('BalanceChecker Redis接続修正テスト (Issue #998)', () => {
       // 接続試行失敗をモック
       mockInitRedisClient.mockRejectedValue(new Error('接続タイムアウト'));
       
-      await expect(getBotManagedBalance()).rejects.toThrow('Redis接続エラー: 接続タイムアウト');
+      await expect(getBotManagedBalance()).rejects.toThrow('Redis接続エラー（3回試行後）: 接続タイムアウト');
     });
 
     test('ポジションデータが配列でない場合はエラーを投げる', async () => {
