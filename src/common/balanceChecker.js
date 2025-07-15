@@ -240,12 +240,15 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
         continue;
       }
 
-      // 重複処理の防止
-      if (processedCurrencies.has(currency)) {
-        logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency}`);
+      // 通貨名の正規化（大文字小文字とトリム）
+      const normalizedCurrency = currency.trim().toUpperCase();
+
+      // 重複処理の防止（正規化されたキーを使用）
+      if (processedCurrencies.has(normalizedCurrency)) {
+        logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency}`);
         continue;
       }
-      processedCurrencies.add(currency);
+      processedCurrencies.add(normalizedCurrency);
 
       const exchangeAmount = exchangeBalance.total[currency] || 0;
       const botAmount = botBalance[currency] || 0;
@@ -255,47 +258,51 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
         continue;
       }
 
-      // 差異の計算（完全一致チェック）
-      const difference = Math.abs(exchangeAmount - botAmount);
+      // 差異の計算（完全一致チェック）- 浮動小数点精度の問題を修正
+      const difference = Math.abs(parseFloat((exchangeAmount - botAmount).toFixed(8)));
       const maxAmount = Math.max(exchangeAmount, botAmount);
-      const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
+      const discrepancyPercent = maxAmount > 0 ? parseFloat(((difference / maxAmount) * 100).toFixed(2)) : 0;
 
       // 完全一致でない場合は全て通知（閾値0%）
       if (difference > 0) {
-        // discrepancies配列での重複チェック（追加の安全措置）
-        const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
+        // discrepancies配列での重複チェック（正規化されたキーを使用）
+        const existingDiscrepancy = discrepancies.find(disc => disc.currency === normalizedCurrency);
         if (existingDiscrepancy) {
-          logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
+          logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
           continue;
         }
 
         const discrepancyEntry = {
-          currency,
-          exchangeAmount,
-          botAmount,
+          currency: normalizedCurrency,
+          exchangeAmount: parseFloat(exchangeAmount.toFixed(8)),
+          botAmount: parseFloat(botAmount.toFixed(8)),
           difference,
-          discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
+          discrepancyPercent,
           timestamp: Date.now(),
           exchangeId
         };
         
         discrepancies.push(discrepancyEntry);
-        logger.debug(`不整合エントリ追加 (${exchangeId}): ${currency} - 差異=${difference}`);
+        logger.debug(`不整合エントリ追加 (${exchangeId}): ${normalizedCurrency} - 差異=${difference}`);
       }
     }
 
     // 不整合があればDiscordに通知
     if (discrepancies.length > 0) {
-      // 最終的な重複チェック（念のため）
+      // 最終的な重複チェック（念のため）- 正規化された通貨名を使用
       const uniqueDiscrepancies = [];
       const seenCurrencies = new Set();
       
       for (const disc of discrepancies) {
-        if (!seenCurrencies.has(disc.currency)) {
-          uniqueDiscrepancies.push(disc);
-          seenCurrencies.add(disc.currency);
+        const normalizedDiscCurrency = disc.currency.trim().toUpperCase();
+        if (!seenCurrencies.has(normalizedDiscCurrency)) {
+          uniqueDiscrepancies.push({
+            ...disc,
+            currency: normalizedDiscCurrency
+          });
+          seenCurrencies.add(normalizedDiscCurrency);
         } else {
-          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency}`);
+          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency}`);
         }
       }
       
