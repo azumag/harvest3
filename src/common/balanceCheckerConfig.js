@@ -31,7 +31,16 @@ const BALANCE_CHECKER_CONFIG = {
   notifications: {
     maxCurrenciesToShow: 5,             // Discord通知で表示する最大通貨数
     maxInconsistenciesToShow: 3,        // 表示する最大内部不整合数
+    maxDiscrepancyDisplay: 5,           // 不整合通知で表示する最大件数
     enableRecoveryNotification: true    // 回復時通知の有効化
+  },
+
+  // 並行処理設定
+  parallelProcessing: {
+    enableCurrencyParallelProcessing: true,  // 通貨処理の並行化
+    currencyBatchSize: 10,                   // 並行処理のバッチサイズ
+    concurrencyLimit: 5,                     // 同時実行数の制限（Discord制限考慮）
+    processingDelay: 100                     // 処理間の遅延（ミリ秒）
   },
 
   // 戦略関連設定
@@ -60,6 +69,19 @@ const BALANCE_CHECKER_CONFIG = {
     enableDetailedLogging: false,       // 詳細ログの有効化
     logDataSnapshots: false,            // データスナップショットのログ出力
     enablePerformanceMetrics: false     // パフォーマンス測定の有効化
+  },
+
+  // セキュリティ設定
+  security: {
+    enableStrictRedisValidation: true,  // 厳密なRedis接続検証
+    maxRedisRetryAttempts: 3,          // Redis接続リトライ回数
+    redisHealthCheckInterval: 30000,    // Redis健全性チェック間隔（30秒）
+    apiRateLimit: {
+      enabled: true,                    // APIレート制限の有効化
+      maxRequestsPerMinute: 30,         // 1分あたりの最大リクエスト数
+      maxConcurrentRequests: 5,         // 同時リクエスト数の制限
+      cooldownPeriod: 60000             // レート制限時のクールダウン期間（1分）
+    }
   }
 };
 

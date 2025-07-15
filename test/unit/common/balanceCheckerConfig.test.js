@@ -48,6 +48,20 @@ describe('残高チェッカー設定のテスト', () => {
 
       expect(BALANCE_CHECKER_CONFIG.notifications.maxCurrenciesToShow).toBe(5);
       expect(BALANCE_CHECKER_CONFIG.notifications.maxInconsistenciesToShow).toBe(3);
+      expect(BALANCE_CHECKER_CONFIG.notifications.maxDiscrepancyDisplay).toBe(5);
+
+      expect(BALANCE_CHECKER_CONFIG.parallelProcessing.enableCurrencyParallelProcessing).toBe(true);
+      expect(BALANCE_CHECKER_CONFIG.parallelProcessing.currencyBatchSize).toBe(10);
+      expect(BALANCE_CHECKER_CONFIG.parallelProcessing.concurrencyLimit).toBe(5);
+      expect(BALANCE_CHECKER_CONFIG.parallelProcessing.processingDelay).toBe(100);
+
+      expect(BALANCE_CHECKER_CONFIG.security.enableStrictRedisValidation).toBe(true);
+      expect(BALANCE_CHECKER_CONFIG.security.maxRedisRetryAttempts).toBe(3);
+      expect(BALANCE_CHECKER_CONFIG.security.redisHealthCheckInterval).toBe(30000);
+      expect(BALANCE_CHECKER_CONFIG.security.apiRateLimit.enabled).toBe(true);
+      expect(BALANCE_CHECKER_CONFIG.security.apiRateLimit.maxRequestsPerMinute).toBe(30);
+      expect(BALANCE_CHECKER_CONFIG.security.apiRateLimit.maxConcurrentRequests).toBe(5);
+      expect(BALANCE_CHECKER_CONFIG.security.apiRateLimit.cooldownPeriod).toBe(60000);
     });
   });
 
@@ -227,12 +241,58 @@ describe('残高チェッカー設定のテスト', () => {
       expect(config.intervals).toBeDefined();
       expect(config.notifications).toBeDefined();
       expect(config.strategies).toBeDefined();
+      expect(config.parallelProcessing).toBeDefined();
+      expect(config.security).toBeDefined();
     });
 
     it('無効な環境変数設定で検証エラーを投げる', () => {
       process.env.BALANCE_CHECKER_LOCK_TTL = '100'; // 1000ms未満で無効
 
       expect(() => getValidatedConfig()).toThrow('defaultTtl must be at least 1000ms');
+    });
+  });
+
+  describe('新機能設定のテスト', () => {
+    beforeEach(() => {
+      // 新機能テストの前に環境変数を完全にクリア
+      jest.resetModules();
+      delete process.env.BALANCE_CHECKER_LOCK_TTL;
+      delete process.env.BALANCE_CHECKER_SIGNIFICANT_THRESHOLD;
+      delete process.env.BALANCE_CHECKER_HIGH_DISCREPANCY_PERCENT;
+      delete process.env.BALANCE_CHECKER_LIGHTWEIGHT_INTERVAL;
+      delete process.env.BALANCE_CHECKER_ROBUST_INTERVAL;
+      delete process.env.BALANCE_CHECKER_DEBUG;
+    });
+
+    it('並行処理設定のデフォルト値が正しい', () => {
+      const { getValidatedConfig } = require('../../../src/common/balanceCheckerConfig');
+      const config = getValidatedConfig();
+      
+      expect(config.parallelProcessing.enableCurrencyParallelProcessing).toBe(true);
+      expect(config.parallelProcessing.currencyBatchSize).toBe(10);
+      expect(config.parallelProcessing.concurrencyLimit).toBe(5);
+      expect(config.parallelProcessing.processingDelay).toBe(100);
+    });
+
+    it('セキュリティ設定のデフォルト値が正しい', () => {
+      const { getValidatedConfig } = require('../../../src/common/balanceCheckerConfig');
+      const config = getValidatedConfig();
+      
+      expect(config.security.enableStrictRedisValidation).toBe(true);
+      expect(config.security.maxRedisRetryAttempts).toBe(3);
+      expect(config.security.redisHealthCheckInterval).toBe(30000);
+      expect(config.security.apiRateLimit.enabled).toBe(true);
+      expect(config.security.apiRateLimit.maxRequestsPerMinute).toBe(30);
+      expect(config.security.apiRateLimit.maxConcurrentRequests).toBe(5);
+      expect(config.security.apiRateLimit.cooldownPeriod).toBe(60000);
+    });
+
+    it('通知設定のmaxDiscrepancyDisplay値が正しい', () => {
+      const { getValidatedConfig } = require('../../../src/common/balanceCheckerConfig');
+      const config = getValidatedConfig();
+      
+      expect(config.notifications.maxDiscrepancyDisplay).toBe(5);
+      expect(config.notifications.maxDiscrepancyDisplay).toBeGreaterThan(0);
     });
   });
 

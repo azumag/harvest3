@@ -18,31 +18,169 @@ const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
 const BALANCE_CONFIG = getValidatedConfig();
 
 /**
- * Redis接続を確実に確立する
+ * APIレート制限管理クラス
+ */
+class ApiRateLimiter {
+  constructor(config) {
+    this.config = config;
+    this.requestCounts = new Map();
+    this.lastCleanup = Date.now();
+  }
+
+  async checkRateLimit(exchangeId) {
+    if (!this.config.security || !this.config.security.apiRateLimit || !this.config.security.apiRateLimit.enabled) {
+      return true;
+    }
+
+    const now = Date.now();
+    const windowStart = now - 60000; // 1分間のウィンドウ
+
+    // 定期的にカウンターをクリーンアップ
+    if (now - this.lastCleanup > 60000) {
+      this.cleanup(windowStart);
+      this.lastCleanup = now;
+    }
+
+    // 現在のリクエスト数を取得
+    const requests = this.requestCounts.get(exchangeId) || [];
+    const recentRequests = requests.filter(timestamp => timestamp > windowStart);
+
+    // レート制限チェック
+    const maxRequests = this.config.security?.apiRateLimit?.maxRequestsPerMinute || 30;
+    if (recentRequests.length >= maxRequests) {
+      logger.warn(`APIレート制限に達しました (${exchangeId}): ${recentRequests.length} requests/min`);
+      return false;
+    }
+
+    // リクエストを記録
+    recentRequests.push(now);
+    this.requestCounts.set(exchangeId, recentRequests);
+    return true;
+  }
+
+  cleanup(windowStart) {
+    for (const [exchangeId, requests] of this.requestCounts.entries()) {
+      const filteredRequests = requests.filter(timestamp => timestamp > windowStart);
+      if (filteredRequests.length === 0) {
+        this.requestCounts.delete(exchangeId);
+      } else {
+        this.requestCounts.set(exchangeId, filteredRequests);
+      }
+    }
+  }
+}
+
+// レート制限インスタンスを作成
+const rateLimiter = new ApiRateLimiter(BALANCE_CONFIG);
+
+/**
+ * Redis接続を確実に確立する（セキュリティ強化版）
  * @returns {Promise<void>}
  */
 async function ensureRedisConnection() {
   const redisClient = getRedisClient();
   
-  // 既に接続済みの場合は何もしない
-  if (redisClient && redisClient.isReady) {
-    return;
+  // 厳密な接続検証が有効な場合の追加チェック
+  if (BALANCE_CONFIG.security?.enableStrictRedisValidation) {
+    if (redisClient && redisClient.isReady) {
+      try {
+        // 実際に簡単なコマンドを実行して接続の健全性を確認
+        await redisClient.ping();
+        logger.debug('Redis接続の健全性確認済み');
+        return;
+      } catch (error) {
+        logger.warn('Redis接続の健全性チェックに失敗、再接続を試行:', error.message);
+      }
+    }
+  } else {
+    // 従来の簡易チェック
+    if (redisClient && redisClient.isReady) {
+      return;
+    }
   }
   
-  // 接続を試行
+  // 接続を試行（リトライ機能付き）
   logger.info('Redis接続を確立中...');
   
-  try {
-    const client = await initRedisClient();
-    if (!client || !client.isReady) {
-      throw new Error('Redis接続の初期化に失敗しました');
+  const maxRetries = BALANCE_CONFIG.security?.maxRedisRetryAttempts || 3;
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const client = await initRedisClient();
+      if (!client || !client.isReady) {
+        throw new Error('Redis接続の初期化に失敗しました');
+      }
+      
+      // 厳密な検証が有効な場合、接続テストを実行
+      if (BALANCE_CONFIG.security?.enableStrictRedisValidation) {
+        await client.ping();
+        logger.debug('Redis接続テスト成功');
+      }
+      
+      logger.info('Redis接続が正常に確立されました');
+      return;
+    } catch (error) {
+      lastError = error;
+      logger.error(`Redis接続試行 ${attempt}/${maxRetries} 失敗:`, error.message);
+      
+      if (attempt < maxRetries) {
+        const delay = 1000 * attempt; // 指数バックオフ
+        logger.info(`${delay}ms 後に再試行します...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw new Error(`Redis接続エラー（${maxRetries}回試行後）: ${lastError.message}`);
+}
+
+/**
+ * 金額データの厳密なバリデーションと解析
+ * @param {any} amount - 金額データ
+ * @param {string} symbol - 通貨ペア（デバッグ用）
+ * @returns {number|null} 有効な金額またはnull
+ */
+function validateAndParseAmount(amount, symbol) {
+  // null/undefined チェック
+  if (amount === null || amount === undefined) {
+    return null;
+  }
+
+  // 文字列の場合の追加チェック
+  if (typeof amount === 'string') {
+    // 空文字列チェック
+    if (amount.trim() === '') {
+      return null;
     }
     
-    logger.info('Redis接続が正常に確立されました');
-  } catch (error) {
-    logger.error('Redis接続の確立に失敗:', error.message);
-    throw new Error(`Redis接続エラー: ${error.message}`);
+    // 数値以外の文字が含まれているかチェック（小数点、負号、科学記法は許可）
+    if (!/^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(amount.trim())) {
+      return null;
+    }
   }
+
+  // 数値変換
+  const parsed = Number(amount);
+  
+  // NaN、Infinity、-Infinity チェック
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  // 負の値チェック（残高は非負であるべき）
+  if (parsed < 0) {
+    logger.warn(`負の金額を検出 (${symbol}): ${amount}`);
+    return null;
+  }
+
+  // 極端に大きい値のチェック（現実的でない値を除外）
+  if (parsed > 1e15) {
+    logger.warn(`異常に大きい金額を検出 (${symbol}): ${amount}`);
+    return null;
+  }
+
+  return parsed;
 }
 
 /**
@@ -52,6 +190,20 @@ async function ensureRedisConnection() {
  */
 async function getExchangeBalance(exchangeId) {
   try {
+    // APIレート制限チェック
+    const canProceed = await rateLimiter.checkRateLimit(exchangeId);
+    if (!canProceed) {
+      const cooldownPeriod = BALANCE_CONFIG.security?.apiRateLimit?.cooldownPeriod || 60000;
+      logger.warn(`APIレート制限により待機中 (${exchangeId}): ${cooldownPeriod}ms`);
+      await new Promise(resolve => setTimeout(resolve, cooldownPeriod));
+      
+      // 再度チェック
+      const canProceedAfterCooldown = await rateLimiter.checkRateLimit(exchangeId);
+      if (!canProceedAfterCooldown) {
+        throw new Error(`APIレート制限により処理を中断 (${exchangeId})`);
+      }
+    }
+
     const exchangeConfig = config.exchanges[exchangeId];
     if (!exchangeConfig) {
       throw new Error(`Exchange ${exchangeId} not found in config`);
@@ -104,24 +256,26 @@ async function getBotManagedBalance() {
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
 
-    // 詳細なポジション統計を収集
-    const positionStats = {
-      total: allPositions.length,
-      byStatus: {},
-      bySide: {},
-      byExchange: {}
-    };
+    // 詳細なポジション統計を収集（デバッグレベルでのみ実行）
+    if (BALANCE_CONFIG.debug?.enableDetailedLogging) {
+      const positionStats = {
+        total: allPositions.length,
+        byStatus: {},
+        bySide: {},
+        byExchange: {}
+      };
 
-    allPositions.forEach(position => {
-      // ステータス別統計
-      positionStats.byStatus[position.status] = (positionStats.byStatus[position.status] || 0) + 1;
-      // サイド別統計
-      positionStats.bySide[position.side] = (positionStats.bySide[position.side] || 0) + 1;
-      // 取引所別統計
-      positionStats.byExchange[position.exchangeId] = (positionStats.byExchange[position.exchangeId] || 0) + 1;
-    });
+      allPositions.forEach(position => {
+        // ステータス別統計
+        positionStats.byStatus[position.status] = (positionStats.byStatus[position.status] || 0) + 1;
+        // サイド別統計
+        positionStats.bySide[position.side] = (positionStats.bySide[position.side] || 0) + 1;
+        // 取引所別統計
+        positionStats.byExchange[position.exchangeId] = (positionStats.byExchange[position.exchangeId] || 0) + 1;
+      });
 
-    logger.debug('ポジション統計:', positionStats);
+      logger.debug('ポジション統計:', positionStats);
+    }
 
     // 有効な買いポジションのみを抽出（より厳密な条件）
     const validBuyPositions = allPositions.filter(position => {
@@ -155,7 +309,12 @@ async function getBotManagedBalance() {
           currencyBalances[baseCurrency] = 0;
         }
 
-        const amount = parseFloat(position.amount) || 0;
+        // より厳密な型チェックとバリデーション
+        const amount = validateAndParseAmount(position.amount, position.symbol);
+        if (amount === null) {
+          logger.warn(`無効な金額データをスキップ: ${position.symbol}, amount: ${position.amount}`);
+          return;
+        }
         currencyBalances[baseCurrency] += amount;
         
         // 処理詳細を記録
@@ -234,53 +393,125 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
     logger.debug(`残高比較対象通貨 (${exchangeId}): ${allCurrencies.length}通貨 - ${allCurrencies.join(', ')}`);
 
-    for (const currency of allCurrencies) {
-      // JPYは残高チェックから除外
-      if (currency === 'JPY') {
-        continue;
+    // 並行処理の設定に基づいて処理方法を決定
+    if (BALANCE_CONFIG.parallelProcessing?.enableCurrencyParallelProcessing && allCurrencies.length > 5) {
+      // 並行処理で通貨を処理
+      const processCurrency = async (currency) => {
+        // JPYは残高チェックから除外
+        if (currency === 'JPY') {
+          return null;
+        }
+
+        // 重複処理の防止
+        if (processedCurrencies.has(currency)) {
+          logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency}`);
+          return null;
+        }
+        processedCurrencies.add(currency);
+
+        const exchangeAmount = exchangeBalance.total[currency] || 0;
+        const botAmount = botBalance[currency] || 0;
+
+        // 有意な差がある場合のみチェック
+        if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
+          return null;
+        }
+
+        // 差異の計算（完全一致チェック）
+        const difference = Math.abs(exchangeAmount - botAmount);
+        const maxAmount = Math.max(exchangeAmount, botAmount);
+        const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
+
+        // 完全一致でない場合は全て通知（閾値0%）
+        if (difference > 0) {
+          return {
+            currency,
+            exchangeAmount,
+            botAmount,
+            difference,
+            discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
+            timestamp: Date.now(),
+            exchangeId
+          };
+        }
+        return null;
+      };
+
+      // バッチ処理で並行度を制限
+      const batchSize = BALANCE_CONFIG.parallelProcessing?.currencyBatchSize || 10;
+      const processingDelay = BALANCE_CONFIG.parallelProcessing?.processingDelay || 100;
+      
+      for (let i = 0; i < allCurrencies.length; i += batchSize) {
+        const batch = allCurrencies.slice(i, i + batchSize);
+        const results = await Promise.all(batch.map(processCurrency));
+        
+        // 結果をdiscrepanciesに追加
+        results.forEach(result => {
+          if (result) {
+            // 重複チェック
+            const existingDiscrepancy = discrepancies.find(disc => disc.currency === result.currency);
+            if (!existingDiscrepancy) {
+              discrepancies.push(result);
+              logger.debug(`不整合エントリ追加 (${exchangeId}): ${result.currency} - 差異=${result.difference}`);
+            }
+          }
+        });
+
+        // バッチ間の遅延（Discord制限考慮）
+        if (i + batchSize < allCurrencies.length) {
+          await new Promise(resolve => setTimeout(resolve, processingDelay));
+        }
       }
-
-      // 重複処理の防止
-      if (processedCurrencies.has(currency)) {
-        logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency}`);
-        continue;
-      }
-      processedCurrencies.add(currency);
-
-      const exchangeAmount = exchangeBalance.total[currency] || 0;
-      const botAmount = botBalance[currency] || 0;
-
-      // 有意な差がある場合のみチェック
-      if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
-        continue;
-      }
-
-      // 差異の計算（完全一致チェック）
-      const difference = Math.abs(exchangeAmount - botAmount);
-      const maxAmount = Math.max(exchangeAmount, botAmount);
-      const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
-
-      // 完全一致でない場合は全て通知（閾値0%）
-      if (difference > 0) {
-        // discrepancies配列での重複チェック（追加の安全措置）
-        const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
-        if (existingDiscrepancy) {
-          logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
+    } else {
+      // 従来の逐次処理
+      for (const currency of allCurrencies) {
+        // JPYは残高チェックから除外
+        if (currency === 'JPY') {
           continue;
         }
 
-        const discrepancyEntry = {
-          currency,
-          exchangeAmount,
-          botAmount,
-          difference,
-          discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
-          timestamp: Date.now(),
-          exchangeId
-        };
-        
-        discrepancies.push(discrepancyEntry);
-        logger.debug(`不整合エントリ追加 (${exchangeId}): ${currency} - 差異=${difference}`);
+        // 重複処理の防止
+        if (processedCurrencies.has(currency)) {
+          logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency}`);
+          continue;
+        }
+        processedCurrencies.add(currency);
+
+        const exchangeAmount = exchangeBalance.total[currency] || 0;
+        const botAmount = botBalance[currency] || 0;
+
+        // 有意な差がある場合のみチェック
+        if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
+          continue;
+        }
+
+        // 差異の計算（完全一致チェック）
+        const difference = Math.abs(exchangeAmount - botAmount);
+        const maxAmount = Math.max(exchangeAmount, botAmount);
+        const discrepancyPercent = maxAmount > 0 ? (difference / maxAmount) * 100 : 0;
+
+        // 完全一致でない場合は全て通知（閾値0%）
+        if (difference > 0) {
+          // discrepancies配列での重複チェック（追加の安全措置）
+          const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
+          if (existingDiscrepancy) {
+            logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
+            continue;
+          }
+
+          const discrepancyEntry = {
+            currency,
+            exchangeAmount,
+            botAmount,
+            difference,
+            discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
+            timestamp: Date.now(),
+            exchangeId
+          };
+          
+          discrepancies.push(discrepancyEntry);
+          logger.debug(`不整合エントリ追加 (${exchangeId}): ${currency} - 差異=${difference}`);
+        }
       }
     }
 
@@ -389,8 +620,8 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   let message = `🚨 **残高不整合検出** (${exchangeId})\n`;
   message += `検出時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n\n`;
 
-  // 上位5件の不整合を表示
-  const maxDisplay = 5;
+  // 上位N件の不整合を表示（設定から取得）
+  const maxDisplay = BALANCE_CONFIG.notifications?.maxDiscrepancyDisplay || 5;
   const displayDiscrepancies = discrepancies.slice(0, maxDisplay);
   
   displayDiscrepancies.forEach(disc => {
