@@ -53,6 +53,79 @@ async function ensureRedisConnection() {
 }
 
 /**
+ * Redis データの同期状態を確認し、必要に応じて再同期を実行する
+ * @returns {Promise<boolean>} 同期が成功したかどうか
+ */
+async function ensureRedisDataSynchronization() {
+  try {
+    await ensureRedisConnection();
+    
+    const redisClient = getRedisClient();
+    if (!redisClient || !redisClient.isReady) {
+      logger.error('Redis接続が確立されていません');
+      return false;
+    }
+    
+    // Redis内のポジションデータの存在確認
+    const positionKeys = await redisClient.keys('position:*');
+    const summaryKeys = await redisClient.keys('summary:*');
+    
+    logger.info(`Redis同期状態確認: ポジションキー数=${positionKeys.length}, サマリーキー数=${summaryKeys.length}`);
+    
+    // データが極端に少ない場合は警告
+    if (positionKeys.length === 0 && summaryKeys.length === 0) {
+      logger.warn('Redis内にポジションデータとサマリーデータが存在しません。システム初期化中の可能性があります。');
+      return false;
+    }
+    
+    // データの整合性を簡易チェック
+    if (positionKeys.length > 0) {
+      // 最新のポジションデータを1つ取得して形式確認
+      const samplePosition = await redisClient.hgetall(positionKeys[0]);
+      if (!samplePosition || !samplePosition.symbol) {
+        logger.warn('Redis内のポジションデータが不正な形式です');
+        return false;
+      }
+    }
+    
+    logger.info('Redis データ同期状態は正常です');
+    return true;
+  } catch (error) {
+    logger.error('Redis データ同期確認エラー:', error.message);
+    return false;
+  }
+}
+
+/**
+ * バランスチェック実行前の初期化処理
+ * @returns {Promise<void>}
+ */
+async function initializeBalanceChecker() {
+  try {
+    logger.info('BalanceChecker 初期化開始');
+    
+    // 1. Redis接続の確立
+    await ensureRedisConnection();
+    
+    // 2. Redis データの同期状態確認
+    const syncStatus = await ensureRedisDataSynchronization();
+    if (!syncStatus) {
+      logger.warn('Redis データ同期に問題があります。継続しますが、結果の精度が低下する可能性があります。');
+    }
+    
+    // 3. 設定の妥当性確認
+    if (!BALANCE_CONFIG || !BALANCE_CONFIG.thresholds) {
+      throw new Error('BALANCE_CONFIG が正しく設定されていません');
+    }
+    
+    logger.info('BalanceChecker 初期化完了');
+  } catch (error) {
+    logger.error('BalanceChecker 初期化エラー:', error.message);
+    throw new Error(`BalanceChecker 初期化失敗: ${error.message}`);
+  }
+}
+
+/**
  * 取引所残高を取得する
  * @param {string} exchangeId - 取引所ID
  * @returns {Object} 取引所の残高情報
@@ -107,28 +180,62 @@ async function getBotManagedBalance() {
         throw new Error('Redis接続が確立されていないため、ポジションデータを取得できません');
       }
       
-      // Redis接続はあるがデータが空の場合は正常な状態として扱う
-      logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
+      // Redis接続はあるがデータが空の場合でも、MongoDB/RedisSummaryから残高を取得してみる
+      logger.warn('Redis接続は正常ですが、ポジションデータが存在しません。代替手段で残高を確認します。');
+      
+      // 代替手段として詳細残高から計算
+      try {
+        const fallbackBalances = await getBotManagedBalanceFromMultipleSources();
+        if (Object.keys(fallbackBalances).length > 0) {
+          logger.info('代替手段で残高を取得しました:', fallbackBalances);
+          return fallbackBalances;
+        }
+      } catch (fallbackError) {
+        logger.warn('代替手段でも残高取得に失敗:', fallbackError.message);
+      }
     }
 
-    // 買いポジション（未売却）のみを抽出
-    const buyPositions = allPositions.filter(position =>
-      position.side === 'buy' &&
-      position.status !== 'closed' // クローズされていないポジション
-    );
+    // 買いポジション（未売却）のみを抽出 - より厳密な条件
+    const buyPositions = allPositions.filter(position => {
+      // 基本条件: 買いポジションでクローズされていない
+      const isValidBuyPosition = position.side === 'buy' && position.status !== 'closed';
+      
+      // 追加条件: 有効な金額を持つ
+      const hasValidAmount = position.amount && position.amount > 0;
+      
+      // 追加条件: 有効なシンボルを持つ
+      const hasValidSymbol = position.symbol && position.symbol.includes('/');
+      
+      // デバッグ用ログ（大量ログを避けるため最初の10件のみ）
+      const positionIndex = allPositions.indexOf(position);
+      if (positionIndex < 10) {
+        logger.debug(`ポジション${positionIndex + 1}: side=${position.side}, status=${position.status}, amount=${position.amount}, symbol=${position.symbol}, valid=${isValidBuyPosition && hasValidAmount && hasValidSymbol}`);
+      }
+      
+      return isValidBuyPosition && hasValidAmount && hasValidSymbol;
+    });
 
     // 通貨別に集計
     const currencyBalances = {};
 
     buyPositions.forEach(position => {
-      // シンボルから基軸通貨を抽出 (例: BTC/JPY -> BTC)
-      const [baseCurrency] = position.symbol.split('/');
+      try {
+        // シンボルから基軸通貨を抽出 (例: BTC/JPY -> BTC)
+        const [baseCurrency] = position.symbol.split('/');
 
-      if (!currencyBalances[baseCurrency]) {
-        currencyBalances[baseCurrency] = 0;
+        if (!baseCurrency) {
+          logger.warn(`無効なシンボル形式: ${position.symbol}`);
+          return;
+        }
+
+        if (!currencyBalances[baseCurrency]) {
+          currencyBalances[baseCurrency] = 0;
+        }
+
+        currencyBalances[baseCurrency] += position.amount || 0;
+      } catch (symbolError) {
+        logger.warn(`ポジション処理エラー: ${JSON.stringify(position)}, エラー: ${symbolError.message}`);
       }
-
-      currencyBalances[baseCurrency] += position.amount || 0;
     });
 
     logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${buyPositions.length}/${allPositions.length}`, currencyBalances);
@@ -146,6 +253,37 @@ async function getBotManagedBalance() {
 }
 
 /**
+ * 複数のソースからBot管理残高を取得する代替メソッド
+ * @returns {Object} 通貨別の残高
+ */
+async function getBotManagedBalanceFromMultipleSources() {
+  try {
+    // MongoDB + Redis summary から残高を取得
+    const mongoBalances = await calculateBalanceFromMongoDB('bitbank'); // 主要取引所のみ
+    const redisBalances = await calculateBalanceFromRedisSummary('bitbank');
+    
+    // 両方のソースを統合
+    const combinedBalances = { ...mongoBalances };
+    
+    // Redis summaryのデータも統合
+    Object.keys(redisBalances).forEach(currency => {
+      if (combinedBalances[currency]) {
+        // 両方にある場合は大きい方を採用（より確実な値）
+        combinedBalances[currency] = Math.max(combinedBalances[currency], redisBalances[currency]);
+      } else {
+        combinedBalances[currency] = redisBalances[currency];
+      }
+    });
+    
+    logger.info('複数ソースからの残高統合完了:', { mongoBalances, redisBalances, combinedBalances });
+    return combinedBalances;
+  } catch (error) {
+    logger.error('複数ソースからの残高取得エラー:', error.message);
+    return {};
+  }
+}
+
+/**
  * 残高を比較し、不整合があればDiscordに通知する
  * @param {string} exchangeId - 取引所ID
  * @param {number} thresholdPercent - 許容誤差（パーセント）- 完全一致チェックのため0
@@ -154,11 +292,45 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
   try {
     logger.info(`残高比較開始: ${exchangeId}`);
 
+    // BalanceChecker の初期化
+    await initializeBalanceChecker();
+
     // 取引所残高を取得
     const exchangeBalance = await getExchangeBalance(exchangeId);
 
-    // Bot管理残高を取得
-    const botBalance = await getBotManagedBalance();
+    // Bot管理残高を取得（改善版: リトライ機能付き）
+    let botBalance;
+    let retryCount = 0;
+    const maxRetries = 2;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        botBalance = await getBotManagedBalance();
+        
+        // Bot残高が空の場合、代替手段を試行
+        if (Object.keys(botBalance).length === 0 && retryCount < maxRetries) {
+          logger.warn(`Bot残高が空です（試行${retryCount + 1}/${maxRetries + 1}）。代替手段を試行します。`);
+          
+          // 短い待機後に代替手段を試行
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          botBalance = await getBotManagedBalanceFromMultipleSources();
+          
+          if (Object.keys(botBalance).length > 0) {
+            logger.info('代替手段でBot残高を取得しました');
+            break;
+          }
+        } else {
+          break;
+        }
+      } catch (balanceError) {
+        retryCount++;
+        if (retryCount > maxRetries) {
+          throw balanceError;
+        }
+        logger.warn(`Bot残高取得エラー（試行${retryCount}/${maxRetries + 1}）: ${balanceError.message}`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2秒待機
+      }
+    }
 
     // 比較対象の通貨一覧（両方に存在する通貨 + 一定額以上の通貨）
     const significantThreshold = BALANCE_CONFIG.thresholds.significantBalance;
@@ -784,6 +956,7 @@ async function resetCheckerState() {
 module.exports = {
   getExchangeBalance,
   getBotManagedBalance,
+  getBotManagedBalanceFromMultipleSources,
   compareBalances,
   checkAllExchangeBalances,
   checkSingleExchange,
@@ -792,7 +965,9 @@ module.exports = {
   getBotManagedBalanceDetailed,
   getCheckerState,
   resetCheckerState,
-  // Redis接続管理
+  // Redis接続管理と初期化
   ensureRedisConnection,
+  ensureRedisDataSynchronization,
+  initializeBalanceChecker,
   STATE
 };
