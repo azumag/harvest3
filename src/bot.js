@@ -744,17 +744,8 @@ if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
     description: 'リスク管理チェック（15分間隔）'
   });
 
-  // 堅牢な残高チェックを1時間間隔でスケジュール
-  schedulingManager.scheduleIntervalTask('robust-balance-check', async () => {
-    try {
-      await executeRobustBalanceCheck();
-    } catch (error) {
-      logger.error('スケジュール済み堅牢残高チェックエラー:', error.message);
-      await postErrorToDiscord(`堅牢残高チェック失敗: ${error.message}`);
-    }
-  }, 60, {
-    description: '堅牢残高チェック（1時間間隔）'
-  });
+  // 注意: 堅牢な残高チェックはschedulingManager.jsで一元管理されています
+  // 重複実行を防ぐため、ここでのスケジューリングは削除されました (Issue #984)
 
   // 自動メンテナンスシステムの初期化
   logger.info('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');

@@ -205,7 +205,7 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
       const message = createDiscrepancyMessage(exchangeId, discrepancies);
       await postOrderToDiscord(message);
       
-      // 不整合の詳細をログに出力
+      // 不整合の詳細をログに出力 (Issue #984: 重複スケジューリング修正済み)
       logger.error(`残高不整合検出: ${exchangeId} (${discrepancies.length}件の不整合)`);
       discrepancies.forEach((disc, index) => {
         logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
