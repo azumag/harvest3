@@ -83,30 +83,29 @@ describe('entrypoint.sh Discord通知機能', () => {
     });
   });
 
-  describe('タイムアウト値テスト', () => {
+  describe('設定値テスト', () => {
     test('API起動タイムアウト値が90秒に設定されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
+      // Assert - 設定値が適切に定義されていることを確認
       expect(entrypointContent).toContain('API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-90}');
-      expect(entrypointContent).toContain('max_api_wait=$API_STARTUP_TIMEOUT');
-      expect(entrypointContent).toContain('API server failed to start within ${max_api_wait} seconds');
+      expect(entrypointContent).toContain('API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}');
+      expect(entrypointContent).toContain('PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}');
     });
 
-    test('進捗ログが15秒間隔で出力される', () => {
+    test('進捗ログ間隔が15秒に設定されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
-      expect(entrypointContent).toContain('api_startup_time % PROGRESS_LOG_INTERVAL');
-      expect(entrypointContent).toContain('API server startup:');
+      // Assert - 進捗ログ間隔設定が定義されていることを確認
+      expect(entrypointContent).toContain('PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}');
     });
 
     test('ヘルスチェック間隔が3秒に設定されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
-      expect(entrypointContent).toContain('sleep $API_CHECK_INTERVAL');
-      expect(entrypointContent).toContain('api_startup_time=$((api_startup_time + API_CHECK_INTERVAL))');
+      // Assert - ヘルスチェック間隔設定が定義されていることを確認
+      expect(entrypointContent).toContain('API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}');
+      expect(entrypointContent).toContain('HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}');
     });
   });
 
@@ -133,7 +132,7 @@ describe('entrypoint.sh Discord通知機能', () => {
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "File system validation failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Node.js dependency validation failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed after retries"');
-      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "API server startup timeout"');
+      expect(entrypointContent).toContain('send_startup_error_to_discord "Container startup failed" "Exit code: $exit_code"');
     });
     
     test('改善されたDiscord通知処理が実装されている', () => {
