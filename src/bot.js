@@ -746,6 +746,10 @@ if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
 
   // 注意: 堅牢な残高チェックはschedulingManager.jsで一元管理されています
   // 重複実行を防ぐため、ここでのスケジューリングは削除されました (Issue #984)
+  
+  // 残高チェックタスクの初期化
+  logger.info('\n[残高チェック] 残高チェックタスクを初期化しています...');
+  schedulingManager.setupDefaultBalanceTasks();
 
   // 自動メンテナンスシステムの初期化
   logger.info('\n[メンテナンス] 自動メンテナンスシステムを初期化しています...');

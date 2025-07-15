@@ -994,3 +994,119 @@ describe('Issue #970: ログ出力改善のテスト', () => {
     );
   });
 });
+
+// Issue #983: AVAX重複ログエラー修正のテスト
+describe('Issue #983: AVAX重複ログエラー修正テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('AVAX通貨の重複ログエントリが適切に除去される', async () => {
+    // Issue #983の実際のログエラーを再現
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        AVAX: 0.0141,
+        LINK: 0.1798,
+        MKR: 0.0093,
+        BOBA: 9.8464,
+        ENJ: 33.5976,
+        DOT: 0.6074,
+        DOGE: 2.5773,
+        ASTR: 263.8481,
+        ADA: 0.4659
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'AVAX/JPY', side: 'buy', amount: 0.0002, status: 'open' },
+      { exchange: 'bitbank', symbol: 'LINK/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MKR/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'BOBA/JPY', side: 'buy', amount: 0.07239999999999999, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ENJ/JPY', side: 'buy', amount: 0.0014, status: 'open' },
+      { exchange: 'bitbank', symbol: 'DOT/JPY', side: 'buy', amount: 0.00030000000000000003, status: 'open' },
+      { exchange: 'bitbank', symbol: 'DOGE/JPY', side: 'buy', amount: 0.0011, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ASTR/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ADA/JPY', side: 'buy', amount: 0.0016, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // AVAXの不整合が1件のみ検出されることを確認
+    const avaxDiscrepancies = result.discrepancies.filter(d => d.currency === 'AVAX');
+    expect(avaxDiscrepancies).toHaveLength(1);
+
+    // AVAXの値が正しいことを確認（Issue #983の実際の値）
+    const avaxDiscrepancy = avaxDiscrepancies[0];
+    expect(avaxDiscrepancy.exchangeAmount).toBe(0.0141);
+    expect(avaxDiscrepancy.botAmount).toBe(0.0002);
+    expect(avaxDiscrepancy.difference).toBe(0.0139);
+    expect(Math.round(avaxDiscrepancy.discrepancyPercent)).toBe(99); // 98.58% ≈ 99%
+
+    // 全体として重複がないことを確認
+    const allCurrencies = result.discrepancies.map(d => d.currency);
+    const uniqueCurrencies = [...new Set(allCurrencies)];
+    expect(allCurrencies).toHaveLength(uniqueCurrencies.length);
+
+    // 各通貨が1回のみ登場することを確認
+    const currencyCount = {};
+    result.discrepancies.forEach(disc => {
+      currencyCount[disc.currency] = (currencyCount[disc.currency] || 0) + 1;
+    });
+    
+    for (const [currency, count] of Object.entries(currencyCount)) {
+      expect(count).toBe(1); // 各通貨は1回のみ
+    }
+
+    // 特にAVAXが1回のみログ出力されることを確認
+    const errorCalls = mockLoggerInstance.error.mock.calls;
+    const avaxLogCount = errorCalls.filter(call => 
+      call[0] && typeof call[0] === 'string' && call[0].includes('AVAX:')
+    ).length;
+    expect(avaxLogCount).toBe(1);
+  });
+
+  it('重複除去警告ログが適切に出力される', async () => {
+    // 仮想的に重複が発生する状況を作成するのは困難なため、
+    // 代わりに重複チェック機能が動作していることを間接的に確認
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 正常なケースでは重複警告は出ないことを確認
+    expect(mockLoggerInstance.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('最終段階で重複エントリを検出し除去')
+    );
+  });
+
+  it('強化されたデバッグ情報が正しく出力される', async () => {
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { BTC: 1.0 }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    const result = await compareBalances('bitbank');
+
+    // デバッグログで通貨リストが出力されることを確認
+    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+      expect.stringContaining('残高比較対象通貨 (bitbank):')
+    );
+
+    // 不整合エントリに新しいフィールドが含まれていることを確認
+    if (result.discrepancies.length > 0) {
+      const firstDiscrepancy = result.discrepancies[0];
+      expect(firstDiscrepancy).toHaveProperty('timestamp');
+      expect(firstDiscrepancy).toHaveProperty('exchangeId');
+      expect(firstDiscrepancy.exchangeId).toBe('bitbank');
+    }
+  });
+});

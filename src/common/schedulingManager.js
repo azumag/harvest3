@@ -226,8 +226,8 @@ class SchedulingManager {
 
     // 毎時0分の堅牢残高チェック
     this.scheduleHourlyTask('robust-balance-check', async () => {
-      const { executeRobustBalanceCheck } = require('../common/balanceChecker');
-      await executeRobustBalanceCheck();
+      const { checkAllExchangeBalances } = require('../common/balanceChecker');
+      await checkAllExchangeBalances();
     }, {
       description: '堅牢残高整合性チェック（毎時0分実行）'
     });

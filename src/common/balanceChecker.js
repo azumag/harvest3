@@ -171,6 +171,8 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     const discrepancies = [];
     const processedCurrencies = new Set(); // 重複処理防止用
 
+    logger.debug(`残高比較対象通貨 (${exchangeId}): ${allCurrencies.length}通貨 - ${allCurrencies.join(', ')}`);
+
     for (const currency of allCurrencies) {
       // JPYは残高チェックから除外
       if (currency === 'JPY') {
@@ -179,7 +181,7 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
 
       // 重複処理の防止
       if (processedCurrencies.has(currency)) {
-        logger.warn(`通貨の重複処理を検出しスキップ: ${currency}`);
+        logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency}`);
         continue;
       }
       processedCurrencies.add(currency);
@@ -202,30 +204,52 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
         // discrepancies配列での重複チェック（追加の安全措置）
         const existingDiscrepancy = discrepancies.find(disc => disc.currency === currency);
         if (existingDiscrepancy) {
-          logger.warn(`discrepancies配列で重複検出しスキップ: ${currency}`);
+          logger.warn(`discrepancies配列で重複検出しスキップ (${exchangeId}): ${currency} - 既存エントリ: ${JSON.stringify(existingDiscrepancy)}`);
           continue;
         }
 
-        discrepancies.push({
+        const discrepancyEntry = {
           currency,
           exchangeAmount,
           botAmount,
           difference,
-          discrepancyPercent: Math.round(discrepancyPercent * 100) / 100
-        });
+          discrepancyPercent: Math.round(discrepancyPercent * 100) / 100,
+          timestamp: Date.now(),
+          exchangeId
+        };
+        
+        discrepancies.push(discrepancyEntry);
+        logger.debug(`不整合エントリ追加 (${exchangeId}): ${currency} - 差異=${difference}`);
       }
     }
 
     // 不整合があればDiscordに通知
     if (discrepancies.length > 0) {
-      const message = createDiscrepancyMessage(exchangeId, discrepancies);
+      // 最終的な重複チェック（念のため）
+      const uniqueDiscrepancies = [];
+      const seenCurrencies = new Set();
+      
+      for (const disc of discrepancies) {
+        if (!seenCurrencies.has(disc.currency)) {
+          uniqueDiscrepancies.push(disc);
+          seenCurrencies.add(disc.currency);
+        } else {
+          logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency}`);
+        }
+      }
+      
+      const message = createDiscrepancyMessage(exchangeId, uniqueDiscrepancies);
       await postOrderToDiscord(message);
       
-      // 不整合の詳細をログに出力 (Issue #984: 重複スケジューリング修正済み)
-      logger.error(`残高不整合検出: ${exchangeId} (${discrepancies.length}件の不整合)`);
-      discrepancies.forEach((disc, index) => {
+      // 不整合の詳細をログに出力 (Issue #983: 重複ログ修正済み)
+      logger.error(`残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の不整合)`);
+      uniqueDiscrepancies.forEach((disc, index) => {
         logger.error(`  [${index + 1}] ${disc.currency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)`);
       });
+      
+      // 元の配列を修正されたものに置き換え
+      discrepancies.length = 0;
+      discrepancies.push(...uniqueDiscrepancies);
       
       // デバッグ用の詳細データ（JSONとして安全に出力）
       try {
