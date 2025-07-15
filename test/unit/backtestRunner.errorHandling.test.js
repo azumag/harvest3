@@ -34,8 +34,13 @@ describe('BacktestRunner Error Handling', () => {
         global.postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
       }
       
-      // プロセスを終了せず、エラーログを出力して継続
-      console.log('エラーが発生しましたが、プロセスを継続します...');
+      // 重要な未処理エラーの場合は終了、それ以外は継続
+      if (reason?.code === 'ECONNREFUSED' || reason?.code === 'EPIPE') {
+        console.log('重要なエラーが発生しました。プロセスを終了します。');
+        process.exit(1);
+      } else {
+        console.log('エラーが発生しましたが、プロセスを継続します...');
+      }
     });
 
     process.on('uncaughtException', (error) => {
@@ -47,8 +52,13 @@ describe('BacktestRunner Error Handling', () => {
         global.postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
       }
       
-      // プロセスを終了せず、エラーログを出力して継続
-      console.log('例外が発生しましたが、プロセスを継続します...');
+      // 重要な例外の場合は終了
+      if (error.code === 'ECONNREFUSED' || error.code === 'EPIPE' || error.name === 'ReferenceError') {
+        console.log('重要な例外が発生しました。プロセスを終了します。');
+        process.exit(1);
+      } else {
+        console.log('例外が発生しましたが、プロセスを継続します...');
+      }
     });
   });
 
@@ -112,6 +122,34 @@ describe('BacktestRunner Error Handling', () => {
       expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
+
+    test('ECONNREFUSED エラーの場合はプロセスを終了する', async () => {
+      const testError = new Error('Connection refused');
+      testError.code = 'ECONNREFUSED';
+      const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
+
+      process.emit('unhandledRejection', testError, testPromise);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
+      expect(console.log).toHaveBeenCalledWith('重要なエラーが発生しました。プロセスを終了します。');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+
+    test('EPIPE エラーの場合はプロセスを終了する', async () => {
+      const testError = new Error('Broken pipe');
+      testError.code = 'EPIPE';
+      const testPromise = Promise.reject(testError).catch(() => {}); // Jestによる検出を防ぐ
+
+      process.emit('unhandledRejection', testError, testPromise);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
+      expect(console.log).toHaveBeenCalledWith('重要なエラーが発生しました。プロセスを終了します。');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
   });
 
   describe('uncaughtException エラーハンドラー', () => {
@@ -138,6 +176,44 @@ describe('BacktestRunner Error Handling', () => {
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト例外: Test exception for Discord');
       expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
+    });
+
+    test('ECONNREFUSED エラーの場合はプロセスを終了する', async () => {
+      const testError = new Error('Connection refused');
+      testError.code = 'ECONNREFUSED';
+
+      process.emit('uncaughtException', testError);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(console.error).toHaveBeenCalledWith('未捕捉の例外が発生しました:', testError);
+      expect(console.log).toHaveBeenCalledWith('重要な例外が発生しました。プロセスを終了します。');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+
+    test('EPIPE エラーの場合はプロセスを終了する', async () => {
+      const testError = new Error('Broken pipe');
+      testError.code = 'EPIPE';
+
+      process.emit('uncaughtException', testError);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(console.error).toHaveBeenCalledWith('未捕捉の例外が発生しました:', testError);
+      expect(console.log).toHaveBeenCalledWith('重要な例外が発生しました。プロセスを終了します。');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+
+    test('ReferenceError の場合はプロセスを終了する', async () => {
+      const testError = new ReferenceError('Undefined variable');
+
+      process.emit('uncaughtException', testError);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(console.error).toHaveBeenCalledWith('未捕捉の例外が発生しました:', testError);
+      expect(console.log).toHaveBeenCalledWith('重要な例外が発生しました。プロセスを終了します。');
+      expect(process.exit).toHaveBeenCalledWith(1);
     });
   });
 

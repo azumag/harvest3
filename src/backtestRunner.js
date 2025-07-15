@@ -275,7 +275,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     }
   } finally {
     // バックテスト終了後の処理
-    process.exit(0);
+    console.log('バックテスト処理が完了しました。');
   }
 }
 
@@ -1314,8 +1314,13 @@ process.on('unhandledRejection', (reason, promise) => {
     postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
   }
   
-  // プロセスを終了せず、エラーログを出力して継続
-  console.log('エラーが発生しましたが、プロセスを継続します...');
+  // 重要な未処理エラーの場合は終了、それ以外は継続
+  if (reason?.code === 'ECONNREFUSED' || reason?.code === 'EPIPE') {
+    console.log('重要なエラーが発生しました。プロセスを終了します。');
+    process.exit(1);
+  } else {
+    console.log('エラーが発生しましたが、プロセスを継続します...');
+  }
 });
 
 process.on('uncaughtException', (error) => {
@@ -1327,8 +1332,13 @@ process.on('uncaughtException', (error) => {
     postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
   }
   
-  // プロセスを終了せず、エラーログを出力して継続
-  console.log('例外が発生しましたが、プロセスを継続します...');
+  // 重要な例外の場合は終了
+  if (error.code === 'ECONNREFUSED' || error.code === 'EPIPE' || error.name === 'ReferenceError') {
+    console.log('重要な例外が発生しました。プロセスを終了します。');
+    process.exit(1);
+  } else {
+    console.log('例外が発生しましたが、プロセスを継続します...');
+  }
 });
 
 // 設定の外部化
@@ -1418,11 +1428,13 @@ async function main() {
   process.on('SIGTERM', () => {
     console.log('SIGTERM受信: グレースフルシャットダウンを開始します');
     isShuttingDown = true;
+    healthStatus.status = 'shutting-down';
   });
   
   process.on('SIGINT', () => {
     console.log('SIGINT受信: グレースフルシャットダウンを開始します');
     isShuttingDown = true;
+    healthStatus.status = 'shutting-down';
   });
   
   while (!isShuttingDown) {
@@ -1493,6 +1505,9 @@ async function main() {
   // 終了前のメモリ使用量レポート
   const finalMemory = checkMemoryUsage();
   logWithLevel('info', `終了時メモリ使用量: ${Math.round(finalMemory.heapUsed / 1024 / 1024)}MB`);
+  
+  // 正常終了
+  process.exit(0);
 }
 
 // バックテストを開始（テストモード以外の場合のみ）
