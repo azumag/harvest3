@@ -8,12 +8,14 @@ const BALANCE_CHECKER_CONFIG = {
   thresholds: {
     significantBalance: 0.00001,     // 有意な残高とする最小値
     highDiscrepancyPercent: 10,      // 高度不整合とする閾値（パーセント）
-    balanceComparisonTolerance: 1,   // 残高比較の許容誤差（パーセント、デフォルト1%）
+    balanceComparisonTolerance: 2,   // 残高比較の許容誤差（パーセント、デフォルト2%）
     externalTradeThreshold: 50,      // 外部取引と判定する閾値（パーセント）
     // 通貨別の許容誤差設定（パーセント）
     currencySpecificTolerance: {
-      // 例: BTC: 2,  // BTCは2%まで許容
-      // 例: ETH: 1.5, // ETHは1.5%まで許容
+      // 例: BTC: 0.5,    // 高精度通貨（手数料が低い）
+      // 例: ETH: 1.0,    // 主要アルトコイン
+      // 例: MANA: 5.0,   // ボラティリティ高い通貨
+      // 例: SHIB: 10.0,  // 極小価格通貨（精度の問題）
     }
   },
 

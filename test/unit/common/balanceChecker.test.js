@@ -60,7 +60,7 @@ jest.mock('../../../src/common/balanceCheckerConfig', () => ({
     thresholds: {
       significantBalance: 0.0001,
       highDiscrepancyPercent: 10,
-      balanceComparisonTolerance: 1,
+      balanceComparisonTolerance: 2,
       externalTradeThreshold: 50,
       currencySpecificTolerance: {}
     },

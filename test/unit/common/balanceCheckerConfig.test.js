@@ -36,7 +36,7 @@ describe('残高チェッカー設定のテスト', () => {
     it('デフォルト設定が正しく定義されている', () => {
       expect(BALANCE_CHECKER_CONFIG.thresholds.significantBalance).toBe(0.00001);
       expect(BALANCE_CHECKER_CONFIG.thresholds.highDiscrepancyPercent).toBe(10);
-      expect(BALANCE_CHECKER_CONFIG.thresholds.balanceComparisonTolerance).toBe(1);
+      expect(BALANCE_CHECKER_CONFIG.thresholds.balanceComparisonTolerance).toBe(2);
       expect(BALANCE_CHECKER_CONFIG.thresholds.externalTradeThreshold).toBe(50);
       expect(BALANCE_CHECKER_CONFIG.thresholds.currencySpecificTolerance).toEqual({});
 
@@ -130,7 +130,7 @@ describe('残高チェッカー設定のテスト', () => {
         thresholds: {
           significantBalance: 0.00001,
           highDiscrepancyPercent: 10,
-          balanceComparisonTolerance: 1,
+          balanceComparisonTolerance: 2,
           externalTradeThreshold: 50
         },
         distributedLock: {
