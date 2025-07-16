@@ -17,9 +17,23 @@ DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通�
 STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
+# 重複起動メッセージ防止（シンプルな環境変数ベース）
+STARTUP_MESSAGE_SENT=""
+
 # ログ関数
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
+    # stdout の即座フラッシュを保証
+    exec 1>&1
+}
+
+# 重複起動ログ防止関数（シンプル版）
+log_startup_message() {
+    local message="$1"
+    if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then
+        STARTUP_MESSAGE_SENT="$message"
+        log "$message"
+    fi
 }
 
 # 起動ロック関数
@@ -255,86 +269,84 @@ pre_startup_checks() {
     log "Pre-startup checks completed successfully"
 }
 
-# データベース接続チェック（強化版）
+# データベース接続チェック関数（共通化）
+check_database_connection() {
+    local service_name="$1"
+    local check_command="$2"
+    local max_retries=3
+    local retry_delay=5
+    
+    log "Testing $service_name connection with retry..."
+    local retry=0
+    while [ $retry -lt $max_retries ]; do
+        if eval "$check_command" 2>/dev/null; then
+            log "$service_name connection verified successfully (attempt $((retry + 1)))"
+            return 0
+        else
+            retry=$((retry + 1))
+            if [ $retry -lt $max_retries ]; then
+                log "$service_name connection failed (attempt $retry/$max_retries), retrying in ${retry_delay}s..."
+                sleep $retry_delay
+            else
+                log "WARNING: $service_name connection failed after $max_retries attempts (service will retry later)"
+                return 1
+            fi
+        fi
+    done
+}
+
+# データベース接続チェック（統合版）
 check_database_connections() {
     log "Checking database connections with retry logic..."
     
     local redis_failed=false
     local mongo_failed=false
-    local max_retries=3
-    local retry_delay=5
     
-    # Redis接続チェック（リトライ付き）
-    log "Testing Redis connection with retry..."
-    local redis_retry=0
-    while [ $redis_retry -lt $max_retries ]; do
-        if node -e "
-            const redis = require('redis');
-            const client = redis.createClient({url: process.env.REDIS_URL});
-            client.connect()
-                .then(() => { 
-                    console.log('Redis connection OK'); 
-                    return client.quit();
-                })
-                .then(() => process.exit(0))
-                .catch(err => { 
-                    console.error('Redis connection failed:', err.message); 
-                    process.exit(1); 
-                });
-            setTimeout(() => { 
-                console.error('Redis connection timeout'); 
+    # Redis接続チェック
+    local redis_check="node -e '
+        const redis = require(\"redis\");
+        const client = redis.createClient({url: process.env.REDIS_URL});
+        client.connect()
+            .then(() => { 
+                console.log(\"Redis connection OK\"); 
+                return client.quit();
+            })
+            .then(() => process.exit(0))
+            .catch(err => { 
+                console.error(\"Redis connection failed:\", err.message); 
                 process.exit(1); 
-            }, ${DATABASE_CONNECTION_TIMEOUT}000);
-        " 2>/dev/null; then
-            log "Redis connection verified successfully (attempt $((redis_retry + 1)))"
-            break
-        else
-            redis_retry=$((redis_retry + 1))
-            if [ $redis_retry -lt $max_retries ]; then
-                log "Redis connection failed (attempt $redis_retry/$max_retries), retrying in ${retry_delay}s..."
-                sleep $retry_delay
-            else
-                log "WARNING: Redis connection failed after $max_retries attempts (service will retry later)"
-                redis_failed=true
-            fi
-        fi
-    done
+            });
+        setTimeout(() => { 
+            console.error(\"Redis connection timeout\"); 
+            process.exit(1); 
+        }, ${DATABASE_CONNECTION_TIMEOUT}000);'"
     
-    # MongoDB接続チェック（リトライ付き）
-    log "Testing MongoDB connection with retry..."
-    local mongo_retry=0
-    while [ $mongo_retry -lt $max_retries ]; do
-        if node -e "
-            const { MongoClient } = require('mongodb');
-            const client = new MongoClient(process.env.MONGO_URL);
-            client.connect()
-                .then(() => { 
-                    console.log('MongoDB connection OK'); 
-                    return client.close(); 
-                })
-                .then(() => process.exit(0))
-                .catch(err => { 
-                    console.error('MongoDB connection failed:', err.message); 
-                    process.exit(1); 
-                });
-            setTimeout(() => { 
-                console.error('MongoDB connection timeout'); 
+    if ! check_database_connection "Redis" "$redis_check"; then
+        redis_failed=true
+    fi
+    
+    # MongoDB接続チェック
+    local mongo_check="node -e '
+        const { MongoClient } = require(\"mongodb\");
+        const client = new MongoClient(process.env.MONGO_URL);
+        client.connect()
+            .then(() => { 
+                console.log(\"MongoDB connection OK\"); 
+                return client.close(); 
+            })
+            .then(() => process.exit(0))
+            .catch(err => { 
+                console.error(\"MongoDB connection failed:\", err.message); 
                 process.exit(1); 
-            }, ${DATABASE_CONNECTION_TIMEOUT}000);
-        " 2>/dev/null; then
-            log "MongoDB connection verified successfully (attempt $((mongo_retry + 1)))"
-            break
-        else
-            mongo_retry=$((mongo_retry + 1))
-            if [ $mongo_retry -lt $max_retries ]; then
-                log "MongoDB connection failed (attempt $mongo_retry/$max_retries), retrying in ${retry_delay}s..."
-                sleep $retry_delay
-            else
-                log "WARNING: MongoDB connection failed after $max_retries attempts (service will retry later)"
-                mongo_failed=true
-            fi
-        fi
-    done
+            });
+        setTimeout(() => { 
+            console.error(\"MongoDB connection timeout\"); 
+            process.exit(1); 
+        }, ${DATABASE_CONNECTION_TIMEOUT}000);'"
+    
+    if ! check_database_connection "MongoDB" "$mongo_check"; then
+        mongo_failed=true
+    fi
     
     # 両方のデータベースが失敗した場合のみエラー終了
     if [ "$redis_failed" = true ] && [ "$mongo_failed" = true ]; then
@@ -576,6 +588,13 @@ trap cleanup SIGTERM SIGINT
 
 # メイン実行
 main() {
+    # 起動診断情報の記録
+    log "=== 起動診断情報 ==="
+    log "プロセス ID: $$"
+    log "起動時刻: $(date '+%Y-%m-%d %H:%M:%S')"
+    log "作業ディレクトリ: $(pwd)"
+    log "バックテストモード: ${BACKTEST_MODE:-false}"
+    
     # 起動ロックの取得（重複起動防止）
     if ! acquire_startup_lock; then
         log "ERROR: Failed to acquire startup lock"
@@ -586,7 +605,7 @@ main() {
     trap release_startup_lock EXIT
     
     if [ "$BACKTEST_MODE" = "true" ]; then
-        log "Starting backtest container with enhanced error handling"
+        log_startup_message "Starting backtest container with enhanced error handling"
         
         # backtest用の段階的起動プロセス
         pre_startup_checks
@@ -596,7 +615,7 @@ main() {
         log "Pre-startup checks completed for backtest mode, executing command: $*"
         exec "$@"
     else
-        log "Starting strategy-runner container with enhanced error handling"
+        log_startup_message "Starting strategy-runner container with enhanced error handling"
         
         # 初期診断の実行
         run_diagnostics
