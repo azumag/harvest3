@@ -643,8 +643,19 @@ async function getBotManagedBalance(includeDiagnostics = false) {
     // Redis接続状態を確認し、必要に応じて初期化
     await ensureRedisConnection();
 
-    // Redisから全ポジションを取得
-    const allPositions = await getAllPositionsRedis();
+    // Redisから全ポジションを取得（エラーハンドリング強化）
+    let allPositions;
+    try {
+      allPositions = await getAllPositionsRedis();
+    } catch (redisError) {
+      // Redis接続エラーを詳細に処理
+      if (redisError.message.includes('Redis接続') || redisError.message.includes('Connection')) {
+        logger.error('Redis接続エラーが発生しました:', redisError.message);
+        throw new Error(`Redis接続エラー: ${redisError.message}`);
+      }
+      // その他のエラーは再投げ
+      throw redisError;
+    }
 
     // Redis接続問題でデータが取得できない場合のチェック
     if (!Array.isArray(allPositions)) {
@@ -653,13 +664,6 @@ async function getBotManagedBalance(includeDiagnostics = false) {
 
     // ポジションデータが空の場合の詳細ログ
     if (allPositions.length === 0) {
-      const redisClient = getRedisClient();
-      const isConnected = redisClient && redisClient.isReady;
-      
-      if (!isConnected) {
-        throw new Error('Redis接続が確立されていないため、ポジションデータを取得できません');
-      }
-      
       // Redis接続はあるがデータが空の場合は正常な状態として扱う
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
@@ -822,6 +826,15 @@ async function getBotManagedBalance(includeDiagnostics = false) {
     const redisClient = getRedisClient();
     const redisStatus = redisClient ? (redisClient.isReady ? '接続済み' : '未接続') : 'null';
     logger.error(`Redis状態: ${redisStatus}`);
+    
+    // Redis接続エラーの場合は特別な処理
+    if (error.message.includes('Redis接続') || error.message.includes('Connection')) {
+      // 接続エラーの詳細情報を含めたエラーメッセージ
+      const enhancedError = new Error(`Redis接続問題により残高取得に失敗しました: ${error.message}`);
+      enhancedError.isRedisConnectionError = true;
+      enhancedError.redisStatus = redisStatus;
+      throw enhancedError;
+    }
     
     throw error;
   }
@@ -1121,7 +1134,19 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     const exchangeBalance = await getExchangeBalance(exchangeId);
 
     // Bot管理残高を取得（診断情報付き）
-    const botBalanceData = await getBotManagedBalance(true);
+    let botBalanceData;
+    try {
+      botBalanceData = await getBotManagedBalance(true);
+    } catch (botBalanceError) {
+      if (botBalanceError.isRedisConnectionError) {
+        // Redis接続エラーの場合は特別な処理
+        const errorMessage = `🔌 Redis接続エラーによりBot管理残高の取得に失敗 (${exchangeId}): ${botBalanceError.message}\n⚠️ strategy-runnerサービスとRedisサービス間の接続を確認してください`;
+        logger.error(errorMessage);
+        await postErrorToDiscord(errorMessage);
+        throw botBalanceError;
+      }
+      throw botBalanceError;
+    }
     const botBalance = botBalanceData.balances;
 
     // 診断情報を収集（強化版）
