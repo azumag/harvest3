@@ -1242,6 +1242,93 @@ describe('Issue #970: ログ出力改善のテスト', () => {
   });
 });
 
+// Issue #2495: 外部取引による高い残高差異のログレベル修正テスト
+describe('Issue #2495: 外部取引による高い残高差異のログレベル修正テスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('98-100%の外部取引差異がINFOレベルで記録される', async () => {
+    // Issue #2495の実際のケースをシミュレート
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        AVAX: 0.0141, 
+        AXS: 0.1488, 
+        FLR: 235.7937, 
+        SAND: 16.288, 
+        GALA: 273.3722, 
+        CHZ: 14.0043, 
+        APE: 0.9309, 
+        OAS: 921.0375, 
+        MANA: 4.4588 
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'AVAX/JPY', side: 'buy', amount: 0.0002, status: 'open' },
+      { exchange: 'bitbank', symbol: 'AXS/JPY', side: 'buy', amount: 0.0021, status: 'open' },
+      { exchange: 'bitbank', symbol: 'FLR/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'SAND/JPY', side: 'buy', amount: 0.0032, status: 'open' },
+      { exchange: 'bitbank', symbol: 'GALA/JPY', side: 'buy', amount: 0.0073, status: 'open' },
+      { exchange: 'bitbank', symbol: 'CHZ/JPY', side: 'buy', amount: 0.0999, status: 'open' },
+      { exchange: 'bitbank', symbol: 'APE/JPY', side: 'buy', amount: 0.0035, status: 'open' },
+      { exchange: 'bitbank', symbol: 'OAS/JPY', side: 'buy', amount: 0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.009, status: 'open' }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 全て90%以上の外部取引差異なので、INFOレベルで記録されることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+    );
+
+    // MANAの具体的なログを確認（99.8%の差異）
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringMatching(/MANA: 取引所=4\.4588, Bot=0\.009, 差異=4\.4498.*99\.8%.*外部取引の可能性/)
+    );
+
+    // FLRの具体的なログを確認（100%の差異）
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringMatching(/FLR: 取引所=235\.7937, Bot=0, 差異=235\.7937.*100%.*外部取引の可能性/)
+    );
+
+    // ERRORレベルのログが出力されていないことを確認
+    expect(mockLoggerInstance.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出')
+    );
+  });
+
+  it('90%以上の外部取引が1つでも存在すればINFOレベルになる', async () => {
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        BTC: 1.0,      // 10%差異（軽微）
+        ETH: 5.0,      // 60%差異（外部取引の可能性）
+        MANA: 10.0     // 95%差異（明らかな外部取引）
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.9, status: 'open' },
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 2.0, status: 'open' },
+      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.5, status: 'open' }
+    ]);
+
+    await compareBalances('bitbank');
+
+    // 90%以上の外部取引が1つでも存在するので、INFOレベルで記録される
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+    );
+
+    // 条件3aが適用されることを確認
+    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+      expect.stringMatching(/条件3a適用 - 高度外部取引数=1件/)
+    );
+  });
+});
+
 // Issue #1691: 未知のステータス値への対応テスト
 describe('Issue #1691: 未知のステータス値への対応テスト', () => {
   beforeEach(() => {

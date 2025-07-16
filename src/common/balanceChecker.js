@@ -740,6 +740,7 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   // Issue #2441修正: デバッグ情報を追加し、ログレベル判定ロジックを強化
   logger.debug(`ログレベル判定デバッグ (${exchangeId}): 総不整合=${uniqueDiscrepancies.length}, 外部取引=${externalTradeDiscrepancies.length}, 高度外部取引=${veryHighExternalTradeDiscrepancies.length}, 非外部高度不整合=${nonExternalHighDiscrepancies.length}`);
   
+  // Issue #2495修正: 外部取引の判定を強化し、90%以上の差異を確実にINFOレベルで記録
   // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
   if (veryHighExternalTradeDiscrepancies.length > 0 && 
       veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length) {
@@ -755,12 +756,16 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevelDecision(exchangeId, '条件2適用 - 全て外部取引', 'INFO');
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
     // 一部が明らかに外部取引（90%以上）の場合
-    // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
+    // Issue #2495修正: 90%以上の外部取引が存在する場合は積極的にINFOレベルにする
     const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
+    // 90%以上の外部取引が1つでも存在すれば、全体をINFOレベルとして扱う
+    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD || 
+        veryHighExternalTradeDiscrepancies.length >= 1) {
       logLevel = 'info';
-      severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件3a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+      severityText = veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length
+        ? '外部取引による残高差異'
+        : '外部取引による残高差異（一部混在）';
+      logLevelDecision(exchangeId, `条件3a適用 - 高度外部取引数=${veryHighExternalTradeDiscrepancies.length}件`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
