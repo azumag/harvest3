@@ -758,9 +758,8 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     // 一部が明らかに外部取引（90%以上）の場合
     // Issue #2495修正: 90%以上の外部取引が存在する場合は積極的にINFOレベルにする
     const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    // 90%以上の外部取引が1つでも存在すれば、全体をINFOレベルとして扱う
-    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD || 
-        veryHighExternalTradeDiscrepancies.length >= 1) {
+    // 90%以上の外部取引の比率が閾値以上の場合、全体をINFOレベルとして扱う
+    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length
         ? '外部取引による残高差異'
