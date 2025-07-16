@@ -193,7 +193,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
     );
   });
 
-  it('90%以上の外部取引が過半数未満の場合、WARNレベルで出力される', async () => {
+  it('90%以上の外部取引が1つでも存在すればINFOレベルになる', async () => {
     config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
       total: {
         BTC: 1.0,    // 外部取引（95%差異）
@@ -210,8 +210,8 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     await compareBalances('bitbank');
 
-    // 90%以上の外部取引が過半数未満（1/3）なので、WARNレベルで出力される
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+    // Issue #2495修正: 90%以上の外部取引が1つでも存在すればINFOレベルになる
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
       expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異（一部混在）/)
     );
 
@@ -265,7 +265,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
     );
   });
 
-  it('境界値テスト: 外部取引の比率が50%未満の場合、WARNレベルで出力される', async () => {
+  it('境界値テスト: 90%以上の外部取引が1つでも存在すればINFOレベルになる', async () => {
     config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
       total: {
         BTC: 1.0,    // 外部取引（95%差異）
@@ -284,8 +284,8 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     await compareBalances('bitbank');
 
-    // 90%以上の外部取引が25%（1/4）なので、WARNレベルで出力される
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+    // Issue #2495修正: 90%以上の外部取引が1つでも存在すればINFOレベルになる
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
       expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異（一部混在）/)
     );
   });
