@@ -706,26 +706,25 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   // 不整合の重要度に応じてログレベルを決定
   const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
   const externalTradeThreshold = BALANCE_CONFIG.thresholds.externalTradeThreshold;
+  const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
   
-  const highDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.discrepancyPercent >= highDiscrepancyThreshold
-  );
   const externalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
     disc.isExternalTradeSuspected
+  );
+  const veryHighExternalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.discrepancyPercent >= veryHighThreshold && disc.isExternalTradeSuspected
+  );
+  // 外部取引ではない高度不整合のみを抽出（外部取引要因を除外）
+  const nonExternalHighDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.discrepancyPercent >= highDiscrepancyThreshold && !disc.isExternalTradeSuspected
   );
 
   let logLevel, severityText;
   
-  // 外部取引の可能性が非常に高い差異をチェック
-  const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
-  const veryHighExternalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.discrepancyPercent >= veryHighThreshold && disc.isExternalTradeSuspected
-  );
-  
-  // 改善されたログレベル判定ロジック
+  // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
   if (veryHighExternalTradeDiscrepancies.length > 0 && 
       veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length) {
-    // 全ての不整合が明らかに外部取引（閾値以上）の場合
+    // 全ての不整合が明らかに外部取引（90%以上）の場合
     logLevel = 'info';
     severityText = '外部取引による残高差異';
   } else if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
@@ -734,23 +733,25 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevel = 'info';
     severityText = '外部取引による残高差異';
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
-    // 一部が明らかに外部取引（閾値以上）の場合
+    // 一部が明らかに外部取引（90%以上）の場合 - WARNレベルに統一
     logLevel = 'warn';
     severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
       ? '外部取引による残高差異（一部混在）'
       : '混合不整合（明らかな外部取引含む）';
-  } else if (highDiscrepancies.length > 0) {
-    // 高度不整合だが外部取引の可能性が低い場合
-    logLevel = 'error';
-    severityText = externalTradeDiscrepancies.length > 0 
-      ? '高度不整合（外部取引の可能性含む）' 
-      : '高度不整合';
-  } else {
-    // 軽微な不整合
+  } else if (externalTradeDiscrepancies.length > 0) {
+    // 一部が外部取引の可能性（50%以上）だが90%未満の場合 - WARNレベル
     logLevel = 'warn';
-    severityText = externalTradeDiscrepancies.length > 0 
-      ? '軽微な不整合（外部取引の可能性）' 
-      : '軽微な不整合';
+    severityText = nonExternalHighDiscrepancies.length > 0 
+      ? '混合不整合（外部取引と高度不整合）'
+      : '軽微な不整合（外部取引の可能性）';
+  } else if (nonExternalHighDiscrepancies.length > 0) {
+    // 外部取引ではない高度不整合のみの場合のみERRORレベル
+    logLevel = 'error';
+    severityText = '高度不整合';
+  } else {
+    // 軽微な不整合のみ
+    logLevel = 'warn';
+    severityText = '軽微な不整合';
   }
   
   const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
