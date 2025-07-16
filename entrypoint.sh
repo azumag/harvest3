@@ -14,10 +14,84 @@ API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}  # APIチェック間隔（秒）
 PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒）
 DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
 DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
+STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
+STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
 # ログ関数
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
+}
+
+# 起動ロック関数
+acquire_startup_lock() {
+    local lock_file="$STARTUP_LOCK_FILE"
+    local timeout="$STARTUP_LOCK_TIMEOUT"
+    local waited=0
+    
+    log "Acquiring startup lock..."
+    
+    # 既存のロックファイルの検証
+    if [ -f "$lock_file" ]; then
+        local lock_pid=$(cat "$lock_file" 2>/dev/null)
+        
+        # PIDが有効で、プロセスが実行中の場合は待機
+        if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+            log "Another startup process is running (PID: $lock_pid), waiting..."
+            
+            # ロックが解放されるまで待機
+            while [ -f "$lock_file" ] && [ $waited -lt $timeout ]; do
+                sleep 1
+                waited=$((waited + 1))
+                
+                # ロックプロセスが終了した場合は古いロックファイルを削除
+                if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+                    log "Lock process (PID: $lock_pid) has exited, removing stale lock"
+                    rm -f "$lock_file"
+                    break
+                fi
+            done
+            
+            # タイムアウトした場合の処理
+            if [ $waited -ge $timeout ]; then
+                log "ERROR: Startup lock acquisition timed out after ${timeout}s"
+                log "Removing potentially stale lock file"
+                rm -f "$lock_file"
+            fi
+        else
+            # 古いロックファイルを削除
+            log "Removing stale lock file (PID: $lock_pid not running)"
+            rm -f "$lock_file"
+        fi
+    fi
+    
+    # ロックファイルを作成
+    echo "$$" > "$lock_file"
+    
+    # ロックファイルの作成を確認
+    if [ ! -f "$lock_file" ] || [ "$(cat "$lock_file" 2>/dev/null)" != "$$" ]; then
+        log "ERROR: Failed to create startup lock file"
+        return 1
+    fi
+    
+    log "Startup lock acquired successfully (PID: $$)"
+    return 0
+}
+
+# 起動ロック解放関数
+release_startup_lock() {
+    local lock_file="$STARTUP_LOCK_FILE"
+    
+    if [ -f "$lock_file" ]; then
+        local lock_pid=$(cat "$lock_file" 2>/dev/null)
+        
+        # 自分のPIDと一致する場合のみ削除
+        if [ "$lock_pid" = "$$" ]; then
+            rm -f "$lock_file"
+            log "Startup lock released"
+        else
+            log "WARNING: Cannot release lock owned by PID: $lock_pid (current: $$)"
+        fi
+    fi
 }
 
 # Discord通知関数
@@ -414,6 +488,9 @@ cleanup() {
         fi
     fi
     
+    # 起動ロックの解放
+    release_startup_lock
+    
     log "Graceful shutdown completed"
     exit 0
 }
@@ -499,6 +576,15 @@ trap cleanup SIGTERM SIGINT
 
 # メイン実行
 main() {
+    # 起動ロックの取得（重複起動防止）
+    if ! acquire_startup_lock; then
+        log "ERROR: Failed to acquire startup lock"
+        exit 1
+    fi
+    
+    # ロック解放のための終了時処理を設定
+    trap release_startup_lock EXIT
+    
     if [ "$BACKTEST_MODE" = "true" ]; then
         log "Starting backtest container with enhanced error handling"
         
