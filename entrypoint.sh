@@ -50,6 +50,7 @@ log() {
 }
 
 # 重複起動ログ防止関数（atomic ファイルベース実装）
+# レースコンディション対策強化版
 log_startup_message() {
     local message="$1"
     local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
