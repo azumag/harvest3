@@ -195,6 +195,114 @@ async function ensureRedisConnection() {
 }
 
 /**
+ * 分散ロックを取得する
+ * @param {string} lockKey - ロックキー
+ * @param {number} ttl - TTL（ミリ秒）
+ * @returns {Promise<string|null>} ロックが取得できた場合はロックID、失敗した場合はnull
+ */
+async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedLock.defaultTtl) {
+  try {
+    await ensureRedisConnection();
+    const redisClient = getRedisClient();
+    
+    if (!redisClient || !redisClient.isReady) {
+      throw new Error('Redis接続が利用できません');
+    }
+    
+    const lockId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const lockValue = JSON.stringify({
+      lockId,
+      acquiredAt: Date.now(),
+      ttl,
+      processId: process.pid
+    });
+    
+    // SET NX EX を使用してアトミックにロックを取得
+    const result = await redisClient.set(lockKey, lockValue, 'PX', ttl, 'NX');
+    
+    if (result === 'OK') {
+      logger.debug(`分散ロック取得成功: ${lockKey} (ID: ${lockId})`);
+      return lockId;
+    } else {
+      logger.debug(`分散ロック取得失敗: ${lockKey} (既に取得済み)`);
+      return null;
+    }
+  } catch (error) {
+    logger.error(`分散ロック取得エラー: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * 分散ロックを解放する
+ * @param {string} lockKey - ロックキー
+ * @param {string} lockId - ロックID
+ * @returns {Promise<boolean>} 解放に成功した場合はtrue
+ */
+async function releaseDistributedLock(lockKey, lockId) {
+  try {
+    await ensureRedisConnection();
+    const redisClient = getRedisClient();
+    
+    if (!redisClient || !redisClient.isReady) {
+      throw new Error('Redis接続が利用できません');
+    }
+    
+    // Lua スクリプトを使用してアトミックにロックを解放
+    const luaScript = `
+      local lockValue = redis.call('GET', KEYS[1])
+      if lockValue then
+        local lockData = cjson.decode(lockValue)
+        if lockData.lockId == ARGV[1] then
+          redis.call('DEL', KEYS[1])
+          return 1
+        end
+      end
+      return 0
+    `;
+    
+    const result = await redisClient.eval(luaScript, 1, lockKey, lockId);
+    
+    if (result === 1) {
+      logger.debug(`分散ロック解放成功: ${lockKey} (ID: ${lockId})`);
+      return true;
+    } else {
+      logger.debug(`分散ロック解放失敗: ${lockKey} (ID: ${lockId}) - ロックが存在しないか、IDが一致しません`);
+      return false;
+    }
+  } catch (error) {
+    logger.error(`分散ロック解放エラー: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * 分散ロックを使用して関数を実行する
+ * @param {string} lockKey - ロックキー
+ * @param {Function} func - 実行する関数
+ * @param {number} ttl - TTL（ミリ秒）
+ * @returns {Promise<any>} 関数の実行結果
+ */
+async function withDistributedLock(lockKey, func, ttl = BALANCE_CONFIG.distributedLock.defaultTtl) {
+  const lockId = await acquireDistributedLock(lockKey, ttl);
+  
+  if (!lockId) {
+    const message = `分散ロック取得失敗: ${lockKey} - 別のプロセスが実行中です`;
+    logger.warn(message);
+    throw new Error(message);
+  }
+  
+  try {
+    logger.debug(`分散ロック実行開始: ${lockKey} (ID: ${lockId})`);
+    const result = await func();
+    return result;
+  } finally {
+    await releaseDistributedLock(lockKey, lockId);
+    logger.debug(`分散ロック実行終了: ${lockKey} (ID: ${lockId})`);
+  }
+}
+
+/**
  * 取引所残高を取得する
  * @param {string} exchangeId - 取引所ID
  * @returns {Object} 取引所の残高情報
@@ -751,8 +859,8 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logger.debug(`不整合詳細 [${index + 1}] (${exchangeId}): ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}, 閾値=${externalTradeThreshold}%`);
   });
   
-  // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
-  // Issue #2465修正: 外部取引判定の優先順位を強化
+  // Issue #2462修正: 外部取引判定の優先順位を強化（より確実な判定）
+  // 全ての不整合が外部取引の可能性（50%以上）の場合を最優先でチェック
   if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
       externalTradeDiscrepancies.length > 0) {
     // 全ての不整合が外部取引の可能性（50%以上）の場合 - 最優先で判定
@@ -761,7 +869,6 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevelDecision(exchangeId, '条件1適用 - 全て外部取引', 'INFO');
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
     // 一部が明らかに外部取引（90%以上）の場合
-    // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
     const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
     if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
       logLevel = 'info';
@@ -776,7 +883,6 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     }
   } else if (externalTradeDiscrepancies.length > 0) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
-    // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
     const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
     if (externalRatio >= LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
       logLevel = 'info';
@@ -799,6 +905,17 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevel = 'warn';
     severityText = '軽微な不整合';
     logLevelDecision(exchangeId, '条件5適用 - 軽微な不整合のみ', 'WARN');
+  }
+  
+  // Issue #2462修正: 強制的な外部取引判定（追加の安全措置）
+  // 98%以上の差異が存在し、全て外部取引の可能性がある場合は強制的にINFOレベルに設定
+  const veryHighDiscrepancies = uniqueDiscrepancies.filter(disc => disc.discrepancyPercent >= 98);
+  if (veryHighDiscrepancies.length > 0 && 
+      veryHighDiscrepancies.every(disc => disc.isExternalTradeSuspected) &&
+      logLevel === 'error') {
+    logger.warn(`[Issue #2462] 98%以上の差異が全て外部取引の可能性なのにERRORレベル選択 -> INFOレベルに強制変更`);
+    logLevel = 'info';
+    severityText = '外部取引による残高差異';
   }
   
   // Issue #2441修正: 最終的なログレベル判定結果を強制的に記録
@@ -1092,33 +1209,42 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
  * 全取引所の残高チェックを実行
  */
 async function checkAllExchangeBalances() {
+  const lockKey = `${BALANCE_CONFIG.distributedLock.lockKeyPrefix}:all_exchanges`;
+  
   try {
-    logger.info('=== 全取引所残高チェック開始 ===');
+    return await withDistributedLock(lockKey, async () => {
+      logger.info('=== 全取引所残高チェック開始 ===');
 
-    const results = [];
-    const exchangeIds = Object.keys(config.exchanges);
+      const results = [];
+      const exchangeIds = Object.keys(config.exchanges);
 
-    for (const exchangeId of exchangeIds) {
-      try {
-        const result = await compareBalances(exchangeId);
-        results.push(result);
+      for (const exchangeId of exchangeIds) {
+        try {
+          const result = await compareBalances(exchangeId);
+          results.push(result);
 
-        // 各取引所チェック間の待機（設定から取得）
-        await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
-      } catch (error) {
-        logger.error(`${exchangeId} の残高チェックに失敗:`, error.message);
-        results.push({
-          exchangeId,
-          error: error.message,
-          isHealthy: false
-        });
+          // 各取引所チェック間の待機（設定から取得）
+          await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+        } catch (error) {
+          logger.error(`${exchangeId} の残高チェックに失敗:`, error.message);
+          results.push({
+            exchangeId,
+            error: error.message,
+            isHealthy: false
+          });
+        }
       }
-    }
 
-    logger.info('=== 全取引所残高チェック完了 ===');
-    return results;
+      logger.info('=== 全取引所残高チェック完了 ===');
+      return results;
+    });
 
   } catch (error) {
+    if (error.message.includes('分散ロック取得失敗')) {
+      logger.info('残高チェックは既に実行中です。スキップします。');
+      return [];
+    }
+    
     const errorMessage = `全取引所残高チェックエラー: ${error.message}`;
     logger.error(errorMessage);
     await postErrorToDiscord(errorMessage);
@@ -1153,5 +1279,9 @@ module.exports = {
   checkAllExchangeBalances,
   checkSingleExchange,
   // Redis接続管理
-  ensureRedisConnection
+  ensureRedisConnection,
+  // 分散ロック機能
+  acquireDistributedLock,
+  releaseDistributedLock,
+  withDistributedLock
 };
