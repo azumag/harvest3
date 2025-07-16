@@ -1719,6 +1719,100 @@ describe('Issue #2457: strategy-runnerサービスで例外が発生 - ログレ
   });
 });
 
+// Issue #2503: strategy-runnerサービスで例外が発生
+describe('Issue #2503: 外部取引判定の改善', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  it('大量の外部取引不整合でもERRORレベルにならない', async () => {
+    // 40件の外部取引不整合を模擬（XRP、LTC含む）
+    const mockBalances = {
+      XRP: 0.9271,
+      LTC: 0.0472,
+      BTC: 1.0,
+      ETH: 2.0,
+      ADA: 0.5,
+      DOT: 0.3,
+      // 追加の通貨を含む大量の外部取引不整合
+    };
+
+    const mockPositions = [
+      { exchange: 'bitbank', symbol: 'XRP/JPY', side: 'buy', amount: 0.0023, status: 'open' },  // 99.75%差異
+      { exchange: 'bitbank', symbol: 'LTC/JPY', side: 'buy', amount: 0, status: 'open' },       // 100%差異
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.01, status: 'open' },    // 99%差異
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 0.02, status: 'open' },    // 99%差異
+      { exchange: 'bitbank', symbol: 'ADA/JPY', side: 'buy', amount: 0.005, status: 'open' },   // 99%差異
+      { exchange: 'bitbank', symbol: 'DOT/JPY', side: 'buy', amount: 0.003, status: 'open' },   // 99%差異
+    ];
+
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: mockBalances
+    });
+
+    getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+    await compareBalances('bitbank');
+
+    // 全て外部取引（90%以上）のため ERROR レベルで出力されないことを確認
+    expect(mockLoggerInstance.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('残高不整合検出: bitbank')
+    );
+
+    // INFO レベルで出力されることを確認
+    expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+    );
+  });
+
+  it('ERRORレベル選択時の詳細検証ログが出力される', async () => {
+    // 外部取引ではない高度不整合を模擬（ERRORレベルを誘発）
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        BTC: 1.0,
+        ETH: 2.0
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.8, status: 'open' },  // 20%差異（非外部取引）
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 1.6, status: 'open' }   // 20%差異（非外部取引）
+    ]);
+
+    await compareBalances('bitbank');
+
+    // Issue #2503の詳細検証ログが出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/\[Issue #2503\] ERRORレベル選択時の詳細検証.*bitbank/)
+    );
+  });
+
+  it('外部取引ではない不整合の詳細ログが出力される', async () => {
+    // 外部取引ではない高度不整合を模擬（ERRORレベルを誘発）
+    config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+      total: { 
+        BTC: 1.0,
+        ETH: 2.0,
+        ADA: 0.5
+      }
+    });
+
+    getAllPositionsRedis.mockResolvedValue([
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.8, status: 'open' },  // 20%差異（非外部取引）
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 1.6, status: 'open' },  // 20%差異（非外部取引）
+      { exchange: 'bitbank', symbol: 'ADA/JPY', side: 'buy', amount: 0.4, status: 'open' }   // 20%差異（非外部取引）
+    ]);
+
+    await compareBalances('bitbank');
+
+    // Issue #2503の外部取引ではない不整合の詳細ログが出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/\[Issue #2503\] 外部取引ではない不整合の詳細.*bitbank.*3件/)
+    );
+  });
+});
+
 // Issue #2494: closedポジション診断機能のテスト
 describe('Issue #2494: closedポジション診断機能のテスト', () => {
   beforeEach(() => {

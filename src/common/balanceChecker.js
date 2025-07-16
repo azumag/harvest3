@@ -740,6 +740,11 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   // Issue #2441修正: デバッグ情報を追加し、ログレベル判定ロジックを強化
   logger.debug(`ログレベル判定デバッグ (${exchangeId}): 総不整合=${uniqueDiscrepancies.length}, 外部取引=${externalTradeDiscrepancies.length}, 高度外部取引=${veryHighExternalTradeDiscrepancies.length}, 非外部高度不整合=${nonExternalHighDiscrepancies.length}`);
   
+  // Issue #2503修正: 各不整合の詳細情報をログ出力
+  uniqueDiscrepancies.forEach((disc, index) => {
+    logger.debug(`不整合詳細 [${index + 1}] (${exchangeId}): ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}, 閾値=${externalTradeThreshold}%`);
+  });
+  
   // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
   if (veryHighExternalTradeDiscrepancies.length > 0 && 
       veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length) {
@@ -802,10 +807,26 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   if (logLevel === 'error') {
     const allExternalTrade = uniqueDiscrepancies.every(d => d.isExternalTradeSuspected);
     const allVeryHighExternalTrade = uniqueDiscrepancies.every(d => d.discrepancyPercent >= veryHighThreshold);
+    
+    // Issue #2503修正: 外部取引判定の詳細ログを追加
+    logger.warn(`[Issue #2503] ERRORレベル選択時の詳細検証 (${exchangeId}): 全て外部取引=${allExternalTrade}, 全て90%以上=${allVeryHighExternalTrade}`);
+    
     if (allExternalTrade && allVeryHighExternalTrade) {
       logger.warn(`[Issue #2441] 異常検出: 全て外部取引（90%以上）なのにERRORレベル選択 -> INFOレベルに強制変更`);
       logLevel = 'info';
       severityText = '外部取引による残高差異';
+    } else if (allExternalTrade) {
+      // Issue #2503修正: 全て外部取引の場合でも90%未満の場合はINFOレベルに変更
+      logger.warn(`[Issue #2503] 異常検出: 全て外部取引なのにERRORレベル選択 -> INFOレベルに強制変更`);
+      logLevel = 'info';
+      severityText = '外部取引による残高差異';
+    } else {
+      // Issue #2503修正: 外部取引ではない不整合の詳細を記録
+      const nonExternalDiscrepancies = uniqueDiscrepancies.filter(d => !d.isExternalTradeSuspected);
+      logger.warn(`[Issue #2503] 外部取引ではない不整合の詳細 (${exchangeId}): ${nonExternalDiscrepancies.length}件`);
+      nonExternalDiscrepancies.forEach((disc, index) => {
+        logger.warn(`[Issue #2503] 非外部取引不整合 [${index + 1}]: ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}`);
+      });
     }
   }
   
