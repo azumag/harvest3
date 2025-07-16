@@ -942,7 +942,8 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
     }
 
     // 差異の計算（浮動小数点精度問題の修正）
-    const difference = Math.abs(parseFloat((exchangeAmount - botAmount).toFixed(DECIMAL_PRECISION)));
+    const rawDifference = exchangeAmount - botAmount;
+    const difference = Math.abs(Math.round(rawDifference * Math.pow(10, DECIMAL_PRECISION)) / Math.pow(10, DECIMAL_PRECISION));
     const maxAmount = Math.max(exchangeAmount, botAmount);
     const discrepancyPercent = maxAmount > 0 ? parseFloat(((difference / maxAmount) * 100).toFixed(2)) : 0;
 
@@ -986,7 +987,7 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
  */
 function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
   const uniqueDiscrepancies = [];
-  const seenCurrencies = new Map(); // Set から Map に変更して詳細情報を保持
+  const seenCurrencies = new Map(); // Mapを使用して詳細情報を保持
   let duplicateCount = 0;
   
   for (const disc of discrepancies) {
