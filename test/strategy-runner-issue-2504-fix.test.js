@@ -43,21 +43,19 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('log_startup_message関数が強化されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // レースコンディション対策の実装確認
-      expect(entrypointContent).toContain('レースコンディション対策強化版');
-      expect(entrypointContent).toContain('max_attempts=5');
-      expect(entrypointContent).toContain('複数回のリトライでatomicなロック取得を試行');
+      // 簡素化されたレースコンディション対策の実装確認
+      expect(entrypointContent).toContain('簡素化版');
+      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
       
-      // タイムスタンプ付きロックファイルの実装確認
-      expect(entrypointContent).toContain('echo "$$:$(date +%s)" > "$lock_file"');
+      // シンプルなロックファイルの実装確認
+      expect(entrypointContent).toContain('echo "$$" > "$lock_file"');
       
-      // 古いロックファイルの自動削除機能
-      expect(entrypointContent).toContain('30秒以上古いロックファイル or 存在しないプロセスのロックファイルを削除');
-      expect(entrypointContent).toContain('Removed stale message lock for PID:');
+      // シンプルな自動クリーンアップ機能
+      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
       
-      // リトライ機能の実装確認
-      expect(entrypointContent).toContain('sleep 0.1');
-      expect(entrypointContent).toContain('attempt=$((attempt + 1))');
+      // 簡素化された実装ではリトライロジックが削除されている
+      expect(entrypointContent).not.toContain('sleep 0.1');
+      expect(entrypointContent).not.toContain('attempt=$((attempt + 1))');
     });
 
     test('起動ロック取得後のメッセージ出力順序が修正されている', () => {
@@ -91,8 +89,8 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       // 最初のロックファイルが存在しないことを確認
       expect(fs.existsSync(lockFile)).toBe(false);
       
-      // ロックファイルを作成（プロセスIDとタイムスタンプ付き）
-      const lockContent = `${process.pid}:${Math.floor(Date.now() / 1000)}`;
+      // ロックファイルを作成（簡素化実装ではプロセスIDのみ）
+      const lockContent = `${process.pid}`;
       fs.writeFileSync(lockFile, lockContent);
       
       // ロックファイルが作成されたことを確認
@@ -103,33 +101,31 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       expect(savedContent).toBe(lockContent);
     });
 
-    test('古いロックファイルの自動削除機能が実装されている', () => {
+    test('簡素化実装でのロックファイルのクリーンアップ機能', () => {
       if (!fs.existsSync(lockDir)) {
         fs.mkdirSync(lockDir, { recursive: true });
       }
       
-      // 古いタイムスタンプのロックファイルを作成
-      const oldTimestamp = Math.floor(Date.now() / 1000) - 60; // 60秒前
-      const oldLockFile = path.join(lockDir, 'old-lock.lock');
-      fs.writeFileSync(oldLockFile, `99999:${oldTimestamp}`);
+      // 簡素化実装ではプロセスIDのみのロックファイルを作成
+      const testLockFile = path.join(lockDir, 'test-lock.lock');
+      fs.writeFileSync(testLockFile, '99999');
       
       // ロックファイルが作成されたことを確認
-      expect(fs.existsSync(oldLockFile)).toBe(true);
+      expect(fs.existsSync(testLockFile)).toBe(true);
       
-      // ロックファイルの内容を確認
-      const content = fs.readFileSync(oldLockFile, 'utf8');
-      const [pid, timestamp] = content.split(':');
-      expect(parseInt(timestamp)).toBeLessThan(Math.floor(Date.now() / 1000) - 30);
+      // ロックファイルの内容を確認（プロセスIDのみ）
+      const content = fs.readFileSync(testLockFile, 'utf8');
+      expect(content).toBe('99999');
     });
 
     test('atomicロック取得の実装が正しい', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // set -C を使ったatomic操作の実装確認
-      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s)" > "$lock_file")');
+      expect(entrypointContent).toContain('(set -C; echo "$$" > "$lock_file")');
       
       // 重複チェック機能の実装確認
-      expect(entrypointContent).toContain('atomicな方法でメッセージの重複をチェック');
+      expect(entrypointContent).toContain('シンプルなatomic操作でロック取得を試行');
       
       // エラーハンドリングの実装確認
       expect(entrypointContent).toContain('2>/dev/null');
@@ -138,17 +134,17 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('リトライ機能の実装が正しい', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // リトライループの実装確認
-      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
+      // 簡素化実装ではリトライループが削除されている
+      expect(entrypointContent).not.toContain('while [ $attempt -lt $max_attempts ]; do');
       
-      // 短時間待機の実装確認
-      expect(entrypointContent).toContain('sleep 0.1');
+      // 短時間待機の実装は削除されている
+      expect(entrypointContent).not.toContain('sleep 0.1');
       
-      // 最大試行回数設定の確認
-      expect(entrypointContent).toContain('max_attempts=5');
+      // 最大試行回数設定は削除されている
+      expect(entrypointContent).not.toContain('max_attempts=5');
       
-      // 最大試行回数到達時の処理確認
-      expect(entrypointContent).toContain('最大試行回数に達した場合は、メッセージを出力せずに終了');
+      // 簡素化実装では即座に処理を終了する
+      expect(entrypointContent).toContain('プロセス内フラグのみ設定して重複防止');
     });
   });
 
@@ -156,39 +152,39 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('重複起動メッセージの根本原因が解決されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 起動ロック取得とメッセージ出力の順序修正
+      // 起動ロック取得とメッセージ出力の順序は維持されている
       expect(entrypointContent).toContain('起動ロック取得後に安全にメッセージを出力');
       
-      // レースコンディション対策の強化
-      expect(entrypointContent).toContain('レースコンディション対策強化版');
+      // レースコンディション対策の簡素化
+      expect(entrypointContent).toContain('簡素化版');
       
-      // 古いロックファイルの自動削除による無限ループ防止
-      expect(entrypointContent).toContain('30秒以上古いロックファイル or 存在しないプロセスのロックファイルを削除');
+      // シンプルなクリーンアップ機能
+      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
     });
 
     test('Docker再起動時の競合状態が解決されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // プロセス存在確認による古いロックファイル検出
+      // acquire_startup_lock関数では依然としてプロセスチェックが必要
       expect(entrypointContent).toContain('! kill -0 "$lock_pid"');
       
-      // タイムスタンプベースの古いロック検出
-      expect(entrypointContent).toContain('current_time - lock_time');
+      // 簡素化実装ではタイムスタンプチェックは行わない
+      expect(entrypointContent).not.toContain('current_time - lock_time');
       
-      // エラー発生時の安全な終了処理
-      expect(entrypointContent).toContain('最大試行回数に達した場合は、メッセージを出力せずに終了');
+      // 簡素化実装では即座に処理を終了する
+      expect(entrypointContent).toContain('プロセス内フラグのみ設定して重複防止');
     });
 
-    test('パフォーマンス向上のための最適化が実装されている', () => {
+    test('パフォーマンス向上のための簡素化が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 短時間での高速リトライ
-      expect(entrypointContent).toContain('sleep 0.1');
+      // 簡素化実装ではリトライロジックが削除されている
+      expect(entrypointContent).not.toContain('sleep 0.1');
       
-      // 最大試行回数の制限
-      expect(entrypointContent).toContain('max_attempts=5');
+      // 簡素化実装では試行回数制限が削除されている
+      expect(entrypointContent).not.toContain('max_attempts=5');
       
-      // 不要な処理の回避
+      // 不要な処理の回避は維持されている
       expect(entrypointContent).toContain('return 0');
     });
   });

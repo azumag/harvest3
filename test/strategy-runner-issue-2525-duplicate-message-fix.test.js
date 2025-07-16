@@ -50,8 +50,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"');
       expect(entrypointContent).toContain('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"');
       
-      // atomic ファイルベース実装が追加されていることを確認
-      expect(entrypointContent).toContain('重複起動ログ防止関数（atomic ファイルベース実装）');
+      // 簡素化実装が追加されていることを確認
+      expect(entrypointContent).toContain('重複起動ログ防止関数（簡素化版）');
       expect(entrypointContent).toContain('log_startup_message()');
     });
 
@@ -66,10 +66,10 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('echo "$$" > "$lock_file"');
       
       // 自動クリーンアップ機能
-      expect(entrypointContent).toContain('sleep 60 && rm -f "$lock_file"');
+      expect(entrypointContent).toContain('sleep 30 && rm -f "$lock_file" 2>/dev/null');
       
       // 重複メッセージの場合のreturn処理
-      expect(entrypointContent).toContain('既に同じメッセージが処理済みの場合は何もしない');
+      expect(entrypointContent).toContain('他のプロセスが処理中または処理済み');
       expect(entrypointContent).toContain('return 0');
     });
 
@@ -99,10 +99,10 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // バックグラウンドでのクリーンアップ処理
-      expect(entrypointContent).toContain('(sleep 60 && rm -f "$lock_file") &');
+      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
       
       // クリーンアップのコメント
-      expect(entrypointContent).toContain('古いロックファイルのクリーンアップ（1分後に自動削除）');
+      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
     });
   });
 
@@ -199,8 +199,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT=""');
       expect(entrypointContent).not.toContain('シンプルな環境変数ベース');
       
-      // 新しいatomic実装が追加されていることを確認
-      expect(entrypointContent).toContain('atomic ファイルベース実装');
+      // 新しい簡素化実装が追加されていることを確認
+      expect(entrypointContent).toContain('簡素化版');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     });
 
@@ -211,7 +211,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('set -C');
       
       // 排他制御による重複防止
-      expect(entrypointContent).toContain('atomicな方法でメッセージの重複をチェック');
+      expect(entrypointContent).toContain('シンプルなatomic操作でロック取得を試行');
       
       // エラーハンドリング
       expect(entrypointContent).toContain('2>/dev/null');
@@ -225,21 +225,21 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // 実際のlog関数呼び出しはatomicロック内で実行される
-      expect(entrypointContent).toContain('ロックが取得できた場合のみメッセージを出力');
+      expect(entrypointContent).toContain('ロック取得成功：プロセス内フラグを設定してメッセージ出力');
       expect(entrypointContent).toContain('log "$message"');
     });
 
     test('自動クリーンアップによるリソース管理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 1分後の自動削除
-      expect(entrypointContent).toContain('sleep 60 && rm -f "$lock_file"');
+      // 30秒後の自動削除
+      expect(entrypointContent).toContain('sleep 30 && rm -f "$lock_file" 2>/dev/null');
       
       // バックグラウンド実行
       expect(entrypointContent).toContain('&');
       
       // クリーンアップのコメント
-      expect(entrypointContent).toContain('1分後に自動削除');
+      expect(entrypointContent).toContain('30秒後');
     });
   });
 
@@ -293,8 +293,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then');
       expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT="$message"');
       
-      // 修正後の堅牢な実装が追加されている
-      expect(entrypointContent).toContain('atomic ファイルベース実装');
+      // 修正後の簡素化実装が追加されている
+      expect(entrypointContent).toContain('簡素化版');
       expect(entrypointContent).toContain('set -C');
       expect(entrypointContent).toContain('message_hash=$(echo "$message" | md5sum');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
