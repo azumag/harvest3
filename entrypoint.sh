@@ -28,21 +28,45 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（atomic ファイルベース実装）
+# 重複起動ログ防止関数（強化版 atomic ファイルベース実装）
 log_startup_message() {
     local message="$1"
     local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    local temp_lock_file="$lock_file.tmp.$$"
     
-    # atomicな方法でメッセージの重複をチェック
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        # ロックが取得できた場合のみメッセージを出力
-        log "$message"
+    # ロックファイルが古い場合のクリーンアップ（5分以上古い場合）
+    if [ -f "$lock_file" ]; then
+        local lock_age=$(( $(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0) ))
+        if [ $lock_age -gt 300 ]; then
+            rm -f "$lock_file" 2>/dev/null || true
+        fi
+    fi
+    
+    # 既にロックファイルが存在する場合は重複として扱う
+    if [ -f "$lock_file" ]; then
+        return 0
+    fi
+    
+    # より堅牢なatomic操作：一時ファイルを使用してからatomicにlink
+    if echo "$$:$(date +%s)" > "$temp_lock_file" 2>/dev/null; then
+        # linkを使用してatomicにロックファイルを作成（既存ファイルがある場合は失敗）
+        if ln "$temp_lock_file" "$lock_file" 2>/dev/null; then
+            # ロックが取得できた場合のみメッセージを出力
+            log "$message"
+            
+            # 自動クリーンアップ（3分後に削除、バックグラウンドで実行）
+            (sleep 180 && rm -f "$lock_file") &
+        else
+            # linkが失敗した場合（既に他のプロセスがロックを取得している）
+            rm -f "$temp_lock_file" 2>/dev/null || true
+            return 0
+        fi
         
-        # 古いロックファイルのクリーンアップ（1分後に自動削除）
-        (sleep 60 && rm -f "$lock_file") &
+        # 一時ファイルを削除
+        rm -f "$temp_lock_file" 2>/dev/null || true
     else
-        # 既に同じメッセージが処理済みの場合は何もしない
+        # 一時ファイルの作成が失敗した場合
         return 0
     fi
 }
