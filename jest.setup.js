@@ -132,6 +132,22 @@ if (process.env.CI) {
     jest.clearAllTimers();
     jest.clearAllMocks();
     
+    // プロセスのクリーンアップ（安全な方法）
+    if (process._getActiveHandles) {
+      const activeHandles = process._getActiveHandles();
+      if (activeHandles && activeHandles.length > 0) {
+        activeHandles.forEach(handle => {
+          if (handle && typeof handle.unref === 'function') {
+            try {
+              handle.unref();
+            } catch (error) {
+              // ハンドルのクリーンアップエラーを無視
+            }
+          }
+        });
+      }
+    }
+    
     // ガベージコレクションを強制実行
     if (global.gc) {
       global.gc();
