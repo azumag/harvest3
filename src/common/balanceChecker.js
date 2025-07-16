@@ -553,10 +553,16 @@ function analyzeClosedPositionDiscrepancies(discrepancies, botBalanceDiagnostics
       }
     };
     
-    // closedポジションで説明可能な場合、外部取引ではない可能性が高い
+    // closedポジションで説明可能な場合の処理
     if (isExplainedByClosedPositions) {
-      enhancedDisc.isExternalTradeSuspected = false;
       enhancedDisc.analysisNote = 'closedポジションが残存している可能性';
+      
+      // Issue #2502修正: 高い差異（50%以上）の場合は外部取引の可能性を維持
+      // closedポジション自体が外部取引の結果の可能性があるため
+      if (disc.discrepancyPercent < BALANCE_CONFIG.thresholds.externalTradeThreshold) {
+        enhancedDisc.isExternalTradeSuspected = false;
+      }
+      // 50%以上の差異の場合は、closedポジションで説明可能でも外部取引の可能性として扱う
     }
     
     return enhancedDisc;
