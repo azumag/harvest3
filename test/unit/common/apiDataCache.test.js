@@ -134,12 +134,16 @@ describe('APIDataCache', () => {
       cache.stats.hits = 10;
       cache.stats.misses = 5;
       cache.stats.requests = 8;
+      cache.stats.retries = 3;
+      cache.stats.fallbacks = 2;
 
       cache.clearStats();
 
       expect(cache.stats.hits).toBe(0);
       expect(cache.stats.misses).toBe(0);
       expect(cache.stats.requests).toBe(0);
+      expect(cache.stats.retries).toBe(0);
+      expect(cache.stats.fallbacks).toBe(0);
     });
   });
 
@@ -163,6 +167,140 @@ describe('APIDataCache', () => {
       expect(cache.cache.size).toBe(1);
       expect(cache.getFromCache('bitbank', 'fetchTicker', 'ETH/JPY')).toEqual(newData);
       expect(cache.getFromCache('bitbank', 'fetchTicker', 'BTC/JPY')).toBeNull();
+    });
+  });
+
+  describe('リトライ機能', () => {
+    test('一時的なエラーで再試行が実行される', async () => {
+      const tickerData = { symbol: 'BTC/JPY', bid: 5000000, ask: 5001000 };
+      const retryableError = new Error('fetch failed');
+      
+      mockExchange.fetchTicker
+        .mockRejectedValueOnce(retryableError)
+        .mockRejectedValueOnce(retryableError)
+        .mockResolvedValue(tickerData);
+
+      const result = await cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY');
+
+      expect(result).toEqual(tickerData);
+      expect(mockExchange.fetchTicker).toHaveBeenCalledTimes(3);
+      expect(cache.stats.retries).toBe(2);
+    });
+
+    test('再試行不可能なエラーで即座に失敗する', async () => {
+      const nonRetryableError = new Error('Invalid API key');
+      mockExchange.fetchTicker.mockRejectedValue(nonRetryableError);
+
+      await expect(cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY'))
+        .rejects.toThrow('Invalid API key');
+
+      expect(mockExchange.fetchTicker).toHaveBeenCalledTimes(1);
+      expect(cache.stats.retries).toBe(0);
+    });
+
+    test('最大再試行回数に達した場合に失敗する', async () => {
+      const retryableError = new Error('ECONNRESET');
+      mockExchange.fetchTicker.mockRejectedValue(retryableError);
+
+      await expect(cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY'))
+        .rejects.toThrow('ECONNRESET');
+
+      expect(mockExchange.fetchTicker).toHaveBeenCalledTimes(4); // 初回 + 3回再試行
+      expect(cache.stats.retries).toBe(3);
+    });
+
+    test('isRetryableError関数のテスト', () => {
+      const retryableErrors = [
+        new Error('fetch failed'),
+        new Error('ECONNRESET'),
+        new Error('ECONNREFUSED'),
+        new Error('Network Error'),
+        new Error('Rate limit exceeded')
+      ];
+
+      const nonRetryableErrors = [
+        new Error('Invalid API key'),
+        new Error('Unauthorized access'),
+        new Error('Invalid symbol')
+      ];
+
+      retryableErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(true);
+      });
+
+      nonRetryableErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(false);
+      });
+    });
+  });
+
+  describe('フォールバック機能', () => {
+    test('API失敗時に古いキャッシュデータを使用する', async () => {
+      const oldTickerData = { symbol: 'BTC/JPY', bid: 5000000, ask: 5001000 };
+      const apiError = new Error('fetch failed');
+      
+      // 古いキャッシュデータを作成
+      cache.setCache('bitbank', 'fetchTicker', 'BTC/JPY', oldTickerData);
+      
+      // キャッシュを期限切れにする
+      const key = cache.createCacheKey('bitbank', 'fetchTicker', 'BTC/JPY');
+      const cachedData = cache.cache.get(key);
+      cachedData.timestamp = Date.now() - cache.maxCacheAge - 1000;
+
+      // API呼び出しが失敗するように設定
+      mockExchange.fetchTicker.mockRejectedValue(apiError);
+
+      const result = await cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY');
+
+      expect(result).toEqual(oldTickerData);
+      expect(cache.stats.fallbacks).toBe(1);
+    });
+
+    test('フォールバック用のキャッシュデータが無い場合はエラーを投げる', async () => {
+      const apiError = new Error('ECONNRESET');
+      mockExchange.fetchTicker.mockRejectedValue(apiError);
+
+      await expect(cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY'))
+        .rejects.toThrow('ECONNRESET');
+
+      expect(cache.stats.fallbacks).toBe(0);
+    });
+
+    test('getFallbackData関数のテスト', () => {
+      const testData = { symbol: 'BTC/JPY', price: 5000000 };
+      
+      // キャッシュデータが存在しない場合
+      expect(cache.getFallbackData('bitbank', 'fetchTicker', 'BTC/JPY')).toBeNull();
+      
+      // キャッシュデータが存在する場合
+      cache.setCache('bitbank', 'fetchTicker', 'BTC/JPY', testData);
+      expect(cache.getFallbackData('bitbank', 'fetchTicker', 'BTC/JPY')).toEqual(testData);
+      expect(cache.stats.fallbacks).toBe(1);
+    });
+  });
+
+  describe('統合テスト', () => {
+    test('リトライ後にフォールバックが実行される', async () => {
+      const oldTickerData = { symbol: 'BTC/JPY', bid: 5000000, ask: 5001000 };
+      const apiError = new Error('fetch failed');
+      
+      // 古いキャッシュデータを作成
+      cache.setCache('bitbank', 'fetchTicker', 'BTC/JPY', oldTickerData);
+      
+      // キャッシュを期限切れにする
+      const key = cache.createCacheKey('bitbank', 'fetchTicker', 'BTC/JPY');
+      const cachedData = cache.cache.get(key);
+      cachedData.timestamp = Date.now() - cache.maxCacheAge - 1000;
+
+      // すべてのAPI呼び出しが失敗するように設定
+      mockExchange.fetchTicker.mockRejectedValue(apiError);
+
+      const result = await cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY');
+
+      expect(result).toEqual(oldTickerData);
+      expect(mockExchange.fetchTicker).toHaveBeenCalledTimes(4); // 初回 + 3回再試行
+      expect(cache.stats.retries).toBe(3);
+      expect(cache.stats.fallbacks).toBe(1);
     });
   });
 });
