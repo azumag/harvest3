@@ -10,6 +10,7 @@ const BALANCE_CHECKER_CONFIG = {
     highDiscrepancyPercent: 10,      // 高度不整合とする閾値（パーセント）
     balanceComparisonTolerance: 2,   // 残高比較の許容誤差（パーセント、デフォルト2%）
     externalTradeThreshold: 50,      // 外部取引と判定する閾値（パーセント）
+    veryHighExternalTradeThreshold: 90, // 明らかな外部取引と判定する閾値（パーセント）
     // 通貨別の許容誤差設定（パーセント）
     currencySpecificTolerance: {
       // 例: BTC: 0.5,    // 高精度通貨（手数料が低い）
@@ -94,6 +95,10 @@ function getBalanceCheckerConfig() {
     config.thresholds.externalTradeThreshold = parseFloat(process.env.BALANCE_CHECKER_EXTERNAL_TRADE_THRESHOLD);
   }
 
+  if (process.env.BALANCE_CHECKER_VERY_HIGH_EXTERNAL_THRESHOLD) {
+    config.thresholds.veryHighExternalTradeThreshold = parseFloat(process.env.BALANCE_CHECKER_VERY_HIGH_EXTERNAL_THRESHOLD);
+  }
+
   if (process.env.BALANCE_CHECKER_LOCK_TTL) {
     config.distributedLock.defaultTtl = parseInt(process.env.BALANCE_CHECKER_LOCK_TTL);
   }
@@ -136,6 +141,10 @@ function validateConfig(config) {
 
   if (config.thresholds.externalTradeThreshold < 0 || config.thresholds.externalTradeThreshold > 100) {
     errors.push('externalTradeThreshold must be between 0 and 100');
+  }
+
+  if (config.thresholds.veryHighExternalTradeThreshold < 0 || config.thresholds.veryHighExternalTradeThreshold > 100) {
+    errors.push('veryHighExternalTradeThreshold must be between 0 and 100');
   }
 
   if (config.distributedLock.defaultTtl < 1000) {

@@ -716,15 +716,16 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
 
   let logLevel, severityText;
   
-  // 外部取引の可能性が非常に高い差異（90%以上）をチェック
+  // 外部取引の可能性が非常に高い差異をチェック
+  const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
   const veryHighExternalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.discrepancyPercent >= 90 && disc.isExternalTradeSuspected
+    disc.discrepancyPercent >= veryHighThreshold && disc.isExternalTradeSuspected
   );
   
   // 改善されたログレベル判定ロジック
   if (veryHighExternalTradeDiscrepancies.length > 0 && 
       veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length) {
-    // 全ての不整合が明らかに外部取引（90%以上）の場合
+    // 全ての不整合が明らかに外部取引（閾値以上）の場合
     logLevel = 'info';
     severityText = '外部取引による残高差異';
   } else if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
@@ -733,7 +734,7 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevel = 'info';
     severityText = '外部取引による残高差異';
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
-    // 一部が明らかに外部取引（90%以上）の場合
+    // 一部が明らかに外部取引（閾値以上）の場合
     logLevel = 'warn';
     severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
       ? '外部取引による残高差異（一部混在）'
