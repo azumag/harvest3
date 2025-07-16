@@ -164,11 +164,11 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
       expect(manaDiscrepancy.isExternalTradeSuspected).toBe(true);
       expect(Math.round(manaDiscrepancy.discrepancyPercent)).toBe(100);
 
-      // ログに外部取引の可能性が含まれることを確認
-      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-        expect.stringMatching(/高度不整合（外部取引の可能性含む）/)
+      // 全ての不整合が外部取引の場合はINFOレベルでログ出力される
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+        expect.stringMatching(/外部取引による残高差異/)
       );
-      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
         expect.stringMatching(/⚠️外部取引の可能性/)
       );
     });
