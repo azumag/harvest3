@@ -11,16 +11,31 @@ class APIDataCache {
     this.requestDelay = options.requestDelay || API_CACHE_SETTINGS.REQUEST_DELAY; // 設定ファイルから取得
     this.cleanupInterval = options.cleanupInterval || API_CACHE_SETTINGS.CLEANUP_INTERVAL; // 設定ファイルから取得
     this.cleanupIntervalId = null;
+    this.maxRetries = options.maxRetries || 3; // デフォルトで3回再試行
+    this.baseRetryDelay = options.baseRetryDelay || 1000; // 基本再試行間隔（1秒）
     this.stats = {
       hits: 0,
       misses: 0,
-      requests: 0
+      requests: 0,
+      retries: 0,
+      fallbacks: 0
     };
   }
 
   createCacheKey(exchangeId, method, symbol, params = {}) {
     const paramString = Object.keys(params).length > 0 ? JSON.stringify(params) : '';
     return `${exchangeId}:${method}:${symbol}:${paramString}`;
+  }
+
+  // センシティブな情報をマスクしたキーを生成
+  maskSensitiveKey(key) {
+    const parts = key.split(':');
+    if (parts.length >= 3) {
+      // パラメータ部分をマスク
+      const maskedParts = parts.slice(0, 3).concat('*****');
+      return maskedParts.join(':');
+    }
+    return key;
   }
 
   isExpired(cachedData) {
@@ -33,13 +48,28 @@ class APIDataCache {
 
     if (cachedData && !this.isExpired(cachedData)) {
       this.stats.hits++;
-      logger.debug(`[APIキャッシュ] ヒット: ${key}`);
+      logger.debug(`[APIキャッシュ] ヒット: ${this.maskSensitiveKey(key)}`);
       return cachedData.data;
     }
 
     if (cachedData && this.isExpired(cachedData)) {
       this.cache.delete(key);
-      logger.debug(`[APIキャッシュ] 期限切れ削除: ${key}`);
+      logger.debug(`[APIキャッシュ] 期限切れ削除: ${this.maskSensitiveKey(key)}`);
+    }
+
+    this.stats.misses++;
+    return null;
+  }
+
+  // 期限切れチェックのみ、削除は行わない（フォールバック用）
+  getFromCacheWithoutExpiry(exchangeId, method, symbol, params = {}) {
+    const key = this.createCacheKey(exchangeId, method, symbol, params);
+    const cachedData = this.cache.get(key);
+
+    if (cachedData && !this.isExpired(cachedData)) {
+      this.stats.hits++;
+      logger.debug(`[APIキャッシュ] ヒット: ${this.maskSensitiveKey(key)}`);
+      return cachedData.data;
     }
 
     this.stats.misses++;
@@ -52,13 +82,13 @@ class APIDataCache {
       data: data,
       timestamp: Date.now()
     });
-    logger.debug(`[APIキャッシュ] 保存: ${key}`);
+    logger.debug(`[APIキャッシュ] 保存: ${this.maskSensitiveKey(key)}`);
   }
 
   async queueRequest(exchangeInstance, method, symbol, params = {}) {
     const key = this.createCacheKey(exchangeInstance.id, method, symbol, params);
     
-    const cachedData = this.getFromCache(exchangeInstance.id, method, symbol, params);
+    const cachedData = this.getFromCacheWithoutExpiry(exchangeInstance.id, method, symbol, params);
     if (cachedData) {
       return cachedData;
     }
@@ -92,16 +122,55 @@ class APIDataCache {
       const request = this.requestQueue.shift();
       const { exchangeInstance, method, symbol, params, key, resolve, reject } = request;
 
-      const cachedData = this.getFromCache(exchangeInstance.id, method, symbol, params);
+      const cachedData = this.getFromCacheWithoutExpiry(exchangeInstance.id, method, symbol, params);
       if (cachedData) {
-        logger.debug(`[APIキャッシュ] キュー処理中にヒット: ${key}`);
+        logger.debug(`[APIキャッシュ] キュー処理中にヒット: ${this.maskSensitiveKey(key)}`);
         resolve(cachedData);
         continue;
       }
 
       try {
-        logger.debug(`[APIキャッシュ] API呼び出し実行: ${key}`);
+        logger.debug(`[APIキャッシュ] API呼び出し実行: ${this.maskSensitiveKey(key)}`);
         this.stats.requests++;
+
+        const data = await this.executeAPICallWithRetry(exchangeInstance, method, symbol, params, key);
+        this.setCache(exchangeInstance.id, method, symbol, data, params);
+        resolve(data);
+
+        if (this.requestQueue.length > 0) {
+          logger.debug(`[APIキャッシュ] 次のリクエストまで${this.requestDelay}ms待機`);
+          await new Promise(resolve => setTimeout(resolve, this.requestDelay));
+        }
+
+      } catch (error) {
+        logger.error(`[APIキャッシュ] API呼び出し失敗: ${this.maskSensitiveKey(key)} - ${error.message}`);
+        
+        // 古いキャッシュデータがある場合はフォールバック
+        const fallbackData = this.getFallbackData(exchangeInstance.id, method, symbol, params);
+        if (fallbackData) {
+          logger.warn(`[APIキャッシュ] フォールバック: ${this.maskSensitiveKey(key)} - 古いキャッシュデータを使用`);
+          resolve(fallbackData);
+        } else {
+          reject(error);
+        }
+      }
+    }
+
+    this.processingQueue = false;
+    logger.info('[APIキャッシュ] キュー処理完了');
+  }
+
+  async executeAPICallWithRetry(exchangeInstance, method, symbol, params, key) {
+    let lastError;
+    
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = this.baseRetryDelay * Math.pow(2, attempt - 1); // 指数バックオフ
+          logger.info(`[APIキャッシュ] 再試行 ${attempt}/${this.maxRetries}: ${this.maskSensitiveKey(key)} - ${delay}ms後`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          this.stats.retries++;
+        }
 
         let data;
         switch (method) {
@@ -118,22 +187,78 @@ class APIDataCache {
             throw new Error(`未対応のメソッド: ${method}`);
         }
 
-        this.setCache(exchangeInstance.id, method, symbol, data, params);
-        resolve(data);
-
-        if (this.requestQueue.length > 0) {
-          logger.debug(`[APIキャッシュ] 次のリクエストまで${this.requestDelay}ms待機`);
-          await new Promise(resolve => setTimeout(resolve, this.requestDelay));
+        if (attempt > 0) {
+          logger.info(`[APIキャッシュ] 再試行成功: ${this.maskSensitiveKey(key)} - ${attempt}回目で成功`);
         }
+        
+        return data;
 
       } catch (error) {
-        logger.error(`[APIキャッシュ] API呼び出し失敗: ${key} - ${error.message}`);
-        reject(error);
+        lastError = error;
+        
+        // 一時的なエラーかどうかを判定
+        if (!this.isRetryableError(error)) {
+          logger.error(`[APIキャッシュ] 再試行不可能なエラー: ${this.maskSensitiveKey(key)} - ${error.message}`);
+          throw error;
+        }
+
+        if (attempt === this.maxRetries) {
+          logger.error(`[APIキャッシュ] 最大再試行回数に達しました: ${this.maskSensitiveKey(key)} - ${error.message}`);
+          throw error;
+        }
+
+        logger.warn(`[APIキャッシュ] 再試行可能なエラー: ${this.maskSensitiveKey(key)} - ${error.message}`);
       }
     }
 
-    this.processingQueue = false;
-    logger.info('[APIキャッシュ] キュー処理完了');
+    throw lastError;
+  }
+
+  isRetryableError(error) {
+    // HTTPステータスコードによる判定
+    if (error.response && error.response.status) {
+      const retryableStatuses = [429, 500, 502, 503, 504];
+      if (retryableStatuses.includes(error.response.status)) {
+        return true;
+      }
+    }
+    
+    // エラーコードによる判定
+    if (error.code) {
+      const retryableCodes = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNABORTED'];
+      if (retryableCodes.includes(error.code)) {
+        return true;
+      }
+    }
+    
+    // メッセージによる判定（最後の手段）
+    const errorMessage = error.message || '';
+    const retryableMessages = [
+      'fetch failed',
+      'Network Error',
+      'Request timeout',
+      'Rate limit',
+      'Service Unavailable',
+      'Bad Gateway',
+      'Gateway Timeout'
+    ];
+    
+    return retryableMessages.some(msg => errorMessage.includes(msg));
+  }
+
+  getFallbackData(exchangeId, method, symbol, params = {}) {
+    const key = this.createCacheKey(exchangeId, method, symbol, params);
+    const cachedData = this.cache.get(key);
+    
+    // フォールバック用なので、期限切れでも使用可能
+    if (cachedData) {
+      const ageSeconds = Math.round((Date.now() - cachedData.timestamp) / 1000);
+      logger.info(`[APIキャッシュ] フォールバック可能: ${this.maskSensitiveKey(key)} - ${ageSeconds}秒前のデータ`);
+      this.stats.fallbacks++;
+      return cachedData.data;
+    }
+    
+    return null;
   }
 
   clearExpiredCache() {
@@ -163,7 +288,7 @@ class APIDataCache {
   }
 
   clearStats() {
-    this.stats = { hits: 0, misses: 0, requests: 0 };
+    this.stats = { hits: 0, misses: 0, requests: 0, retries: 0, fallbacks: 0 };
   }
 
   startCleanupTimer() {
@@ -198,19 +323,26 @@ const globalAPIDataCache = new APIDataCache();
 globalAPIDataCache.startCleanupTimer();
 
 // プロセス終了時のクリーンアップ
-process.on('exit', () => {
-  globalAPIDataCache.destroy();
-});
+let isShuttingDown = false;
 
-process.on('SIGINT', () => {
+const gracefulShutdown = (signal) => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+  
+  logger.info(`[APIキャッシュ] ${signal}受信: グレースフルシャットダウン開始`);
   globalAPIDataCache.destroy();
-  process.exit(0);
-});
+  
+  // SIGTERM/SIGINTの場合のみexitを呼ぶ
+  if (signal !== 'exit') {
+    process.exit(0);
+  }
+};
 
-process.on('SIGTERM', () => {
-  globalAPIDataCache.destroy();
-  process.exit(0);
-});
+process.on('exit', () => gracefulShutdown('exit'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 module.exports = {
   APIDataCache,
