@@ -3,6 +3,22 @@
  * 残高チェッカーの許容誤差改善のテスト
  */
 
+// Mock balanceCheckerConfig to set 1% tolerance for these tests
+jest.mock('../../../src/common/balanceCheckerConfig', () => ({
+  getValidatedConfig: jest.fn(() => ({
+    thresholds: {
+      significantBalance: 0.00001,
+      highDiscrepancyPercent: 10,
+      balanceComparisonTolerance: 1, // Set to 1% for these tolerance tests
+      externalTradeThreshold: 50,
+      currencySpecificTolerance: {}
+    },
+    intervals: {
+      exchangeCheckDelay: 2000
+    }
+  }))
+}));
+
 const {
   getValidatedConfig
 } = require('../../../src/common/balanceCheckerConfig');
@@ -148,11 +164,11 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
       expect(manaDiscrepancy.isExternalTradeSuspected).toBe(true);
       expect(Math.round(manaDiscrepancy.discrepancyPercent)).toBe(100);
 
-      // ログに外部取引の可能性が含まれることを確認
-      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-        expect.stringMatching(/高度不整合（外部取引の可能性含む）/)
+      // 全ての不整合が外部取引の場合はINFOレベルでログ出力される
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+        expect.stringMatching(/外部取引による残高差異/)
       );
-      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
         expect.stringMatching(/⚠️外部取引の可能性/)
       );
     });

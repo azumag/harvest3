@@ -210,9 +210,9 @@ describe('Issue #1873 修正テスト - 重複ログ問題', () => {
       
       await balanceChecker.compareBalances('bitbank');
       
-      // ERRORレベルのログが呼ばれることを確認（99.8%は高度不整合）
-      const errorLogs = mockLoggerInstance.error.mock.calls;
-      const manaLogs = errorLogs.filter(call => 
+      // INFOレベルのログが呼ばれることを確認（99.8%は外部取引として扱われる）
+      const infoLogs = mockLoggerInstance.info.mock.calls;
+      const manaLogs = infoLogs.filter(call => 
         call[0] && call[0].includes('MANA') && call[0].includes('[')
       );
       

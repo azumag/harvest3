@@ -468,7 +468,13 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   );
 
   let logLevel, severityText;
-  if (highDiscrepancies.length > 0) {
+  
+  // 全ての不整合が外部取引の可能性が高い場合（50%以上）は情報レベルで扱う
+  if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
+      externalTradeDiscrepancies.length > 0) {
+    logLevel = 'info';
+    severityText = '外部取引による残高差異';
+  } else if (highDiscrepancies.length > 0) {
     logLevel = 'error';
     severityText = externalTradeDiscrepancies.length > 0 
       ? '高度不整合（外部取引の可能性含む）' 
@@ -630,7 +636,20 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
  * @returns {string} Discord用メッセージ
  */
 function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo) {
-  let message = `🚨 **残高不整合検出** (${exchangeId})\n`;
+  // 外部取引の可能性に応じてメッセージのトーンを調整
+  const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
+  const isAllExternalTrade = externalTradeDiscrepancies.length === discrepancies.length && discrepancies.length > 0;
+  
+  let messageHeader, messageIcon;
+  if (isAllExternalTrade) {
+    messageIcon = '💡';
+    messageHeader = '外部取引による残高差異検出';
+  } else {
+    messageIcon = '🚨';
+    messageHeader = '残高不整合検出';
+  }
+  
+  let message = `${messageIcon} **${messageHeader}** (${exchangeId})\n`;
   message += `検出時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n\n`;
 
   // 上位5件の不整合を表示
@@ -677,7 +696,6 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   }
 
   // 外部取引の可能性に応じて対応メッセージを調整
-  const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
   if (externalTradeDiscrepancies.length === discrepancies.length) {
     // 全て外部取引の可能性
     message += '💡 **外部取引が原因の可能性があります。**\n';
