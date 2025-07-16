@@ -156,7 +156,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 90%以上の外部取引が過半数（2/3）なので、INFOレベルで出力される
     expect(mockLoggerInstance.info).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異.*一部混在/)
     );
 
     // ERRORレベルでは出力されていないことを確認
@@ -184,7 +184,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 50%以上の外部取引が過半数（2/3）だが70%未満なので、WARNレベルで出力される
     expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引の可能性/)
+      expect.stringMatching(/残高不整合検出: bitbank.*混合不整合.*外部取引の可能性/)
     );
 
     // ERRORレベルでは出力されていないことを確認
@@ -212,7 +212,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 90%以上の外部取引が過半数未満（1/3）なので、WARNレベルで出力される
     expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異.*一部混在/)
+      expect.stringMatching(/残高不整合検出: bitbank.*混合不整合.*明らかな外部取引含む/)
     );
 
     // ERRORレベルでは出力されていないことを確認
@@ -261,7 +261,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 90%以上の外部取引が50%（1/2）なので、INFOレベルで出力される
     expect(mockLoggerInstance.info).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異.*一部混在/)
     );
   });
 
@@ -286,7 +286,7 @@ describe('Issue #2489: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 90%以上の外部取引が25%（1/4）なので、WARNレベルで出力される
     expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異.*一部混在/)
+      expect.stringMatching(/残高不整合検出: bitbank.*混合不整合.*明らかな外部取引含む/)
     );
   });
 });

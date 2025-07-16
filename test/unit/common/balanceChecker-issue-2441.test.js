@@ -234,7 +234,7 @@ describe('Issue #2441: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 具体的な条件適用のデバッグ情報も確認
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/条件6適用 - 外部取引比率66\.7% >= 50%.*WARN/)
+      expect.stringMatching(/ログレベル判定.*条件6適用 - 外部取引比率66\.7% >= 50%.*WARN/)
     );
   });
 

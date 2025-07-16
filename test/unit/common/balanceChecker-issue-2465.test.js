@@ -244,7 +244,7 @@ describe('Issue #2465: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 条件4が適用されることを確認
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/条件4適用 - 全て外部取引.*INFO/)
+      expect.stringMatching(/ログレベル判定.*条件4適用 - 全て外部取引.*INFO/)
     );
   });
 
@@ -293,12 +293,12 @@ describe('Issue #2465: strategy-runnerサービスで例外が発生 - 修正テ
 
     // 条件4は適用されない（全て外部取引ではないため）
     expect(mockLoggerInstance.debug).not.toHaveBeenCalledWith(
-      expect.stringMatching(/条件4適用 - 全て外部取引.*INFO/)
+      expect.stringMatching(/ログレベル判定.*条件4適用 - 全て外部取引.*INFO/)
     );
 
     // 他の条件（条件6等）が適用される
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/条件6適用 - 外部取引比率66\.7% >= 50%.*WARN/)
+      expect.stringMatching(/ログレベル判定.*条件6適用 - 外部取引比率66\.7% >= 50%.*WARN/)
     );
   });
 });

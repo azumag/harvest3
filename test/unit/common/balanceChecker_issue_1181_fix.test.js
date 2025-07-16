@@ -162,7 +162,7 @@ describe('Issue #1181 修正テスト', () => {
       
       // 正規化された通貨名が使用されていることを確認
       const currencies = result.discrepancies.map(d => d.currency);
-      expect(currencies).toEqual(['ETH', 'BTC']);
+      expect(currencies).toEqual(['BTC', 'ETH']);
       
       // 重複が排除されていることを確認
       expect(result.discrepancies).toHaveLength(2);
