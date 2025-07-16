@@ -175,23 +175,25 @@ describe('Issue #2301: 外部取引による残高差異の適切な処理', () 
   });
 
   it('外部取引とシステム不整合が混在する場合、ERRORレベルで処理される', async () => {
-    // 一部は外部取引、一部はシステム不整合のパターン
+    // 一部は外部取引、一部はシステム不整合のパターン（外部取引が少数派）
     config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
       total: {
         BTC: 1.0,     // 通常の不整合（15%差異）
+        ETH: 1.0,     // 通常の不整合（15%差異）
         MANA: 2.0     // 外部取引（67%差異、90%未満なので very high ではない）
       }
     });
 
     getAllPositionsRedis.mockResolvedValue([
       { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.85, status: 'open' }, // 15%差異
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 0.85, status: 'open' }, // 15%差異
       { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.66, status: 'open' } // 67%差異
     ]);
 
     const result = await compareBalances('bitbank');
 
-    // 2件の不整合が検出されることを確認
-    expect(result.discrepancies).toHaveLength(2);
+    // 3件の不整合が検出されることを確認
+    expect(result.discrepancies).toHaveLength(3);
 
     // 一部のみが外部取引として判定されることを確認
     const externalTradeDiscrepancies = result.discrepancies.filter(d => d.isExternalTradeSuspected);

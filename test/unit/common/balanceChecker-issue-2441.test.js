@@ -220,8 +220,8 @@ describe('Issue #2441: strategy-runnerサービスで例外が発生 - 修正テ
     });
 
     getAllPositionsRedis.mockResolvedValue([
-      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.05, status: 'open' },  // 95%差異（外部取引）
-      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 0.1, status: 'open' },   // 95%差異（外部取引）
+      { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.33, status: 'open' },  // 67%差異（外部取引）
+      { exchange: 'bitbank', symbol: 'ETH/JPY', side: 'buy', amount: 0.33, status: 'open' },   // 83.5%差異（外部取引）
       { exchange: 'bitbank', symbol: 'ADA/JPY', side: 'buy', amount: 0.8, status: 'open' }    // 20%差異（非外部取引）
     ]);
 
@@ -229,12 +229,12 @@ describe('Issue #2441: strategy-runnerサービスで例外が発生 - 修正テ
 
     // デバッグ情報が出力されることを確認
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/ログレベル判定デバッグ \(bitbank\): 総不整合=3, 外部取引=2, 高度外部取引=2, 非外部高度不整合=1/)
+      expect.stringMatching(/ログレベル判定デバッグ \(bitbank\): 総不整合=3, 外部取引=2, 高度外部取引=0, 非外部高度不整合=1/)
     );
 
     // 具体的な条件適用のデバッグ情報も確認
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/ログレベル判定 \(bitbank\): 条件3a適用 - 高度外部取引比率66\.7% >= 50% -> INFO/)
+      expect.stringMatching(/ログレベル判定 \(bitbank\): 条件3a適用 - 外部取引比率66\.7% >= 50% -> INFO/)
     );
   });
 
