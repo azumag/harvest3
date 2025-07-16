@@ -749,7 +749,7 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
     // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
     const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (externalRatio >= 0.5) {
+    if (externalRatio > 0.5) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
     } else {
