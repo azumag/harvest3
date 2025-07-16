@@ -178,13 +178,13 @@ describe('Issue #2301: 外部取引による残高差異の適切な処理', () 
     config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
       total: {
         BTC: 1.0,     // 通常の不整合（15%差異）
-        MANA: 4.4588  // 外部取引（99%差異）
+        MANA: 2.0     // 外部取引（67%差異、90%未満なので very high ではない）
       }
     });
 
     getAllPositionsRedis.mockResolvedValue([
       { exchange: 'bitbank', symbol: 'BTC/JPY', side: 'buy', amount: 0.85, status: 'open' }, // 15%差異
-      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.009, status: 'open' } // 99%差異
+      { exchange: 'bitbank', symbol: 'MANA/JPY', side: 'buy', amount: 0.66, status: 'open' } // 67%差異
     ]);
 
     const result = await compareBalances('bitbank');

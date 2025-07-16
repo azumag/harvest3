@@ -1131,17 +1131,17 @@ describe('Issue #970: ログ出力改善のテスト', () => {
 
     await compareBalances('bitbank');
 
-    // 改善されたログ形式が使用されていることを確認
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*高度不整合/)
+    // 90%以上の外部取引の可能性がある場合、warnレベルで適切に分類されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異（一部混在）/)
     );
 
-    // 各不整合が個別に詳細ログ出力されていることを確認
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+    // 各不整合が個別に詳細ログ出力されていることを確認（warnレベル）
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
       expect.stringMatching(/\s+\[1\] ETH: 取引所=10, Bot=8, 差異=2 \(20%\)/)
     );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringMatching(/\s+\[2\] ADA: 取引所=0\.0016, Bot=0, 差異=0\.0016 \(100%\)/)
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/\s+\[2\] ADA: 取引所=0\.0016, Bot=0, 差異=0\.0016 \(100%\).*外部取引の可能性/)
     );
 
     // デバッグ用JSONログも出力されていることを確認（debug levelなのでここでは呼ばれないかもしれない）
