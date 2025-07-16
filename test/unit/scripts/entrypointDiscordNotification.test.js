@@ -151,8 +151,8 @@ describe('entrypoint.sh Discord通知機能', () => {
       // Assert - 改善されたDB接続チェック
       expect(entrypointContent).toContain('local redis_failed=false');
       expect(entrypointContent).toContain('local mongo_failed=false');
-      expect(entrypointContent).toContain('WARNING: Redis connection failed after $max_retries attempts (service will retry later)');
-      expect(entrypointContent).toContain('WARNING: MongoDB connection failed after $max_retries attempts (service will retry later)');
+      expect(entrypointContent).toContain('WARNING: $service_name connection failed after $max_retries attempts (service will retry later)');
+      expect(entrypointContent).toContain('WARNING: $service_name connection failed after $max_retries attempts (service will retry later)');
       expect(entrypointContent).toContain('両方のデータベースが失敗した場合のみエラー終了');
     });
   });

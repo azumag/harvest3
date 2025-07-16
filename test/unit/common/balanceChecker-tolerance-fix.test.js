@@ -249,7 +249,7 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           side: 'buy',
-          amount: 0.94, // 6%の差異（軽微で外部取引の可能性は低い）
+          amount: 0.85, // 15%の差異（軽微で外部取引の可能性は低い）
           status: 'open'
         }
       ]);
@@ -257,8 +257,8 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
       const result = await compareBalances('bitbank');
 
       expect(result.discrepancies).toHaveLength(1);
-      expect(result.discrepancies[0].isExternalTradeSuspected).toBe(false); // 6%なので外部取引の可能性は低い
-      expect(result.discrepancies[0].discrepancyPercent).toBe(6);
+      expect(result.discrepancies[0].isExternalTradeSuspected).toBe(false); // 15%なので外部取引の可能性は低い
+      expect(result.discrepancies[0].discrepancyPercent).toBe(15);
 
       // 軽微な不整合として報告されることを確認
       expect(mockLoggerInstance.warn).toHaveBeenCalledWith(

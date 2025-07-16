@@ -188,7 +188,7 @@ describe('Issue #1873 修正テスト - 重複ログ問題', () => {
       
       // 重複除去の警告ログが出力されることを確認
       expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
-        expect.stringContaining('通貨の重複処理を検出しスキップ')
+        expect.stringMatching(/通貨の重複処理を検出しスキップ.*bitbank.*mana.*MANA/)
       );
     });
     
