@@ -746,18 +746,13 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   });
   
   // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
-  if (veryHighExternalTradeDiscrepancies.length > 0 && 
-      veryHighExternalTradeDiscrepancies.length === uniqueDiscrepancies.length) {
-    // 全ての不整合が明らかに外部取引（90%以上）の場合
+  // Issue #2465修正: 外部取引判定の優先順位を強化
+  if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
+      externalTradeDiscrepancies.length > 0) {
+    // 全ての不整合が外部取引の可能性（50%以上）の場合 - 最優先で判定
     logLevel = 'info';
     severityText = '外部取引による残高差異';
-    logLevelDecision(exchangeId, '条件1適用 - 全て高度外部取引', 'INFO');
-  } else if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
-             externalTradeDiscrepancies.length > 0) {
-    // 全ての不整合が外部取引の可能性（50%以上）の場合
-    logLevel = 'info';
-    severityText = '外部取引による残高差異';
-    logLevelDecision(exchangeId, '条件2適用 - 全て外部取引', 'INFO');
+    logLevelDecision(exchangeId, '条件1適用 - 全て外部取引', 'INFO');
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
     // 一部が明らかに外部取引（90%以上）の場合
     // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
@@ -765,13 +760,13 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件3a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+      logLevelDecision(exchangeId, `条件2a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
         ? '外部取引による残高差異（一部混在）'
         : '混合不整合（明らかな外部取引含む）';
-      logLevelDecision(exchangeId, `条件3b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
+      logLevelDecision(exchangeId, `条件2b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
     }
   } else if (externalTradeDiscrepancies.length > 0) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
@@ -780,24 +775,24 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     if (externalRatio > LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件4a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% > 50%`, 'INFO');
+      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% > 50%`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = nonExternalHighDiscrepancies.length > 0 
         ? '混合不整合（外部取引と高度不整合）'
         : '軽微な不整合（外部取引の可能性）';
-      logLevelDecision(exchangeId, `条件4b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% <= 50%`, 'WARN');
+      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% <= 50%`, 'WARN');
     }
   } else if (nonExternalHighDiscrepancies.length > 0) {
     // 外部取引ではない高度不整合のみの場合のみERRORレベル
     logLevel = 'error';
     severityText = '高度不整合';
-    logLevelDecision(exchangeId, '条件5適用 - 非外部高度不整合のみ', 'ERROR');
+    logLevelDecision(exchangeId, '条件4適用 - 非外部高度不整合のみ', 'ERROR');
   } else {
     // 軽微な不整合のみ
     logLevel = 'warn';
     severityText = '軽微な不整合';
-    logLevelDecision(exchangeId, '条件6適用 - 軽微な不整合のみ', 'WARN');
+    logLevelDecision(exchangeId, '条件5適用 - 軽微な不整合のみ', 'WARN');
   }
   
   // Issue #2441修正: 最終的なログレベル判定結果を強制的に記録
