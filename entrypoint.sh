@@ -2,6 +2,7 @@
 
 # strategy-runner コンテナ起動時エラーハンドリング & Discord通知スクリプト
 # Geminiの厳格レビューに基づく実装
+# Issue #2511 修正: 二重再起動防止機能とDocker restart policyとの競合回避
 
 set -e  # エラー時即座終了
 
@@ -435,13 +436,16 @@ start_application() {
     done
     
     log "Application started successfully (Bot PID: $app_pid)"
+    log "Initializing enhanced process monitoring (Issue #2511 fix: dual-restart prevention)"
     
-    # プロセス監視と自動回復機能（レースコンディション対策版）
+    # プロセス監視と自動回復機能（Issue #2511: 二重再起動防止強化版）
     local process_restart_count=0
-    local max_process_restarts=3
-    local restart_cooldown=30
+    local max_process_restarts=2  # Docker restart policy (5回) と合わせて制限を強化
+    local restart_cooldown=45     # クールダウン期間を延長して再起動ループを防止
     local restart_in_progress=false
     local last_restart_time=0
+    local consecutive_failures=0  # 連続失敗回数を追跡
+    local max_consecutive_failures=3
     
     while true; do
         local current_time=$(date +%s)
@@ -461,11 +465,24 @@ start_application() {
                 continue
             fi
             
-            # 頻繁な再起動を防ぐ（最後の再起動から30秒以内は再起動しない）
-            if [ $((current_time - last_restart_time)) -lt 30 ]; then
-                log "Too soon since last restart, waiting..."
-                sleep 5
+            # Issue #2511対策: 頻繁な再起動を防ぐ（最後の再起動から45秒以内は再起動しない）
+            if [ $((current_time - last_restart_time)) -lt 45 ]; then
+                log "Too soon since last restart (min 45s interval), waiting..."
+                sleep 10  # 待機時間を延長
                 continue
+            fi
+            
+            # 連続失敗回数をインクリメント
+            consecutive_failures=$((consecutive_failures + 1))
+            log "Bot process failure detected (consecutive failures: $consecutive_failures/$max_consecutive_failures)"
+            
+            # 連続失敗が限界に達した場合は Dockerレベルの再起動に委ねる
+            if [ $consecutive_failures -gt $max_consecutive_failures ]; then
+                log "Maximum consecutive failures reached. Allowing Docker-level restart."
+                log "Exiting entrypoint to trigger Docker restart policy..."
+                # 起動ロックを解放してからexit
+                release_startup_lock
+                exit 1  # Dockerのrestart policyが作動
             fi
             
             restart_in_progress=true
@@ -489,16 +506,26 @@ start_application() {
                 
                 log "Bot process restarted successfully (Bot PID: $app_pid)"
                 restart_in_progress=false
+                consecutive_failures=0  # Issue #2511対策: 成功時は連続失敗カウンターをリセット
             else
-                log "Maximum restart attempts reached, exiting..."
+                log "Maximum internal restart attempts reached ($max_process_restarts)."
+                log "Allowing Docker restart policy to handle container-level restart..."
                 restart_in_progress=false
-                exit 1
+                # 起動ロックを解放してからexit
+                release_startup_lock
+                exit 1  # Dockerのrestart policyに委ねる
             fi
         fi
         
         # 定期的なヘルスチェック（60秒間隔）
         if [ $((current_time % 60)) -eq 0 ]; then
             log "Process health check: Bot PID $app_pid"
+            
+            # Issue #2511対策: 長期間安定動作している場合は連続失敗カウンターをリセット
+            if [ $bot_alive = true ] && [ $consecutive_failures -gt 0 ] && [ $((current_time - last_restart_time)) -gt 300 ]; then
+                log "Bot running stable for 5+ minutes, resetting consecutive failure counter"
+                consecutive_failures=0
+            fi
         fi
         
         sleep 5
