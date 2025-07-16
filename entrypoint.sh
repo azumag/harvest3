@@ -33,8 +33,8 @@ test_atomic_implementation() {
         # ロックが取得できた場合のみメッセージを出力
         log "$message"
         
-        # 古いロックファイルのクリーンアップ（1分後に自動削除）
-        (sleep 60 && rm -f "$lock_file") &
+        # 古いロックファイルのクリーンアップ（30秒後に自動削除）
+        (sleep 30 && rm -f "$lock_file") &
         return 0
     else
         # 既に同じメッセージが処理済みの場合は何もしない
@@ -49,52 +49,37 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（atomic ファイルベース実装）
-# レースコンディション対策強化版
+# 重複起動ログ防止関数（簡素化版）
+# プロセス内フラグとシンプルなatomic操作による重複防止
 log_startup_message() {
     local message="$1"
+    
+    # プロセス内重複チェック（最初の防御線）
+    local var_name="STARTUP_MSG_$(echo "$message" | md5sum | cut -d' ' -f1 | cut -c1-8)"
+    if [ "${!var_name}" = "1" ]; then
+        # 既に同じメッセージを出力済み
+        return 0
+    fi
+    
+    # プロセス間重複チェック（第二の防御線）
     local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    local max_attempts=5
-    local attempt=0
     
-    # 複数回のリトライでatomicなロック取得を試行
-    while [ $attempt -lt $max_attempts ]; do
-        # atomicな方法でメッセージの重複をチェック
-        if (set -C; echo "$$:$(date +%s)" > "$lock_file") 2>/dev/null; then
-            # ロックが取得できた場合のみメッセージを出力
-            log "$message"
-            
-            # 古いロックファイルのクリーンアップ（1分後に自動削除）
-            (sleep 60 && rm -f "$lock_file") &
-            return 0
-        else
-            # 既存ロックファイルの検証
-            if [ -f "$lock_file" ]; then
-                local lock_info=$(cat "$lock_file" 2>/dev/null)
-                local lock_pid=$(echo "$lock_info" | cut -d':' -f1)
-                local lock_time=$(echo "$lock_info" | cut -d':' -f2)
-                local current_time=$(date +%s)
-                
-                # 30秒以上古いロックファイル or 存在しないプロセスのロックファイルを削除
-                if [ -n "$lock_pid" ] && [ -n "$lock_time" ] && \
-                   ([ $((current_time - lock_time)) -gt 30 ] || ! kill -0 "$lock_pid" 2>/dev/null); then
-                    rm -f "$lock_file" 2>/dev/null
-                    log "Removed stale message lock for PID: $lock_pid"
-                    # 削除後、再度ロック取得を試行
-                    continue
-                fi
-            fi
-            
-            # 既に同じメッセージが処理済みの場合は何もしない
-            # 短時間待機してからリトライ
-            attempt=$((attempt + 1))
-            sleep 0.1
-        fi
-    done
-    
-    # 最大試行回数に達した場合は、メッセージを出力せずに終了
-    return 0
+    # シンプルなatomic操作でロック取得を試行
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        # ロック取得成功：プロセス内フラグを設定してメッセージ出力
+        export "$var_name"=1
+        log "$message"
+        
+        # ロックファイルのクリーンアップ（30秒後）
+        (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
+        return 0
+    else
+        # ロック取得失敗：他のプロセスが処理中または処理済み
+        # プロセス内フラグのみ設定して重複防止
+        export "$var_name"=1
+        return 0
+    fi
 }
 
 # 起動ロック関数
