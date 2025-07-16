@@ -498,7 +498,14 @@ function getComparisonCurrencies(exchangeBalance, botBalance) {
   
   const botCurrencies = Object.keys(botBalance || {});
   
-  return [...new Set([...exchangeCurrencies, ...botCurrencies])];
+  // 通貨名を正規化してから重複除去
+  const allRawCurrencies = [...exchangeCurrencies, ...botCurrencies];
+  const normalizedCurrencies = allRawCurrencies.map(currency => normalizeCurrency(currency));
+  const uniqueNormalizedCurrencies = [...new Set(normalizedCurrencies)];
+  
+  logger.debug(`通貨収集: 取引所=${exchangeCurrencies.length}件, Bot=${botCurrencies.length}件, 正規化後一意=${uniqueNormalizedCurrencies.length}件`);
+  
+  return uniqueNormalizedCurrencies;
 }
 
 /**
@@ -573,7 +580,7 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
       continue;
     }
 
-    // 通貨名の正規化
+    // 通貨はすでに正規化されているが、安全のため再正規化
     const normalizedCurrency = normalizeCurrency(currency);
 
     // 重複処理の防止
@@ -584,8 +591,37 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
     }
     processedCurrencies.add(normalizedCurrency);
 
-    const exchangeAmount = exchangeBalance.total[currency] || 0;
-    const botAmount = botBalance[currency] || 0;
+    // 取引所残高を正規化された通貨名で検索（元の通貨名でも試行）
+    let exchangeAmount = 0;
+    if (exchangeBalance.total[normalizedCurrency] !== undefined) {
+      exchangeAmount = exchangeBalance.total[normalizedCurrency];
+    } else if (exchangeBalance.total[currency] !== undefined) {
+      exchangeAmount = exchangeBalance.total[currency];
+    } else {
+      // 大文字小文字や空白の違いを考慮した検索
+      for (const [key, value] of Object.entries(exchangeBalance.total || {})) {
+        if (normalizeCurrency(key) === normalizedCurrency) {
+          exchangeAmount = value;
+          break;
+        }
+      }
+    }
+
+    // Bot残高を正規化された通貨名で検索
+    let botAmount = 0;
+    if (botBalance[normalizedCurrency] !== undefined) {
+      botAmount = botBalance[normalizedCurrency];
+    } else if (botBalance[currency] !== undefined) {
+      botAmount = botBalance[currency];
+    } else {
+      // 大文字小文字や空白の違いを考慮した検索
+      for (const [key, value] of Object.entries(botBalance || {})) {
+        if (normalizeCurrency(key) === normalizedCurrency) {
+          botAmount = value;
+          break;
+        }
+      }
+    }
 
     // 有意な差がある場合のみチェック
     if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
@@ -684,6 +720,45 @@ function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
 }
 
 /**
+ * システム的な問題を検出する
+ * @param {Array} discrepancies - 不整合データの配列
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} システム的問題の分析結果
+ */
+function detectSystematicIssues(discrepancies, exchangeId) {
+  const totalDiscrepancies = discrepancies.length;
+  const highDiscrepancies = discrepancies.filter(d => d.discrepancyPercent >= 90);
+  const nearZeroBotBalances = discrepancies.filter(d => d.botAmount < 0.001);
+  const allExternalTradeSuspected = discrepancies.filter(d => d.isExternalTradeSuspected);
+  
+  const analysis = {
+    isSystematicIssue: false,
+    severityLevel: 'normal',
+    reasoning: [],
+    recommendations: []
+  };
+  
+  // 系統的な問題の兆候を分析
+  if (totalDiscrepancies >= 5 && nearZeroBotBalances.length >= totalDiscrepancies * 0.8) {
+    analysis.isSystematicIssue = true;
+    analysis.severityLevel = 'critical';
+    analysis.reasoning.push(`Bot残高の80%以上（${nearZeroBotBalances.length}/${totalDiscrepancies}通貨）がほぼゼロ`);
+    analysis.recommendations.push('Redis接続とポジションデータの整合性を緊急確認');
+  } else if (totalDiscrepancies >= 3 && highDiscrepancies.length >= totalDiscrepancies * 0.9) {
+    analysis.isSystematicIssue = true;
+    analysis.severityLevel = 'high';
+    analysis.reasoning.push(`不整合の90%以上（${highDiscrepancies.length}/${totalDiscrepancies}通貨）が90%超の高い差異`);
+    analysis.recommendations.push('データ同期プロセスの確認が必要');
+  }
+  
+  if (analysis.isSystematicIssue) {
+    logger.warn(`🚨 システム的問題を検出 (${exchangeId}): 重要度=${analysis.severityLevel}, 理由=[${analysis.reasoning.join(', ')}]`);
+  }
+  
+  return analysis;
+}
+
+/**
  * 不整合データを処理し、Discord通知を送信する
  * @param {Array} discrepancies - 不整合データの配列
  * @param {string} exchangeId - 取引所ID
@@ -699,8 +774,11 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   // 重複を除去
   const uniqueDiscrepancies = removeDuplicateDiscrepancies(discrepancies, exchangeId);
   
-  // Discord通知を送信
-  const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
+  // システム的問題の検出
+  const systematicAnalysis = detectSystematicIssues(uniqueDiscrepancies, exchangeId);
+  
+  // Discord通知を送信（システム的問題の情報も含める）
+  const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo, systematicAnalysis);
   await postOrderToDiscord(message);
   
   // 不整合の重要度に応じてログレベルを決定
@@ -911,15 +989,26 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
  * @param {string} exchangeId - 取引所ID
  * @param {Array} discrepancies - 不整合データ
  * @param {Object} diagnosticInfo - 診断情報
+ * @param {Object} systematicAnalysis - システム的問題の分析結果
  * @returns {string} Discord用メッセージ
  */
-function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo) {
+function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo, systematicAnalysis = null) {
   // 外部取引の可能性に応じてメッセージのトーンを調整
   const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
   const isAllExternalTrade = externalTradeDiscrepancies.length === discrepancies.length && discrepancies.length > 0;
   
   let messageHeader, messageIcon;
-  if (isAllExternalTrade) {
+  
+  // システム的問題が検出された場合、メッセージを優先
+  if (systematicAnalysis && systematicAnalysis.isSystematicIssue) {
+    if (systematicAnalysis.severityLevel === 'critical') {
+      messageIcon = '🔥';
+      messageHeader = 'システム緊急警告：大規模残高不整合検出';
+    } else {
+      messageIcon = '⚠️';
+      messageHeader = 'システム警告：残高不整合パターン検出';
+    }
+  } else if (isAllExternalTrade) {
     messageIcon = '💡';
     messageHeader = '外部取引による残高差異検出';
   } else {
@@ -928,7 +1017,13 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   }
   
   let message = `${messageIcon} **${messageHeader}** (${exchangeId})\n`;
-  message += `検出時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n\n`;
+  message += `検出時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n`;
+  
+  // システム的問題の概要を追加
+  if (systematicAnalysis && systematicAnalysis.isSystematicIssue) {
+    message += `🚨 **システム問題検出**: ${systematicAnalysis.reasoning.join(', ')}\n`;
+  }
+  message += '\n';
 
   // 上位5件の不整合を表示
   const maxDisplay = 5;
@@ -992,19 +1087,34 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
     message += '\n';
   }
 
-  // 外部取引の可能性に応じて対応メッセージを調整
-  if (externalTradeDiscrepancies.length === discrepancies.length) {
-    // 全て外部取引の可能性
-    message += '💡 **外部取引が原因の可能性があります。**\n';
-    message += '取引所での手動取引履歴を確認し、必要に応じてボット設定を調整してください。';
-  } else if (externalTradeDiscrepancies.length > 0) {
-    // 一部が外部取引の可能性
-    message += '⚠️ **調査が必要です。**\n';
-    message += '外部取引の可能性がある通貨とシステム不整合の可能性がある通貨が混在しています。詳細な調査とRedisデータの確認を行ってください。';
+  // システム的問題が検出された場合の特別な対応メッセージ
+  if (systematicAnalysis && systematicAnalysis.isSystematicIssue) {
+    if (systematicAnalysis.severityLevel === 'critical') {
+      message += '🔥 **緊急システム対応が必要です！**\n';
+    } else {
+      message += '⚠️ **システム調査が必要です。**\n';
+    }
+    message += `**推奨対応**: ${systematicAnalysis.recommendations.join('、')}\n\n`;
+    message += '**追加確認事項**:\n';
+    message += '• Docker環境のRedisサービス状態確認\n';
+    message += '• strategy-runnerサービスの再起動検討\n';
+    message += '• ポジションデータの手動確認\n';
+    message += '• 最近のシステム変更の確認';
   } else {
-    // 外部取引ではない可能性が高い
-    message += '🚨 **緊急対応が必要です。**\n';
-    message += 'システム不整合の可能性が高いです。詳細な調査とRedisデータの確認を行ってください。';
+    // 従来の外部取引ベースの対応メッセージ
+    if (externalTradeDiscrepancies.length === discrepancies.length) {
+      // 全て外部取引の可能性
+      message += '💡 **外部取引が原因の可能性があります。**\n';
+      message += '取引所での手動取引履歴を確認し、必要に応じてボット設定を調整してください。';
+    } else if (externalTradeDiscrepancies.length > 0) {
+      // 一部が外部取引の可能性
+      message += '⚠️ **調査が必要です。**\n';
+      message += '外部取引の可能性がある通貨とシステム不整合の可能性がある通貨が混在しています。詳細な調査とRedisデータの確認を行ってください。';
+    } else {
+      // 外部取引ではない可能性が高い
+      message += '🚨 **緊急対応が必要です。**\n';
+      message += 'システム不整合の可能性が高いです。詳細な調査とRedisデータの確認を行ってください。';
+    }
   }
 
   return message;
