@@ -96,17 +96,16 @@ process.env.MONGO_URL = process.env.MONGO_URL || 'mongodb://harvest3-mongodb:270
 process.env.MONGODB_DB_NAME = 'test';
 
 // Suppress console outputs in CI environment to prevent false test failures
-// Tests legitimately use console.log/warn/error outputs which CI treats as failures
+// Tests legitimately use console.log/warn outputs which CI treats as failures
+// Error-level output is preserved for debugging
 if (process.env.CI) {
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
   const originalConsoleLog = console.log;
 
   console.error = jest.fn().mockImplementation((...args) => {
-    // Still log to stderr for debugging if needed
-    if (process.env.DEBUG_CI_ERRORS) {
-      originalConsoleError.apply(console, args);
-    }
+    // Always preserve error-level output for debugging
+    originalConsoleError.apply(console, args);
   });
 
   console.warn = jest.fn().mockImplementation((...args) => {
@@ -124,23 +123,36 @@ if (process.env.CI) {
   });
 }
 
-// CI環境でのクリーンアップ強化
-if (process.env.CI) {
-  // テスト終了後のクリーンアップ
-  afterAll(async () => {
-    // 未処理のPromiseやタイマーをクリア
-    jest.clearAllTimers();
-    jest.clearAllMocks();
-    
-    // ガベージコレクションを強制実行
-    if (global.gc) {
-      global.gc();
+// 安全なクリーンアップ処理 - ワーカープロセスクラッシュを防止
+afterAll(async () => {
+  // 基本的なクリーンアップのみ実行
+  jest.clearAllTimers();
+  jest.clearAllMocks();
+  
+  // CI環境では積極的なクリーンアップを避ける
+  if (!process.env.CI) {
+    // アクティブなハンドルを安全にクリーンアップ（非CI環境のみ）
+    if (process._getActiveHandles) {
+      const activeHandles = process._getActiveHandles();
+      if (activeHandles && activeHandles.length > 0) {
+        activeHandles.forEach(handle => {
+          if (handle && typeof handle.unref === 'function') {
+            try {
+              handle.unref();
+            } catch (error) {
+              // ハンドルのクリーンアップエラーを無視
+            }
+          }
+        });
+      }
     }
-  });
+  }
+});
 
-  // 各テストスイート後のクリーンアップ
-  afterEach(() => {
-    // モックコールをクリア
-    jest.clearAllMocks();
-  });
-}
+// 各テストスイート後のクリーンアップ
+afterEach(() => {
+  // モックコールをクリア
+  jest.clearAllMocks();
+  // タイマーをクリア
+  jest.clearAllTimers();
+});
