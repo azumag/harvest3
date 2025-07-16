@@ -1393,12 +1393,10 @@ describe('Issue #1691: 未知のステータス値への対応テスト', () => 
     // 残高がゼロであることを確認
     expect(result).toEqual({});
 
-    // 診断情報が出力されることを確認
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。以下の可能性があります:');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  1. 全ポジションが決済済み (status="closed")');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  2. 売りポジションのみが存在');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  3. データベース接続またはデータ整合性の問題');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  4. ポジションデータの形式変更');
+    // 新しい診断情報が出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。詳細な分析を実行中...');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(expect.stringMatching(/🔍 Closed ポジション分析結果: \d+件のclosedポジションを検出/));
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(expect.stringMatching(/💰 BTC: \d+ポジション, 総額=\d+\.\d+/));
   });
 
   it('データ検証エラーが適切に報告される', async () => {
