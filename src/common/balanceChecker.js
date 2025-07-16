@@ -568,7 +568,7 @@ function analyzeClosedPositionDiscrepancies(discrepancies, botBalanceDiagnostics
 }
 
 /**
- * 残高の不整合を検出する
+ * 残高の不整合を検出する（Issue #2472修正版）
  * @param {Array} allCurrencies - 比較対象の通貨一覧
  * @param {Object} exchangeBalance - 取引所残高
  * @param {Object} botBalance - Bot管理残高
@@ -583,25 +583,32 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
 
   logger.debug(`不整合検出開始 (${exchangeId}): 対象通貨数=${allCurrencies.length}`);
 
-  for (const currency of allCurrencies) {
+  // Issue #2472修正: 通貨リストを事前に正規化して重複を除去
+  const uniqueCurrencies = [...new Set(allCurrencies.map(currency => normalizeCurrency(currency)))];
+  logger.debug(`[Issue #2472] 正規化後の一意通貨数 (${exchangeId}): ${uniqueCurrencies.length}/${allCurrencies.length}`);
+
+  for (const currency of uniqueCurrencies) {
     // 除外する通貨をチェック
     if (EXCLUDED_CURRENCIES.includes(currency)) {
       continue;
     }
 
-    // 通貨名の正規化
+    // 通貨名の正規化（既に正規化済みだが安全のため再実行）
     const normalizedCurrency = normalizeCurrency(currency);
 
-    // 重複処理の防止
+    // 重複処理の防止（二重チェック）
     if (processedCurrencies.has(normalizedCurrency)) {
       skippedDuplicateCount++;
-      logger.warn(`通貨の重複処理を検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency}`);
+      logger.warn(`[Issue #2472] 通貨の重複処理を検出しスキップ (${exchangeId}): ${currency} -> ${normalizedCurrency}`);
       continue;
     }
     processedCurrencies.add(normalizedCurrency);
 
-    const exchangeAmount = exchangeBalance.total[currency] || 0;
-    const botAmount = botBalance[currency] || 0;
+    // 元の通貨名を探す（取引所残高とbot残高の両方をチェック）
+    const originalCurrency = allCurrencies.find(c => normalizeCurrency(c) === normalizedCurrency) || currency;
+    
+    const exchangeAmount = exchangeBalance.total[originalCurrency] || 0;
+    const botAmount = botBalance[originalCurrency] || 0;
 
     // 有意な差がある場合のみチェック
     if (Math.max(exchangeAmount, botAmount) < significantThreshold) {
@@ -623,7 +630,7 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
     if (discrepancyPercent > tolerancePercent) {
       const discrepancyEntry = {
         currency: normalizedCurrency,
-        originalCurrency: currency, // 元の通貨名を保持
+        originalCurrency: originalCurrency, // 元の通貨名を保持
         exchangeAmount: parseFloat(exchangeAmount.toFixed(DECIMAL_PRECISION)),
         botAmount: parseFloat(botAmount.toFixed(DECIMAL_PRECISION)),
         difference,
@@ -646,25 +653,32 @@ function detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchang
 }
 
 /**
- * 不整合データから重複を除去する（強化版）
+ * 不整合データから重複を除去する（Issue #2472修正版）
  * @param {Array} discrepancies - 不整合データの配列
  * @param {string} exchangeId - 取引所ID
  * @returns {Array} 重複を除去した不整合データの配列
  */
 function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
   const uniqueDiscrepancies = [];
-  const seenCurrencies = new Map(); // Set から Map に変更して詳細情報を保持
+  const seenCurrencies = new Map();
   let duplicateCount = 0;
   
-  for (const disc of discrepancies) {
+  // 最初に通貨名で事前ソート（一貫性を保つため）
+  const sortedDiscrepancies = discrepancies.sort((a, b) => {
+    const aCurrency = normalizeCurrency(a.currency);
+    const bCurrency = normalizeCurrency(b.currency);
+    return aCurrency.localeCompare(bCurrency);
+  });
+  
+  for (const disc of sortedDiscrepancies) {
     const normalizedDiscCurrency = normalizeCurrency(disc.currency);
     
     if (!seenCurrencies.has(normalizedDiscCurrency)) {
       const enhancedDisc = {
         ...disc,
         currency: normalizedDiscCurrency,
-        originalCurrency: disc.originalCurrency || disc.currency, // 既存のoriginalCurrencyを優先
-        processedAt: Date.now() // 処理時刻を記録
+        originalCurrency: disc.originalCurrency || disc.currency,
+        processedAt: Date.now()
       };
       uniqueDiscrepancies.push(enhancedDisc);
       seenCurrencies.set(normalizedDiscCurrency, {
@@ -675,24 +689,32 @@ function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
     } else {
       duplicateCount++;
       const existingInfo = seenCurrencies.get(normalizedDiscCurrency);
-      logger.warn(`最終段階で重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency} (既存: ${existingInfo.originalCurrency}, インデックス: ${existingInfo.index})`);
+      logger.warn(`[Issue #2472] 重複エントリを検出し除去 (${exchangeId}): ${disc.currency} -> ${normalizedDiscCurrency} (既存: ${existingInfo.originalCurrency}, インデックス: ${existingInfo.index})`);
     }
   }
   
   // 重複が検出された場合は統計情報をログ出力
   if (duplicateCount > 0) {
-    logger.warn(`重複エントリ除去統計 (${exchangeId}): 元の件数=${discrepancies.length}, 重複除去後=${uniqueDiscrepancies.length}, 除去された重複=${duplicateCount}`);
+    logger.warn(`[Issue #2472] 重複エントリ除去統計 (${exchangeId}): 元の件数=${discrepancies.length}, 重複除去後=${uniqueDiscrepancies.length}, 除去された重複=${duplicateCount}`);
   }
   
-  // 最終的な一意性チェック
+  // 最終的な一意性チェック（より厳密）
   const finalCheck = new Set(uniqueDiscrepancies.map(d => d.currency));
   if (finalCheck.size !== uniqueDiscrepancies.length) {
-    logger.error(`重複除去後も重複が残存 (${exchangeId}): 期待数=${finalCheck.size}, 実際数=${uniqueDiscrepancies.length}`);
-    // 緊急対応として完全重複除去を実行
-    const emergencyUnique = Array.from(finalCheck).map(currency => 
-      uniqueDiscrepancies.find(d => d.currency === currency)
-    );
-    logger.warn(`緊急重複除去を実行 (${exchangeId}): ${uniqueDiscrepancies.length} -> ${emergencyUnique.length}`);
+    logger.error(`[Issue #2472] 重複除去後も重複が残存 (${exchangeId}): 期待数=${finalCheck.size}, 実際数=${uniqueDiscrepancies.length}`);
+    
+    // 緊急対応として完全重複除去を実行（最初の出現を保持）
+    const emergencyUnique = [];
+    const emergencyCheck = new Set();
+    
+    for (const disc of uniqueDiscrepancies) {
+      if (!emergencyCheck.has(disc.currency)) {
+        emergencyUnique.push(disc);
+        emergencyCheck.add(disc.currency);
+      }
+    }
+    
+    logger.warn(`[Issue #2472] 緊急重複除去を実行 (${exchangeId}): ${uniqueDiscrepancies.length} -> ${emergencyUnique.length}`);
     return emergencyUnique;
   }
   
@@ -745,54 +767,63 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logger.debug(`不整合詳細 [${index + 1}] (${exchangeId}): ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}, 閾値=${externalTradeThreshold}%`);
   });
   
-  // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
-  // Issue #2465修正: 外部取引判定の優先順位を強化
-  if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
-      externalTradeDiscrepancies.length > 0) {
-    // 全ての不整合が外部取引の可能性（50%以上）の場合 - 最優先で判定
+  // Issue #2472修正: 外部取引を優先的に判定する改善されたログレベル判定ロジック
+  // 90%以上の外部取引を最優先で判定
+  if (veryHighExternalTradeDiscrepancies.length > 0) {
+    const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
+    if (veryHighRatio >= 0.8) {
+      // 80%以上が明らかな外部取引（90%以上）の場合はINFOレベル
+      logLevel = 'info';
+      severityText = '外部取引による残高差異';
+      logLevelDecision(exchangeId, `条件1適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 80%`, 'INFO');
+    } else if (veryHighRatio >= 0.5) {
+      // 50%以上が明らかな外部取引の場合はINFOレベル
+      logLevel = 'info';
+      severityText = '外部取引による残高差異（一部混在）';
+      logLevelDecision(exchangeId, `条件2適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+    } else {
+      // 50%未満だが90%以上の外部取引が含まれる場合はWARNレベル
+      logLevel = 'warn';
+      severityText = '混合不整合（明らかな外部取引含む）';
+      logLevelDecision(exchangeId, `条件3適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
+    }
+  } else if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
+             externalTradeDiscrepancies.length > 0) {
+    // 全ての不整合が外部取引の可能性（50%以上）の場合
     logLevel = 'info';
     severityText = '外部取引による残高差異';
-    logLevelDecision(exchangeId, '条件1適用 - 全て外部取引', 'INFO');
-  } else if (veryHighExternalTradeDiscrepancies.length > 0) {
-    // 一部が明らかに外部取引（90%以上）の場合
-    // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
-    const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
-      logLevel = 'info';
-      severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件2a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
-    } else {
-      logLevel = 'warn';
-      severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
-        ? '外部取引による残高差異（一部混在）'
-        : '混合不整合（明らかな外部取引含む）';
-      logLevelDecision(exchangeId, `条件2b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
-    }
+    logLevelDecision(exchangeId, '条件4適用 - 全て外部取引', 'INFO');
   } else if (externalTradeDiscrepancies.length > 0) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
-    // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
     const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (externalRatio >= LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
+    if (externalRatio >= 0.7) {
+      // 70%以上が外部取引の可能性の場合はINFOレベル
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+      logLevelDecision(exchangeId, `条件5適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 70%`, 'INFO');
+    } else if (externalRatio >= 0.5) {
+      // 50%以上が外部取引の可能性の場合はWARNレベル
+      logLevel = 'warn';
+      severityText = '混合不整合（外部取引の可能性）';
+      logLevelDecision(exchangeId, `条件6適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 50%`, 'WARN');
     } else {
+      // 50%未満の場合はWARNレベル
       logLevel = 'warn';
       severityText = nonExternalHighDiscrepancies.length > 0 
         ? '混合不整合（外部取引と高度不整合）'
         : '軽微な不整合（外部取引の可能性）';
-      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% < 50%`, 'WARN');
+      logLevelDecision(exchangeId, `条件7適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% < 50%`, 'WARN');
     }
   } else if (nonExternalHighDiscrepancies.length > 0) {
     // 外部取引ではない高度不整合のみの場合のみERRORレベル
     logLevel = 'error';
     severityText = '高度不整合';
-    logLevelDecision(exchangeId, '条件4適用 - 非外部高度不整合のみ', 'ERROR');
+    logLevelDecision(exchangeId, '条件8適用 - 非外部高度不整合のみ', 'ERROR');
   } else {
     // 軽微な不整合のみ
     logLevel = 'warn';
     severityText = '軽微な不整合';
-    logLevelDecision(exchangeId, '条件5適用 - 軽微な不整合のみ', 'WARN');
+    logLevelDecision(exchangeId, '条件9適用 - 軽微な不整合のみ', 'WARN');
   }
   
   // Issue #2441修正: 最終的なログレベル判定結果を強制的に記録
