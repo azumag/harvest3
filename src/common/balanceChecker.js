@@ -664,13 +664,6 @@ async function getBotManagedBalance(includeDiagnostics = false) {
 
     // ポジションデータが空の場合の詳細ログ
     if (allPositions.length === 0) {
-      const redisClient = getRedisClient();
-      const isConnected = redisClient && redisClient.isReady;
-      
-      if (!isConnected) {
-        throw new Error('Redis接続が確立されていないため、ポジションデータを取得できません');
-      }
-      
       // Redis接続はあるがデータが空の場合は正常な状態として扱う
       logger.warn('Redis接続は正常ですが、ポジションデータが存在しません（新規起動またはポジションなし）');
     }
