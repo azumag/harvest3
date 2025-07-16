@@ -756,7 +756,7 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
   logger[logLevel](message_text);
   
-  // ログ出力時の強化された重複防止チェック
+  // ログ出力時の強化された重複防止チェック（個別ログレベル対応）
   const loggedCurrencies = new Map(); // Set から Map に変更
   const logEntries = [];
   
@@ -765,9 +765,28 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     const logIndex = index + 1;
     
     if (!loggedCurrencies.has(normalizedCurrency)) {
+      // 個別の不整合に対して適切なログレベルを決定
+      let individualLogLevel;
+      if (disc.isExternalTradeSuspected && disc.discrepancyPercent >= BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold) {
+        // 明らかな外部取引（90%以上）
+        individualLogLevel = 'info';
+      } else if (disc.isExternalTradeSuspected && disc.discrepancyPercent >= BALANCE_CONFIG.thresholds.externalTradeThreshold) {
+        // 外部取引の可能性（50%以上）
+        individualLogLevel = 'info';
+      } else if (disc.discrepancyPercent >= BALANCE_CONFIG.thresholds.highDiscrepancyPercent) {
+        // 高度不整合でシステム問題の可能性
+        individualLogLevel = 'error';
+      } else {
+        // 軽微な不整合
+        individualLogLevel = 'warn';
+      }
+      
       const toleranceInfo = disc.tolerancePercent > 0 ? ` [許容誤差: ${disc.tolerancePercent}%]` : '';
       const externalTradeInfo = disc.isExternalTradeSuspected ? ' ⚠️外部取引の可能性' : '';
-      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)${toleranceInfo}${externalTradeInfo}`;
+      const logEntry = {
+        message: `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)${toleranceInfo}${externalTradeInfo}`,
+        level: individualLogLevel
+      };
       logEntries.push(logEntry);
       loggedCurrencies.set(normalizedCurrency, {
         logIndex,
@@ -780,9 +799,9 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     }
   });
   
-  // 実際のログ出力（重複なしが保証された状態）
+  // 実際のログ出力（重複なしが保証された状態、個別ログレベル適用）
   logEntries.forEach(logEntry => {
-    logger[logLevel](logEntry);
+    logger[logEntry.level](logEntry.message);
   });
   
   // 最終検証: ログ出力数と期待数の一致確認
