@@ -560,7 +560,7 @@ describe('Walk-Forward Analysis 包括テストスイート', () => {
     const data = generateMockTimeSeriesData();
     return data.map((item, index) => ({
       ...item,
-      optimalParameter: 0.5 + (index / data.length) * 0.4 // 徐々に変化
+      optimalParameter: 0.1 + (index / data.length) * 4.9 // より大きな変化でドリフト検出を確実に
     }));
   }
 

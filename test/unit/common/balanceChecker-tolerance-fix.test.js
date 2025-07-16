@@ -207,7 +207,7 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
           exchange: 'bitbank',
           symbol: 'BTC/JPY',
           side: 'buy',
-          amount: 0.05, // 95%の差異（外部取引の可能性）
+          amount: 0.25, // 75%の差異（外部取引の可能性、90%未満）
           status: 'open'
         },
         {
