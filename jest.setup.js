@@ -124,48 +124,28 @@ if (process.env.CI) {
   });
 }
 
-// 全環境でのクリーンアップ強化（安全な方法）
-// テスト終了後のクリーンアップ
+// 安全なクリーンアップ処理 - ワーカープロセスクラッシュを防止
 afterAll(async () => {
-  // 未処理のPromiseやタイマーをクリア
+  // 基本的なクリーンアップのみ実行
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // アクティブなハンドルを安全にクリーンアップ
-  if (process._getActiveHandles) {
-    const activeHandles = process._getActiveHandles();
-    if (activeHandles && activeHandles.length > 0) {
-      activeHandles.forEach(handle => {
-        if (handle && typeof handle.unref === 'function') {
-          try {
-            handle.unref();
-          } catch (error) {
-            // ハンドルのクリーンアップエラーを無視
+  // CI環境では積極的なクリーンアップを避ける
+  if (!process.env.CI) {
+    // アクティブなハンドルを安全にクリーンアップ（非CI環境のみ）
+    if (process._getActiveHandles) {
+      const activeHandles = process._getActiveHandles();
+      if (activeHandles && activeHandles.length > 0) {
+        activeHandles.forEach(handle => {
+          if (handle && typeof handle.unref === 'function') {
+            try {
+              handle.unref();
+            } catch (error) {
+              // ハンドルのクリーンアップエラーを無視
+            }
           }
-        }
-      });
-    }
-  }
-  
-  // ガベージコレクションを強制実行（利用可能な場合のみ）
-  if (global.gc) {
-    try {
-      global.gc();
-    } catch (error) {
-      // ガベージコレクションエラーを無視
-    }
-  }
-  
-  // NodeJSのタイマーを強制的にクリア
-  if (global.clearTimeout) {
-    try {
-      // 存在する可能性のあるタイマーIDをクリア
-      for (let i = 1; i < 1000; i++) {
-        clearTimeout(i);
-        clearInterval(i);
+        });
       }
-    } catch (error) {
-      // タイマークリアエラーを無視
     }
   }
 });
