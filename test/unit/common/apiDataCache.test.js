@@ -60,6 +60,20 @@ describe('APIDataCache', () => {
       expect(result).toBeNull();
       expect(cache.cache.has(key)).toBe(false);
     });
+
+    test('センシティブキーのマスキング', () => {
+      const key1 = 'bitbank:fetchTicker:BTC/JPY:';
+      const key2 = 'bitbank:fetchTicker:BTC/JPY:{"limit":100}';
+      const key3 = 'bitbank:fetchBalance::';
+      
+      expect(cache.maskSensitiveKey(key1)).toBe('bitbank:fetchTicker:BTC/JPY:*****');
+      expect(cache.maskSensitiveKey(key2)).toBe('bitbank:fetchTicker:BTC/JPY:*****');
+      expect(cache.maskSensitiveKey(key3)).toBe('bitbank:fetchBalance::*****');
+      
+      // 短いキーの場合はそのまま返す
+      const shortKey = 'bitbank:fetchTicker';
+      expect(cache.maskSensitiveKey(shortKey)).toBe(shortKey);
+    });
   });
 
   describe('APIキュー処理', () => {
@@ -199,21 +213,19 @@ describe('APIDataCache', () => {
     });
 
     test('最大再試行回数に達した場合に失敗する', async () => {
-      const retryableError = new Error('ECONNRESET');
+      const retryableError = new Error('fetch failed');
       mockExchange.fetchTicker.mockRejectedValue(retryableError);
 
       await expect(cache.queueRequest(mockExchange, 'fetchTicker', 'BTC/JPY'))
-        .rejects.toThrow('ECONNRESET');
+        .rejects.toThrow('fetch failed');
 
       expect(mockExchange.fetchTicker).toHaveBeenCalledTimes(4); // 初回 + 3回再試行
       expect(cache.stats.retries).toBe(3);
     });
 
-    test('isRetryableError関数のテスト', () => {
+    test('isRetryableError関数のテスト - メッセージベース', () => {
       const retryableErrors = [
         new Error('fetch failed'),
-        new Error('ECONNRESET'),
-        new Error('ECONNREFUSED'),
         new Error('Network Error'),
         new Error('Rate limit exceeded')
       ];
@@ -229,6 +241,54 @@ describe('APIDataCache', () => {
       });
 
       nonRetryableErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(false);
+      });
+    });
+
+    test('isRetryableError関数のテスト - HTTPステータスコードベース', () => {
+      const retryableHttpErrors = [
+        { response: { status: 429 }, message: 'Rate limit' },
+        { response: { status: 500 }, message: 'Server error' },
+        { response: { status: 502 }, message: 'Bad Gateway' },
+        { response: { status: 503 }, message: 'Service Unavailable' },
+        { response: { status: 504 }, message: 'Gateway Timeout' }
+      ];
+
+      const nonRetryableHttpErrors = [
+        { response: { status: 400 }, message: 'Bad Request' },
+        { response: { status: 401 }, message: 'Unauthorized' },
+        { response: { status: 403 }, message: 'Forbidden' },
+        { response: { status: 404 }, message: 'Not Found' }
+      ];
+
+      retryableHttpErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(true);
+      });
+
+      nonRetryableHttpErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(false);
+      });
+    });
+
+    test('isRetryableError関数のテスト - エラーコードベース', () => {
+      const retryableCodeErrors = [
+        { code: 'ECONNRESET', message: 'Connection reset' },
+        { code: 'ECONNREFUSED', message: 'Connection refused' },
+        { code: 'ETIMEDOUT', message: 'Timeout' },
+        { code: 'ENOTFOUND', message: 'Not found' },
+        { code: 'ECONNABORTED', message: 'Connection aborted' }
+      ];
+
+      const nonRetryableCodeErrors = [
+        { code: 'EACCES', message: 'Permission denied' },
+        { code: 'EINVAL', message: 'Invalid argument' }
+      ];
+
+      retryableCodeErrors.forEach(error => {
+        expect(cache.isRetryableError(error)).toBe(true);
+      });
+
+      nonRetryableCodeErrors.forEach(error => {
         expect(cache.isRetryableError(error)).toBe(false);
       });
     });
