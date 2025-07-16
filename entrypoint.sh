@@ -17,8 +17,9 @@ DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通�
 STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
-# 重複起動メッセージ防止（シンプルな環境変数ベース）
-STARTUP_MESSAGE_SENT=""
+# 重複起動メッセージ防止（ファイルベースの atomic 実装）
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # ログ関数
 log() {
@@ -27,12 +28,22 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（シンプル版）
+# 重複起動ログ防止関数（atomic ファイルベース実装）
 log_startup_message() {
     local message="$1"
-    if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then
-        STARTUP_MESSAGE_SENT="$message"
+    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # atomicな方法でメッセージの重複をチェック
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        # ロックが取得できた場合のみメッセージを出力
         log "$message"
+        
+        # 古いロックファイルのクリーンアップ（1分後に自動削除）
+        (sleep 60 && rm -f "$lock_file") &
+    else
+        # 既に同じメッセージが処理済みの場合は何もしない
+        return 0
     fi
 }
 
