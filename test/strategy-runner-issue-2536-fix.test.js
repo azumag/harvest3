@@ -1,300 +1,268 @@
 /**
  * strategy-runner Issue #2536 重複起動メッセージ修正のテスト
  * Issue #2536: [自動] strategy-runnerサービスで例外が発生
+ * 
+ * 改善版テスト: 実際の動作をテストする
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => {
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
-  const testLogFile = '/tmp/test-strategy-runner-startup.log';
-  const testLockFile = '/tmp/test-strategy-runner-startup.lock';
+  const testScript = `#!/bin/bash
+source "${entrypointPath}"
 
-  // 各テスト前のクリーンアップ
-  beforeEach(() => {
-    // テストファイルを削除
-    [testLogFile, testLockFile].forEach(file => {
-      if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
-      }
-    });
+# テスト用のログ関数の動作確認
+test_log_startup_message() {
+    echo "=== Testing log_startup_message function ==="
+    
+    # 最初の呼び出し
+    log_startup_message "Test message 1"
+    
+    # 同じメッセージの重複呼び出し（抑制されるべき）
+    log_startup_message "Test message 1"
+    
+    # 異なるメッセージの呼び出し
+    log_startup_message "Test message 2"
+    
+    # 最初のメッセージの再度呼び出し（抑制されるべき）
+    log_startup_message "Test message 1"
+    
+    # 環境変数の確認
+    echo "STARTUP_MESSAGE_SENT: $STARTUP_MESSAGE_SENT"
+}
+
+# 関数のテスト実行
+test_log_startup_message
+`;
+
+  const testScriptPath = path.join(__dirname, '..', '.tmp', 'test_startup_message.sh');
+
+  beforeAll(() => {
+    // テストディレクトリの作成
+    const tmpDir = path.join(__dirname, '..', '.tmp');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    
+    // テストスクリプトの作成
+    fs.writeFileSync(testScriptPath, testScript);
+    fs.chmodSync(testScriptPath, '755');
   });
 
-  // 各テスト後のクリーンアップ
-  afterEach(() => {
-    // テストファイルを削除
-    [testLogFile, testLockFile].forEach(file => {
-      if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
-      }
-    });
+  afterAll(() => {
+    // テストファイルのクリーンアップ
+    if (fs.existsSync(testScriptPath)) {
+      fs.unlinkSync(testScriptPath);
+    }
   });
 
   describe('重複起動ログ防止機能の実装確認', () => {
-    test('entrypoint.shファイルに重複防止機能が追加されている', () => {
-      // entrypoint.shファイルが存在することを確認
+    test('entrypoint.shファイルが存在し、基本的な機能が含まれている', () => {
       expect(fs.existsSync(entrypointPath)).toBe(true);
       
-      // entrypoint.shファイルの内容を読み込み
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 重複防止関連の設定が追加されていることを確認
-      expect(entrypointContent).toContain('STARTUP_INSTANCE_ID');
-      expect(entrypointContent).toContain('STARTUP_LOG_FILE');
-      
-      // 重複防止関数が定義されていることを確認
+      // 重複防止機能が簡素化されていることを確認
+      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT');
       expect(entrypointContent).toContain('log_startup_message()');
       
-      // 起動メッセージで重複防止機能が使用されていることを確認
-      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
-      expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
+      // 複雑な実装が削除されていることを確認
+      expect(entrypointContent).not.toContain('STARTUP_INSTANCE_ID');
+      expect(entrypointContent).not.toContain('STARTUP_LOG_FILE');
     });
 
-    test('起動インスタンスIDが一意に生成される', () => {
+    test('簡素化された重複防止機能が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 起動インスタンスIDの生成ロジックを確認
-      expect(entrypointContent).toContain('STARTUP_INSTANCE_ID="${RANDOM}-$$-$(date +%s)"');
+      // シンプルな実装が使用されていることを確認
+      expect(entrypointContent).toContain('if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then');
+      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT="$message"');
       
-      // 一意性を保証する要素が含まれていることを確認
-      expect(entrypointContent).toContain('${RANDOM}');  // ランダム値
-      expect(entrypointContent).toContain('$$');         // プロセスID
-      expect(entrypointContent).toContain('$(date +%s)'); // タイムスタンプ
+      // 複雑な処理が削除されていることを確認
+      expect(entrypointContent).not.toContain('tail -n 10');
+      expect(entrypointContent).not.toContain('grep -q');
+      expect(entrypointContent).not.toContain('instance_signature');
     });
 
-    test('重複チェック機能が正しく実装されている', () => {
+    test('データベース接続チェック機能が統合されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 重複チェック処理の実装を確認
-      expect(entrypointContent).toContain('if grep -q "$instance_signature" "$STARTUP_LOG_FILE"');
-      expect(entrypointContent).toContain('重複メッセージの抑制');
+      // 共通の接続チェック関数が存在することを確認
+      expect(entrypointContent).toContain('check_database_connection()');
       
-      // インスタンスシグネチャの生成
-      expect(entrypointContent).toContain('instance_signature="${STARTUP_INSTANCE_ID}-${message}"');
+      // 重複したコードが削除されていることを確認
+      const redisChecks = (entrypointContent.match(/Redis connection/g) || []).length;
+      const mongoChecks = (entrypointContent.match(/MongoDB connection/g) || []).length;
       
-      // ログファイルへの記録
-      expect(entrypointContent).toContain('echo "$instance_signature" >> "$STARTUP_LOG_FILE"');
-    });
-
-    test('ログファイルのクリーンアップ機能が実装されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // ログファイルの自動クリーンアップ
-      expect(entrypointContent).toContain('tail -n 10 "$STARTUP_LOG_FILE"');
-      
-      // 起動ロック解放時のクリーンアップ
-      expect(entrypointContent).toContain('grep -v "$STARTUP_INSTANCE_ID" "$STARTUP_LOG_FILE"');
-      
-      // 空ファイルの削除
-      expect(entrypointContent).toContain('if [ ! -s "$STARTUP_LOG_FILE" ]; then');
-      expect(entrypointContent).toContain('rm -f "$STARTUP_LOG_FILE"');
-    });
-
-    test('stdout フラッシュ機能が追加されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // stdout の即座フラッシュ処理
-      expect(entrypointContent).toContain('exec 1>&1');
-      expect(entrypointContent).toContain('stdout の即座フラッシュを保証');
-    });
-
-    test('起動診断情報が追加されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // 起動診断情報の記録
-      expect(entrypointContent).toContain('起動診断情報');
-      expect(entrypointContent).toContain('起動インスタンス ID');
-      expect(entrypointContent).toContain('プロセス ID');
-      expect(entrypointContent).toContain('起動時刻');
-      expect(entrypointContent).toContain('作業ディレクトリ');
-      expect(entrypointContent).toContain('バックテストモード');
+      // 各データベースのチェックが一箇所に集約されていることを確認
+      expect(redisChecks).toBeLessThanOrEqual(3); // 定義、呼び出し、ログ出力
+      expect(mongoChecks).toBeLessThanOrEqual(3);
     });
   });
 
-  describe('修正機能の動作確認', () => {
-    test('ログファイルの基本的な操作が正常に動作する', () => {
-      // テスト用のログファイルを作成
-      const testSignature = '12345-999-1234567890-test message';
-      fs.writeFileSync(testLogFile, testSignature + '\n');
-      
-      // ログファイルが作成されることを確認
-      expect(fs.existsSync(testLogFile)).toBe(true);
-      
-      // ログファイルの内容を確認
-      const logContent = fs.readFileSync(testLogFile, 'utf8');
-      expect(logContent).toContain(testSignature);
-      
-      // ログファイルを削除
-      fs.unlinkSync(testLogFile);
-      expect(fs.existsSync(testLogFile)).toBe(false);
-    });
-
-    test('重複エントリの検出が可能', () => {
-      // テスト用のログファイルを作成
-      const testSignature = '12345-999-1234567890-test message';
-      fs.writeFileSync(testLogFile, testSignature + '\n');
-      
-      // 既存のエントリを検出できることを確認
-      const logContent = fs.readFileSync(testLogFile, 'utf8');
-      expect(logContent.includes(testSignature)).toBe(true);
-      
-      // 別のエントリを追加
-      const anotherSignature = '67890-888-0987654321-another message';
-      fs.appendFileSync(testLogFile, anotherSignature + '\n');
-      
-      // 両方のエントリが存在することを確認
-      const updatedLogContent = fs.readFileSync(testLogFile, 'utf8');
-      expect(updatedLogContent.includes(testSignature)).toBe(true);
-      expect(updatedLogContent.includes(anotherSignature)).toBe(true);
-    });
-
-    test('古いエントリの削除が正常に動作する', () => {
-      // 複数のテストエントリを作成
-      const entries = [
-        '11111-111-1111111111-message1',
-        '22222-222-2222222222-message2',
-        '33333-333-3333333333-message3'
-      ];
-      
-      entries.forEach(entry => {
-        fs.appendFileSync(testLogFile, entry + '\n');
+  describe('実際の重複防止動作確認', () => {
+    test('log_startup_message関数が重複メッセージを正しく抑制する', (done) => {
+      // テストスクリプトを実行
+      const child = spawn('bash', [testScriptPath], {
+        env: { ...process.env, PATH: process.env.PATH }
       });
-      
-      // 全てのエントリが存在することを確認
-      const initialContent = fs.readFileSync(testLogFile, 'utf8');
-      entries.forEach(entry => {
-        expect(initialContent.includes(entry)).toBe(true);
-      });
-      
-      // 特定のエントリを削除（grep -v の動作をシミュレート）
-      const targetId = '22222';
-      const lines = initialContent.split('\n');
-      const filteredLines = lines.filter(line => !line.includes(targetId));
-      fs.writeFileSync(testLogFile, filteredLines.join('\n'));
-      
-      // 削除されたエントリが存在しないことを確認
-      const filteredContent = fs.readFileSync(testLogFile, 'utf8');
-      expect(filteredContent.includes(entries[1])).toBe(false);
-      expect(filteredContent.includes(entries[0])).toBe(true);
-      expect(filteredContent.includes(entries[2])).toBe(true);
-    });
 
-    test('空ファイルの削除が正常に動作する', () => {
-      // 空のログファイルを作成
-      fs.writeFileSync(testLogFile, '');
-      
-      // ファイルが存在することを確認
-      expect(fs.existsSync(testLogFile)).toBe(true);
-      
-      // ファイルが空であることを確認
-      const stats = fs.statSync(testLogFile);
-      expect(stats.size).toBe(0);
-      
-      // 空ファイルの削除をシミュレート
-      if (stats.size === 0) {
-        fs.unlinkSync(testLogFile);
-      }
-      
-      // ファイルが削除されることを確認
-      expect(fs.existsSync(testLogFile)).toBe(false);
-    });
-
-    test('ログファイルの制限（最新10件）が正常に動作する', () => {
-      // 15件のエントリを作成
-      const entries = [];
-      for (let i = 1; i <= 15; i++) {
-        entries.push(`${i.toString().padStart(5, '0')}-${i}-${Date.now()}-message${i}`);
-      }
-      
-      entries.forEach(entry => {
-        fs.appendFileSync(testLogFile, entry + '\n');
+      let output = '';
+      child.stdout.on('data', (data) => {
+        output += data.toString();
       });
+
+      child.stderr.on('data', (data) => {
+        output += data.toString();
+      });
+
+      child.on('close', (code) => {
+        try {
+          expect(code).toBe(0);
+          
+          // 出力の解析
+          const lines = output.split('\n').filter(line => line.trim() !== '');
+          const testMessages = lines.filter(line => line.includes('Test message'));
+          
+          // "Test message 1" が一度だけ出力されることを確認
+          const message1Occurrences = testMessages.filter(line => line.includes('Test message 1')).length;
+          expect(message1Occurrences).toBe(1);
+          
+          // "Test message 2" が一度だけ出力されることを確認
+          const message2Occurrences = testMessages.filter(line => line.includes('Test message 2')).length;
+          expect(message2Occurrences).toBe(1);
+          
+          // 環境変数が正しく設定されていることを確認
+          expect(output).toContain('STARTUP_MESSAGE_SENT: Test message 2');
+          
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      child.on('error', (error) => {
+        done(error);
+      });
+    }, 10000);
+
+    test('異なるメッセージは正常に出力される', (done) => {
+      const differentMessagesTest = `#!/bin/bash
+source "${entrypointPath}"
+
+echo "=== Testing different messages ==="
+log_startup_message "Message A"
+log_startup_message "Message B"
+log_startup_message "Message C"
+log_startup_message "Message A"  # 重複（抑制されるべき）
+log_startup_message "Message D"
+`;
+
+      const testPath = path.join(__dirname, '..', '.tmp', 'test_different_messages.sh');
+      fs.writeFileSync(testPath, differentMessagesTest);
+      fs.chmodSync(testPath, '755');
+
+      const child = spawn('bash', [testPath]);
+      let output = '';
       
-      // 全てのエントリが存在することを確認
-      const initialContent = fs.readFileSync(testLogFile, 'utf8');
-      expect(initialContent.split('\n').filter(line => line.length > 0).length).toBe(15);
-      
-      // 最新10件のみ保持するロジックをシミュレート
-      const lines = initialContent.split('\n').filter(line => line.length > 0);
-      const last10Lines = lines.slice(-10);
-      fs.writeFileSync(testLogFile, last10Lines.join('\n') + '\n');
-      
-      // 最新10件のみ残っていることを確認
-      const trimmedContent = fs.readFileSync(testLogFile, 'utf8');
-      const remainingLines = trimmedContent.split('\n').filter(line => line.length > 0);
-      expect(remainingLines.length).toBe(10);
-      
-      // 最新のエントリが残っていることを確認
-      expect(remainingLines[9]).toContain('message15');
-      expect(remainingLines[0]).toContain('message6');
-    });
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        output += data.toString();
+      });
+
+      child.on('close', (code) => {
+        try {
+          expect(code).toBe(0);
+          
+          // 各メッセージが適切に出力されることを確認
+          expect(output).toContain('Message A');
+          expect(output).toContain('Message B');
+          expect(output).toContain('Message C');
+          expect(output).toContain('Message D');
+          
+          // Message A が一度だけ出力されることを確認
+          const messageAOccurrences = (output.match(/Message A/g) || []).length;
+          expect(messageAOccurrences).toBe(1);
+          
+          // クリーンアップ
+          fs.unlinkSync(testPath);
+          done();
+        } catch (error) {
+          fs.unlinkSync(testPath);
+          done(error);
+        }
+      });
+    }, 10000);
   });
 
   describe('Issue #2536 の問題解決確認', () => {
-    test('重複起動メッセージの防止機能が実装されている', () => {
+    test('重複起動メッセージの防止機能が適切に動作する', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Issue #2536 の根本原因である重複メッセージの防止
-      expect(entrypointContent).toContain('log_startup_message');
+      // 重複防止対象のメッセージが適切に処理されることを確認
+      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
+      expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
-      // 重複防止対象のメッセージが正しく指定されている
-      expect(entrypointContent).toContain('Starting strategy-runner container with enhanced error handling');
-      expect(entrypointContent).toContain('Starting backtest container with enhanced error handling');
-      
-      // 重複チェック機能
-      expect(entrypointContent).toContain('重複メッセージの抑制');
-      
-      // インスタンス一意性の保証
-      expect(entrypointContent).toContain('STARTUP_INSTANCE_ID');
+      // シンプルな実装が使用されていることを確認
+      expect(entrypointContent).toContain('log_startup_message()');
     });
 
-    test('stdout バッファリング問題の対策が実装されている', () => {
+    test('stdout フラッシュ機能が保持されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // stdout フラッシュ機能
+      // stdout フラッシュ機能が保持されていることを確認
       expect(entrypointContent).toContain('exec 1>&1');
-      
-      // ログ関数の強化
-      expect(entrypointContent).toContain('重複防止機能付き');
     });
 
-    test('起動プロセスの透明性向上が実装されている', () => {
+    test('既存の起動ロック機能が保持されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 起動診断情報の記録
-      expect(entrypointContent).toContain('起動診断情報');
-      expect(entrypointContent).toContain('起動インスタンス ID');
-      expect(entrypointContent).toContain('プロセス ID');
-      
-      // 診断情報の構造化
-      expect(entrypointContent).toContain('===');
-    });
-
-    test('リソースクリーンアップ機能が実装されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // 起動ログファイルのクリーンアップ
-      expect(entrypointContent).toContain('起動ログファイルのクリーンアップ');
-      
-      // 現在のインスタンスに関連するエントリの削除
-      expect(entrypointContent).toContain('grep -v "$STARTUP_INSTANCE_ID"');
-      
-      // 空ファイルの削除
-      expect(entrypointContent).toContain('if [ ! -s "$STARTUP_LOG_FILE" ]');
-    });
-
-    test('既存の起動ロック機能との互換性が保たれている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // 既存の起動ロック機能が残っていることを確認
+      // 既存の起動ロック機能が保持されていることを確認
       expect(entrypointContent).toContain('acquire_startup_lock');
       expect(entrypointContent).toContain('release_startup_lock');
       expect(entrypointContent).toContain('STARTUP_LOCK_FILE');
+    });
+
+    test('複雑な実装が削除され、シンプルになっている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 新機能との統合
-      expect(entrypointContent).toContain('trap release_startup_lock EXIT');
+      // 複雑な実装が削除されていることを確認
+      expect(entrypointContent).not.toContain('STARTUP_INSTANCE_ID');
+      expect(entrypointContent).not.toContain('STARTUP_LOG_FILE');
+      expect(entrypointContent).not.toContain('instance_signature');
+      expect(entrypointContent).not.toContain('tail -n 10');
+      expect(entrypointContent).not.toContain('grep -v');
+    });
+  });
+
+  describe('パフォーマンスとセキュリティの改善確認', () => {
+    test('ファイル操作が削減されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // 不要なファイル操作が削除されていることを確認
+      expect(entrypointContent).not.toContain('mktemp');
+      expect(entrypointContent).not.toContain('tail -n 10');
+      expect(entrypointContent).not.toContain('grep -q');
+      
+      // 環境変数ベースの簡素な実装が使用されていることを確認
+      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT');
+    });
+
+    test('データベース接続チェックが効率化されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // 共通関数が定義されていることを確認
+      expect(entrypointContent).toContain('check_database_connection()');
+      
+      // 重複したコードが削除されていることを確認
+      const whileLoopCount = (entrypointContent.match(/while \[.*retry.*\]/g) || []).length;
+      expect(whileLoopCount).toBeLessThanOrEqual(2); // 共通関数内の1つとバックアップ
     });
   });
 });
