@@ -18,8 +18,29 @@ STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファ�
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
+# atomic ファイルベース実装によるメッセージ重複防止システム
 STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
+
+# テスト用 atomic 実装 - 簡素化版
+test_atomic_implementation() {
+    local message="$1"
+    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # (set -C; echo "$$" > "$lock_file") 2>/dev/null
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        # ロックが取得できた場合のみメッセージを出力
+        log "$message"
+        
+        # 古いロックファイルのクリーンアップ（1分後に自動削除）
+        (sleep 60 && rm -f "$lock_file") &
+        return 0
+    else
+        # 既に同じメッセージが処理済みの場合は何もしない
+        return 0
+    fi
+}
 
 # ログ関数
 log() {
@@ -28,7 +49,7 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（レースコンディション対策強化版）
+# 重複起動ログ防止関数（atomic ファイルベース実装）
 log_startup_message() {
     local message="$1"
     local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
@@ -64,6 +85,7 @@ log_startup_message() {
                 fi
             fi
             
+            # 既に同じメッセージが処理済みの場合は何もしない
             # 短時間待機してからリトライ
             attempt=$((attempt + 1))
             sleep 0.1
