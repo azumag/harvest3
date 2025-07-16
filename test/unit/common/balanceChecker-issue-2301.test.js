@@ -58,6 +58,7 @@ jest.mock('../../../src/common/balanceCheckerConfig', () => ({
       highDiscrepancyPercent: 10,
       balanceComparisonTolerance: 2,
       externalTradeThreshold: 50,
+      veryHighExternalTradeThreshold: 90,
       currencySpecificTolerance: {}
     },
     intervals: {
@@ -197,12 +198,12 @@ describe('Issue #2301: 外部取引による残高差異の適切な処理', () 
     expect(externalTradeDiscrepancies.length).toBe(1);
     expect(externalTradeDiscrepancies[0].currency).toBe('MANA');
 
-    // 混在の場合はERRORレベルで処理されることを確認
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+    // 混在の場合はWARNレベルで処理されることを確認（外部取引要因を含むため）
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
       expect.stringContaining('残高不整合検出: bitbank')
     );
-    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-      expect.stringContaining('高度不整合（外部取引の可能性含む）')
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+      expect.stringContaining('混合不整合（外部取引と高度不整合）')
     );
   });
 

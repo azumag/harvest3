@@ -11,6 +11,7 @@ jest.mock('../../../src/common/balanceCheckerConfig', () => ({
       highDiscrepancyPercent: 10,
       balanceComparisonTolerance: 1, // Set to 1% for these tolerance tests
       externalTradeThreshold: 50,
+      veryHighExternalTradeThreshold: 90,
       currencySpecificTolerance: {}
     },
     intervals: {
@@ -225,9 +226,9 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
       expect(result.discrepancies[0].isExternalTradeSuspected).toBe(true);
       expect(result.discrepancies[1].isExternalTradeSuspected).toBe(false);
 
-      // 外部取引の可能性を含む高度不整合として報告されることを確認
-      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
-        expect.stringMatching(/高度不整合（外部取引の可能性含む）/)
+      // 外部取引と高度不整合の混在としてWARNレベルで報告されることを確認
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/混合不整合（外部取引と高度不整合）/)
       );
     });
 
