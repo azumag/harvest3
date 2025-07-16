@@ -1393,12 +1393,10 @@ describe('Issue #1691: 未知のステータス値への対応テスト', () => 
     // 残高がゼロであることを確認
     expect(result).toEqual({});
 
-    // 診断情報が出力されることを確認
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。以下の可能性があります:');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  1. 全ポジションが決済済み (status="closed")');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  2. 売りポジションのみが存在');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  3. データベース接続またはデータ整合性の問題');
-    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('  4. ポジションデータの形式変更');
+    // 新しい診断情報が出力されることを確認
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。詳細な分析を実行中...');
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(expect.stringMatching(/🔍 Closed ポジション分析結果: \d+件のclosedポジションを検出/));
+    expect(mockLoggerInstance.warn).toHaveBeenCalledWith(expect.stringMatching(/💰 BTC: \d+ポジション, 総額=\d+\.\d+/));
   });
 
   it('データ検証エラーが適切に報告される', async () => {
@@ -1621,5 +1619,199 @@ describe('Issue #983: AVAX重複ログエラー修正テスト', () => {
       expect(firstDiscrepancy).toHaveProperty('exchangeId');
       expect(firstDiscrepancy.exchangeId).toBe('bitbank');
     }
+  });
+});
+
+// Issue #2494: closedポジション診断機能のテスト
+describe('Issue #2494: closedポジション診断機能のテスト', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    postOrderToDiscord.mockResolvedValue();
+  });
+
+  describe('analyzeClosedPositions', () => {
+    it('closedポジションを正しく分析する', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.0,
+          status: 'closed',
+          closedAt: Date.now() - 1000 * 60 * 60, // 1時間前
+          strategyKey: 'MA'
+        },
+        {
+          symbol: 'ETH/JPY',
+          side: 'buy',
+          amount: 2.0,
+          status: 'closed',
+          closedAt: Date.now() - 1000 * 60 * 60 * 12, // 12時間前
+          strategyKey: 'BOLLINGER_BANDS'
+        },
+        {
+          symbol: 'ADA/JPY',
+          side: 'buy',
+          amount: 3.0,
+          status: 'open' // openは除外される
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      const result = await getBotManagedBalance(true);
+
+      expect(result.diagnostics.closedPositions).toBe(2);
+      expect(result.diagnostics.closedCurrencyBalances).toEqual({
+        BTC: 1.0,
+        ETH: 2.0
+      });
+      expect(result.diagnostics.closedAnalysis.recentlyClosed).toHaveLength(2);
+    });
+
+    it('孤立ポジション（closedAtが未設定）を検出する', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.0,
+          status: 'closed',
+          // closedAtが未設定
+          updatedAt: Date.now(),
+          strategyKey: 'MA'
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      const result = await getBotManagedBalance(true);
+
+      expect(result.diagnostics.closedAnalysis.potentialOrphans).toHaveLength(1);
+      expect(result.diagnostics.closedAnalysis.potentialOrphans[0]).toEqual({
+        currency: 'BTC',
+        amount: 1.0,
+        symbol: 'BTC/JPY',
+        strategyKey: 'MA',
+        updatedAt: expect.any(Number)
+      });
+    });
+  });
+
+  describe('analyzeClosedPositionDiscrepancies', () => {
+    beforeEach(() => {
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 1.0 }
+      });
+    });
+
+    it('closedポジションによる差異を正しく分析する', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.9, // 取引所1.0に対して少し少ない（closedが原因の可能性）
+          status: 'closed',
+          closedAt: Date.now() - 1000 * 60 * 60
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      const result = await compareBalances('bitbank');
+
+      expect(result.discrepancies).toHaveLength(1);
+      const discrepancy = result.discrepancies[0];
+      expect(discrepancy.closedPositionAnalysis).toBeDefined();
+      expect(discrepancy.closedPositionAnalysis.closedAmount).toBe(0.9);
+      expect(discrepancy.closedPositionAnalysis.isLikelyClosedPositionIssue).toBe(true);
+      expect(discrepancy.closedPositionAnalysis.hasRecentlyClosed).toBe(true);
+    });
+
+    it('exchangeAmountが0の場合でも安全に処理する', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 0.5,
+          status: 'closed'
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      // 取引所残高を0に設定
+      config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
+        total: { BTC: 0 }
+      });
+
+      const result = await compareBalances('bitbank');
+
+      // エラーが発生せず、安全に処理されることを確認
+      expect(result.discrepancies).toBeDefined();
+      if (result.discrepancies.length > 0) {
+        const discrepancy = result.discrepancies[0];
+        expect(discrepancy.closedPositionAnalysis.isLikelyClosedPositionIssue).toBe(false);
+      }
+    });
+  });
+
+  describe('YAGNI原則の遵守', () => {
+    it('includeDiagnostics=falseの場合、closedポジション分析をスキップする', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.0,
+          status: 'open'
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      const result = await getBotManagedBalance(false);
+
+      // 従来の形式で返されることを確認
+      expect(result).toEqual({ BTC: 1.0 });
+      // diagnostics プロパティは存在しない
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it('残高ゼロの場合は診断フラグに関わらずclosedポジション分析を実行する', async () => {
+      const mockPositions = [
+        {
+          symbol: 'BTC/JPY',
+          side: 'buy',
+          amount: 1.0,
+          status: 'closed' // 全て閉じられているため残高ゼロ
+        }
+      ];
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      await getBotManagedBalance(false);
+
+      // 残高ゼロ時の診断ログが出力されることを確認
+      expect(mockLoggerInstance.warn).toHaveBeenCalledWith('Bot管理残高が0の状態です。詳細な分析を実行中...');
+    });
+  });
+
+  describe('パフォーマンスの改善', () => {
+    it('大量のポジションデータでも効率的に処理する', async () => {
+      // 1000件のポジションデータを生成
+      const mockPositions = Array.from({ length: 1000 }, (_, index) => ({
+        symbol: `COIN${index}/JPY`,
+        side: index % 2 === 0 ? 'buy' : 'sell',
+        amount: Math.random(),
+        status: index % 3 === 0 ? 'closed' : 'open'
+      }));
+
+      getAllPositionsRedis.mockResolvedValue(mockPositions);
+
+      const startTime = Date.now();
+      await getBotManagedBalance(false);
+      const endTime = Date.now();
+
+      // 処理時間が妥当な範囲内であることを確認（1秒未満）
+      expect(endTime - startTime).toBeLessThan(1000);
+    });
   });
 });

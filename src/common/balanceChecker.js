@@ -31,6 +31,126 @@ function normalizeCurrency(currency) {
 }
 
 /**
+ * ポジションデータの妥当性を検証する
+ * @param {Array} allPositions - 全ポジション配列
+ * @returns {Object} 検証結果とエラー情報
+ */
+function validatePositionData(allPositions) {
+  const validationIssues = [];
+  const statusBreakdown = {};
+  const sideBreakdown = {};
+
+  allPositions.forEach(position => {
+    // ステータス別統計
+    statusBreakdown[position.status || 'undefined'] = (statusBreakdown[position.status || 'undefined'] || 0) + 1;
+    // サイド別統計
+    sideBreakdown[position.side || 'undefined'] = (sideBreakdown[position.side || 'undefined'] || 0) + 1;
+    
+    // データ検証
+    if (!position.symbol || !position.side || !position.amount || !position.status) {
+      validationIssues.push({
+        issue: 'missing_fields',
+        position: {
+          symbol: position.symbol || 'missing',
+          side: position.side || 'missing',
+          amount: position.amount || 'missing',
+          status: position.status || 'missing'
+        }
+      });
+    }
+  });
+
+  return {
+    validationIssues,
+    statusBreakdown,
+    sideBreakdown
+  };
+}
+
+/**
+ * 除外されたポジションの統計を生成する
+ * @param {Array} allPositions - 全ポジション配列
+ * @param {Array} validBuyPositions - 有効な買いポジション配列
+ * @returns {Object} 除外統計
+ */
+function generateExcludedPositionStats(allPositions, validBuyPositions) {
+  const excludedPositions = allPositions.length - validBuyPositions.length;
+  if (excludedPositions === 0) {
+    return { excludedPositions: 0 };
+  }
+
+  const excludedByStatus = {};
+  const excludedBySide = {};
+  const validPositionSet = new Set(validBuyPositions);
+  
+  allPositions.forEach(position => {
+    if (!validPositionSet.has(position)) {
+      excludedByStatus[position.status || 'undefined'] = (excludedByStatus[position.status || 'undefined'] || 0) + 1;
+      excludedBySide[position.side || 'undefined'] = (excludedBySide[position.side || 'undefined'] || 0) + 1;
+    }
+  });
+
+  return {
+    excludedPositions,
+    excludedByStatus,
+    excludedBySide
+  };
+}
+
+/**
+ * ゼロ残高時の診断情報を生成する
+ * @param {Object} closedAnalysis - 閉じられたポジションの分析結果
+ * @param {Object} closedCurrencyBalances - 閉じられたポジションの通貨別残高
+ */
+function generateZeroBalanceDiagnostics(closedAnalysis, closedCurrencyBalances) {
+  logger.warn('Bot管理残高が0の状態です。詳細な分析を実行中...');
+  
+  if (closedAnalysis && closedAnalysis.totalCount > 0) {
+    logger.warn(`🔍 Closed ポジション分析結果: ${closedAnalysis.totalCount}件のclosedポジションを検出`);
+    
+    // 通貨別の閉じられたポジション詳細
+    Object.entries(closedAnalysis.currencyBreakdown).forEach(([currency, data]) => {
+      if (data.totalAmount > BALANCE_CONFIG.thresholds.significantBalance) {
+        logger.warn(`  💰 ${currency}: ${data.count}ポジション, 総額=${data.totalAmount.toFixed(8)}`);
+      }
+    });
+    
+    // 最近閉じられたポジション
+    if (closedAnalysis.recentlyClosed.length > 0) {
+      logger.warn(`⏰ 過去24時間以内に閉じられたポジション: ${closedAnalysis.recentlyClosed.length}件`);
+      closedAnalysis.recentlyClosed.slice(0, 5).forEach(pos => {
+        logger.warn(`  - ${pos.currency}: ${pos.amount.toFixed(8)} (${pos.hoursAgo}時間前) [${pos.symbol}]`);
+      });
+    }
+    
+    // 孤立ポジションの警告
+    if (closedAnalysis.potentialOrphans.length > 0) {
+      logger.error(`🚨 孤立ポジション検出: ${closedAnalysis.potentialOrphans.length}件 (closedAtが未設定)`);
+      closedAnalysis.potentialOrphans.slice(0, 3).forEach(pos => {
+        logger.error(`  - ${pos.currency}: ${pos.amount.toFixed(8)} [${pos.symbol}] [${pos.strategyKey}]`);
+      });
+    }
+    
+    // 総合的な診断メッセージ
+    const significantClosedCurrencies = Object.entries(closedCurrencyBalances)
+      .filter(([_, amount]) => amount > BALANCE_CONFIG.thresholds.significantBalance);
+    
+    if (significantClosedCurrencies.length > 0) {
+      logger.warn('💡 残高差異の可能性:');
+      significantClosedCurrencies.forEach(([currency, amount]) => {
+        logger.warn(`  - ${currency}: 閉じられたポジション ${amount.toFixed(8)} が取引所に残存している可能性`);
+      });
+    }
+  } else {
+    logger.warn('従来の原因分析:');
+    logger.warn('  1. 全ポジションが決済済み (status="closed")');
+    logger.warn('  2. 売りポジションのみが存在');
+    logger.warn('  3. データベース接続またはデータ整合性の問題');
+    logger.warn('  4. ポジションデータの形式変更');
+  }
+}
+
+/**
  * Redis接続を確実に確立する
  * @returns {Promise<void>}
  */
@@ -88,10 +208,94 @@ async function getExchangeBalance(exchangeId) {
 }
 
 /**
- * botで管理している未売却ポジションから計算した残高を取得する
- * @returns {Object} 通貨別の未売却ポジション残高
+ * closedポジションの詳細分析を実行する
+ * @param {Array} allPositions - 全ポジションデータ
+ * @returns {Object} closedポジションの分析結果
  */
-async function getBotManagedBalance() {
+function analyzeClosedPositions(allPositions) {
+  const closedPositions = allPositions.filter(position => position.status === 'closed');
+  const closedCurrencyBalances = {};
+  const closedAnalysis = {
+    totalCount: closedPositions.length,
+    currencyBreakdown: {},
+    recentlyClosed: [],
+    potentialOrphans: []
+  };
+
+  closedPositions.forEach(position => {
+    try {
+      // シンボルから基軸通貨を抽出
+      const [baseCurrency] = position.symbol.split('/');
+      
+      if (!baseCurrency) {
+        logger.warn('閉じられたポジションのシンボル解析に失敗:', position.symbol);
+        return;
+      }
+
+      const amount = parseFloat(position.amount) || 0;
+      
+      // 通貨別集計
+      if (!closedCurrencyBalances[baseCurrency]) {
+        closedCurrencyBalances[baseCurrency] = 0;
+        closedAnalysis.currencyBreakdown[baseCurrency] = {
+          count: 0,
+          totalAmount: 0,
+          positions: []
+        };
+      }
+      
+      if (position.side === 'buy' && amount > 0) {
+        closedCurrencyBalances[baseCurrency] += amount;
+        closedAnalysis.currencyBreakdown[baseCurrency].count++;
+        closedAnalysis.currencyBreakdown[baseCurrency].totalAmount += amount;
+        closedAnalysis.currencyBreakdown[baseCurrency].positions.push({
+          symbol: position.symbol,
+          amount,
+          closedAt: position.closedAt || position.updatedAt,
+          strategyKey: position.strategyKey
+        });
+        
+        // 最近閉じられたポジション（24時間以内）
+        const now = Date.now();
+        const closedTime = parseInt(position.closedAt || position.updatedAt || 0);
+        if (closedTime > 0 && (now - closedTime) < 24 * 60 * 60 * 1000) {
+          closedAnalysis.recentlyClosed.push({
+            currency: baseCurrency,
+            amount,
+            symbol: position.symbol,
+            closedAt: closedTime,
+            hoursAgo: Math.round((now - closedTime) / (60 * 60 * 1000))
+          });
+        }
+        
+        // 孤立ポジションの可能性（closedAtが設定されていない）
+        if (!position.closedAt && position.status === 'closed') {
+          closedAnalysis.potentialOrphans.push({
+            currency: baseCurrency,
+            amount,
+            symbol: position.symbol,
+            strategyKey: position.strategyKey,
+            updatedAt: position.updatedAt
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('閉じられたポジションの分析エラー:', error.message, position);
+    }
+  });
+
+  return {
+    closedCurrencyBalances,
+    analysis: closedAnalysis
+  };
+}
+
+/**
+ * botで管理している未売却ポジションから計算した残高を取得する
+ * @param {boolean} includeDiagnostics - 診断情報を含めるかどうか
+ * @returns {Object} 通貨別の未売却ポジション残高（診断情報付きの場合は拡張版）
+ */
+async function getBotManagedBalance(includeDiagnostics = false) {
   try {
     // Redis接続状態を確認し、必要に応じて初期化
     await ensureRedisConnection();
@@ -137,29 +341,8 @@ async function getBotManagedBalance() {
     logger.debug('ポジション統計:', positionStats);
 
     // 全ポジションの統計情報を詳細に収集
-    const statusBreakdown = {};
-    const sideBreakdown = {};
-    const validationIssues = [];
-
-    allPositions.forEach(position => {
-      // ステータス別統計
-      statusBreakdown[position.status || 'undefined'] = (statusBreakdown[position.status || 'undefined'] || 0) + 1;
-      // サイド別統計
-      sideBreakdown[position.side || 'undefined'] = (sideBreakdown[position.side || 'undefined'] || 0) + 1;
-      
-      // データ検証
-      if (!position.symbol || !position.side || !position.amount || !position.status) {
-        validationIssues.push({
-          issue: 'missing_fields',
-          position: {
-            symbol: position.symbol || 'missing',
-            side: position.side || 'missing',
-            amount: position.amount || 'missing',
-            status: position.status || 'missing'
-          }
-        });
-      }
-    });
+    const validationResult = validatePositionData(allPositions);
+    const { validationIssues, statusBreakdown, sideBreakdown } = validationResult;
 
     // 詳細な統計情報をログ出力
     logger.info('ポジション詳細統計:');
@@ -239,22 +422,11 @@ async function getBotManagedBalance() {
     logger.info(`Bot管理残高計算完了: ${Object.keys(currencyBalances).length}通貨, 有効ポジション: ${validBuyPositions.length}/${allPositions.length}`);
     
     // 除外されたポジションの統計（効率的な処理のためSetを使用）
-    const excludedPositions = allPositions.length - validBuyPositions.length;
-    if (excludedPositions > 0) {
-      logger.info(`除外されたポジション: ${excludedPositions}件`);
-      const excludedByStatus = {};
-      const excludedBySide = {};
-      const validPositionSet = new Set(validBuyPositions);
-      
-      allPositions.forEach(position => {
-        if (!validPositionSet.has(position)) {
-          excludedByStatus[position.status || 'undefined'] = (excludedByStatus[position.status || 'undefined'] || 0) + 1;
-          excludedBySide[position.side || 'undefined'] = (excludedBySide[position.side || 'undefined'] || 0) + 1;
-        }
-      });
-      
-      logger.info(`  除外理由 - ステータス別: ${JSON.stringify(excludedByStatus, null, 2)}`);
-      logger.info(`  除外理由 - サイド別: ${JSON.stringify(excludedBySide, null, 2)}`);
+    const excludedStats = generateExcludedPositionStats(allPositions, validBuyPositions);
+    if (excludedStats.excludedPositions > 0) {
+      logger.info(`除外されたポジション: ${excludedStats.excludedPositions}件`);
+      logger.info(`  除外理由 - ステータス別: ${JSON.stringify(excludedStats.excludedByStatus, null, 2)}`);
+      logger.info(`  除外理由 - サイド別: ${JSON.stringify(excludedStats.excludedBySide, null, 2)}`);
     }
     
     // 有意な残高がある通貨のみログ出力
@@ -267,16 +439,39 @@ async function getBotManagedBalance() {
       }
     });
     
-    // 残高ゼロの通貨について追加情報を提供
-    if (Object.keys(currencyBalances).length === 0) {
-      logger.warn('Bot管理残高が0の状態です。以下の可能性があります:');
-      logger.warn('  1. 全ポジションが決済済み (status="closed")');
-      logger.warn('  2. 売りポジションのみが存在');
-      logger.warn('  3. データベース接続またはデータ整合性の問題');
-      logger.warn('  4. ポジションデータの形式変更');
+    // 診断情報が必要な場合のみclosedポジション分析を実行
+    let closedAnalysisResult = null;
+    let closedCurrencyBalances = {};
+    let closedAnalysis = null;
+    
+    if (includeDiagnostics || Object.keys(currencyBalances).length === 0) {
+      closedAnalysisResult = analyzeClosedPositions(allPositions);
+      closedCurrencyBalances = closedAnalysisResult.closedCurrencyBalances;
+      closedAnalysis = closedAnalysisResult.analysis;
     }
 
-    return currencyBalances;
+    // 残高ゼロの通貨について追加情報と診断を提供
+    if (Object.keys(currencyBalances).length === 0) {
+      generateZeroBalanceDiagnostics(closedAnalysis, closedCurrencyBalances);
+    }
+
+    // 診断情報付きで結果を返す（後方互換性を保つ）
+    if (includeDiagnostics) {
+      return {
+        balances: currencyBalances,
+        diagnostics: {
+          totalPositions: allPositions.length,
+          validBuyPositions: validBuyPositions.length,
+          closedPositions: closedAnalysis ? closedAnalysis.totalCount : 0,
+          closedCurrencyBalances,
+          closedAnalysis,
+          lastAnalyzedAt: Date.now()
+        }
+      };
+    } else {
+      // 従来の形式（後方互換性）
+      return currencyBalances;
+    }
   } catch (error) {
     logger.error('Bot管理残高取得エラー:', error.message);
     
@@ -300,8 +495,60 @@ function getComparisonCurrencies(exchangeBalance, botBalance) {
   const exchangeCurrencies = Object.keys(exchangeBalance.total || {}).filter(
     currency => (exchangeBalance.total[currency] || 0) >= significantThreshold
   );
+  
   const botCurrencies = Object.keys(botBalance || {});
+  
   return [...new Set([...exchangeCurrencies, ...botCurrencies])];
+}
+
+/**
+ * closedポジションによる残高差異を分析する
+ * @param {Array} discrepancies - 検出された不整合
+ * @param {Object} botBalanceDiagnostics - Bot残高の診断情報
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Array} 拡張された不整合データ
+ */
+function analyzeClosedPositionDiscrepancies(discrepancies, botBalanceDiagnostics, exchangeId) {
+  if (!botBalanceDiagnostics || !botBalanceDiagnostics.closedCurrencyBalances) {
+    return discrepancies;
+  }
+
+  const enhancedDiscrepancies = discrepancies.map(disc => {
+    const closedAmount = botBalanceDiagnostics.closedCurrencyBalances[disc.currency] || 0;
+    const closedPositionData = botBalanceDiagnostics.closedAnalysis.currencyBreakdown[disc.currency];
+    
+    // closedポジションによる説明可能な差異かどうかを判定
+    const isExplainedByClosedPositions = closedAmount > 0 && 
+      disc.exchangeAmount > 0 &&
+      Math.abs(disc.exchangeAmount - closedAmount) < disc.exchangeAmount * 0.1; // 10%以内の誤差
+    
+    const enhancedDisc = {
+      ...disc,
+      closedPositionAnalysis: {
+        closedAmount: parseFloat(closedAmount.toFixed(DECIMAL_PRECISION)),
+        isLikelyClosedPositionIssue: isExplainedByClosedPositions,
+        closedPositionCount: closedPositionData ? closedPositionData.count : 0,
+        hasRecentlyClosed: botBalanceDiagnostics.closedAnalysis.recentlyClosed
+          ? botBalanceDiagnostics.closedAnalysis.recentlyClosed.some(pos => pos.currency === disc.currency)
+          : false,
+        hasPotentialOrphans: botBalanceDiagnostics.closedAnalysis.potentialOrphans
+          ? botBalanceDiagnostics.closedAnalysis.potentialOrphans.some(pos => pos.currency === disc.currency)
+          : false
+      }
+    };
+    
+    // closedポジションで説明可能な場合、外部取引ではない可能性が高い
+    if (isExplainedByClosedPositions) {
+      enhancedDisc.isExternalTradeSuspected = false;
+      enhancedDisc.analysisNote = 'closedポジションが残存している可能性';
+    }
+    
+    return enhancedDisc;
+  });
+  
+  logger.debug(`Closed ポジション分析完了 (${exchangeId}): ${enhancedDiscrepancies.filter(d => d.closedPositionAnalysis.isLikelyClosedPositionIssue).length}件がclosedポジションで説明可能`);
+  
+  return enhancedDiscrepancies;
 }
 
 /**
@@ -560,17 +807,21 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     // 取引所残高を取得
     const exchangeBalance = await getExchangeBalance(exchangeId);
 
-    // Bot管理残高を取得
-    const botBalance = await getBotManagedBalance();
+    // Bot管理残高を取得（診断情報付き）
+    const botBalanceData = await getBotManagedBalance(true);
+    const botBalance = botBalanceData.balances;
 
-    // 診断情報を収集
+    // 診断情報を収集（強化版）
     const diagnosticInfo = {
       exchangeId,
       timestamp: comparisonStartTime,
       exchangeBalanceKeys: Object.keys(exchangeBalance.total || {}),
       botBalanceKeys: Object.keys(botBalance || {}),
       exchangeTotal: exchangeBalance.total || {},
-      botTotal: botBalance || {}
+      botTotal: botBalance || {},
+      // 新しい診断情報を追加
+      botBalanceDiagnostics: botBalanceData.diagnostics,
+      hasClosedPositions: botBalanceData.diagnostics && botBalanceData.diagnostics.closedPositions > 0
     };
 
     // 比較対象の通貨一覧を取得
@@ -581,8 +832,15 @@ async function compareBalances(exchangeId, _thresholdPercent = 0) {
     // 不整合を検出
     const discrepancies = detectDiscrepancies(allCurrencies, exchangeBalance, botBalance, exchangeId);
 
+    // closedポジション分析による拡張
+    const enhancedDiscrepancies = analyzeClosedPositionDiscrepancies(
+      discrepancies, 
+      botBalanceData.diagnostics, 
+      exchangeId
+    );
+
     // 不整合を処理
-    const processedDiscrepancies = await processDiscrepancies(discrepancies, exchangeId, diagnosticInfo);
+    const processedDiscrepancies = await processDiscrepancies(enhancedDiscrepancies, exchangeId, diagnosticInfo);
 
     return {
       exchangeId,
@@ -658,14 +916,33 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
   
   displayDiscrepancies.forEach(disc => {
     const externalTradeWarning = disc.isExternalTradeSuspected ? ' ⚠️' : '';
-    message += `**${disc.currency}${externalTradeWarning}**\n`;
+    const closedPositionWarning = disc.closedPositionAnalysis && disc.closedPositionAnalysis.isLikelyClosedPositionIssue ? ' 🔒' : '';
+    message += `**${disc.currency}${externalTradeWarning}${closedPositionWarning}**\n`;
     message += `・取引所残高: ${disc.exchangeAmount.toFixed(DECIMAL_PRECISION)}\n`;
     message += `・Bot管理残高: ${disc.botAmount.toFixed(DECIMAL_PRECISION)}\n`;
     message += `・差異: ${disc.difference.toFixed(DECIMAL_PRECISION)} (${disc.discrepancyPercent}%)\n`;
     if (disc.tolerancePercent > 0) {
       message += `・許容誤差: ${disc.tolerancePercent}%\n`;
     }
-    if (disc.isExternalTradeSuspected) {
+    
+    // closedポジション分析結果の表示
+    if (disc.closedPositionAnalysis) {
+      const analysis = disc.closedPositionAnalysis;
+      if (analysis.closedAmount > 0) {
+        message += `・閉じられたポジション: ${analysis.closedAmount.toFixed(DECIMAL_PRECISION)} (${analysis.closedPositionCount}件)\n`;
+      }
+      if (analysis.isLikelyClosedPositionIssue) {
+        message += `・🔒 閉じられたポジションが残存している可能性があります\n`;
+      }
+      if (analysis.hasRecentlyClosed) {
+        message += `・⏰ 過去24時間以内に閉じられたポジションがあります\n`;
+      }
+      if (analysis.hasPotentialOrphans) {
+        message += `・🚨 孤立ポジション（closedAtが未設定）が存在します\n`;
+      }
+    }
+    
+    if (disc.isExternalTradeSuspected && !disc.closedPositionAnalysis?.isLikelyClosedPositionIssue) {
       message += `・⚠️ 外部取引の可能性が高い差異です\n`;
     }
     message += '\n';
