@@ -24,7 +24,9 @@ const EXCLUDED_CURRENCIES = ['JPY'];
 // ログレベル判定のための定数
 const LOG_LEVEL_CONFIG = {
   EXTERNAL_TRADE_RATIO_THRESHOLD: 0.5,
-  VERY_HIGH_EXTERNAL_RATIO_THRESHOLD: 0.5
+  VERY_HIGH_EXTERNAL_RATIO_THRESHOLD: 0.5,
+  // Issue #2462修正: マジックナンバーの設定化
+  EMERGENCY_OVERRIDE_THRESHOLD: 98 // 98%以上の差異で外部取引の可能性がある場合の強制的なINFOレベル変更
 };
 
 /**
@@ -44,6 +46,203 @@ function normalizeCurrency(currency) {
  */
 function logLevelDecision(exchangeId, condition, result) {
   logger.debug(`ログレベル判定 (${exchangeId}): ${condition} -> ${result}`);
+}
+
+/**
+ * 不整合データからログレベルを決定する（複雑性の解決）
+ * @param {Array} uniqueDiscrepancies - 重複除去済みの不整合データ
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} ログレベル判定結果
+ */
+function determineLogLevel(uniqueDiscrepancies, exchangeId) {
+  const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
+  const externalTradeThreshold = BALANCE_CONFIG.thresholds.externalTradeThreshold;
+  const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
+  
+  const externalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.isExternalTradeSuspected
+  );
+  const veryHighExternalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.discrepancyPercent >= veryHighThreshold && disc.isExternalTradeSuspected
+  );
+  // 外部取引ではない高度不整合のみを抽出（外部取引要因を除外）
+  const nonExternalHighDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.discrepancyPercent >= highDiscrepancyThreshold && !disc.isExternalTradeSuspected
+  );
+
+  let logLevel, severityText;
+  
+  // Issue #2441修正: デバッグ情報を追加し、ログレベル判定ロジックを強化
+  logger.debug(`ログレベル判定デバッグ (${exchangeId}): 総不整合=${uniqueDiscrepancies.length}, 外部取引=${externalTradeDiscrepancies.length}, 高度外部取引=${veryHighExternalTradeDiscrepancies.length}, 非外部高度不整合=${nonExternalHighDiscrepancies.length}`);
+  
+  // Issue #2503修正: 各不整合の詳細情報をログ出力
+  uniqueDiscrepancies.forEach((disc, index) => {
+    logger.debug(`不整合詳細 [${index + 1}] (${exchangeId}): ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}, 閾値=${externalTradeThreshold}%`);
+  });
+  
+  // Issue #2462修正: 外部取引判定の優先順位を強化（より確実な判定）
+  // 全ての不整合が外部取引の可能性（50%以上）の場合を最優先でチェック
+  if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
+      externalTradeDiscrepancies.length > 0) {
+    // 全ての不整合が外部取引の可能性（50%以上）の場合 - 最優先で判定
+    logLevel = 'info';
+    severityText = '外部取引による残高差異';
+    logLevelDecision(exchangeId, '条件1適用 - 全て外部取引', 'INFO');
+  } else if (veryHighExternalTradeDiscrepancies.length > 0) {
+    // 一部が明らかに外部取引（90%以上）の場合
+    const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
+    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
+      logLevel = 'info';
+      severityText = '外部取引による残高差異（一部混在）';
+      logLevelDecision(exchangeId, `条件2a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+    } else {
+      logLevel = 'warn';
+      severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
+        ? '外部取引による残高差異（一部混在）'
+        : '混合不整合（明らかな外部取引含む）';
+      logLevelDecision(exchangeId, `条件2b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
+    }
+  } else if (externalTradeDiscrepancies.length > 0) {
+    // 一部が外部取引の可能性（50%以上）だが90%未満の場合
+    const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
+    if (externalRatio >= LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
+      logLevel = 'info';
+      severityText = '外部取引による残高差異（一部混在）';
+      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
+    } else {
+      logLevel = 'warn';
+      severityText = nonExternalHighDiscrepancies.length > 0 
+        ? '混合不整合（外部取引と高度不整合）'
+        : '軽微な不整合（外部取引の可能性）';
+      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% < 50%`, 'WARN');
+    }
+  } else if (nonExternalHighDiscrepancies.length > 0) {
+    // 外部取引ではない高度不整合のみの場合のみERRORレベル
+    logLevel = 'error';
+    severityText = '高度不整合';
+    logLevelDecision(exchangeId, '条件4適用 - 非外部高度不整合のみ', 'ERROR');
+  } else {
+    // 軽微な不整合のみ
+    logLevel = 'warn';
+    severityText = '軽微な不整合';
+    logLevelDecision(exchangeId, '条件5適用 - 軽微な不整合のみ', 'WARN');
+  }
+  
+  return {
+    logLevel,
+    severityText,
+    externalTradeDiscrepancies,
+    veryHighExternalTradeDiscrepancies,
+    nonExternalHighDiscrepancies
+  };
+}
+
+/**
+ * 強制的な外部取引判定を適用する（安全措置）
+ * @param {Object} levelResult - ログレベル判定結果
+ * @param {Array} uniqueDiscrepancies - 重複除去済みの不整合データ
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} 修正されたログレベル判定結果
+ */
+function applyEmergencyOverride(levelResult, uniqueDiscrepancies, exchangeId) {
+  let { logLevel, severityText } = levelResult;
+  
+  // Issue #2462修正: 強制的な外部取引判定（追加の安全措置）
+  // 設定された閾値以上の差異が存在し、全て外部取引の可能性がある場合は強制的にINFOレベルに設定
+  const veryHighDiscrepancies = uniqueDiscrepancies.filter(disc => 
+    disc.discrepancyPercent >= LOG_LEVEL_CONFIG.EMERGENCY_OVERRIDE_THRESHOLD
+  );
+  if (veryHighDiscrepancies.length > 0 && 
+      veryHighDiscrepancies.every(disc => disc.isExternalTradeSuspected) &&
+      logLevel === 'error') {
+    logger.warn(`[Issue #2462] ${LOG_LEVEL_CONFIG.EMERGENCY_OVERRIDE_THRESHOLD}%以上の差異が全て外部取引の可能性なのにERRORレベル選択 -> INFOレベルに強制変更`);
+    logLevel = 'info';
+    severityText = '外部取引による残高差異';
+  }
+  
+  return { logLevel, severityText };
+}
+
+/**
+ * ERRORレベル選択時の追加検証を行う
+ * @param {string} logLevel - 判定されたログレベル
+ * @param {string} severityText - 重要度テキスト
+ * @param {Array} uniqueDiscrepancies - 重複除去済みの不整合データ
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} 検証済みのログレベル判定結果
+ */
+function validateErrorLevel(logLevel, severityText, uniqueDiscrepancies, exchangeId) {
+  // Issue #2441修正: 安全性のため、ERRORレベルが選択された場合の追加検証
+  if (logLevel === 'error') {
+    const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
+    const allExternalTrade = uniqueDiscrepancies.every(d => d.isExternalTradeSuspected);
+    const allVeryHighExternalTrade = uniqueDiscrepancies.every(d => d.discrepancyPercent >= veryHighThreshold);
+    
+    // Issue #2503修正: 外部取引判定の詳細ログを追加
+    logger.warn(`[Issue #2503] ERRORレベル選択時の詳細検証 (${exchangeId}): 全て外部取引=${allExternalTrade}, 全て90%以上=${allVeryHighExternalTrade}`);
+    
+    if (allExternalTrade && allVeryHighExternalTrade) {
+      logger.warn(`[Issue #2441] 異常検出: 全て外部取引（90%以上）なのにERRORレベル選択 -> INFOレベルに強制変更`);
+      logLevel = 'info';
+      severityText = '外部取引による残高差異';
+    } else if (allExternalTrade) {
+      // Issue #2503修正: 全て外部取引の場合でも90%未満の場合はINFOレベルに変更
+      logger.warn(`[Issue #2503] 異常検出: 全て外部取引なのにERRORレベル選択 -> INFOレベルに強制変更`);
+      logLevel = 'info';
+      severityText = '外部取引による残高差異';
+    } else {
+      // Issue #2503修正: 外部取引ではない不整合の詳細を記録
+      const nonExternalDiscrepancies = uniqueDiscrepancies.filter(d => !d.isExternalTradeSuspected);
+      logger.warn(`[Issue #2503] 外部取引ではない不整合の詳細 (${exchangeId}): ${nonExternalDiscrepancies.length}件`);
+      nonExternalDiscrepancies.forEach((disc, index) => {
+        logger.warn(`[Issue #2503] 非外部取引不整合 [${index + 1}]: ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}`);
+      });
+    }
+  }
+  
+  return { logLevel, severityText };
+}
+
+/**
+ * 不整合データをログ出力する
+ * @param {Array} uniqueDiscrepancies - 重複除去済みの不整合データ
+ * @param {string} logLevel - ログレベル
+ * @param {string} exchangeId - 取引所ID
+ */
+function logDiscrepancies(uniqueDiscrepancies, logLevel, exchangeId) {
+  // ログ出力時の強化された重複防止チェック
+  const loggedCurrencies = new Map();
+  const logEntries = [];
+  
+  uniqueDiscrepancies.forEach((disc, index) => {
+    const normalizedCurrency = normalizeCurrency(disc.currency);
+    const logIndex = index + 1;
+    
+    if (!loggedCurrencies.has(normalizedCurrency)) {
+      const toleranceInfo = disc.tolerancePercent > 0 ? ` [許容誤差: ${disc.tolerancePercent}%]` : '';
+      const externalTradeInfo = disc.isExternalTradeSuspected ? ' ⚠️外部取引の可能性' : '';
+      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)${toleranceInfo}${externalTradeInfo}`;
+      logEntries.push(logEntry);
+      loggedCurrencies.set(normalizedCurrency, {
+        logIndex,
+        originalCurrency: disc.originalCurrency || disc.currency,
+        processedAt: disc.processedAt || Date.now()
+      });
+    } else {
+      const existingInfo = loggedCurrencies.get(normalizedCurrency);
+      logger.warn(`ログ出力時に重複を検出しスキップ (${exchangeId}): ${disc.currency} -> ${normalizedCurrency} (既存ログ: [${existingInfo.logIndex}], 元通貨: ${existingInfo.originalCurrency})`);
+    }
+  });
+  
+  // 実際のログ出力（重複なしが保証された状態）
+  logEntries.forEach(logEntry => {
+    logger[logLevel](logEntry);
+  });
+  
+  // 最終検証: ログ出力数と期待数の一致確認
+  if (logEntries.length !== loggedCurrencies.size) {
+    logger.error(`ログ出力数不整合 (${exchangeId}): 出力数=${logEntries.length}, 通貨数=${loggedCurrencies.size}`);
+  }
 }
 
 /**
@@ -84,7 +283,7 @@ function validatePositionData(allPositions) {
 }
 
 /**
- * 除外されたポジションの統計を生成する
+ * 除外されたポジションの統計を生成する（効率的な実装）
  * @param {Array} allPositions - 全ポジション配列
  * @param {Array} validBuyPositions - 有効な買いポジション配列
  * @returns {Object} 除外統計
@@ -95,12 +294,19 @@ function generateExcludedPositionStats(allPositions, validBuyPositions) {
     return { excludedPositions: 0 };
   }
 
+  // 効率的な実装: 一意の識別子を使用したSet作成
+  const validPositionKeys = new Set(
+    validBuyPositions.map(pos => 
+      `${pos.symbol}_${pos.side}_${pos.amount}_${pos.status}_${pos.timestamp || pos.createdAt || pos.id || ''}`
+    )
+  );
+  
   const excludedByStatus = {};
   const excludedBySide = {};
-  const validPositionSet = new Set(validBuyPositions);
   
   allPositions.forEach(position => {
-    if (!validPositionSet.has(position)) {
+    const positionKey = `${position.symbol}_${position.side}_${position.amount}_${position.status}_${position.timestamp || position.createdAt || position.id || ''}`;
+    if (!validPositionKeys.has(positionKey)) {
       excludedByStatus[position.status || 'undefined'] = (excludedByStatus[position.status || 'undefined'] || 0) + 1;
       excludedBySide[position.side || 'undefined'] = (excludedBySide[position.side || 'undefined'] || 0) + 1;
     }
@@ -191,6 +397,114 @@ async function ensureRedisConnection() {
   } catch (error) {
     logger.error('Redis接続の確立に失敗:', error.message);
     throw new Error(`Redis接続エラー: ${error.message}`);
+  }
+}
+
+/**
+ * 分散ロックを取得する
+ * @param {string} lockKey - ロックキー
+ * @param {number} ttl - TTL（ミリ秒）
+ * @returns {Promise<string|null>} ロックが取得できた場合はロックID、失敗した場合はnull
+ */
+async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedLock.defaultTtl) {
+  try {
+    await ensureRedisConnection();
+    const redisClient = getRedisClient();
+    
+    if (!redisClient || !redisClient.isReady) {
+      throw new Error('Redis接続が利用できません');
+    }
+    
+    const lockId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const lockValue = JSON.stringify({
+      lockId,
+      acquiredAt: Date.now(),
+      ttl,
+      processId: process.pid
+    });
+    
+    // SET NX EX を使用してアトミックにロックを取得
+    const result = await redisClient.set(lockKey, lockValue, 'PX', ttl, 'NX');
+    
+    if (result === 'OK') {
+      logger.debug(`分散ロック取得成功: ${lockKey} (ID: ${lockId})`);
+      return lockId;
+    } else {
+      logger.debug(`分散ロック取得失敗: ${lockKey} (既に取得済み)`);
+      return null;
+    }
+  } catch (error) {
+    logger.error(`分散ロック取得エラー: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * 分散ロックを解放する
+ * @param {string} lockKey - ロックキー
+ * @param {string} lockId - ロックID
+ * @returns {Promise<boolean>} 解放に成功した場合はtrue
+ */
+async function releaseDistributedLock(lockKey, lockId) {
+  try {
+    await ensureRedisConnection();
+    const redisClient = getRedisClient();
+    
+    if (!redisClient || !redisClient.isReady) {
+      throw new Error('Redis接続が利用できません');
+    }
+    
+    // Lua スクリプトを使用してアトミックにロックを解放
+    const luaScript = `
+      local lockValue = redis.call('GET', KEYS[1])
+      if lockValue then
+        local lockData = cjson.decode(lockValue)
+        if lockData.lockId == ARGV[1] then
+          redis.call('DEL', KEYS[1])
+          return 1
+        end
+      end
+      return 0
+    `;
+    
+    const result = await redisClient.eval(luaScript, 1, lockKey, lockId);
+    
+    if (result === 1) {
+      logger.debug(`分散ロック解放成功: ${lockKey} (ID: ${lockId})`);
+      return true;
+    } else {
+      logger.debug(`分散ロック解放失敗: ${lockKey} (ID: ${lockId}) - ロックが存在しないか、IDが一致しません`);
+      return false;
+    }
+  } catch (error) {
+    logger.error(`分散ロック解放エラー: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * 分散ロックを使用して関数を実行する
+ * @param {string} lockKey - ロックキー
+ * @param {Function} func - 実行する関数
+ * @param {number} ttl - TTL（ミリ秒）
+ * @returns {Promise<any>} 関数の実行結果
+ */
+async function withDistributedLock(lockKey, func, ttl = BALANCE_CONFIG.distributedLock.defaultTtl) {
+  const lockId = await acquireDistributedLock(lockKey, ttl);
+  
+  if (!lockId) {
+    const message = `分散ロック取得失敗: ${lockKey} - 別のプロセスが実行中です`;
+    logger.warn(message);
+    throw new Error(message);
+  }
+  
+  try {
+    logger.debug(`分散ロック実行開始: ${lockKey} (ID: ${lockId})`);
+    const result = await func();
+    return result;
+  } finally {
+    await releaseDistributedLock(lockKey, lockId);
+    logger.debug(`分散ロック実行終了: ${lockKey} (ID: ${lockId})`);
   }
 }
 
@@ -725,148 +1039,24 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
   await postOrderToDiscord(message);
   
-  // 不整合の重要度に応じてログレベルを決定
-  const highDiscrepancyThreshold = BALANCE_CONFIG.thresholds.highDiscrepancyPercent;
-  const externalTradeThreshold = BALANCE_CONFIG.thresholds.externalTradeThreshold;
-  const veryHighThreshold = BALANCE_CONFIG.thresholds.veryHighExternalTradeThreshold;
+  // ログレベル判定の実行（複雑なロジックを関数に分離）
+  const levelResult = determineLogLevel(uniqueDiscrepancies, exchangeId);
+  let { logLevel, severityText } = levelResult;
   
-  const externalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.isExternalTradeSuspected
-  );
-  const veryHighExternalTradeDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.discrepancyPercent >= veryHighThreshold && disc.isExternalTradeSuspected
-  );
-  // 外部取引ではない高度不整合のみを抽出（外部取引要因を除外）
-  const nonExternalHighDiscrepancies = uniqueDiscrepancies.filter(disc => 
-    disc.discrepancyPercent >= highDiscrepancyThreshold && !disc.isExternalTradeSuspected
-  );
-
-  let logLevel, severityText;
-  
-  // Issue #2441修正: デバッグ情報を追加し、ログレベル判定ロジックを強化
-  logger.debug(`ログレベル判定デバッグ (${exchangeId}): 総不整合=${uniqueDiscrepancies.length}, 外部取引=${externalTradeDiscrepancies.length}, 高度外部取引=${veryHighExternalTradeDiscrepancies.length}, 非外部高度不整合=${nonExternalHighDiscrepancies.length}`);
-  
-  // Issue #2503修正: 各不整合の詳細情報をログ出力
-  uniqueDiscrepancies.forEach((disc, index) => {
-    logger.debug(`不整合詳細 [${index + 1}] (${exchangeId}): ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}, 閾値=${externalTradeThreshold}%`);
-  });
-  
-  // 改善されたログレベル判定ロジック（外部取引を優先的に判定）
-  // Issue #2465修正: 外部取引判定の優先順位を強化
-  if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
-      externalTradeDiscrepancies.length > 0) {
-    // 全ての不整合が外部取引の可能性（50%以上）の場合 - 最優先で判定
-    logLevel = 'info';
-    severityText = '外部取引による残高差異';
-    logLevelDecision(exchangeId, '条件1適用 - 全て外部取引', 'INFO');
-  } else if (veryHighExternalTradeDiscrepancies.length > 0) {
-    // 一部が明らかに外部取引（90%以上）の場合
-    // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
-    const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
-      logLevel = 'info';
-      severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件2a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
-    } else {
-      logLevel = 'warn';
-      severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
-        ? '外部取引による残高差異（一部混在）'
-        : '混合不整合（明らかな外部取引含む）';
-      logLevelDecision(exchangeId, `条件2b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
-    }
-  } else if (externalTradeDiscrepancies.length > 0) {
-    // 一部が外部取引の可能性（50%以上）だが90%未満の場合
-    // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
-    const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (externalRatio >= LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
-      logLevel = 'info';
-      severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
-    } else {
-      logLevel = 'warn';
-      severityText = nonExternalHighDiscrepancies.length > 0 
-        ? '混合不整合（外部取引と高度不整合）'
-        : '軽微な不整合（外部取引の可能性）';
-      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% < 50%`, 'WARN');
-    }
-  } else if (nonExternalHighDiscrepancies.length > 0) {
-    // 外部取引ではない高度不整合のみの場合のみERRORレベル
-    logLevel = 'error';
-    severityText = '高度不整合';
-    logLevelDecision(exchangeId, '条件4適用 - 非外部高度不整合のみ', 'ERROR');
-  } else {
-    // 軽微な不整合のみ
-    logLevel = 'warn';
-    severityText = '軽微な不整合';
-    logLevelDecision(exchangeId, '条件5適用 - 軽微な不整合のみ', 'WARN');
-  }
+  // 強制的な外部取引判定（追加の安全措置）
+  ({ logLevel, severityText } = applyEmergencyOverride(levelResult, uniqueDiscrepancies, exchangeId));
   
   // Issue #2441修正: 最終的なログレベル判定結果を強制的に記録
   logger.info(`[Issue #2441] ログレベル判定結果 (${exchangeId}): ${logLevel.toUpperCase()} - ${severityText}`);
   
-  // Issue #2441修正: 安全性のため、ERRORレベルが選択された場合の追加検証
-  if (logLevel === 'error') {
-    const allExternalTrade = uniqueDiscrepancies.every(d => d.isExternalTradeSuspected);
-    const allVeryHighExternalTrade = uniqueDiscrepancies.every(d => d.discrepancyPercent >= veryHighThreshold);
-    
-    // Issue #2503修正: 外部取引判定の詳細ログを追加
-    logger.warn(`[Issue #2503] ERRORレベル選択時の詳細検証 (${exchangeId}): 全て外部取引=${allExternalTrade}, 全て90%以上=${allVeryHighExternalTrade}`);
-    
-    if (allExternalTrade && allVeryHighExternalTrade) {
-      logger.warn(`[Issue #2441] 異常検出: 全て外部取引（90%以上）なのにERRORレベル選択 -> INFOレベルに強制変更`);
-      logLevel = 'info';
-      severityText = '外部取引による残高差異';
-    } else if (allExternalTrade) {
-      // Issue #2503修正: 全て外部取引の場合でも90%未満の場合はINFOレベルに変更
-      logger.warn(`[Issue #2503] 異常検出: 全て外部取引なのにERRORレベル選択 -> INFOレベルに強制変更`);
-      logLevel = 'info';
-      severityText = '外部取引による残高差異';
-    } else {
-      // Issue #2503修正: 外部取引ではない不整合の詳細を記録
-      const nonExternalDiscrepancies = uniqueDiscrepancies.filter(d => !d.isExternalTradeSuspected);
-      logger.warn(`[Issue #2503] 外部取引ではない不整合の詳細 (${exchangeId}): ${nonExternalDiscrepancies.length}件`);
-      nonExternalDiscrepancies.forEach((disc, index) => {
-        logger.warn(`[Issue #2503] 非外部取引不整合 [${index + 1}]: ${disc.currency} - 差異=${disc.discrepancyPercent}%, 外部取引判定=${disc.isExternalTradeSuspected}`);
-      });
-    }
-  }
+  // ERRORレベル選択時の追加検証
+  ({ logLevel, severityText } = validateErrorLevel(logLevel, severityText, uniqueDiscrepancies, exchangeId));
   
   const message_text = `残高不整合検出: ${exchangeId} (${uniqueDiscrepancies.length}件の${severityText})`;
   logger[logLevel](message_text);
   
-  // ログ出力時の強化された重複防止チェック
-  const loggedCurrencies = new Map(); // Set から Map に変更
-  const logEntries = [];
-  
-  uniqueDiscrepancies.forEach((disc, index) => {
-    const normalizedCurrency = normalizeCurrency(disc.currency);
-    const logIndex = index + 1;
-    
-    if (!loggedCurrencies.has(normalizedCurrency)) {
-      const toleranceInfo = disc.tolerancePercent > 0 ? ` [許容誤差: ${disc.tolerancePercent}%]` : '';
-      const externalTradeInfo = disc.isExternalTradeSuspected ? ' ⚠️外部取引の可能性' : '';
-      const logEntry = `  [${logIndex}] ${normalizedCurrency}: 取引所=${disc.exchangeAmount}, Bot=${disc.botAmount}, 差異=${disc.difference} (${disc.discrepancyPercent}%)${toleranceInfo}${externalTradeInfo}`;
-      logEntries.push(logEntry);
-      loggedCurrencies.set(normalizedCurrency, {
-        logIndex,
-        originalCurrency: disc.originalCurrency || disc.currency,
-        processedAt: disc.processedAt || Date.now()
-      });
-    } else {
-      const existingInfo = loggedCurrencies.get(normalizedCurrency);
-      logger.warn(`ログ出力時に重複を検出しスキップ (${exchangeId}): ${disc.currency} -> ${normalizedCurrency} (既存ログ: [${existingInfo.logIndex}], 元通貨: ${existingInfo.originalCurrency})`);
-    }
-  });
-  
-  // 実際のログ出力（重複なしが保証された状態）
-  logEntries.forEach(logEntry => {
-    logger[logLevel](logEntry);
-  });
-  
-  // 最終検証: ログ出力数と期待数の一致確認
-  if (logEntries.length !== loggedCurrencies.size) {
-    logger.error(`ログ出力数不整合 (${exchangeId}): 出力数=${logEntries.length}, 通貨数=${loggedCurrencies.size}`);
-  }
+  // 不整合データのログ出力（関数に分離）
+  logDiscrepancies(uniqueDiscrepancies, logLevel, exchangeId);
   
   // デバッグ用の詳細データ（開発環境のみ、機密情報をマスク）
   if (process.env.NODE_ENV === 'development') {
@@ -1092,33 +1282,42 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
  * 全取引所の残高チェックを実行
  */
 async function checkAllExchangeBalances() {
+  const lockKey = `${BALANCE_CONFIG.distributedLock.lockKeyPrefix}:all_exchanges`;
+  
   try {
-    logger.info('=== 全取引所残高チェック開始 ===');
+    return await withDistributedLock(lockKey, async () => {
+      logger.info('=== 全取引所残高チェック開始 ===');
 
-    const results = [];
-    const exchangeIds = Object.keys(config.exchanges);
+      const results = [];
+      const exchangeIds = Object.keys(config.exchanges);
 
-    for (const exchangeId of exchangeIds) {
-      try {
-        const result = await compareBalances(exchangeId);
-        results.push(result);
+      for (const exchangeId of exchangeIds) {
+        try {
+          const result = await compareBalances(exchangeId);
+          results.push(result);
 
-        // 各取引所チェック間の待機（設定から取得）
-        await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
-      } catch (error) {
-        logger.error(`${exchangeId} の残高チェックに失敗:`, error.message);
-        results.push({
-          exchangeId,
-          error: error.message,
-          isHealthy: false
-        });
+          // 各取引所チェック間の待機（設定から取得）
+          await new Promise(resolve => setTimeout(resolve, BALANCE_CONFIG.intervals.exchangeCheckDelay));
+        } catch (error) {
+          logger.error(`${exchangeId} の残高チェックに失敗:`, error.message);
+          results.push({
+            exchangeId,
+            error: error.message,
+            isHealthy: false
+          });
+        }
       }
-    }
 
-    logger.info('=== 全取引所残高チェック完了 ===');
-    return results;
+      logger.info('=== 全取引所残高チェック完了 ===');
+      return results;
+    });
 
   } catch (error) {
+    if (error.message.includes('分散ロック取得失敗')) {
+      logger.info('残高チェックは既に実行中です。スキップします。');
+      return [];
+    }
+    
     const errorMessage = `全取引所残高チェックエラー: ${error.message}`;
     logger.error(errorMessage);
     await postErrorToDiscord(errorMessage);
@@ -1153,5 +1352,9 @@ module.exports = {
   checkAllExchangeBalances,
   checkSingleExchange,
   // Redis接続管理
-  ensureRedisConnection
+  ensureRedisConnection,
+  // 分散ロック機能
+  acquireDistributedLock,
+  releaseDistributedLock,
+  withDistributedLock
 };
