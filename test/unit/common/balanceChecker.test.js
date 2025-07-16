@@ -1319,12 +1319,12 @@ describe('Issue #2495: 外部取引による高い残高差異のログレベル
 
     // 90%以上の外部取引が1つでも存在するので、INFOレベルで記録される
     expect(mockLoggerInstance.info).toHaveBeenCalledWith(
-      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異/)
+      expect.stringMatching(/残高不整合検出: bitbank.*外部取引による残高差異（一部混在）/)
     );
 
-    // 条件3aが適用されることを確認
+    // 条件4aが適用されることを確認
     expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/条件3a適用 - 高度外部取引数=1件/)
+      expect.stringMatching(/条件4a適用 - 外部取引比率66\.7% > 50%/)
     );
   });
 });
