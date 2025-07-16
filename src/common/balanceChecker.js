@@ -21,6 +21,12 @@ const BALANCE_CONFIG = getValidatedConfig();
 const DECIMAL_PRECISION = 8;
 const EXCLUDED_CURRENCIES = ['JPY'];
 
+// ログレベル判定のための定数
+const LOG_LEVEL_CONFIG = {
+  EXTERNAL_TRADE_RATIO_THRESHOLD: 0.5,
+  VERY_HIGH_EXTERNAL_RATIO_THRESHOLD: 0.5
+};
+
 /**
  * 通貨名を正規化する
  * @param {string} currency - 通貨名
@@ -28,6 +34,16 @@ const EXCLUDED_CURRENCIES = ['JPY'];
  */
 function normalizeCurrency(currency) {
   return currency.trim().toUpperCase();
+}
+
+/**
+ * ログレベル判定の結果をログ出力する（DRY原則による共通化）
+ * @param {string} exchangeId - 取引所ID
+ * @param {string} condition - 適用された条件
+ * @param {string} result - 判定結果
+ */
+function logLevelDecision(exchangeId, condition, result) {
+  logger.debug(`ログレベル判定 (${exchangeId}): ${condition} -> ${result}`);
 }
 
 /**
@@ -730,53 +746,53 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     // 全ての不整合が明らかに外部取引（90%以上）の場合
     logLevel = 'info';
     severityText = '外部取引による残高差異';
-    logger.debug(`ログレベル判定 (${exchangeId}): 条件1適用 - 全て高度外部取引 -> INFO`);
+    logLevelDecision(exchangeId, '条件1適用 - 全て高度外部取引', 'INFO');
   } else if (externalTradeDiscrepancies.length === uniqueDiscrepancies.length && 
              externalTradeDiscrepancies.length > 0) {
     // 全ての不整合が外部取引の可能性（50%以上）の場合
     logLevel = 'info';
     severityText = '外部取引による残高差異';
-    logger.debug(`ログレベル判定 (${exchangeId}): 条件2適用 - 全て外部取引 -> INFO`);
+    logLevelDecision(exchangeId, '条件2適用 - 全て外部取引', 'INFO');
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
     // 一部が明らかに外部取引（90%以上）の場合
     // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
     const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (veryHighRatio >= 0.5) {
+    if (veryHighRatio >= LOG_LEVEL_CONFIG.VERY_HIGH_EXTERNAL_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logger.debug(`ログレベル判定 (${exchangeId}): 条件3a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50% -> INFO`);
+      logLevelDecision(exchangeId, `条件3a適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
         ? '外部取引による残高差異（一部混在）'
         : '混合不整合（明らかな外部取引含む）';
-      logger.debug(`ログレベル判定 (${exchangeId}): 条件3b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50% -> WARN`);
+      logLevelDecision(exchangeId, `条件3b適用 - 高度外部取引比率${(veryHighRatio * 100).toFixed(1)}% < 50%`, 'WARN');
     }
   } else if (externalTradeDiscrepancies.length > 0) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
     // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
     const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (externalRatio > 0.5) {
+    if (externalRatio > LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logger.debug(`ログレベル判定 (${exchangeId}): 条件4a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% > 50% -> INFO`);
+      logLevelDecision(exchangeId, `条件4a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% > 50%`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = nonExternalHighDiscrepancies.length > 0 
         ? '混合不整合（外部取引と高度不整合）'
         : '軽微な不整合（外部取引の可能性）';
-      logger.debug(`ログレベル判定 (${exchangeId}): 条件4b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% <= 50% -> WARN`);
+      logLevelDecision(exchangeId, `条件4b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% <= 50%`, 'WARN');
     }
   } else if (nonExternalHighDiscrepancies.length > 0) {
     // 外部取引ではない高度不整合のみの場合のみERRORレベル
     logLevel = 'error';
     severityText = '高度不整合';
-    logger.debug(`ログレベル判定 (${exchangeId}): 条件5適用 - 非外部高度不整合のみ -> ERROR`);
+    logLevelDecision(exchangeId, '条件5適用 - 非外部高度不整合のみ', 'ERROR');
   } else {
     // 軽微な不整合のみ
     logLevel = 'warn';
     severityText = '軽微な不整合';
-    logger.debug(`ログレベル判定 (${exchangeId}): 条件6適用 - 軽微な不整合のみ -> WARN`);
+    logLevelDecision(exchangeId, '条件6適用 - 軽微な不整合のみ', 'WARN');
   }
   
   // Issue #2441修正: 最終的なログレベル判定結果を強制的に記録
