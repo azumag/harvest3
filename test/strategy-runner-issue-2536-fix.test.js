@@ -25,8 +25,8 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
       
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 重複防止機能が簡素化されていることを確認
-      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT');
+      // 重複防止機能がatomic実装されていることを確認
+      expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
       expect(entrypointContent).toContain('log_startup_message()');
       
       // 複雑な実装が削除されていることを確認
@@ -34,12 +34,13 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
       expect(entrypointContent).not.toContain('STARTUP_LOG_FILE');
     });
 
-    test('簡素化された重複防止機能が正しく実装されている', () => {
+    test('atomic重複防止機能が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // シンプルな実装が使用されていることを確認
-      expect(entrypointContent).toContain('if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then');
-      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT="$message"');
+      // atomic実装が使用されていることを確認
+      expect(entrypointContent).toContain('message_hash=$(echo "$message" | md5sum | cut -d\' \' -f1)');
+      expect(entrypointContent).toContain('lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
+      expect(entrypointContent).toContain('if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then');
       
       // 複雑な処理が削除されていることを確認
       expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
@@ -65,38 +66,50 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
 
   describe('実際の重複防止動作確認', () => {
     test('log_startup_message関数が重複メッセージを正しく抑制する', () => {
-      // シンプルな関数テストスクリプトを作成
-      const simpleTestScript = `#!/bin/bash
+      // atomic実装の関数テストスクリプトを作成
+      const atomicTestScript = `#!/bin/bash
 set -e
 
-# 環境変数の初期化
-STARTUP_MESSAGE_SENT=""
+# 重複起動メッセージ防止（ファイルベースの atomic 実装）
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
-# ログ関数のシンプル版
+# ログ関数
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# 重複起動ログ防止関数（シンプル版）
+# 重複起動ログ防止関数（atomic ファイルベース実装）
 log_startup_message() {
     local message="$1"
-    if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then
-        STARTUP_MESSAGE_SENT="$message"
+    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # atomicな方法でメッセージの重複をチェック
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        # ロックが取得できた場合のみメッセージを出力
         log "$message"
+        
+        # 短時間でのクリーンアップ（テスト用）
+        (sleep 1 && rm -f "$lock_file") &
+    else
+        # 既に同じメッセージが処理済みの場合は何もしない
+        return 0
     fi
 }
 
 # テスト実行
-echo "=== Testing log_startup_message function ==="
+echo "=== Testing atomic log_startup_message function ==="
 log_startup_message "Test message 1"
 log_startup_message "Test message 1"  # 抑制されるべき
 log_startup_message "Test message 2"
-log_startup_message "Test message 1"  # 新しいメッセージ（前回と違うので出力される）
-echo "STARTUP_MESSAGE_SENT: $STARTUP_MESSAGE_SENT"
+sleep 2  # ロックファイルのクリーンアップを待つ
+log_startup_message "Test message 1"  # クリーンアップ後なので出力される
+echo "Test completed"
 `;
 
-      const testPath = path.join(__dirname, '..', '.tmp', 'simple_test.sh');
-      fs.writeFileSync(testPath, simpleTestScript);
+      const testPath = path.join(__dirname, '..', '.tmp', 'atomic_test.sh');
+      fs.writeFileSync(testPath, atomicTestScript);
       fs.chmodSync(testPath, '755');
 
       try {
@@ -106,7 +119,7 @@ echo "STARTUP_MESSAGE_SENT: $STARTUP_MESSAGE_SENT"
         const lines = output.split('\n').filter(line => line.trim() !== '');
         const logMessages = lines.filter(line => line.includes('[ENTRYPOINT]'));
         
-        // "Test message 1" が2回出力されることを確認（最初と最後）
+        // "Test message 1" が2回出力されることを確認（最初とクリーンアップ後）
         const message1Occurrences = logMessages.filter(line => line.includes('Test message 1')).length;
         expect(message1Occurrences).toBe(2);
         
@@ -114,13 +127,15 @@ echo "STARTUP_MESSAGE_SENT: $STARTUP_MESSAGE_SENT"
         const message2Occurrences = logMessages.filter(line => line.includes('Test message 2')).length;
         expect(message2Occurrences).toBe(1);
         
-        // 環境変数が正しく設定されていることを確認（最後のメッセージが保存される）
-        expect(output).toContain('STARTUP_MESSAGE_SENT: Test message 1');
+        // テスト完了メッセージがあることを確認
+        expect(output).toContain('Test completed');
         
         // クリーンアップ
         fs.unlinkSync(testPath);
       } catch (error) {
-        if (fs.existsSync(testPath)) fs.unlinkSync(testPath);
+        if (fs.existsSync(testPath)) {
+fs.unlinkSync(testPath);
+}
         throw error;
       }
     });
@@ -129,20 +144,31 @@ echo "STARTUP_MESSAGE_SENT: $STARTUP_MESSAGE_SENT"
       const differentMessagesTest = `#!/bin/bash
 set -e
 
-# 環境変数の初期化
-STARTUP_MESSAGE_SENT=""
+# 重複起動メッセージ防止（ファイルベースの atomic 実装）
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_diff"
+mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
-# ログ関数のシンプル版
+# ログ関数
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# 重複起動ログ防止関数（シンプル版）
+# 重複起動ログ防止関数（atomic ファイルベース実装）
 log_startup_message() {
     local message="$1"
-    if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then
-        STARTUP_MESSAGE_SENT="$message"
+    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # atomicな方法でメッセージの重複をチェック
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        # ロックが取得できた場合のみメッセージを出力
         log "$message"
+        
+        # 短時間でのクリーンアップ（テスト用）
+        (sleep 1 && rm -f "$lock_file") &
+    else
+        # 既に同じメッセージが処理済みの場合は何もしない
+        return 0
     fi
 }
 
@@ -152,8 +178,10 @@ log_startup_message "Message A"
 log_startup_message "Message B"
 log_startup_message "Message C"
 log_startup_message "Message C"  # 連続した同じメッセージ（抑制されるべき）
-log_startup_message "Message A"  # 新しいメッセージ（前回と違うので出力される）
+sleep 2  # ロックファイルのクリーンアップを待つ
+log_startup_message "Message A"  # クリーンアップ後なので出力される
 log_startup_message "Message D"
+echo "Test completed"
 `;
 
       const testPath = path.join(__dirname, '..', '.tmp', 'test_different_messages.sh');
@@ -169,7 +197,7 @@ log_startup_message "Message D"
         expect(output).toContain('Message C');
         expect(output).toContain('Message D');
         
-        // Message A が2回出力されることを確認（最初と後半）
+        // Message A が2回出力されることを確認（最初とクリーンアップ後）
         const lines = output.split('\n').filter(line => line.trim() !== '');
         const logMessages = lines.filter(line => line.includes('[ENTRYPOINT]'));
         const messageAOccurrences = logMessages.filter(line => line.includes('Message A')).length;
@@ -182,7 +210,9 @@ log_startup_message "Message D"
         // クリーンアップ
         fs.unlinkSync(testPath);
       } catch (error) {
-        if (fs.existsSync(testPath)) fs.unlinkSync(testPath);
+        if (fs.existsSync(testPath)) {
+fs.unlinkSync(testPath);
+}
         throw error;
       }
     });
@@ -229,15 +259,15 @@ log_startup_message "Message D"
   });
 
   describe('パフォーマンスとセキュリティの改善確認', () => {
-    test('ファイル操作が削減されている', () => {
+    test('不要なファイル操作が削減されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 重複防止機能で不要なファイル操作が削除されていることを確認
       expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
       expect(entrypointContent).not.toContain('grep -q "$instance_signature"');
       
-      // 環境変数ベースの簡素な実装が使用されていることを確認
-      expect(entrypointContent).toContain('STARTUP_MESSAGE_SENT');
+      // atomic実装が使用されていることを確認
+      expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     });
 
     test('データベース接続チェックが効率化されている', () => {
