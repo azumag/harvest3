@@ -124,39 +124,56 @@ if (process.env.CI) {
   });
 }
 
-// CI環境でのクリーンアップ強化
-if (process.env.CI) {
-  // テスト終了後のクリーンアップ
-  afterAll(async () => {
-    // 未処理のPromiseやタイマーをクリア
-    jest.clearAllTimers();
-    jest.clearAllMocks();
-    
-    // プロセスのクリーンアップ（安全な方法）
-    if (process._getActiveHandles) {
-      const activeHandles = process._getActiveHandles();
-      if (activeHandles && activeHandles.length > 0) {
-        activeHandles.forEach(handle => {
-          if (handle && typeof handle.unref === 'function') {
-            try {
-              handle.unref();
-            } catch (error) {
-              // ハンドルのクリーンアップエラーを無視
-            }
+// 全環境でのクリーンアップ強化（安全な方法）
+// テスト終了後のクリーンアップ
+afterAll(async () => {
+  // 未処理のPromiseやタイマーをクリア
+  jest.clearAllTimers();
+  jest.clearAllMocks();
+  
+  // アクティブなハンドルを安全にクリーンアップ
+  if (process._getActiveHandles) {
+    const activeHandles = process._getActiveHandles();
+    if (activeHandles && activeHandles.length > 0) {
+      activeHandles.forEach(handle => {
+        if (handle && typeof handle.unref === 'function') {
+          try {
+            handle.unref();
+          } catch (error) {
+            // ハンドルのクリーンアップエラーを無視
           }
-        });
-      }
+        }
+      });
     }
-    
-    // ガベージコレクションを強制実行
-    if (global.gc) {
+  }
+  
+  // ガベージコレクションを強制実行（利用可能な場合のみ）
+  if (global.gc) {
+    try {
       global.gc();
+    } catch (error) {
+      // ガベージコレクションエラーを無視
     }
-  });
+  }
+  
+  // NodeJSのタイマーを強制的にクリア
+  if (global.clearTimeout) {
+    try {
+      // 存在する可能性のあるタイマーIDをクリア
+      for (let i = 1; i < 1000; i++) {
+        clearTimeout(i);
+        clearInterval(i);
+      }
+    } catch (error) {
+      // タイマークリアエラーを無視
+    }
+  }
+});
 
-  // 各テストスイート後のクリーンアップ
-  afterEach(() => {
-    // モックコールをクリア
-    jest.clearAllMocks();
-  });
-}
+// 各テストスイート後のクリーンアップ
+afterEach(() => {
+  // モックコールをクリア
+  jest.clearAllMocks();
+  // タイマーをクリア
+  jest.clearAllTimers();
+});
