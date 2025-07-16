@@ -370,8 +370,13 @@ async function getValidatedStrategyKey(orderId, fallbackStrategy = 'UNKNOWN') {
 async function getAllTradeSummaries() {
   try {
     // Redis接続が利用できない場合は空の配列を返す
-    if (!client || !client.isReady || process.env.DISABLE_REDIS === 'true') {
+    if (!client || !client.isReady) {
       logger.warn('Redis接続が利用できないため、空のサマリーを返します');
+      return [];
+    }
+
+    if (process.env.DISABLE_REDIS === 'true') {
+      logger.warn('Redis接続が無効化されているため、空のサマリーを返します');
       return [];
     }
 
@@ -420,8 +425,13 @@ async function getAllTradeSummaries() {
 
 async function getTradeSummaries(exchangeId) {
   try {
-    // Redisが無効化されている場合は空の配列を返す
-    if (!client || process.env.DISABLE_REDIS === 'true') {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できないため、空のサマリーを返します');
+      return [];
+    }
+
+    if (process.env.DISABLE_REDIS === 'true') {
       logger.warn('Redis接続が無効化されているため、空のサマリーを返します');
       return [];
     }
@@ -540,6 +550,12 @@ function parseParamValue(value, type = 'auto') {
 async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
   const key = `params:${exchangeId}:${symbol}:${strategyKey}`;
   try {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できません - getStrategyParametersRedis をスキップ');
+      return null;
+    }
+
     const params = await client.hGetAll(key);
 
     if (Object.keys(params).length > 0) {
@@ -565,6 +581,12 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
  */
 async function getAllStrategyParametersRedis() {
   try {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できません - getAllStrategyParametersRedis をスキップ');
+      return {};
+    }
+
     const keys = await client.keys('params:*');
     const allParams = {};
 
@@ -872,6 +894,12 @@ async function getPositionRedis(positionKey) {
  */
 async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
   try {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できません - getStrategyPositionsRedis をスキップ');
+      return [];
+    }
+
     const pattern = `position:${exchangeId}:${symbol}:${strategyKey}:*`;
     const keys = await client.keys(pattern);
     const positions = [];
@@ -910,39 +938,64 @@ async function getStrategyPositionsRedis(exchangeId, symbol, strategyKey) {
  */
 async function getAllPositionsRedis() {
   try {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できません - getAllPositionsRedis をスキップ');
+      // 接続エラーと空データを区別するために例外を投げる
+      throw new Error('Redis接続が利用できません');
+    }
+
+    // Redis無効化フラグのチェック
+    if (process.env.DISABLE_REDIS === 'true') {
+      logger.warn('Redis接続が無効化されているため、空のポジション配列を返します');
+      return [];
+    }
+
     const pattern = 'position:*';
     const keys = await client.keys(pattern);
     const positions = [];
 
+    logger.debug(`Redis keys found: ${keys.length}`);
+
     for (const key of keys) {
-      const position = await client.hGetAll(key);
-      if (Object.keys(position).length > 0) {
-        const positionKey = key.replace('position:', '');
-        positions.push({
-          key: positionKey,
-          positionKey: positionKey, // API互換性のため
-          exchangeId: position.exchangeId,
-          exchange: position.exchangeId, // API互換性のため
-          symbol: position.symbol,
-          strategyKey: position.strategyKey,
-          strategy: position.strategyKey, // API互換性のため
-          orderId: position.orderId,
-          side: position.side,
-          amount: parseFloat(position.amount || 0),
-          entryPrice: parseFloat(position.entryPrice || 0),
-          highestPrice: parseFloat(position.highestPrice || 0),
-          currentPrice: parseFloat(position.currentPrice || position.entryPrice || 0),
-          status: position.status,
-          createdAt: parseInt(position.createdAt || 0),
-          updatedAt: parseInt(position.updatedAt || 0),
-          timestamp: parseInt(position.createdAt || 0) // API互換性のため
-        });
+      try {
+        const position = await client.hGetAll(key);
+        if (Object.keys(position).length > 0) {
+          const positionKey = key.replace('position:', '');
+          positions.push({
+            key: positionKey,
+            positionKey: positionKey, // API互換性のため
+            exchangeId: position.exchangeId,
+            exchange: position.exchangeId, // API互換性のため
+            symbol: position.symbol,
+            strategyKey: position.strategyKey,
+            strategy: position.strategyKey, // API互換性のため
+            orderId: position.orderId,
+            side: position.side,
+            amount: parseFloat(position.amount || 0),
+            entryPrice: parseFloat(position.entryPrice || 0),
+            highestPrice: parseFloat(position.highestPrice || 0),
+            currentPrice: parseFloat(position.currentPrice || position.entryPrice || 0),
+            status: position.status,
+            createdAt: parseInt(position.createdAt || 0),
+            updatedAt: parseInt(position.updatedAt || 0),
+            timestamp: parseInt(position.createdAt || 0) // API互換性のため
+          });
+        }
+      } catch (keyError) {
+        logger.warn(`ポジションキーの処理に失敗しました: ${key}`, keyError.message);
+        // 個別のキーエラーは警告のみで処理を続行
       }
     }
 
+    logger.debug(`取得されたポジション数: ${positions.length}`);
     return positions;
   } catch (error) {
     logger.error('全ポジションの取得に失敗しました:', error);
+    // Redis接続エラーの場合は例外を再投げして上位で適切に処理
+    if (error.message.includes('Redis接続') || error.message.includes('Connection')) {
+      throw error;
+    }
     return [];
   }
 }
@@ -1561,6 +1614,12 @@ async function getPendingOrderRedis(exchangeId, symbol, strategyKey, orderId) {
  */
 async function getAllPendingOrdersRedis() {
   try {
+    // Redis接続状態をチェック
+    if (!client || !client.isReady) {
+      logger.warn('Redis接続が利用できません - getAllPendingOrdersRedis をスキップ');
+      return [];
+    }
+
     const pattern = 'pending_order:*';
     const keys = await client.keys(pattern);
     const orders = [];
