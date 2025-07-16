@@ -3,6 +3,22 @@
  * 残高チェッカーの許容誤差改善のテスト
  */
 
+// Mock balanceCheckerConfig to set 1% tolerance for these tests
+jest.mock('../../../src/common/balanceCheckerConfig', () => ({
+  getValidatedConfig: jest.fn(() => ({
+    thresholds: {
+      significantBalance: 0.00001,
+      highDiscrepancyPercent: 10,
+      balanceComparisonTolerance: 1, // Set to 1% for these tolerance tests
+      externalTradeThreshold: 50,
+      currencySpecificTolerance: {}
+    },
+    intervals: {
+      exchangeCheckDelay: 2000
+    }
+  }))
+}));
+
 const {
   getValidatedConfig
 } = require('../../../src/common/balanceCheckerConfig');
