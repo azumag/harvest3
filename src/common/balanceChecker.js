@@ -772,16 +772,16 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     // 一部が外部取引の可能性（50%以上）だが90%未満の場合
     // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
     const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
-    if (externalRatio > LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
+    if (externalRatio >= LOG_LEVEL_CONFIG.EXTERNAL_TRADE_RATIO_THRESHOLD) {
       logLevel = 'info';
       severityText = '外部取引による残高差異（一部混在）';
-      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% > 50%`, 'INFO');
+      logLevelDecision(exchangeId, `条件3a適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% >= 50%`, 'INFO');
     } else {
       logLevel = 'warn';
       severityText = nonExternalHighDiscrepancies.length > 0 
         ? '混合不整合（外部取引と高度不整合）'
         : '軽微な不整合（外部取引の可能性）';
-      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% <= 50%`, 'WARN');
+      logLevelDecision(exchangeId, `条件3b適用 - 外部取引比率${(externalRatio * 100).toFixed(1)}% < 50%`, 'WARN');
     }
   } else if (nonExternalHighDiscrepancies.length > 0) {
     // 外部取引ではない高度不整合のみの場合のみERRORレベル

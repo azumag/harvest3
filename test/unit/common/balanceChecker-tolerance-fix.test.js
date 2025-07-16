@@ -201,7 +201,7 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
   describe('ログレベル判定のテスト', () => {
     it('外部取引の可能性がある場合、適切なメッセージが表示される', async () => {
       config.exchanges.bitbank.instance.fetchBalance.mockResolvedValue({
-        total: { BTC: 1.0, ETH: 1.0 }
+        total: { BTC: 1.0, ETH: 1.0, ADA: 1.0 }
       });
       getAllPositionsRedis.mockResolvedValue([
         {
@@ -217,14 +217,22 @@ describe('Issue #2033: BalanceChecker許容誤差改善のテスト', () => {
           side: 'buy',
           amount: 0.85, // 15%の差異（高度不整合だが外部取引ではない）
           status: 'open'
+        },
+        {
+          exchange: 'bitbank',
+          symbol: 'ADA/JPY',
+          side: 'buy',
+          amount: 0.85, // 15%の差異（高度不整合だが外部取引ではない）
+          status: 'open'
         }
       ]);
 
       const result = await compareBalances('bitbank');
 
-      expect(result.discrepancies).toHaveLength(2);
+      expect(result.discrepancies).toHaveLength(3);
       expect(result.discrepancies[0].isExternalTradeSuspected).toBe(true);
       expect(result.discrepancies[1].isExternalTradeSuspected).toBe(false);
+      expect(result.discrepancies[2].isExternalTradeSuspected).toBe(false);
 
       // 外部取引と高度不整合の混在としてWARNレベルで報告されることを確認
       expect(mockLoggerInstance.warn).toHaveBeenCalledWith(
