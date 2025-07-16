@@ -733,17 +733,31 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
     logLevel = 'info';
     severityText = '外部取引による残高差異';
   } else if (veryHighExternalTradeDiscrepancies.length > 0) {
-    // 一部が明らかに外部取引（90%以上）の場合 - WARNレベルに統一
-    logLevel = 'warn';
-    severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
-      ? '外部取引による残高差異（一部混在）'
-      : '混合不整合（明らかな外部取引含む）';
+    // 一部が明らかに外部取引（90%以上）の場合
+    // Issue #2489修正: 90%以上の外部取引が過半数の場合はINFOレベルにする
+    const veryHighRatio = veryHighExternalTradeDiscrepancies.length / uniqueDiscrepancies.length;
+    if (veryHighRatio >= 0.5) {
+      logLevel = 'info';
+      severityText = '外部取引による残高差異（一部混在）';
+    } else {
+      logLevel = 'warn';
+      severityText = veryHighExternalTradeDiscrepancies.length === externalTradeDiscrepancies.length
+        ? '外部取引による残高差異（一部混在）'
+        : '混合不整合（明らかな外部取引含む）';
+    }
   } else if (externalTradeDiscrepancies.length > 0) {
-    // 一部が外部取引の可能性（50%以上）だが90%未満の場合 - WARNレベル
-    logLevel = 'warn';
-    severityText = nonExternalHighDiscrepancies.length > 0 
-      ? '混合不整合（外部取引と高度不整合）'
-      : '軽微な不整合（外部取引の可能性）';
+    // 一部が外部取引の可能性（50%以上）だが90%未満の場合
+    // Issue #2489修正: 外部取引の可能性が過半数の場合はINFOレベルにする
+    const externalRatio = externalTradeDiscrepancies.length / uniqueDiscrepancies.length;
+    if (externalRatio >= 0.5) {
+      logLevel = 'info';
+      severityText = '外部取引による残高差異（一部混在）';
+    } else {
+      logLevel = 'warn';
+      severityText = nonExternalHighDiscrepancies.length > 0 
+        ? '混合不整合（外部取引と高度不整合）'
+        : '軽微な不整合（外部取引の可能性）';
+    }
   } else if (nonExternalHighDiscrepancies.length > 0) {
     // 外部取引ではない高度不整合のみの場合のみERRORレベル
     logLevel = 'error';
