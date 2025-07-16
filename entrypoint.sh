@@ -16,10 +16,38 @@ DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイ
 DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
 STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
+STARTUP_INSTANCE_ID="${RANDOM}-$$-$(date +%s)"  # 起動インスタンスの一意ID
+STARTUP_LOG_FILE="/tmp/strategy-runner-startup.log"  # 起動ログファイル（重複防止用）
 
-# ログ関数
+# ログ関数（重複防止機能付き）
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
+    # stdout の即座フラッシュを保証
+    exec 1>&1
+}
+
+# 重複起動ログ防止関数
+log_startup_message() {
+    local message="$1"
+    local instance_signature="${STARTUP_INSTANCE_ID}-${message}"
+    
+    # 重複チェック用のファイルを作成/確認
+    if [ -f "$STARTUP_LOG_FILE" ]; then
+        # 既に同じメッセージが記録されているかチェック
+        if grep -q "$instance_signature" "$STARTUP_LOG_FILE" 2>/dev/null; then
+            log "DEBUG: 重複メッセージの抑制: $message"
+            return 0
+        fi
+    fi
+    
+    # メッセージを記録
+    echo "$instance_signature" >> "$STARTUP_LOG_FILE"
+    log "$message"
+    
+    # 古いログエントリを削除（最新10件のみ保持）
+    if [ -f "$STARTUP_LOG_FILE" ]; then
+        tail -n 10 "$STARTUP_LOG_FILE" > "${STARTUP_LOG_FILE}.tmp" && mv "${STARTUP_LOG_FILE}.tmp" "$STARTUP_LOG_FILE"
+    fi
 }
 
 # 起動ロック関数
@@ -90,6 +118,17 @@ release_startup_lock() {
             log "Startup lock released"
         else
             log "WARNING: Cannot release lock owned by PID: $lock_pid (current: $$)"
+        fi
+    fi
+    
+    # 起動ログファイルのクリーンアップ（古いエントリを削除）
+    if [ -f "$STARTUP_LOG_FILE" ]; then
+        # 現在のインスタンスに関連するエントリを削除
+        grep -v "$STARTUP_INSTANCE_ID" "$STARTUP_LOG_FILE" > "${STARTUP_LOG_FILE}.tmp" 2>/dev/null && mv "${STARTUP_LOG_FILE}.tmp" "$STARTUP_LOG_FILE"
+        
+        # ファイルが空の場合は削除
+        if [ ! -s "$STARTUP_LOG_FILE" ]; then
+            rm -f "$STARTUP_LOG_FILE"
         fi
     fi
 }
@@ -576,6 +615,14 @@ trap cleanup SIGTERM SIGINT
 
 # メイン実行
 main() {
+    # 起動診断情報の記録
+    log "=== 起動診断情報 ==="
+    log "起動インスタンス ID: $STARTUP_INSTANCE_ID"
+    log "プロセス ID: $$"
+    log "起動時刻: $(date '+%Y-%m-%d %H:%M:%S')"
+    log "作業ディレクトリ: $(pwd)"
+    log "バックテストモード: ${BACKTEST_MODE:-false}"
+    
     # 起動ロックの取得（重複起動防止）
     if ! acquire_startup_lock; then
         log "ERROR: Failed to acquire startup lock"
@@ -586,7 +633,7 @@ main() {
     trap release_startup_lock EXIT
     
     if [ "$BACKTEST_MODE" = "true" ]; then
-        log "Starting backtest container with enhanced error handling"
+        log_startup_message "Starting backtest container with enhanced error handling"
         
         # backtest用の段階的起動プロセス
         pre_startup_checks
@@ -596,7 +643,7 @@ main() {
         log "Pre-startup checks completed for backtest mode, executing command: $*"
         exec "$@"
     else
-        log "Starting strategy-runner container with enhanced error handling"
+        log_startup_message "Starting strategy-runner container with enhanced error handling"
         
         # 初期診断の実行
         run_diagnostics
