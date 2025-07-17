@@ -207,14 +207,21 @@ describe('Issue #2615: 分散ロック解放エラー修正のテスト', () => 
       );
     });
 
-    it('Issue #2615: オブジェクト型のlockIdは拒否される', async () => {
+    it('Issue #2615: オブジェクト型のlockIdは文字列化されて処理される', async () => {
       const lockKey = 'test_lock';
       const lockId = { id: 'test-id' }; // オブジェクト型のlockId
       
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await releaseDistributedLock(lockKey, lockId);
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'test_lock',
+        '[object Object]'
+      );
     });
 
     it('Issue #2615: Luaスクリプトの型安全性を確認する', async () => {
@@ -389,7 +396,7 @@ describe('Issue #2615: 分散ロック解放エラー修正のテスト', () => 
         { lockId: null, expected: false, description: 'null' },
         { lockId: undefined, expected: false, description: 'undefined' },
         { lockId: [], expected: false, description: '配列型' },
-        { lockId: {}, expected: false, description: 'オブジェクト型' }
+        { lockId: {}, expected: true, description: 'オブジェクト型' }
       ];
       
       for (const testCase of testCases) {
