@@ -121,7 +121,9 @@ describe('BalanceChecker Issue #2576: Redis分散ロック解放時のLuaスク�
       
       const calledScript = mockRedisClient.eval.mock.calls[0][0];
       expect(calledScript).toContain('pcall(cjson.decode, lockValue)');
-      expect(calledScript).toContain('if success and lockData and tostring(lockData.lockId) == ARGV[1] then');
+      expect(calledScript).toContain('if success and lockData and lockData.lockId then');
+      expect(calledScript).toContain('local lockIdStr = tostring(lockData.lockId)');
+      expect(calledScript).toContain('if lockIdStr == ARGV[1] then');
     });
 
     it('JSONデコードが失敗した場合でもRedisエラーが発生しない', async () => {
@@ -145,7 +147,7 @@ describe('BalanceChecker Issue #2576: Redis分散ロック解放時のLuaスク�
       
       expect(result).toBe(false);
       expect(mockRedisClient.eval).toHaveBeenCalledWith(
-        expect.stringContaining('if success and lockData and tostring(lockData.lockId) == ARGV[1] then'),
+        expect.stringContaining('local lockIdStr = tostring(lockData.lockId)'),
         1,
         'test-key',
         'valid-lock-id'
