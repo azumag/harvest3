@@ -477,8 +477,8 @@ async function releaseDistributedLock(lockKey, lockId) {
     const luaScript = `
       local lockValue = redis.call('GET', KEYS[1])
       if lockValue then
-        local lockData = cjson.decode(lockValue)
-        if lockData.lockId == ARGV[1] then
+        local success, lockData = pcall(cjson.decode, lockValue)
+        if success and lockData and lockData.lockId == ARGV[1] then
           redis.call('DEL', KEYS[1])
           return 1
         end
