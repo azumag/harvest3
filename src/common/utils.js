@@ -260,6 +260,31 @@ async function executeWithRetry(asyncFunction, maxRetries = 3, delayMs = 1000, c
   throw lastError;
 }
 
+/**
+ * 分散ロックパラメータの厳密なバリデーション
+ * @param {string} lockKey - ロックキー
+ * @param {string} lockValue - ロック値（lockId）
+ * @param {string} context - コンテキスト（エラーメッセージ用）
+ * @returns {Object} { valid: boolean, error?: string }
+ */
+function validateLockParameters(lockKey, lockValue, context = 'lock') {
+  if (!lockKey || typeof lockKey !== 'string' || lockKey.trim() === '') {
+    return {
+      valid: false,
+      error: `無効なlockKey (${lockKey})`
+    };
+  }
+  
+  if (!lockValue || typeof lockValue !== 'string' || lockValue.trim() === '') {
+    return {
+      valid: false,
+      error: `無効なlockValue (${lockValue})`
+    };
+  }
+  
+  return { valid: true };
+}
+
 module.exports = {
   weightedAverage,
   fetchTotal,
@@ -274,5 +299,7 @@ module.exports = {
   safeNumberConversion,
   safeArrayGet,
   validateOHLCVData,
-  executeWithRetry
+  executeWithRetry,
+  // 分散ロック関数
+  validateLockParameters
 };

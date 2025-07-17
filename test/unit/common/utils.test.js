@@ -135,4 +135,117 @@ describe('Utils module', () => {
       expect(result).toBe(0);
     });
   });
+
+  describe('validateLockParameters function', () => {
+    test('returns valid for correct parameters', () => {
+      const result = utils.validateLockParameters('validKey', 'validValue');
+      
+      expect(result).toEqual({ valid: true });
+    });
+
+    test('rejects null lockKey', () => {
+      const result = utils.validateLockParameters(null, 'validValue');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey (null)'
+      });
+    });
+
+    test('rejects undefined lockKey', () => {
+      const result = utils.validateLockParameters(undefined, 'validValue');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey (undefined)'
+      });
+    });
+
+    test('rejects empty string lockKey', () => {
+      const result = utils.validateLockParameters('', 'validValue');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey ()'
+      });
+    });
+
+    test('rejects whitespace-only lockKey', () => {
+      const result = utils.validateLockParameters('   ', 'validValue');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey (   )'
+      });
+    });
+
+    test('rejects non-string lockKey', () => {
+      const result = utils.validateLockParameters(123, 'validValue');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey (123)'
+      });
+    });
+
+    test('rejects null lockValue', () => {
+      const result = utils.validateLockParameters('validKey', null);
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockValue (null)'
+      });
+    });
+
+    test('rejects undefined lockValue', () => {
+      const result = utils.validateLockParameters('validKey', undefined);
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockValue (undefined)'
+      });
+    });
+
+    test('rejects empty string lockValue', () => {
+      const result = utils.validateLockParameters('validKey', '');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockValue ()'
+      });
+    });
+
+    test('rejects whitespace-only lockValue', () => {
+      const result = utils.validateLockParameters('validKey', '   ');
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockValue (   )'
+      });
+    });
+
+    test('rejects non-string lockValue', () => {
+      const result = utils.validateLockParameters('validKey', 456);
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockValue (456)'
+      });
+    });
+
+    test('rejects both null parameters', () => {
+      const result = utils.validateLockParameters(null, null);
+      
+      expect(result).toEqual({
+        valid: false,
+        error: '無効なlockKey (null)'
+      });
+    });
+
+    test('accepts valid string parameters with extra context', () => {
+      const result = utils.validateLockParameters('myKey', 'myValue', 'testContext');
+      
+      expect(result).toEqual({ valid: true });
+    });
+  });
 });

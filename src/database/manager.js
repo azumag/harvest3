@@ -84,7 +84,7 @@ const { fetchOHLCVDataAPI } = require('./exchangeAPI');
 const { getOHLCVQueue } = require('./ohlcvQueue');
 const { getOHLCVCacheManager } = require('./ohlcvCache');
 
-const { sleep, timeframeToMs, isBacktestMode } = require('../common/utils');
+const { sleep, timeframeToMs, isBacktestMode, validateLockParameters } = require('../common/utils');
 const { withBitbankErrorHandling } = require('../common/bitbankErrorHandler');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
@@ -1130,6 +1130,18 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
  */
 async function releaseDistributedLock(lockInfo) {
   try {
+    // lockInfoの厳密なバリデーション
+    if (!lockInfo || typeof lockInfo !== 'object') {
+      logger.warn(`分散ロック解放スキップ: 無効なlockInfo (${lockInfo})`);
+      return false;
+    }
+    
+    const validation = validateLockParameters(lockInfo.lockKey, lockInfo.lockValue, 'database/manager');
+    if (!validation.valid) {
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue})`);
+      return false;
+    }
+
     const redisDatabase = require('./redisDatabase');
     const redisClient = redisDatabase.getClient();
 

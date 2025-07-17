@@ -10,6 +10,7 @@ const {
 } = require('../database/redisDatabase');
 const { initRedisClient } = require('../database/redisClient');
 const Logger = require('../hft/utils/Logger');
+const { validateLockParameters } = require('./utils');
 
 const logger = new Logger('BalanceChecker');
 const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
@@ -460,9 +461,10 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
  */
 async function releaseDistributedLock(lockKey, lockId) {
   try {
-    // lockIdがnullまたはundefinedの場合は早期リターン
-    if (!lockId || typeof lockId !== 'string') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockId (${lockId}) for lockKey: ${lockKey}`);
+    // lockKeyとlockIdの厳密なバリデーション
+    const validation = validateLockParameters(lockKey, lockId, 'balanceChecker');
+    if (!validation.valid) {
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
     
@@ -486,8 +488,8 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
-    // 引数を明示的に文字列として渡す
-    const result = await redisClient.eval(luaScript, 1, String(lockKey), String(lockId));
+    // 既にバリデーション済みのためString()変換は不要
+    const result = await redisClient.eval(luaScript, 1, lockKey, lockId);
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${lockKey} (ID: ${lockId})`);
