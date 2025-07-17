@@ -46,7 +46,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       expect(entrypointContent).toContain('local message_hash=$(get_message_hash "$message")');
       
       // ハッシュ結果を再利用している
-      expect(entrypointContent).toContain('local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"');
+      expect(entrypointContent).toContain('local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-${HASH_PREFIX_LENGTH})"');
       expect(entrypointContent).toContain('local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
       
       // 古い重複ハッシュ計算が削除されている
@@ -102,7 +102,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       expect(entrypointContent).toContain('(set -C; echo "$$" > "$lock_file") 2>/dev/null');
       
       // クリーンアップ機能は維持
-      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
+      expect(entrypointContent).toContain('(sleep ${LOCK_CLEANUP_DELAY} && rm -f "$lock_file" 2>/dev/null) &');
     });
   });
 
@@ -134,7 +134,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
       
       // 自動クリーンアップ機能
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（定数化された時間後）');
       
       // get_message_hash関数
       expect(entrypointContent).toContain('get_message_hash() {');
