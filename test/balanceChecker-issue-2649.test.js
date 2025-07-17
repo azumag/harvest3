@@ -28,7 +28,8 @@ jest.mock('../src/database/redisDatabase', () => ({
 }));
 
 jest.mock('../src/database/redisClient', () => ({
-  initRedisClient: mockInitRedisClient
+  initRedisClient: mockInitRedisClient,
+  ensureRedisConnection: jest.fn(() => Promise.resolve())
 }));
 
 jest.mock('../src/common/utils', () => ({
@@ -115,7 +116,7 @@ describe('Issue #2649: 分散ロック解放エラーの修正', () => {
       
       expect(result).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockKey')
+        expect.stringContaining('分散ロック解放スキップ: 複雑な型のパラメータ')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
@@ -125,29 +126,46 @@ describe('Issue #2649: 分散ロック解放エラーの修正', () => {
       
       expect(result).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockId')
+        expect.stringContaining('分散ロック解放スキップ: 複雑な型のパラメータ')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
-    test('lockKey がオブジェクトの場合は早期リターン', async () => {
+    test('lockKey がオブジェクトの場合は文字列変換されて処理される', async () => {
+      mockValidateLockParameters.mockReturnValue({ valid: true });
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await releaseDistributedLock({ invalid: true }, 'valid-lock-id');
       
-      expect(result).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockKey')
-      );
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockValidateLockParameters).toHaveBeenCalledWith('[object Object]', 'valid-lock-id', 'balanceChecker');
+      expect(mockRedisClient.eval).toHaveBeenCalled();
     });
 
-    test('lockId がオブジェクトの場合は早期リターン', async () => {
+    test('lockId がオブジェクトの場合は文字列変換されて処理される', async () => {
+      mockValidateLockParameters.mockReturnValue({ valid: true });
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await releaseDistributedLock('valid-lock-key', { invalid: true });
       
-      expect(result).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockId')
-      );
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockValidateLockParameters).toHaveBeenCalledWith('valid-lock-key', '[object Object]', 'balanceChecker');
+      expect(mockRedisClient.eval).toHaveBeenCalled();
+    });
+
+    test('カスタムtoStringメソッドを持つオブジェクトは適切に変換される', async () => {
+      mockValidateLockParameters.mockReturnValue({ valid: true });
+      mockRedisClient.eval.mockResolvedValue(1);
+      
+      const customObj = {
+        toString: () => 'custom-lock-key'
+      };
+      
+      const result = await releaseDistributedLock(customObj, 'valid-lock-id');
+      
+      expect(result).toBe(true);
+      expect(mockValidateLockParameters).toHaveBeenCalledWith('custom-lock-key', 'valid-lock-id', 'balanceChecker');
+      expect(mockRedisClient.eval).toHaveBeenCalled();
     });
 
     test('lockKey が関数の場合は早期リターン', async () => {
@@ -155,7 +173,7 @@ describe('Issue #2649: 分散ロック解放エラーの修正', () => {
       
       expect(result).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockKey')
+        expect.stringContaining('分散ロック解放スキップ: 複雑な型のパラメータ')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
@@ -165,7 +183,7 @@ describe('Issue #2649: 分散ロック解放エラーの修正', () => {
       
       expect(result).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放スキップ: 無効な型のlockId')
+        expect.stringContaining('分散ロック解放スキップ: 複雑な型のパラメータ')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
@@ -223,26 +241,26 @@ describe('Issue #2649: 分散ロック解放エラーの修正', () => {
   });
 
   describe('Redis接続エラーのテスト', () => {
-    test('Redis接続が利用できない場合はエラーを投げる', async () => {
+    test('Redis接続が利用できない場合はエラーをログしてfalseを返す', async () => {
       mockGetRedisClient.mockReturnValue(null);
 
       const result = await releaseDistributedLock('valid-lock-key', 'valid-lock-id');
       
       expect(result).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放エラー: Redis接続が利用できません')
+        expect.stringContaining('Redis接続が利用できません')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
-    test('Redis接続が準備できていない場合はエラーを投げる', async () => {
+    test('Redis接続が準備できていない場合はエラーをログしてfalseを返す', async () => {
       mockGetRedisClient.mockReturnValue({ isReady: false });
 
       const result = await releaseDistributedLock('valid-lock-key', 'valid-lock-id');
       
       expect(result).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('分散ロック解放エラー: Redis接続が利用できません')
+        expect.stringContaining('Redis接続が利用できません')
       );
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
