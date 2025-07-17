@@ -58,8 +58,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
     test('log_startup_message関数がatomic実装になっている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // md5ハッシュによるメッセージ識別
-      expect(entrypointContent).toContain('message_hash=$(echo "$message" | md5sum | cut -d\' \' -f1)');
+      // md5ハッシュ関数の使用によるメッセージ識別（DRY原則適用後）
+      expect(entrypointContent).toContain('message_hash=$(get_message_hash "$message")');
       
       // atomicなロックファイル作成
       expect(entrypointContent).toContain('set -C');
@@ -88,8 +88,9 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
     test('メッセージハッシュ計算が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // md5sumコマンドによるハッシュ計算
-      expect(entrypointContent).toContain('echo "$message" | md5sum | cut -d\' \' -f1');
+      // get_message_hash関数によるハッシュ計算（DRY原則適用後）
+      expect(entrypointContent).toContain('get_message_hash() {');
+      expect(entrypointContent).toContain('echo "$1" | md5sum | cut -d\' \' -f1');
       
       // ハッシュベースのロックファイル名
       expect(entrypointContent).toContain('lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
@@ -296,7 +297,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       // 修正後の簡素化実装が追加されている
       expect(entrypointContent).toContain('簡素化版');
       expect(entrypointContent).toContain('set -C');
-      expect(entrypointContent).toContain('message_hash=$(echo "$message" | md5sum');
+      expect(entrypointContent).toContain('message_hash=$(get_message_hash');
+      expect(entrypointContent).toContain('get_message_hash() {');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     });
   });

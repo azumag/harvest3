@@ -37,8 +37,8 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
     test('atomic重複防止機能が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // atomic実装が使用されていることを確認
-      expect(entrypointContent).toContain('message_hash=$(echo "$message" | md5sum | cut -d\' \' -f1)');
+      // atomic実装が使用されていることを確認（DRY原則適用後）
+      expect(entrypointContent).toContain('message_hash=$(get_message_hash "$message")');
       expect(entrypointContent).toContain('lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
       expect(entrypointContent).toContain('if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then');
       
