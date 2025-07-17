@@ -652,12 +652,23 @@ async function getBotManagedBalance(includeDiagnostics = false) {
 
     // Redisから全ポジションを取得（エラーハンドリング強化）
     let allPositions;
+    let isRedisConnectionIssue = false;
     try {
       allPositions = await getAllPositionsRedis();
+      
+      // Issue #2500修正: Redis接続問題によるデータ欠損を検出
+      if (Array.isArray(allPositions) && allPositions.length === 0) {
+        const redisClient = getRedisClient();
+        if (!redisClient || !redisClient.isReady) {
+          isRedisConnectionIssue = true;
+          logger.error('[Issue #2500] Redis接続問題により空のポジションデータを取得しました');
+        }
+      }
     } catch (redisError) {
       // Redis接続エラーを詳細に処理
       if (redisError.message.includes('Redis接続') || redisError.message.includes('Connection')) {
-        logger.error('Redis接続エラーが発生しました:', redisError.message);
+        isRedisConnectionIssue = true;
+        logger.error('[Issue #2500] Redis接続エラーが発生しました:', redisError.message);
         throw new Error(`Redis接続エラー: ${redisError.message}`);
       }
       // その他のエラーは再投げ
@@ -819,7 +830,10 @@ async function getBotManagedBalance(includeDiagnostics = false) {
           closedPositions: closedAnalysis ? closedAnalysis.totalCount : 0,
           closedCurrencyBalances,
           closedAnalysis,
-          lastAnalyzedAt: Date.now()
+          lastAnalyzedAt: Date.now(),
+          // Issue #2500修正: Redis接続問題の検出フラグを追加
+          isRedisConnectionIssue,
+          redisConnectionStatus: isRedisConnectionIssue ? 'disconnected' : 'connected'
         }
       };
     } else {
@@ -1065,6 +1079,35 @@ function removeDuplicateDiscrepancies(discrepancies, exchangeId) {
 }
 
 /**
+ * システム全体の残高異常を検出する
+ * @param {Array} discrepancies - 不整合データの配列
+ * @param {string} exchangeId - 取引所ID
+ * @returns {Object} システム異常の判定結果
+ */
+function detectSystemWideBalanceAnomaly(discrepancies, exchangeId) {
+  // Issue #2500修正: 複数通貨で同時に高い差異が発生した場合はシステム異常と判定
+  const highDiscrepancyThreshold = 90; // 90%以上の差異
+  const multiCurrencyThreshold = 3; // 3通貨以上
+  
+  const highDiscrepancies = discrepancies.filter(d => d.discrepancyPercent >= highDiscrepancyThreshold);
+  const isSystemAnomaly = highDiscrepancies.length >= multiCurrencyThreshold;
+  
+  if (isSystemAnomaly) {
+    logger.error(`[Issue #2500] システム全体の残高異常を検出 (${exchangeId}): ${highDiscrepancies.length}通貨で${highDiscrepancyThreshold}%以上の差異`);
+    highDiscrepancies.forEach(disc => {
+      logger.error(`  - ${disc.currency}: ${disc.discrepancyPercent}% (取引所=${disc.exchangeAmount}, Bot=${disc.botAmount})`);
+    });
+  }
+  
+  return {
+    isSystemAnomaly,
+    highDiscrepancyCount: highDiscrepancies.length,
+    threshold: highDiscrepancyThreshold,
+    affectedCurrencies: highDiscrepancies.map(d => d.currency)
+  };
+}
+
+/**
  * 不整合データを処理し、Discord通知を送信する
  * @param {Array} discrepancies - 不整合データの配列
  * @param {string} exchangeId - 取引所ID
@@ -1080,13 +1123,23 @@ async function processDiscrepancies(discrepancies, exchangeId, diagnosticInfo) {
   // 重複を除去
   const uniqueDiscrepancies = removeDuplicateDiscrepancies(discrepancies, exchangeId);
   
+  // Issue #2500修正: システム全体の残高異常を検出
+  const systemAnomalyResult = detectSystemWideBalanceAnomaly(uniqueDiscrepancies, exchangeId);
+  
   // Discord通知を送信
-  const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo);
+  const message = createEnhancedDiscrepancyMessage(exchangeId, uniqueDiscrepancies, diagnosticInfo, systemAnomalyResult);
   await postOrderToDiscord(message);
   
   // ログレベル判定の実行（複雑なロジックを関数に分離）
   const levelResult = determineLogLevel(uniqueDiscrepancies, exchangeId);
   let { logLevel, severityText } = levelResult;
+  
+  // Issue #2500修正: システム異常の場合は強制的にERRORレベル
+  if (systemAnomalyResult.isSystemAnomaly) {
+    logLevel = 'error';
+    severityText = `システム全体の残高異常 (${systemAnomalyResult.highDiscrepancyCount}通貨)`;
+    logger.error(`[Issue #2500] システム異常により強制的にERRORレベルに変更: ${severityText}`);
+  }
   
   // 強制的な外部取引判定（追加の安全措置）
   ({ logLevel, severityText } = applyEmergencyOverride(levelResult, uniqueDiscrepancies, exchangeId));
@@ -1236,15 +1289,19 @@ function createDiscrepancyMessage(exchangeId, discrepancies) {
  * @param {string} exchangeId - 取引所ID
  * @param {Array} discrepancies - 不整合データ
  * @param {Object} diagnosticInfo - 診断情報
+ * @param {Object} systemAnomalyResult - システム異常検出結果
  * @returns {string} Discord用メッセージ
  */
-function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo) {
-  // 外部取引の可能性に応じてメッセージのトーンを調整
+function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticInfo, systemAnomalyResult = null) {
+  // Issue #2500修正: システム異常、外部取引の可能性に応じてメッセージのトーンを調整
   const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
   const isAllExternalTrade = externalTradeDiscrepancies.length === discrepancies.length && discrepancies.length > 0;
   
   let messageHeader, messageIcon;
-  if (isAllExternalTrade) {
+  if (systemAnomalyResult && systemAnomalyResult.isSystemAnomaly) {
+    messageIcon = '🚨';
+    messageHeader = `システム全体の残高異常検出 (${systemAnomalyResult.highDiscrepancyCount}通貨)`;
+  } else if (isAllExternalTrade) {
     messageIcon = '💡';
     messageHeader = '外部取引による残高差異検出';
   } else {
@@ -1303,6 +1360,13 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
     message += `・取引所通貨数: ${diagnosticInfo.exchangeBalanceKeys.length}\n`;
     message += `・Bot管理通貨数: ${diagnosticInfo.botBalanceKeys.length}\n`;
     
+    // Issue #2500修正: システム異常情報を追加
+    if (systemAnomalyResult && systemAnomalyResult.isSystemAnomaly) {
+      message += `・🚨 システム異常: ${systemAnomalyResult.highDiscrepancyCount}通貨で${systemAnomalyResult.threshold}%以上の差異\n`;
+      message += `・影響通貨: ${systemAnomalyResult.affectedCurrencies.join(', ')}\n`;
+      message += `・⚠️ Redis接続問題またはデータ同期エラーの可能性が高い\n`;
+    }
+    
     // 外部取引の可能性がある通貨を表示
     const externalTradeDiscrepancies = discrepancies.filter(d => d.isExternalTradeSuspected);
     if (externalTradeDiscrepancies.length > 0) {
@@ -1317,8 +1381,17 @@ function createEnhancedDiscrepancyMessage(exchangeId, discrepancies, diagnosticI
     message += '\n';
   }
 
-  // 外部取引の可能性に応じて対応メッセージを調整
-  if (externalTradeDiscrepancies.length === discrepancies.length) {
+  // Issue #2500修正: システム異常、外部取引の可能性に応じて対応メッセージを調整
+  if (systemAnomalyResult && systemAnomalyResult.isSystemAnomaly) {
+    // システム全体の異常
+    message += '🚨 **システム全体の異常が検出されました - 緊急対応が必要です**\n';
+    message += '複数通貨で同時に高い差異が発生しており、Redis接続問題またはデータ同期エラーの可能性が高いです。\n';
+    message += '以下を確認してください：\n';
+    message += '1. Redisサービスの接続状態\n';
+    message += '2. strategy-runnerサービスの再起動\n';
+    message += '3. ポジションデータの整合性チェック\n';
+    message += '4. システムログの詳細確認';
+  } else if (externalTradeDiscrepancies.length === discrepancies.length) {
     // 全て外部取引の可能性
     message += '💡 **外部取引が原因の可能性があります。**\n';
     message += '取引所での手動取引履歴を確認し、必要に応じてボット設定を調整してください。';

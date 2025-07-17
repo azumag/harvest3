@@ -941,8 +941,10 @@ async function getAllPositionsRedis() {
     // Redis接続状態をチェック
     if (!client || !client.isReady) {
       logger.warn('Redis接続が利用できません - getAllPositionsRedis をスキップ');
-      // 接続エラーと空データを区別するために例外を投げる
-      throw new Error('Redis接続が利用できません');
+      // Issue #2500修正: 接続エラー時に空配列を返し、上位で適切な処理を実行
+      // 例外を投げるとBotの残高が0になり、誤った外部取引アラートが発生する
+      logger.error('[Issue #2500] Redis接続エラーによりポジションデータを取得できません - 空配列を返します');
+      return [];
     }
 
     // Redis無効化フラグのチェック
