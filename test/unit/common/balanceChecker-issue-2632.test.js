@@ -150,7 +150,8 @@ describe('BalanceChecker Issue #2632: Redis分散ロック解放時の型変換�
       await balanceChecker.releaseDistributedLock('test-key', 'test-id');
       
       const luaScript = mockRedisClient.eval.mock.calls[0][0];
-      expect(luaScript).toContain('tostring(lockData.lockId) == ARGV[1]');
+      expect(luaScript).toContain('local lockIdStr = tostring(lockData.lockId)');
+      expect(luaScript).toContain('if lockIdStr == ARGV[1] then');
     });
 
     it('Redis evalが0を返す場合はfalseを返す', async () => {
