@@ -28,25 +28,6 @@ get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
 }
 
-# テスト用 atomic 実装 - 簡素化版
-test_atomic_implementation() {
-    local message="$1"
-    local message_hash=$(get_message_hash "$message")
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    
-    # (set -C; echo "$$" > "$lock_file") 2>/dev/null
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        # ロックが取得できた場合のみメッセージを出力
-        log "$message"
-        
-        # 古いロックファイルのクリーンアップ（30秒後に自動削除）
-        (sleep 30 && rm -f "$lock_file") &
-        return 0
-    else
-        # 既に同じメッセージが処理済みの場合は何もしない
-        return 0
-    fi
-}
 
 # ログ関数
 log() {
@@ -60,21 +41,25 @@ log() {
 log_startup_message() {
     local message="$1"
     
+    # メッセージハッシュを一度だけ計算（一貫性確保）
+    local message_hash=$(get_message_hash "$message")
+    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
+    
     # プロセス内重複チェック（最初の防御線）
-    local var_name="STARTUP_MSG_$(get_message_hash "$message" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み
         return 0
     fi
     
+    # レースコンディション防止：即座にプロセス内フラグを設定
+    export "$var_name"=1
+    
     # プロセス間重複チェック（第二の防御線）
-    local message_hash=$(get_message_hash "$message")
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # シンプルなatomic操作でロック取得を試行
     if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        # ロック取得成功：プロセス内フラグを設定してメッセージ出力
-        export "$var_name"=1
+        # ロック取得成功：メッセージ出力
         log "$message"
         
         # ロックファイルのクリーンアップ（30秒後）
@@ -82,8 +67,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグのみ設定して重複防止
-        export "$var_name"=1
+        # プロセス内フラグは既に設定済みなので何もしない
         return 0
     fi
 }
