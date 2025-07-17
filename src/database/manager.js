@@ -1136,7 +1136,8 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
 
-    if (!lockInfo.lockKey || !lockInfo.lockValue) {
+    if (lockInfo.lockKey === null || lockInfo.lockKey === undefined || lockInfo.lockKey === '' ||
+        lockInfo.lockValue === null || lockInfo.lockValue === undefined || lockInfo.lockValue === '') {
       logger.warn(`分散ロック解放スキップ: 無効なlockKey (${lockInfo.lockKey}) or lockValue (${lockInfo.lockValue})`);
       return false;
     }
