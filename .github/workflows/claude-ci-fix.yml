@@ -47,6 +47,8 @@ jobs:
           
           additional_permissions: |
             actions: read
+
+          allowed_tools: "Agent,Bash,Edit,MultiEdit,WebFetch,WebSearch,Write"
           
           direct_prompt: |
             CIが失敗しました。PR #${{ github.event.pull_request.number }} の CI 失敗を修正してください：
