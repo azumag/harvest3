@@ -1130,6 +1130,17 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
  */
 async function releaseDistributedLock(lockInfo) {
   try {
+    // 引数検証
+    if (!lockInfo || typeof lockInfo !== 'object') {
+      logger.warn(`分散ロック解放スキップ: 無効なlockInfo (${lockInfo})`);
+      return false;
+    }
+
+    if (!lockInfo.lockKey || !lockInfo.lockValue) {
+      logger.warn(`分散ロック解放スキップ: 無効なlockKey (${lockInfo.lockKey}) or lockValue (${lockInfo.lockValue})`);
+      return false;
+    }
+
     const redisDatabase = require('./redisDatabase');
     const redisClient = redisDatabase.getClient();
 
@@ -1142,7 +1153,8 @@ async function releaseDistributedLock(lockInfo) {
       end
     `;
 
-    const result = await redisClient.eval(script, 1, lockInfo.lockKey, lockInfo.lockValue);
+    // 引数を明示的に文字列として渡す
+    const result = await redisClient.eval(script, 1, String(lockInfo.lockKey), String(lockInfo.lockValue));
     return result === 1;
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
