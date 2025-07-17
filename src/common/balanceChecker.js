@@ -461,15 +461,28 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
  */
 async function releaseDistributedLock(lockKey, lockId) {
   try {
-    // lockKeyとlockIdの型安全性を確保
-    if (!lockKey || !lockId) {
-      logger.warn(`分散ロック解放スキップ: パラメータが無効です (lockKey: ${lockKey}, lockId: ${lockId})`);
+    // Issue #2649修正: nullやundefinedの場合は早期リターン
+    if (lockKey === null || lockKey === undefined || lockId === null || lockId === undefined) {
+      logger.warn(`分散ロック解放スキップ: パラメータがnull/undefined (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
     
-    // 無効な型をチェック（配列は処理しない）
-    if (Array.isArray(lockId)) {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId})`);
+    // Issue #2649修正: 基本的な型チェック
+    if (typeof lockKey !== 'string' && typeof lockKey !== 'number' && typeof lockKey !== 'boolean') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (type: ${typeof lockKey}, value: ${lockKey})`);
+      return false;
+    }
+    
+    if (typeof lockId !== 'string' && typeof lockId !== 'number' && typeof lockId !== 'boolean') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (type: ${typeof lockId}, value: ${lockId})`);
+      return false;
+    }
+    
+    // 無効な型をチェック（配列、オブジェクト、関数は処理しない）
+    if (Array.isArray(lockKey) || Array.isArray(lockId) || 
+        typeof lockKey === 'object' || typeof lockId === 'object' ||
+        typeof lockKey === 'function' || typeof lockId === 'function') {
+      logger.warn(`分散ロック解放スキップ: 複雑な型のパラメータ (lockKey type: ${typeof lockKey}, lockId type: ${typeof lockId})`);
       return false;
     }
     
@@ -477,10 +490,17 @@ async function releaseDistributedLock(lockKey, lockId) {
     const stringLockKey = String(lockKey);
     const stringLockId = String(lockId);
     
+    // Issue #2649修正: 文字列化後の追加チェック
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' ||
+        stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '') {
+      logger.warn(`分散ロック解放スキップ: 文字列化後に無効な値 (lockKey: "${stringLockKey}", lockId: "${stringLockId}")`);
+      return false;
+    }
+    
     // バリデーションは文字列化されたパラメータで実行
     const validation = validateLockParameters(stringLockKey, stringLockId, 'balanceChecker');
     if (!validation.valid) {
-      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockId: ${stringLockId})`);
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: "${stringLockKey}", lockId: "${stringLockId}")`);
       return false;
     }
     
@@ -504,6 +524,9 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
+    // Issue #2649修正: Redisに渡すパラメータの最終チェック
+    logger.debug(`分散ロック解放実行: key="${stringLockKey}", id="${stringLockId}"`);
+    
     // 文字列に変換してからRedisに渡す
     const result = await redisClient.eval(luaScript, 1, stringLockKey, stringLockId);
     
@@ -516,6 +539,7 @@ async function releaseDistributedLock(lockKey, lockId) {
     }
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
+    logger.error(`分散ロック解放エラー詳細: lockKey type=${typeof lockKey}, lockId type=${typeof lockId}, lockKey value=${lockKey}, lockId value=${lockId}`);
     return false;
   }
 }
