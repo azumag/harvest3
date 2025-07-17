@@ -10,6 +10,7 @@ const {
 } = require('../database/redisDatabase');
 const { initRedisClient } = require('../database/redisClient');
 const Logger = require('../hft/utils/Logger');
+const { validateLockParameters } = require('./utils');
 
 const logger = new Logger('BalanceChecker');
 const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
@@ -461,13 +462,9 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
 async function releaseDistributedLock(lockKey, lockId) {
   try {
     // lockKeyとlockIdの厳密なバリデーション
-    if (!lockKey || typeof lockKey !== 'string' || lockKey.trim() === '') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockKey (${lockKey}) for lockId: ${lockId}`);
-      return false;
-    }
-    
-    if (!lockId || typeof lockId !== 'string' || lockId.trim() === '') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockId (${lockId}) for lockKey: ${lockKey}`);
+    const validation = validateLockParameters(lockKey, lockId, 'balanceChecker');
+    if (!validation.valid) {
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
     
