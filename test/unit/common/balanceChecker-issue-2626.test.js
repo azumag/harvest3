@@ -5,8 +5,6 @@
  * 文字列化されてRedis Luaスクリプトエラーが発生する問題を修正
  */
 
-const { jest } = require('@jest/globals');
-
 describe('BalanceChecker Issue #2626: Redis分散ロック解放エラー修正', () => {
   let balanceChecker;
   let mockRedisClient;
@@ -40,12 +38,14 @@ describe('BalanceChecker Issue #2626: Redis分散ロック解放エラー修正'
     }));
     
     // loggerのモック
-    jest.doMock('../../../src/common/logger', () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn()
-    }));
+    jest.doMock('../../../src/hft/utils/Logger', () => {
+      return jest.fn().mockImplementation(() => ({
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn()
+      }));
+    });
     
     balanceChecker = require('../../../src/common/balanceChecker');
   });
