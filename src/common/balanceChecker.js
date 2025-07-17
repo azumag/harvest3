@@ -467,15 +467,21 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // 無効な型をチェック（配列は処理しない）
-    if (Array.isArray(lockId)) {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId})`);
+    // 無効な型をチェック（配列、関数、オブジェクトは処理しない）
+    if (Array.isArray(lockId) || typeof lockId === 'function' || (typeof lockId === 'object' && lockId !== null)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId}, type: ${typeof lockId})`);
       return false;
     }
     
     // 文字列に変換してバリデーション
     const stringLockKey = String(lockKey);
     const stringLockId = String(lockId);
+    
+    // 文字列化された値が有効かチェック
+    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]') {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
+      return false;
+    }
     
     // バリデーションは文字列化されたパラメータで実行
     const validation = validateLockParameters(stringLockKey, stringLockId, 'balanceChecker');

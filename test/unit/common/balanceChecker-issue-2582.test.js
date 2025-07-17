@@ -104,18 +104,11 @@ describe('BalanceChecker Issue #2582: Redis分散ロック解放エラー修正'
       );
     });
 
-    it('lockIdがオブジェクトの場合は文字列化されて処理される', async () => {
-      mockRedisClient.eval.mockResolvedValue(1);
-      
+    it('lockIdがオブジェクトの場合はRedis呼び出しを避けてfalseを返す', async () => {
       const result = await balanceChecker.releaseDistributedLock('test-key', {});
       
-      expect(result).toBe(true);
-      expect(mockRedisClient.eval).toHaveBeenCalledWith(
-        expect.any(String),
-        1,
-        'test-key',
-        '[object Object]'  // {}がString({})により'[object Object]'に変換される
-      );
+      expect(result).toBe(false);
+      expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
     it('lockIdが配列の場合はRedis呼び出しを避けてfalseを返す', async () => {
