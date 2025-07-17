@@ -96,22 +96,15 @@ describe('BalanceChecker Issue #2632: Redis分散ロック解放時の型変換�
       );
     });
 
-    it('オブジェクトのlockKeyとlockIdが文字列に変換されてRedisに渡される', async () => {
-      mockRedisClient.eval.mockResolvedValue(1);
-      
+    it('オブジェクトのlockKeyとlockIdは早期リジェクトされてfalseを返す', async () => {
       const lockKey = { toString: () => 'object-key' };
       const lockId = { toString: () => 'object-id' };
       
       const result = await balanceChecker.releaseDistributedLock(lockKey, lockId);
       
-      expect(result).toBe(true);
-      expect(mockUtils.validateLockParameters).toHaveBeenCalledWith('object-key', 'object-id', 'balanceChecker');
-      expect(mockRedisClient.eval).toHaveBeenCalledWith(
-        expect.any(String),
-        1,
-        'object-key',
-        'object-id'
-      );
+      expect(result).toBe(false);
+      expect(mockUtils.validateLockParameters).not.toHaveBeenCalled();
+      expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
     it('nullまたはundefinedの場合は早期リターンでfalseを返す', async () => {
