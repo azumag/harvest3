@@ -474,8 +474,8 @@ async function releaseDistributedLock(lockKey, lockId) {
     }
     
     // 文字列に変換してバリデーション
-    const stringLockKey = String(lockKey);
-    const stringLockId = String(lockId);
+    let stringLockKey = String(lockKey);
+    let stringLockId = String(lockId);
     
     // 文字列化された値が有効かチェック
     if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey.includes(',') || stringLockKey.includes('[object')) {
@@ -484,6 +484,16 @@ async function releaseDistributedLock(lockKey, lockId) {
     }
     if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]' || stringLockId.includes(',') || stringLockId.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
+      return false;
+    }
+    
+    // Redis Luaスクリプト用に文字列をサニタイズ（制御文字・非印字文字を除去）
+    stringLockKey = stringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    stringLockId = stringLockId.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    
+    // サニタイズ後の最終チェック
+    if (!stringLockKey || !stringLockId) {
+      logger.warn(`分散ロック解放スキップ: サニタイズ後に空文字列 (元lockKey: ${lockKey}, 元lockId: ${lockId})`);
       return false;
     }
     
