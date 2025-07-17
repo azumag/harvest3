@@ -144,7 +144,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       expect(entrypointContent).not.toContain('max_attempts=5');
       
       // 簡素化実装では即座に処理を終了する
-      expect(entrypointContent).toContain('プロセス内フラグのみ設定して重複防止');
+      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
     });
   });
 
@@ -172,7 +172,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       expect(entrypointContent).not.toContain('current_time - lock_time');
       
       // 簡素化実装では即座に処理を終了する
-      expect(entrypointContent).toContain('プロセス内フラグのみ設定して重複防止');
+      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
     });
 
     test('パフォーマンス向上のための簡素化が実装されている', () => {

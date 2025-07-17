@@ -81,7 +81,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       
       // 条件分岐による排他制御
       expect(entrypointContent).toContain('if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then');
-      expect(entrypointContent).toContain('ロックが取得できた場合のみメッセージを出力');
+      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       expect(entrypointContent).toContain('else');
     });
 
@@ -226,7 +226,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // 実際のlog関数呼び出しはatomicロック内で実行される
-      expect(entrypointContent).toContain('ロック取得成功：プロセス内フラグを設定してメッセージ出力');
+      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       expect(entrypointContent).toContain('log "$message"');
     });
 
