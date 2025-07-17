@@ -270,48 +270,124 @@ pre_startup_checks() {
     # Node.js依存関係インストールとチェック
     log "Installing npm dependencies..."
     
+    # 事前診断情報の収集
+    log "Pre-install diagnostics:"
+    log "  Working directory: $(pwd)"
+    log "  Node.js version: $(node --version 2>/dev/null || echo 'Node.js not found')"
+    log "  npm version: $(npm --version 2>/dev/null || echo 'npm not found')"
+    log "  Disk space: $(df -h . | tail -1 | awk '{print $4}' || echo 'unknown')"
+    log "  package.json exists: $([ -f package.json ] && echo 'yes' || echo 'no')"
+    log "  node_modules exists: $([ -d node_modules ] && echo 'yes' || echo 'no')"
+    
     # npm installを実行し、失敗した場合はキャッシュクリアして再試行
-    if ! npm install; then
-        log "Initial npm install failed, cleaning cache and retrying..."
-        npm cache clean --force
-        if ! npm install; then
+    log "Attempting npm install with detailed error capture..."
+    local npm_error_log="/tmp/npm-install-error.log"
+    
+    if ! timeout 300 npm install 2>"$npm_error_log"; then
+        log "Initial npm install failed, error details:"
+        if [ -f "$npm_error_log" ]; then
+            cat "$npm_error_log" | head -20 | while read line; do
+                log "  npm error: $line"
+            done
+        fi
+        
+        log "Cleaning npm cache and retrying..."
+        npm cache clean --force 2>/dev/null || true
+        
+        if ! timeout 300 npm install 2>"$npm_error_log"; then
             local error_msg="npm install failed after cache clean"
             log "ERROR: $error_msg"
+            log "Final npm error details:"
+            if [ -f "$npm_error_log" ]; then
+                cat "$npm_error_log" | head -20 | while read line; do
+                    log "  npm error: $line"
+                done
+            fi
             send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
             exit 1
         fi
     fi
     
-    # decimal.jsの存在を具体的にチェック（強化版）
+    # クリーンアップ
+    rm -f "$npm_error_log" 2>/dev/null || true
+    
+    # critical dependenciesの存在を具体的にチェック（強化版）
     log "Checking critical dependencies..."
     local critical_deps=("decimal.js@10.6.0" "ccxt" "mongodb" "redis")
     for dep in "${critical_deps[@]}"; do
         local dep_name=$(echo "$dep" | cut -d'@' -f1)
-        if ! node -e "require('$dep_name'); console.log('$dep_name OK');" 2>/dev/null; then
-            log "$dep_name not found, installing specifically..."
-            if ! npm install "$dep"; then
+        log "Checking dependency: $dep_name"
+        
+        local dep_check_error="/tmp/dep-check-$dep_name.log"
+        if ! node -e "require('$dep_name'); console.log('$dep_name OK');" 2>"$dep_check_error"; then
+            log "$dep_name not found, installation required. Error details:"
+            if [ -f "$dep_check_error" ]; then
+                cat "$dep_check_error" | head -5 | while read line; do
+                    log "  require error: $line"
+                done
+            fi
+            
+            log "Installing $dep specifically..."
+            local dep_install_error="/tmp/dep-install-$dep_name.log"
+            if ! timeout 120 npm install "$dep" 2>"$dep_install_error"; then
                 local error_msg="Failed to install $dep specifically"
                 log "ERROR: $error_msg"
+                log "Install error details:"
+                if [ -f "$dep_install_error" ]; then
+                    cat "$dep_install_error" | head -10 | while read line; do
+                        log "  install error: $line"
+                    done
+                fi
                 send_startup_error_to_discord "$error_msg" "$dep installation failed"
                 exit 1
             fi
             
             # インストール後の再確認
-            if ! node -e "require('$dep_name'); console.log('$dep_name verified after install');" 2>/dev/null; then
+            if ! node -e "require('$dep_name'); console.log('$dep_name verified after install');" 2>"$dep_check_error"; then
                 local error_msg="$dep_name still not accessible after installation"
                 log "ERROR: $error_msg"
+                log "Post-install verification error:"
+                if [ -f "$dep_check_error" ]; then
+                    cat "$dep_check_error" | head -5 | while read line; do
+                        log "  verification error: $line"
+                    done
+                fi
                 send_startup_error_to_discord "$error_msg" "$dep_name accessibility check failed"
                 exit 1
+            else
+                log "$dep_name successfully installed and verified"
             fi
+            
+            # クリーンアップ
+            rm -f "$dep_install_error" 2>/dev/null || true
+        else
+            log "$dep_name OK"
         fi
+        
+        # クリーンアップ
+        rm -f "$dep_check_error" 2>/dev/null || true
     done
     
-    if ! npm ls > /dev/null 2>&1; then
+    # 最終的な依存関係の検証
+    log "Performing final dependency validation..."
+    local npm_ls_error="/tmp/npm-ls-error.log"
+    if ! npm ls 2>"$npm_ls_error" >/dev/null; then
         local error_msg="npm dependencies validation failed"
         log "ERROR: $error_msg"
+        log "npm ls error details:"
+        if [ -f "$npm_ls_error" ]; then
+            cat "$npm_ls_error" | head -15 | while read line; do
+                log "  npm ls error: $line"
+            done
+        fi
         send_startup_error_to_discord "$error_msg" "Node.js dependency validation failed"
         exit 1
     fi
+    
+    # クリーンアップ
+    rm -f "$npm_ls_error" 2>/dev/null || true
+    
+    log "All dependencies successfully installed and validated"
     
     log "Pre-startup checks completed successfully"
 }
