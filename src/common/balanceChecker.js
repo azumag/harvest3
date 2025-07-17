@@ -478,7 +478,11 @@ async function releaseDistributedLock(lockKey, lockId) {
     const stringLockId = String(lockId);
     
     // 文字列化された値が有効かチェック
-    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]') {
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey.includes(',') || stringLockKey.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey})`);
+      return false;
+    }
+    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]' || stringLockId.includes(',') || stringLockId.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
       return false;
     }
