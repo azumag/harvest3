@@ -90,18 +90,32 @@ describe('BalanceChecker Issue #2582: Redis分散ロック解放エラー修正'
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
-    it('lockIdが数値の場合はRedis呼び出しを避けてfalseを返す', async () => {
+    it('lockIdが数値の場合は文字列に変換されて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await balanceChecker.releaseDistributedLock('test-key', 123);
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'test-key',
+        '123'  // 数値123が文字列'123'に変換される
+      );
     });
 
-    it('lockIdがオブジェクトの場合はRedis呼び出しを避けてfalseを返す', async () => {
+    it('lockIdがオブジェクトの場合は文字列化されて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await balanceChecker.releaseDistributedLock('test-key', {});
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'test-key',
+        '[object Object]'  // {}がString({})により'[object Object]'に変換される
+      );
     });
 
     it('lockIdが配列の場合はRedis呼び出しを避けてfalseを返す', async () => {

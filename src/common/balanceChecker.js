@@ -461,10 +461,26 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
  */
 async function releaseDistributedLock(lockKey, lockId) {
   try {
-    // lockKeyとlockIdの厳密なバリデーション
-    const validation = validateLockParameters(lockKey, lockId, 'balanceChecker');
+    // lockKeyとlockIdの型安全性を確保
+    if (!lockKey || !lockId) {
+      logger.warn(`分散ロック解放スキップ: パラメータが無効です (lockKey: ${lockKey}, lockId: ${lockId})`);
+      return false;
+    }
+    
+    // 無効な型をチェック（配列は処理しない）
+    if (Array.isArray(lockId)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId})`);
+      return false;
+    }
+    
+    // 文字列に変換してバリデーション
+    const stringLockKey = String(lockKey);
+    const stringLockId = String(lockId);
+    
+    // バリデーションは文字列化されたパラメータで実行
+    const validation = validateLockParameters(stringLockKey, stringLockId, 'balanceChecker');
     if (!validation.valid) {
-      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${lockKey}, lockId: ${lockId})`);
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockId: ${stringLockId})`);
       return false;
     }
     
@@ -480,7 +496,7 @@ async function releaseDistributedLock(lockKey, lockId) {
       local lockValue = redis.call('GET', KEYS[1])
       if lockValue then
         local success, lockData = pcall(cjson.decode, lockValue)
-        if success and lockData and lockData.lockId == ARGV[1] then
+        if success and lockData and tostring(lockData.lockId) == ARGV[1] then
           redis.call('DEL', KEYS[1])
           return 1
         end
@@ -488,14 +504,14 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
-    // 既にバリデーション済みのためString()変換は不要
-    const result = await redisClient.eval(luaScript, 1, lockKey, lockId);
+    // 文字列に変換してからRedisに渡す
+    const result = await redisClient.eval(luaScript, 1, stringLockKey, stringLockId);
     
     if (result === 1) {
-      logger.debug(`分散ロック解放成功: ${lockKey} (ID: ${lockId})`);
+      logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);
       return true;
     } else {
-      logger.debug(`分散ロック解放失敗: ${lockKey} (ID: ${lockId}) - ロックが存在しないか、IDが一致しません`);
+      logger.debug(`分散ロック解放失敗: ${stringLockKey} (ID: ${stringLockId}) - ロックが存在しないか、IDが一致しません`);
       return false;
     }
   } catch (error) {
