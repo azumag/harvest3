@@ -68,6 +68,8 @@ jobs:
           
           additional_permissions: |
             actions: read
+
+          allowed_tools: "Agent,Bash,Edit,MultiEdit,WebFetch,WebSearch,Write"
           
           direct_prompt: |
             PRのレビューが完了しています。以下の点を確認してください：
