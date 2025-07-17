@@ -2,11 +2,8 @@ name: Auto Issue Resolver
 
 on:
   schedule:
-    # JST基準（UTC+9）で1-5時は30分ごとに実行
-    # UTCでは16-20時がJSTの1-5時
-    - cron: '0,30 16-20 * * *'
-    # それ以外の時間は1時間ごとに実行（JST 6-24時 → UTC 21-15時）
-    - cron: '0 21-23,0-15 * * *'
+    # 全ての時間帯で1時間ごとに実行
+    - cron: '0 * * * *'
   workflow_dispatch: # 手動実行も可能
 
 jobs:
@@ -21,8 +18,6 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             // 全てのオープンissueを取得
-            const processedLabel = 'claude-code-requested';
-            
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -30,15 +25,10 @@ jobs:
               per_page: 100
             });
             
-            // 未処理のissueを抽出
-            const unprocessedIssues = issues.data.filter(issue => 
-              !issue.labels.some(label => label.name === processedLabel)
-            );
-            
-            if (unprocessedIssues.length > 0) {
+            if (issues.data.length > 0) {
               // ランダムに一つ選択
-              const randomIndex = Math.floor(Math.random() * unprocessedIssues.length);
-              const selectedIssue = unprocessedIssues[randomIndex];
+              const randomIndex = Math.floor(Math.random() * issues.data.length);
+              const selectedIssue = issues.data[randomIndex];
               
               // @claudeメンションコメントを投稿
               await github.rest.issues.createComment({
@@ -47,7 +37,7 @@ jobs:
                 issue_number: selectedIssue.number,
                 body: [
                   `@claude このIssue #${selectedIssue.number} を解決してください。`,
-                  '',
+                  'もし、すでに解決済みの場合は、resolved とラベルをつけ、issueをクローズしてください。',
                   '以下の内容に基づいて実装し、PRを作成してください。',
                   '',
                   `**タイトル**: ${selectedIssue.title}`,
@@ -57,16 +47,8 @@ jobs:
                 ].join('\n')
               });
               
-              // 処理済みラベルを追加
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: selectedIssue.number,
-                labels: [processedLabel]
-              });
-              
               console.log(`Randomly selected issue #${selectedIssue.number} for processing`);
               console.log('Claude Code Action will be triggered by the mention');
+            } else {
+              console.log('No open issues found');
             }
-            
-            console.log('No unprocessed issues found');
