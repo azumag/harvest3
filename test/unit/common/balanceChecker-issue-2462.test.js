@@ -159,6 +159,34 @@ describe('BalanceChecker Issue #2462 - 分散ロック機能と外部取引判�
         
         expect(result).toBe(false);
       });
+
+      it('lockIdがnullの場合はfalseを返すこと', async () => {
+        const result = await balanceChecker.releaseDistributedLock('test-key', null);
+        
+        expect(result).toBe(false);
+        expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
+
+      it('lockIdがundefinedの場合はfalseを返すこと', async () => {
+        const result = await balanceChecker.releaseDistributedLock('test-key', undefined);
+        
+        expect(result).toBe(false);
+        expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
+
+      it('lockIdが空文字列の場合はfalseを返すこと', async () => {
+        const result = await balanceChecker.releaseDistributedLock('test-key', '');
+        
+        expect(result).toBe(false);
+        expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
+
+      it('lockIdが数値の場合はfalseを返すこと', async () => {
+        const result = await balanceChecker.releaseDistributedLock('test-key', 123);
+        
+        expect(result).toBe(false);
+        expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
     });
 
     describe('withDistributedLock', () => {
