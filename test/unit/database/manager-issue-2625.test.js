@@ -56,16 +56,23 @@ mockRedisDatabase.isConnected.mockReturnValue(true);
 describe('Database Manager Issue #2625: Redis分散ロック解放エラー修正', () => {
   let manager;
 
+  beforeAll(() => {
+    manager = require('../../../src/database/manager');
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.resetModules();
-    manager = require('../../../src/database/manager');
   });
 
   describe('releaseDistributedLock - 引数型エラー修正', () => {
     it('releaseDistributedLock関数が存在する', () => {
       expect(manager.releaseDistributedLock).toBeDefined();
       expect(typeof manager.releaseDistributedLock).toBe('function');
+    });
+
+    it('関数が正常に呼び出される', async () => {
+      const result = await manager.releaseDistributedLock(null);
+      expect(result).not.toBeUndefined();
     });
 
     it('正常なlockInfoの場合は正常に処理される', async () => {

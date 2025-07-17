@@ -1128,39 +1128,60 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
 /**
  * 分散ロック解放
  */
-async function releaseDistributedLock(lockInfo) {
-  try {
-    // 引数検証
-    if (!lockInfo || typeof lockInfo !== 'object') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockInfo (${lockInfo})`);
-      return false;
+function releaseDistributedLock(lockInfo) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 引数検証
+      if (!lockInfo || typeof lockInfo !== 'object') {
+        if (logger && logger.warn) {
+          logger.warn(`分散ロック解放スキップ: 無効なlockInfo (${lockInfo})`);
+        }
+        resolve(false);
+        return;
+      }
+
+      if (lockInfo.lockKey === null || lockInfo.lockKey === undefined || lockInfo.lockKey === '' ||
+          lockInfo.lockValue === null || lockInfo.lockValue === undefined || lockInfo.lockValue === '') {
+        if (logger && logger.warn) {
+          logger.warn(`分散ロック解放スキップ: 無効なlockKey (${lockInfo.lockKey}) or lockValue (${lockInfo.lockValue})`);
+        }
+        resolve(false);
+        return;
+      }
+
+      const redisDatabase = require('./redisDatabase');
+      const redisClient = redisDatabase.getClient();
+
+      // Lua script for atomic lock release
+      const script = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+
+      // 引数を明示的に文字列として渡す
+      const lockKey = String(lockInfo.lockKey);
+      const lockValue = String(lockInfo.lockValue);
+      
+      redisClient.eval(script, 1, lockKey, lockValue)
+        .then(result => {
+          resolve(result === 1);
+        })
+        .catch(error => {
+          if (logger && logger.error) {
+            logger.error(`分散ロック解放エラー: ${error.message}`);
+          }
+          resolve(false);
+        });
+    } catch (error) {
+      if (logger && logger.error) {
+        logger.error(`分散ロック解放エラー: ${error.message}`);
+      }
+      resolve(false);
     }
-
-    if (lockInfo.lockKey === null || lockInfo.lockKey === undefined || lockInfo.lockKey === '' ||
-        lockInfo.lockValue === null || lockInfo.lockValue === undefined || lockInfo.lockValue === '') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockKey (${lockInfo.lockKey}) or lockValue (${lockInfo.lockValue})`);
-      return false;
-    }
-
-    const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
-
-    // Lua script for atomic lock release
-    const script = `
-      if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("del", KEYS[1])
-      else
-        return 0
-      end
-    `;
-
-    // 引数を明示的に文字列として渡す
-    const result = await redisClient.eval(script, 1, String(lockInfo.lockKey), String(lockInfo.lockValue));
-    return result === 1;
-  } catch (error) {
-    logger.error(`分散ロック解放エラー: ${error.message}`);
-    return false;
-  }
+  });
 }
 
 /**
