@@ -467,20 +467,8 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // Issue #2649修正: 基本的な型チェック
-    if (typeof lockKey !== 'string' && typeof lockKey !== 'number' && typeof lockKey !== 'boolean') {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (type: ${typeof lockKey}, value: ${lockKey})`);
-      return false;
-    }
-    
-    if (typeof lockId !== 'string' && typeof lockId !== 'number' && typeof lockId !== 'boolean') {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (type: ${typeof lockId}, value: ${lockId})`);
-      return false;
-    }
-    
-    // 無効な型をチェック（配列、オブジェクト、関数は処理しない）
+    // Issue #2649修正: 配列と関数は処理しない（オブジェクトは文字列変換を許可）
     if (Array.isArray(lockKey) || Array.isArray(lockId) || 
-        typeof lockKey === 'object' || typeof lockId === 'object' ||
         typeof lockKey === 'function' || typeof lockId === 'function') {
       logger.warn(`分散ロック解放スキップ: 複雑な型のパラメータ (lockKey type: ${typeof lockKey}, lockId type: ${typeof lockId})`);
       return false;
