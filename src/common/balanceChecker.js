@@ -467,8 +467,8 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // 無効な型をチェック（オブジェクトや配列は処理しない）
-    if (typeof lockId === 'object' || Array.isArray(lockId)) {
+    // 無効な型をチェック（配列は処理しない）
+    if (Array.isArray(lockId)) {
       logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
