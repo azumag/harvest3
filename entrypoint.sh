@@ -23,10 +23,15 @@ STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムア�
 STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
+# MD5ハッシュ値生成関数（DRY原則適用）
+get_message_hash() {
+    echo "$1" | md5sum | cut -d' ' -f1
+}
+
 # テスト用 atomic 実装 - 簡素化版
 test_atomic_implementation() {
     local message="$1"
-    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local message_hash=$(get_message_hash "$message")
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # (set -C; echo "$$" > "$lock_file") 2>/dev/null
@@ -56,14 +61,14 @@ log_startup_message() {
     local message="$1"
     
     # プロセス内重複チェック（最初の防御線）
-    local var_name="STARTUP_MSG_$(echo "$message" | md5sum | cut -d' ' -f1 | cut -c1-8)"
+    local var_name="STARTUP_MSG_$(get_message_hash "$message" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み
         return 0
     fi
     
     # プロセス間重複チェック（第二の防御線）
-    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local message_hash=$(get_message_hash "$message")
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # シンプルなatomic操作でロック取得を試行
