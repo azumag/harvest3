@@ -172,8 +172,8 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
   describe('undefinedとnullの処理', () => {
     
     it('undefinedとnullが適切に処理される', () => {
-      expect(getRedisErrorMessage(undefined, 0)).toBe('Unknown error');
-      expect(getRedisErrorMessage(null, 0)).toBe('Unknown error');
+      expect(getRedisErrorMessage(undefined, 0)).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
+      expect(getRedisErrorMessage(null, 0)).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
     });
   });
   
@@ -290,8 +290,8 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       expect(failedCommands[0].errorMessage).toBe('Redis command 0 failed: Invalid response');
       expect(failedCommands[1].errorMessage).toBe('Redis command 1 failed: Connection closed');
       expect(failedCommands[2].errorMessage).toBe('Redis command 2 failed: Redis server error');
-      expect(failedCommands[3].errorMessage).toBe('Unknown error');
-      expect(failedCommands[4].errorMessage).toBe('Unknown error');
+      expect(failedCommands[3].errorMessage).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
+      expect(failedCommands[4].errorMessage).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
       
       // エラーログメッセージ生成のテスト
       const errorDetails = failedCommands.map(({ index, errorMessage, command }) => 
@@ -302,8 +302,8 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
         'コマンド0: Redis command 0 failed: Invalid response, ' +
         'コマンド1: Redis command 1 failed: Connection closed, ' +
         'コマンド2: Redis command 2 failed: Redis server error, ' +
-        'コマンド3: Unknown error, ' +
-        'コマンド4: Unknown error'
+        'コマンド3: Redis operation failed with null/undefined error. This may indicate a connection issue or timeout., ' +
+        'コマンド4: Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.'
       );
     });
   });

@@ -49,10 +49,10 @@ describe('Database Manager Issue #3620: 2PC Redis Commitエラー表示の改善
       const content = fs.readFileSync(managerPath, 'utf8');
       
       // コマンド名が記録されることを確認
-      expect(content).toContain('redisCommandNames = await prepareRedisOperations');
+      expect(content).toContain('redisCommandNames = await prepareRedisOperations(redisTransaction, trade);');
       
       // 実際のコマンド名が使用されることを確認
-      expect(content).toContain('command: redisCommandNames[index] || `コマンド${index}`');
+      expect(content).toContain('const commandName = redisCommandNames[index] || `コマンド${index}`;');
     });
   });
 
