@@ -129,6 +129,9 @@ const TRADING_EXECUTION_CONSTANTS = {
   BASE_SLIPPAGE_PERCENT: 0.0001,        // 基本スリッページ（0.01%）
   MAX_SLIPPAGE_PERCENT: 0.001,          // 最大スリッページ（0.1%）
   
+  // トレードデータ制限 (Issue #2790)
+  MAX_TRADE_VALUE: 1e15,                // トレード値上限（10^15未満）
+  
   // スプレッド設定
   BASE_SPREAD_PERCENT: 0.0002,          // 基本スプレッド（0.02%）
   MAX_SPREAD_PERCENT: 0.002,            // 最大スプレッド（0.2%）

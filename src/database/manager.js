@@ -969,6 +969,12 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let distributedLock = null;
 
   try {
+    // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
+    const validation = validateTradeData(trade);
+    if (!validation.valid) {
+      throw new Error(`トレードデータバリデーションエラー: ${validation.errors.join(', ')}`);
+    }
+
     // 分散ロック取得（並行処理制御）
     distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
     if (!distributedLock.acquired) {
@@ -1033,8 +1039,20 @@ async function executeDistributedTransaction(trade, isBacktest) {
 
     // Redis先行コミット（原子性保証）
     const redisResults = await redisTransaction.exec();
-    if (!redisResults || redisResults.some(result => result[0] !== null)) {
-      throw new Error('Redis Commit失敗: 一部のコマンドが失敗しました');
+    if (!redisResults) {
+      throw new Error('Redis Commit失敗: トランザクション結果がnull');
+    }
+    
+    // Issue #2790: 詳細なエラー情報を提供
+    const failedCommands = redisResults
+      .map((result, index) => ({ index, result }))
+      .filter(({ result }) => result[0] !== null);
+    
+    if (failedCommands.length > 0) {
+      const errorDetails = failedCommands.map(({ index, result }) => 
+        `コマンド${index}: ${result[0].message || result[0]}`
+      ).join(', ');
+      throw new Error(`Redis Commit失敗: ${errorDetails}`);
     }
 
     // MongoDB後続コミット
@@ -1257,6 +1275,50 @@ async function setTradeProcessingState(tradeId, state) {
     logger.error(`処理状態設定エラー: ${tradeId} - ${error.message}`);
     return { success: false, reason: error.message };
   }
+}
+
+/**
+ * トレードデータの数値バリデーション
+ * Issue #2790: Redis commit失敗を防ぐための数値検証
+ */
+function validateTradeData(trade) {
+  const errors = [];
+  
+  // Null安全性チェック
+  if (!trade || typeof trade !== 'object') {
+    errors.push('トレードオブジェクトが無効');
+    return { valid: false, errors };
+  }
+  
+  // 必須フィールドの存在チェック
+  if (!trade.amount || !trade.value || !trade.price) {
+    errors.push('必須フィールド (amount, value, price) が不足');
+  }
+  
+  // 数値の有効性チェック
+  if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
+    errors.push(`無効なamount値: ${trade.amount}`);
+  }
+  
+  if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
+    errors.push(`無効なvalue値: ${trade.value}`);
+  }
+  
+  if (typeof trade.price !== 'number' || !Number.isFinite(trade.price) || trade.price <= 0) {
+    errors.push(`無効なprice値: ${trade.price}`);
+  }
+  
+  // 極端な値のチェック（定数を使用）
+  if (trade.amount > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      trade.value > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      trade.price > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE) {
+    errors.push('トレード値が上限を超過');
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors: errors
+  };
 }
 
 /**
@@ -2416,5 +2478,7 @@ module.exports = {
   getAllPendingOrdersRedis,
   cleanupInvalidPendingOrders,
   recalculateTradeSummaryFromMongoDB,
-  getStrategyKey // 戦略名マッピング関数を追加
+  getStrategyKey, // 戦略名マッピング関数を追加
+  executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
+  validateTradeData // Issue #2790: テスト用にエクスポート
 };
