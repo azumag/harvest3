@@ -28,7 +28,7 @@ const getRedisErrorMessage = require('../../../src/database/manager').getRedisEr
   if (typeof error === 'string') {
     // 意味のない文字列パターンをチェック
     if (error === '-' || error === '' || error.trim() === '') {
-      return `Redis command ${commandIndex} failed: Invalid response`;
+      return `Redis command ${commandIndex} failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.`;
     }
     return error;
   }
@@ -141,11 +141,11 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
     
     it('意味のない文字列が適切に処理される', () => {
       const testCases = [
-        { error: '-', commandIndex: 0, expected: 'Redis command 0 failed: Invalid response' },
-        { error: '', commandIndex: 1, expected: 'Redis command 1 failed: Invalid response' },
-        { error: '   ', commandIndex: 2, expected: 'Redis command 2 failed: Invalid response' },
-        { error: '\t', commandIndex: 3, expected: 'Redis command 3 failed: Invalid response' },
-        { error: '\n', commandIndex: 4, expected: 'Redis command 4 failed: Invalid response' },
+        { error: '-', commandIndex: 0, expected: 'Redis command 0 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
+        { error: '', commandIndex: 1, expected: 'Redis command 1 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
+        { error: '   ', commandIndex: 2, expected: 'Redis command 2 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
+        { error: '\t', commandIndex: 3, expected: 'Redis command 3 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
+        { error: '\n', commandIndex: 4, expected: 'Redis command 4 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
       ];
       
       testCases.forEach(({ error, commandIndex, expected }) => {
@@ -287,7 +287,7 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       expect(successfulCommands).toHaveLength(0);
       
       // 個別エラーメッセージ検証
-      expect(failedCommands[0].errorMessage).toBe('Redis command 0 failed: Invalid response');
+      expect(failedCommands[0].errorMessage).toBe('Redis command 0 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.');
       expect(failedCommands[1].errorMessage).toBe('Redis command 1 failed: Connection closed');
       expect(failedCommands[2].errorMessage).toBe('Redis command 2 failed: Redis server error');
       expect(failedCommands[3].errorMessage).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
@@ -299,7 +299,7 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       ).join(', ');
       
       expect(errorDetails).toBe(
-        'コマンド0: Redis command 0 failed: Invalid response, ' +
+        'コマンド0: Redis command 0 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout., ' +
         'コマンド1: Redis command 1 failed: Connection closed, ' +
         'コマンド2: Redis command 2 failed: Redis server error, ' +
         'コマンド3: Redis operation failed with null/undefined error. This may indicate a connection issue or timeout., ' +
