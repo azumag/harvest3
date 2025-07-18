@@ -1128,9 +1128,12 @@ async function executeDistributedTransaction(trade, isBacktest) {
     const redisClient = redisDatabase.getClient();
     redisTransaction = redisClient.multi();
 
+    // Issue #3620: コマンド名を記録
+    let redisCommandNames = [];
+
     try {
       // Redis準備処理をトランザクションキューに追加
-      await prepareRedisOperations(redisTransaction, trade);
+      redisCommandNames = await prepareRedisOperations(redisTransaction, trade);
       if (!isBacktest) {
         logger.info(`[2PC] Redis Prepare完了: ${trade.tradeId}`);
       }
@@ -1153,6 +1156,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
     // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
     
     // パフォーマンス改善: forEachをreduceに変更して効率的な分類処理
+    // Issue #3620: 実際のコマンド名を使用してエラーハンドリングを改善
     const { failed: failedCommands, successful: successfulCommands } = redisResults.reduce((acc, result, index) => {
       if (result[0] !== null) {
         // エラーが発生したコマンド
@@ -1160,7 +1164,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
           index,
           error: result[0],
           errorMessage: getRedisErrorMessage(result[0], index),
-          command: `コマンド${index}`
+          command: redisCommandNames[index] || `コマンド${index}`
         });
       } else {
         // 成功したコマンド
@@ -1503,6 +1507,7 @@ function validateTradeData(trade) {
 
 /**
  * Redis操作の準備（トランザクションキューに追加）
+ * Issue #3620: コマンド名を記録してデバッグ情報を改善
  */
 async function prepareRedisOperations(transaction, trade) {
   // Issue #2856: Redis操作の事前バリデーション
@@ -1533,25 +1538,43 @@ async function prepareRedisOperations(transaction, trade) {
   // updateTradeSummary相当の操作をトランザクションに追加
   const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
+  // Issue #3620: 実行されるコマンドを記録
+  const commandNames = [];
+
   try {
     if (trade.side === 'buy') {
       transaction.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+      commandNames.push('hIncrByFloat(netPosition)');
+      
       transaction.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
+      commandNames.push('hIncrByFloat(buyAmount)');
+      
       transaction.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
+      commandNames.push('hIncrByFloat(totalBuyCost)');
     } else if (trade.side === 'sell') {
       transaction.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+      commandNames.push('hIncrByFloat(netPosition)');
+      
       transaction.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
+      commandNames.push('hIncrByFloat(sellAmount)');
+      
       transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', trade.value);
+      commandNames.push('hIncrByFloat(totalSellRevenue)');
     }
 
     // 未約定注文削除をトランザクションに追加
     if (trade.orderId && trade.strategy !== 'OUTSIDE') {
       const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
       transaction.hDel(pendingKey, trade.orderId.toString());
+      commandNames.push('hDel(pendingOrder)');
     }
 
     // タイムスタンプ更新
     transaction.hSet(summaryKey, 'updatedAt', Date.now().toString());
+    commandNames.push('hSet(updatedAt)');
+    
+    // Issue #3620: コマンド名を返す
+    return commandNames;
   } catch (error) {
     throw new Error(`Redis操作準備エラー: ${error.message}`);
   }
