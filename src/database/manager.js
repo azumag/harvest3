@@ -969,6 +969,12 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let distributedLock = null;
 
   try {
+    // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
+    const validation = validateTradeData(trade);
+    if (!validation.valid) {
+      throw new Error(`トレードデータバリデーションエラー: ${validation.errors.join(', ')}`);
+    }
+
     // 分散ロック取得（並行処理制御）
     distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
     if (!distributedLock.acquired) {
@@ -1017,12 +1023,6 @@ async function executeDistributedTransaction(trade, isBacktest) {
     redisTransaction = redisClient.multi();
 
     try {
-      // Issue #2790: トレードデータのバリデーション
-      const validation = validateTradeData(trade);
-      if (!validation.valid) {
-        throw new Error(`トレードデータバリデーションエラー: ${validation.errors.join(', ')}`);
-      }
-      
       // Redis準備処理をトランザクションキューに追加
       await prepareRedisOperations(redisTransaction, trade);
       if (!isBacktest) {
@@ -1284,9 +1284,15 @@ async function setTradeProcessingState(tradeId, state) {
 function validateTradeData(trade) {
   const errors = [];
   
+  // Null安全性チェック
+  if (!trade || typeof trade !== 'object') {
+    errors.push('トレードオブジェクトが無効');
+    return { valid: false, errors };
+  }
+  
   // 必須フィールドの存在チェック
   if (!trade.amount || !trade.value || !trade.price) {
-    errors.push('必須フィールド（amount, value, price）が不足');
+    errors.push('必須フィールド (amount, value, price) が不足');
   }
   
   // 数値の有効性チェック
@@ -1302,9 +1308,10 @@ function validateTradeData(trade) {
     errors.push(`無効なprice値: ${trade.price}`);
   }
   
-  // 極端な値のチェック
-  const MAX_TRADE_VALUE = 1e15; // 10^15 未満
-  if (trade.amount > MAX_TRADE_VALUE || trade.value > MAX_TRADE_VALUE || trade.price > MAX_TRADE_VALUE) {
+  // 極端な値のチェック（定数を使用）
+  if (trade.amount > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      trade.value > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      trade.price > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE) {
     errors.push('トレード値が上限を超過');
   }
   
@@ -2472,5 +2479,6 @@ module.exports = {
   cleanupInvalidPendingOrders,
   recalculateTradeSummaryFromMongoDB,
   getStrategyKey, // 戦略名マッピング関数を追加
-  executeDistributedTransaction // Issue #2790: テスト用にエクスポート
+  executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
+  validateTradeData // Issue #2790: テスト用にエクスポート
 };
