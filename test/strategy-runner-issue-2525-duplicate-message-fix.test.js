@@ -51,7 +51,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"');
       
       // 簡素化実装が追加されていることを確認
-      expect(entrypointContent).toContain('重複起動ログ防止関数（簡素化版）');
+      expect(entrypointContent).toContain('重複起動ログ防止関数（強化版 - Issue #3942 修正）');
       expect(entrypointContent).toContain('log_startup_message()');
     });
 
@@ -77,12 +77,12 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // set -C（noclobber）オプションの使用
-      expect(entrypointContent).toContain('(set -C; echo "$$" > "$lock_file") 2>/dev/null');
+      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null');
       
       // 条件分岐による排他制御
-      expect(entrypointContent).toContain('if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then');
-      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
-      expect(entrypointContent).toContain('else');
+      expect(entrypointContent).toContain('if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then');
+      expect(entrypointContent).toContain('ロック取得成功：プロセス内重複チェック（第二の防御線）');
+      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
     });
 
     test('メッセージハッシュ計算が正しく実装されている', () => {
@@ -201,7 +201,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('シンプルな環境変数ベース');
       
       // 新しい簡素化実装が追加されていることを確認
-      expect(entrypointContent).toContain('簡素化版');
+      expect(entrypointContent).toContain('強化版');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     });
 
@@ -212,7 +212,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('set -C');
       
       // 排他制御による重複防止
-      expect(entrypointContent).toContain('シンプルなatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
       
       // エラーハンドリング
       expect(entrypointContent).toContain('2>/dev/null');
@@ -226,7 +226,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // 実際のlog関数呼び出しはatomicロック内で実行される
-      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
+      expect(entrypointContent).toContain('ロック取得成功：プロセス内重複チェック（第二の防御線）');
       expect(entrypointContent).toContain('log "$message"');
     });
 
@@ -294,8 +294,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then');
       expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT="$message"');
       
-      // 修正後の簡素化実装が追加されている
-      expect(entrypointContent).toContain('簡素化版');
+      // 修正後の強化実装が追加されている
+      expect(entrypointContent).toContain('強化版');
       expect(entrypointContent).toContain('set -C');
       expect(entrypointContent).toContain('message_hash=$(get_message_hash');
       expect(entrypointContent).toContain('get_message_hash() {');

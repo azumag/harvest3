@@ -44,7 +44,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 簡素化されたレースコンディション対策の実装確認
-      expect(entrypointContent).toContain('簡素化版');
+      expect(entrypointContent).toContain('強化版');
       expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
       
       // シンプルなロックファイルの実装確認
@@ -122,10 +122,10 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // set -C を使ったatomic操作の実装確認
-      expect(entrypointContent).toContain('(set -C; echo "$$" > "$lock_file")');
+      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file")');
       
       // 重複チェック機能の実装確認
-      expect(entrypointContent).toContain('シンプルなatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
       
       // エラーハンドリングの実装確認
       expect(entrypointContent).toContain('2>/dev/null');
@@ -156,7 +156,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       expect(entrypointContent).toContain('起動ロック取得後に安全にメッセージを出力');
       
       // レースコンディション対策の簡素化
-      expect(entrypointContent).toContain('簡素化版');
+      expect(entrypointContent).toContain('強化版');
       
       // シンプルなクリーンアップ機能
       expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');

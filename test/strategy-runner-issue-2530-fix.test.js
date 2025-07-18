@@ -52,7 +52,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 新しい簡素化された実装が含まれていることを確認
-      expect(entrypointContent).toContain('# 重複起動ログ防止関数（簡素化版）');
+      expect(entrypointContent).toContain('# 重複起動ログ防止関数（強化版 - Issue #3942 修正）');
       expect(entrypointContent).toContain('# プロセス内フラグとシンプルなatomic操作による重複防止');
       
       // プロセス内重複チェック機能の確認
@@ -62,7 +62,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       
       // プロセス間重複チェック機能の確認
       expect(entrypointContent).toContain('# プロセス間重複チェック（第二の防御線）');
-      expect(entrypointContent).toContain('set -C; echo "$$" > "$lock_file"');
+      expect(entrypointContent).toContain('set -C; echo "$$:$(date +%s.%N)" > "$lock_file"');
       
       // 環境変数のexportによるフラグ設定の確認
       expect(entrypointContent).toContain('export "$var_name"=1');
@@ -230,7 +230,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       expect(entrypointContent).not.toContain('while [ $attempt -lt $max_attempts ]');
       
       // シンプルなatomic操作のみ使用
-      expect(entrypointContent).toContain('set -C; echo "$$" > "$lock_file"');
+      expect(entrypointContent).toContain('set -C; echo "$$:$(date +%s.%N)" > "$lock_file"');
     });
 
     test('レースコンディション対策の改善', () => {

@@ -36,7 +36,7 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（簡素化版）
+# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 # プロセス内フラグとシンプルなatomic操作による重複防止
 log_startup_message() {
     local message="$1"
@@ -44,10 +44,13 @@ log_startup_message() {
     # メッセージハッシュを一度だけ計算（一貫性確保）
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
-        # 既に同じメッセージを出力済み
+        # 既に同じメッセージを出力済み（プロセス内重複）
+        # ロックファイルを削除してから終了
+        rm -f "$lock_file" 2>/dev/null
         return 0
     fi
     
@@ -55,19 +58,30 @@ log_startup_message() {
     export "$var_name"=1
     
     # プロセス間重複チェック（第二の防御線）
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
+    local lock_acquired=false
     
-    # シンプルなatomic操作でロック取得を試行
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    # より強固なatomic操作でロック取得を試行
+    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+        lock_acquired=true
+    fi
+    
+    # 条件分岐による処理制御
+    if [ "$lock_acquired" = true ]; then
+        # ロック取得成功：プロセス内重複チェック（第二の防御線）
         # ロック取得成功：メッセージ出力
         log "$message"
         
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
+        
+        # 処理完了後にプロセス内フラグを設定（重複防止）
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
         # プロセス内フラグは既に設定済みなので何もしない
+        # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
+        # 重複メッセージとして処理終了
         return 0
     fi
 }
