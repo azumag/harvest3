@@ -38,6 +38,40 @@ jest.mock('../../../src/database/mongoDatabase', () => ({
   })
 }));
 
+// Mock constants to prevent validation errors
+jest.mock('../../../src/common/const', () => ({
+  TRADING_EXECUTION_CONSTANTS: {
+    MAX_TRADE_VALUE: 1e15
+  },
+  EXCHANGE_SETTINGS: {}
+}));
+
+// Mock other dependencies that might be needed
+jest.mock('../../../src/common/notifications', () => ({
+  postErrorToDiscord: jest.fn()
+}));
+
+jest.mock('../../../src/data/marketDataProvider', () => ({}));
+
+jest.mock('../../../src/hft/utils/Logger', () => {
+  return function MockLogger() {
+    return {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn()
+    };
+  };
+});
+
+jest.mock('../../../src/common/throttleMonitor', () => ({
+  throttleMonitor: {}
+}));
+
+jest.mock('../../../src/common/apiCoordinator', () => ({
+  apiCoordinator: {}
+}));
+
 // テスト対象のモジュール
 const { prepareRedisOperations, executeDistributedTransaction } = require('../../../src/database/manager');
 
@@ -69,7 +103,17 @@ describe('Database Manager Issue #3620: 2PC Redis Commitエラー表示の改善
       mockTransaction.hDel.mockReturnValue(mockTransaction);
       mockTransaction.hSet.mockReturnValue(mockTransaction);
 
-      const commandNames = await prepareRedisOperations(mockTransaction, trade);
+      console.log('About to call prepareRedisOperations');
+      console.log('Trade:', trade);
+      
+      let commandNames;
+      try {
+        commandNames = await prepareRedisOperations(mockTransaction, trade);
+        console.log('Got result:', commandNames);
+      } catch (error) {
+        console.log('Got error:', error.message);
+        throw error;
+      }
       
       // 期待されるコマンド名
       expect(commandNames).toEqual([
