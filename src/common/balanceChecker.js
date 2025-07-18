@@ -467,6 +467,26 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
+    // 特殊な型をチェック（Symbol、BigInt、関数など）
+    if (typeof lockKey === 'symbol' || typeof lockKey === 'bigint' || typeof lockKey === 'function') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (lockKey: ${lockKey}, type: ${typeof lockKey})`);
+      return false;
+    }
+    if (typeof lockId === 'symbol' || typeof lockId === 'bigint' || typeof lockId === 'function') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockId: ${lockId}, type: ${typeof lockId})`);
+      return false;
+    }
+    
+    // 数値型の特殊値をチェック（NaN、Infinity、-Infinity）
+    if (typeof lockKey === 'number' && (!Number.isFinite(lockKey) || Number.isNaN(lockKey))) {
+      logger.warn(`分散ロック解放スキップ: 特殊な数値のlockKey (lockKey: ${lockKey})`);
+      return false;
+    }
+    if (typeof lockId === 'number' && (!Number.isFinite(lockId) || Number.isNaN(lockId))) {
+      logger.warn(`分散ロック解放スキップ: 特殊な数値のlockId (lockId: ${lockId})`);
+      return false;
+    }
+    
     // 無効な型をチェック（配列、関数、オブジェクトは処理しない）
     if (Array.isArray(lockId) || typeof lockId === 'function' || (typeof lockId === 'object' && lockId !== null)) {
       logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId}, type: ${typeof lockId})`);
@@ -477,12 +497,29 @@ async function releaseDistributedLock(lockKey, lockId) {
     let stringLockKey = String(lockKey);
     let stringLockId = String(lockId);
     
-    // 文字列化された値が有効かチェック
-    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey.includes(',') || stringLockKey.includes('[object')) {
+    // 文字列化された値が有効かチェック（拡張版）
+    const invalidStringPatterns = [
+      'null', 'undefined', '', '[object Object]', 'NaN', 'Infinity', '-Infinity',
+      'Symbol(', '[object Symbol]', '[object BigInt]'
+    ];
+    
+    for (const pattern of invalidStringPatterns) {
+      if (stringLockKey === pattern || stringLockKey.includes(pattern)) {
+        logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey}, pattern: ${pattern})`);
+        return false;
+      }
+      if (stringLockId === pattern || stringLockId.includes(pattern)) {
+        logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId}, pattern: ${pattern})`);
+        return false;
+      }
+    }
+    
+    // カンマや特殊な文字列を含む場合もチェック
+    if (stringLockKey.includes(',') || stringLockKey.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey})`);
       return false;
     }
-    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]' || stringLockId.includes(',') || stringLockId.includes('[object')) {
+    if (stringLockId.includes(',') || stringLockId.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
       return false;
     }
