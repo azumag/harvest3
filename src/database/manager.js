@@ -1516,15 +1516,99 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
     }
     
-    // Issue #4155: トランザクション実行前の最終接続確認
-    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
-    if (!finalHealthCheck.isHealthy) {
-      throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
+    // Issue #4153: Redis transaction execution with retry logic for connection failures
+    let redisResults = null;
+    let lastError = null;
+    const maxExecRetries = 3;
+    
+    for (let execAttempt = 1; execAttempt <= maxExecRetries; execAttempt++) {
+      try {
+        // Issue #4155: トランザクション実行前の最終接続確認
+        const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+        if (!finalHealthCheck.isHealthy) {
+          throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
+        }
+        
+        redisResults = await redisTransaction.exec();
+        if (!redisResults) {
+          throw new Error('Redis Commit失敗: トランザクション結果がnull');
+        }
+        
+        // Issue #4153: Check if all or most commands failed with connection-related errors
+        const connectionRelatedFailures = redisResults.filter((result, index) => {
+          if (result[0] !== null) {
+            const errorMsg = getRedisErrorMessage(result[0], index, redisCommandNames[index] || `コマンド${index}`);
+            return errorMsg.includes('Invalid response') || 
+                   errorMsg.includes('connection') || 
+                   errorMsg.includes('timeout') ||
+                   errorMsg.includes('null/undefined error');
+          }
+          return false;
+        });
+        
+        // If more than 80% of commands failed with connection errors, treat as connection issue
+        const connectionFailureRatio = connectionRelatedFailures.length / redisResults.length;
+        if (connectionFailureRatio > 0.8 && connectionRelatedFailures.length > 0) {
+          throw new Error(`Redis Commit失敗: 接続関連エラーによる大量コマンド失敗 (${connectionRelatedFailures.length}/${redisResults.length})`);
+        }
+        
+        // Success - break out of retry loop
+        break;
+        
+      } catch (execError) {
+        lastError = execError;
+        
+        if (!isBacktest) {
+          logger.warn(`[2PC] Redis transaction execution failed (attempt ${execAttempt}/${maxExecRetries}): ${execError.message}`);
+        }
+        
+        // Check if this is a connection-related error that we should retry
+        const isConnectionError = execError.message.includes('connection') || 
+                                  execError.message.includes('timeout') ||
+                                  execError.message.includes('ECONNRESET') ||
+                                  execError.message.includes('ENOTFOUND') ||
+                                  execError.message.includes('EPIPE') ||
+                                  execError.message.includes('ECONNREFUSED') ||
+                                  execError.message.includes('Invalid response') ||
+                                  execError.message.includes('failed: Invalid response') ||
+                                  execError.message.includes('Redis Commit失敗: 最終接続確認失敗') ||
+                                  execError.message.includes('Redis Commit失敗: トランザクション結果がnull') ||
+                                  execError.message.includes('接続関連エラーによる大量コマンド失敗');
+        
+        if (!isConnectionError || execAttempt === maxExecRetries) {
+          // Not a connection error or max retries reached - don't retry
+          throw execError;
+        }
+        
+        // Attempt connection recovery and transaction recreation
+        if (!isBacktest) {
+          logger.info(`[2PC] Attempting Redis connection recovery and transaction recreation...`);
+        }
+        
+        const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger);
+        if (recoveredClient) {
+          currentRedisClient = recoveredClient;
+          
+          // Recreate transaction with the recovered client
+          redisTransaction = currentRedisClient.multi();
+          redisCommandNames = await prepareRedisOperations(redisTransaction, trade);
+          
+          if (!isBacktest) {
+            logger.info(`[2PC] Redis transaction recreated successfully for retry attempt ${execAttempt + 1}`);
+          }
+          
+          // Add exponential backoff delay before retry
+          const retryDelay = Math.min(1000 * Math.pow(2, execAttempt - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          // Connection recovery failed - don't retry further
+          throw new Error(`Redis Commit失敗: 接続回復に失敗しました (試行回数: ${execAttempt})`);
+        }
+      }
     }
     
-    const redisResults = await redisTransaction.exec();
     if (!redisResults) {
-      throw new Error('Redis Commit失敗: トランザクション結果がnull');
+      throw lastError || new Error('Redis Commit失敗: トランザクション実行に失敗しました');
     }
     
     // Issue #4155: 結果配列の検証を追加
