@@ -106,10 +106,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
     // DatabaseManagerをインポート
     const DatabaseManager = require('../../../src/database/manager');
     databaseManager = DatabaseManager;
-    
-    // addTradeRecordの関数をモック（テスト用の関数を追加）
-    const mockAddTradeRecord = jest.fn().mockResolvedValue(true);
-    databaseManager.addTradeRecord = mockAddTradeRecord;
   });
 
   afterEach(() => {
@@ -266,7 +262,7 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       };
 
       await expect(databaseManager.addTradeRecord(testTrade)).rejects.toThrow(
-        expect.stringContaining('Redis Commit失敗: 接続回復に失敗しました')
+        'Redis Commit失敗: 接続回復に失敗しました'
       );
 
       // 接続回復失敗のログが記録されることを確認
@@ -292,7 +288,7 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       };
 
       await expect(databaseManager.addTradeRecord(testTrade)).rejects.toThrow(
-        expect.stringContaining('Redis Commit失敗: 接続回復に失敗しました')
+        'Redis Commit失敗: 接続回復に失敗しました'
       );
     });
   });

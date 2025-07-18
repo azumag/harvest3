@@ -887,6 +887,69 @@ async function updateFilledTrades(exchange, symbol) {
 }
 
 /**
+ * Issue #4090: Redis接続状態チェック機能付きの取引記録追加
+ * 
+ * @param {Object} trade - 取引データ
+ * @param {string} trade.tradeId - 取引ID
+ * @param {string} trade.exchange - 取引所名
+ * @param {string} trade.symbol - 通貨ペア
+ * @param {string} trade.strategy - 戦略名
+ * @param {string} trade.side - 売買方向
+ * @param {number} trade.amount - 取引量
+ * @param {number} trade.value - 取引額
+ * @param {string} trade.orderId - 注文ID
+ * @returns {Promise<boolean>} 成功時true
+ */
+async function addTradeRecord(trade) {
+  const logger = new Logger('DatabaseManager');
+  const redisDatabase = require('./redisDatabase');
+  const { getMongoClient } = require('./mongoDatabase');
+  
+  try {
+    // Redis接続チェック
+    const redisClient = redisDatabase.getClient();
+    const healthCheck = await checkRedisConnectionHealth(redisClient, logger);
+    
+    if (!healthCheck.isHealthy) {
+      logger.warn(`[2PC] Redis接続不良を検出: ${JSON.stringify(healthCheck.details)}`);
+      
+      // 接続回復を試行
+      const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger);
+      if (!recoveredClient) {
+        logger.error(`[Redis Recovery] 最大試行回数に達しました。接続回復に失敗しました。`);
+        throw new Error('Redis Commit失敗: 接続回復に失敗しました');
+      }
+      
+      logger.info(`[Redis Recovery] 接続回復成功`);
+    }
+    
+    // 成功時は MongoDB への取引記録も追加
+    try {
+      const mongoClient = getMongoClient();
+      const db = mongoClient.db('trading');
+      const collection = db.collection('trades');
+      
+      await collection.insertOne({
+        ...trade,
+        timestamp: new Date(),
+        createdAt: new Date()
+      });
+      
+      logger.info(`[Trade Record] 取引記録追加成功: ${trade.tradeId}`);
+      return true;
+      
+    } catch (mongoError) {
+      logger.error(`[Trade Record] MongoDB書き込みエラー:`, mongoError);
+      throw mongoError;
+    }
+    
+  } catch (error) {
+    logger.error(`[Trade Record] 取引記録追加失敗:`, error);
+    throw error;
+  }
+}
+
+/**
  * 分散トランザクション対応の約定履歴更新実装
  * データ整合性とACID特性を保証
  */
@@ -2856,5 +2919,6 @@ module.exports = {
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
-  getRedisErrorMessage // Issue #3622: テスト用にエクスポート
+  getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
+  addTradeRecord // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
 };
