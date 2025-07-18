@@ -45,16 +45,7 @@ log_startup_message() {
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    # プロセス内重複チェック（最初の防御線）
-    if [ "${!var_name}" = "1" ]; then
-        # 既に同じメッセージを出力済み（プロセス内重複）
-        return 0
-    fi
-    
-    # レースコンディション防止：即座にプロセス内フラグを設定
-    export "$var_name"=1
-    
-    # プロセス間重複チェック（第二の防御線）
+    # プロセス間重複チェック（第一の防御線）
     # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
@@ -65,15 +56,40 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
-        # ロック取得成功：メッセージ出力
+        # ロック取得成功：プロセス内重複チェック（第二の防御線）
+        if [ "${!var_name}" = "1" ]; then
+            # 既に同じメッセージを出力済み（プロセス内重複）
+            # ロックファイルを削除してから終了
+            rm -f "$lock_file" 2>/dev/null
+            return 0
+        fi
+        
+        # メッセージ出力
         log "$message"
+        
+        # 処理完了後にプロセス内フラグを設定（重複防止）
+        export "$var_name"=1
         
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグは既に設定済みなので何もしない
+        # 他のプロセスが処理中の場合は待機
+        local wait_count=0
+        while [ -f "$lock_file" ] && [ $wait_count -lt 10 ]; do
+            sleep 0.1
+            wait_count=$((wait_count + 1))
+        done
+        
+        # プロセス内重複チェック（第二の防御線）
+        if [ "${!var_name}" = "1" ]; then
+            # 既に同じメッセージを出力済み（プロセス内重複）
+            return 0
+        fi
+        
+        # レースコンディション防止：即座にプロセス内フラグを設定
+        export "$var_name"=1
         
         # 重複メッセージとして処理終了
         return 0
