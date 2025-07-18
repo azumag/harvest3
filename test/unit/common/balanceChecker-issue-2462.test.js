@@ -68,6 +68,10 @@ jest.mock('../../../src/common/bitbankErrorHandler', () => ({
   withBitbankErrorHandling: jest.fn()
 }));
 
+jest.mock('../../../src/common/utils', () => ({
+  validateLockParameters: jest.fn()
+}));
+
 describe('BalanceChecker Issue #2462 - 分散ロック機能と外部取引判定', () => {
   let balanceChecker;
   let mockRedisClient;
@@ -86,6 +90,17 @@ describe('BalanceChecker Issue #2462 - 分散ロック機能と外部取引判�
     
     const { getClient } = require('../../../src/database/redisDatabase');
     getClient.mockReturnValue(mockRedisClient);
+    
+    // Mock validateLockParameters to return valid for normal strings/numbers
+    const mockUtils = require('../../../src/common/utils');
+    mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
+      // Return valid for normal string/number inputs
+      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
+          lockKey.trim() !== '' && lockValue.trim() !== '') {
+        return { valid: true };
+      }
+      return { valid: false, error: 'Invalid parameters' };
+    });
     
     // BalanceCheckerをインポート
     balanceChecker = require('../../../src/common/balanceChecker');

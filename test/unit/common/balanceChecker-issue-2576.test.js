@@ -48,6 +48,10 @@ jest.mock('../../../src/database/redisClient', () => ({
   initRedisClient: jest.fn()
 }));
 
+jest.mock('../../../src/common/utils', () => ({
+  validateLockParameters: jest.fn()
+}));
+
 const mockRedisClient = {
   isReady: true,
   eval: jest.fn(),
@@ -64,6 +68,18 @@ describe('BalanceChecker Issue #2576: Redis分散ロック解放時のLuaスク�
 
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock validateLockParameters to return valid for normal strings/numbers
+    const mockUtils = require('../../../src/common/utils');
+    mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
+      // Return valid for normal string/number inputs
+      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
+          lockKey.trim() !== '' && lockValue.trim() !== '') {
+        return { valid: true };
+      }
+      return { valid: false, error: 'Invalid parameters' };
+    });
+    
     balanceChecker = require('../../../src/common/balanceChecker');
   });
 

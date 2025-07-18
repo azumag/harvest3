@@ -91,6 +91,17 @@ describe('BalanceChecker - Issue #2700: Redis Lua script引数の型チェック
     mockRedisClient.eval.mockResolvedValue(1);
     mockRedisClient.isReady = true;
     
+    // Mock validateLockParameters to return valid for normal strings/numbers
+    const mockUtils = require('../../../src/common/utils');
+    mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
+      // Return valid for normal string/number inputs
+      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
+          lockKey.trim() !== '' && lockValue.trim() !== '') {
+        return { valid: true };
+      }
+      return { valid: false, error: 'Invalid parameters' };
+    });
+    
     // Import balanceChecker after mocks are set
     balanceChecker = require('../../../src/common/balanceChecker');
   });
