@@ -270,7 +270,7 @@ pre_startup_checks() {
         fi
     done
     
-    # Node.js依存関係インストールとチェック
+    # Node.js依存関係インストールとチェック（Issue #4202 修正: 無限再起動ループ防止）
     log "Installing npm dependencies..."
     
     # 事前診断情報の収集
@@ -282,37 +282,98 @@ pre_startup_checks() {
     log "  package.json exists: $([ -f package.json ] && echo 'yes' || echo 'no')"
     log "  node_modules exists: $([ -d node_modules ] && echo 'yes' || echo 'no')"
     
-    # npm installを実行し、失敗した場合はキャッシュクリアして再試行
-    log "Attempting npm install with detailed error capture..."
-    local npm_error_log="/tmp/npm-install-error.log"
+    # Issue #4202 修正: 既存の依存関係の状態を事前確認
+    log "Checking existing dependency status..."
+    local dependencies_satisfied=false
+    local npm_check_log="/tmp/npm-check.log"
     
-    if ! timeout 300 npm install 2>"$npm_error_log"; then
-        log "Initial npm install failed, error details:"
-        if [ -f "$npm_error_log" ]; then
-            cat "$npm_error_log" | head -20 | while read line; do
-                log "  npm error: $line"
+    # npm lsで既存の依存関係の状態を確認
+    if npm ls 2>"$npm_check_log" >/dev/null; then
+        log "Dependencies already satisfied, skipping npm install"
+        dependencies_satisfied=true
+    else
+        log "Dependencies check failed, npm install required:"
+        if [ -f "$npm_check_log" ]; then
+            cat "$npm_check_log" | head -10 | while read line; do
+                log "  dependency issue: $line"
             done
         fi
+    fi
+    
+    # 依存関係が既に満たされている場合はスキップ
+    if [ "$dependencies_satisfied" = false ]; then
+        # Issue #4202 修正: 指数バックオフによるリトライとコンテナ再起動防止
+        local npm_install_attempts=0
+        local max_npm_attempts=3
+        local npm_install_success=false
+        local restart_counter_file="/tmp/.npm_restart_counter"
+        local max_container_restarts=3
         
-        log "Cleaning npm cache and retrying..."
-        npm cache clean --force 2>/dev/null || true
+        # コンテナ再起動回数をチェック（無限ループ防止）
+        local restart_count=0
+        if [ -f "$restart_counter_file" ]; then
+            restart_count=$(cat "$restart_counter_file" 2>/dev/null || echo "0")
+        fi
+        restart_count=$((restart_count + 1))
+        echo "$restart_count" > "$restart_counter_file"
         
-        if ! timeout 300 npm install 2>"$npm_error_log"; then
-            local error_msg="npm install failed after cache clean"
-            log "ERROR: $error_msg"
-            log "Final npm error details:"
-            if [ -f "$npm_error_log" ]; then
-                cat "$npm_error_log" | head -20 | while read line; do
-                    log "  npm error: $line"
-                done
+        log "Container restart count: $restart_count/$max_container_restarts"
+        
+        # 最大再起動回数に達した場合は依存関係チェックを緩和
+        if [ $restart_count -gt $max_container_restarts ]; then
+            log "WARNING: Maximum container restart count exceeded. Attempting minimal dependency install..."
+            max_npm_attempts=1  # 最小限のリトライに制限
+        fi
+        
+        while [ $npm_install_attempts -lt $max_npm_attempts ] && [ "$npm_install_success" = false ]; do
+            npm_install_attempts=$((npm_install_attempts + 1))
+            local npm_error_log="/tmp/npm-install-error-${npm_install_attempts}.log"
+            local timeout_seconds=$((180 + npm_install_attempts * 60))  # 指数バックオフ: 180s, 240s, 300s
+            
+            log "Attempting npm install (attempt $npm_install_attempts/$max_npm_attempts, timeout: ${timeout_seconds}s)..."
+            
+            if timeout $timeout_seconds npm install 2>"$npm_error_log"; then
+                log "npm install completed successfully on attempt $npm_install_attempts"
+                npm_install_success=true
+                # 成功時はカウンタをリセット
+                rm -f "$restart_counter_file"
+                break
+            else
+                log "npm install attempt $npm_install_attempts failed, error details:"
+                if [ -f "$npm_error_log" ]; then
+                    cat "$npm_error_log" | head -15 | while read line; do
+                        log "  npm error: $line"
+                    done
+                fi
+                
+                # 最後の試行でない場合のみリトライ準備
+                if [ $npm_install_attempts -lt $max_npm_attempts ]; then
+                    local retry_delay=$((npm_install_attempts * 10))  # 10s, 20s の待機
+                    log "Cleaning npm cache and waiting ${retry_delay}s before retry..."
+                    npm cache clean --force 2>/dev/null || true
+                    sleep $retry_delay
+                fi
             fi
-            send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
-            exit 1
+        done
+        
+        # 全てのリトライが失敗した場合の処理
+        if [ "$npm_install_success" = false ]; then
+            if [ $restart_count -le $max_container_restarts ]; then
+                local error_msg="npm install failed after $max_npm_attempts attempts (container restart $restart_count/$max_container_restarts)"
+                log "ERROR: $error_msg"
+                send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed - will retry on container restart"
+                exit 1
+            else
+                # 最大再起動回数に達した場合は依存関係を部分的に無視して続行
+                log "WARNING: Maximum restart attempts reached. Continuing with partial dependencies..."
+                log "This may cause runtime errors, but prevents infinite restart loop"
+                send_startup_error_to_discord "npm install repeatedly failed - continuing with partial dependencies" "Infinite restart loop prevention activated"
+            fi
         fi
     fi
     
     # クリーンアップ
-    rm -f "$npm_error_log" 2>/dev/null || true
+    rm -f /tmp/npm-check.log /tmp/npm-install-error-*.log 2>/dev/null || true
     
     # critical dependenciesの存在を具体的にチェック（強化版）
     log "Checking critical dependencies..."
