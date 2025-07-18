@@ -16,8 +16,8 @@ describe('Issue #3416: Redis分散ロック処理の改善', () => {
       // DRY原則の改善: ensureString関数が実装されていることを確認
       expect(managerSource).toMatch(/const ensureString = \(value\) => typeof value === 'string' \? value : String\(value\);/);
       expect(managerSource).toMatch(/DRY原則の改善: 重複した型チェックロジックをヘルパー関数に抽出/);
-      expect(managerSource).toMatch(/let finalLockKey = ensureString\(stringLockKey\);/);
-      expect(managerSource).toMatch(/let finalLockValue = ensureString\(stringLockValue\);/);
+      expect(managerSource).toMatch(/const finalLockKey = ensureString\(stringLockKey\);/);
+      expect(managerSource).toMatch(/const finalLockValue = ensureString\(stringLockValue\);/);
     });
 
     it('パフォーマンス改善: 正規表現のキャッシュ化が実装されていることを確認', () => {

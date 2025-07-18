@@ -34,13 +34,14 @@ describe('Database Manager - Issue #2682: Redis Lua script引数の型チェッ�
     expect(managerSource).toMatch(/stringLockValue\.includes\(','\)/);
     expect(managerSource).toMatch(/stringLockValue\.includes\('\[object'\)/);
     
-    // サニタイズ処理が実装されているかを確認
-    expect(managerSource).toMatch(/replace\(\/\[\\x00-\\x1F\\x7F-\\x9F\]\/g, ''\)/);
+    // サニタイズ処理が実装されているかを確認（Issue #3416で改善済み）
+    expect(managerSource).toMatch(/stringLockKey\.replace\(CONTROL_CHARS_REGEX, ''\)/);
+    expect(managerSource).toMatch(/stringLockValue\.replace\(CONTROL_CHARS_REGEX, ''\)/);
     
     // Redis evalに渡す引数がfinalLockKey、finalLockValueとして型安全性が確保されているかを確認
     expect(managerSource).toMatch(/redisClient\.eval\s*\(.*finalLockKey\s*,\s*finalLockValue\s*\)/);
-    expect(managerSource).toMatch(/let finalLockKey = stringLockKey/);
-    expect(managerSource).toMatch(/let finalLockValue = stringLockValue/);
+    expect(managerSource).toMatch(/const finalLockKey = ensureString\(stringLockKey\)/);
+    expect(managerSource).toMatch(/const finalLockValue = ensureString\(stringLockValue\)/);
   });
 
   it('関数が正常にエクスポートされていることを確認', function() {
@@ -66,8 +67,7 @@ describe('Database Manager - Issue #2682: Redis Lua script引数の型チェッ�
       /=== 'undefined'/,
       /=== '\[object Object\]'/,
       /\.includes\(','\)/,
-      /\.includes\('\[object'\)/,
-      /\.replace\(\/\[\\x00-\\x1F\\x7F-\\x9F\]\/g, ''\)/
+      /\.includes\('\[object'\)/
     ];
     
     for (const pattern of criticalPatterns) {

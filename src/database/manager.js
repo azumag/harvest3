@@ -49,6 +49,13 @@ const logger = new Logger('DatabaseManager');
 // フォールバック定数
 const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
 
+// パフォーマンス改善: 正規表現のキャッシュ化
+// セキュリティ強化: 制御文字の除去パターンを明示的に文書化
+// \x00-\x1F: C0制御文字（NULL, SOH, STX, ETX, EOT, ENQ, ACK, BEL, BS, HT, LF, VT, FF, CR, SO, SI, DLE, DC1, DC2, DC3, DC4, NAK, SYN, ETB, CAN, EM, SUB, ESC, FS, GS, RS, US）
+// \x7F: DEL制御文字
+// \x7F-\x9F: C1制御文字（DEL, PAD, HOP, BPH, NBH, IND, NEL, SSA, ESA, HTS, HTJ, VTS, PLD, PLU, RI, SS2, SS3, DCS, PU1, PU2, STS, CCH, MW, SPA, EPA, SOS, SGCI, SCI, CSI, ST, OSC, PM, APC）
+const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F-\x9F]/g;
+
 // 戦略名マッピング: 表示名 → 内部キー
 function getStrategyKey(strategyDisplayName) {
   const strategyMapping = {
@@ -1239,12 +1246,6 @@ async function releaseDistributedLock(lockInfo) {
     }
     
     // Redis Luaスクリプト用に文字列をサニタイズ（制御文字・非印字文字を除去）
-    // パフォーマンス改善: 正規表現のキャッシュ化
-    // セキュリティ強化: 制御文字の除去パターンを明示的に文書化
-    // \x00-\x1F: C0制御文字（NULL, SOH, STX, ETX, EOT, ENQ, ACK, BEL, BS, HT, LF, VT, FF, CR, SO, SI, DLE, DC1, DC2, DC3, DC4, NAK, SYN, ETB, CAN, EM, SUB, ESC, FS, GS, RS, US）
-    // \x7F: DEL制御文字
-    // \x7F-\x9F: C1制御文字（DEL, PAD, HOP, BPH, NBH, IND, NEL, SSA, ESA, HTS, HTJ, VTS, PLD, PLU, RI, SS2, SS3, DCS, PU1, PU2, STS, CCH, MW, SPA, EPA, SOS, SGCI, SCI, CSI, ST, OSC, PM, APC）
-    const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F-\x9F]/g;
     stringLockKey = stringLockKey.replace(CONTROL_CHARS_REGEX, '').trim();
     stringLockValue = stringLockValue.replace(CONTROL_CHARS_REGEX, '').trim();
     
@@ -1277,8 +1278,8 @@ async function releaseDistributedLock(lockInfo) {
     // Issue #3279: Redis Lua script引数の型安全性を強化
     // DRY原則の改善: 重複した型チェックロジックをヘルパー関数に抽出
     const ensureString = (value) => typeof value === 'string' ? value : String(value);
-    let finalLockKey = ensureString(stringLockKey);
-    let finalLockValue = ensureString(stringLockValue);
+    const finalLockKey = ensureString(stringLockKey);
+    const finalLockValue = ensureString(stringLockValue);
     
     // 最終的な型チェック
     if (typeof finalLockKey !== 'string' || typeof finalLockValue !== 'string') {
