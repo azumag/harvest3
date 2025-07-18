@@ -203,15 +203,12 @@ log_startup_message() {
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
-        # ロック所有権を確認してから削除
         if [ -f "$lock_file" ]; then
             local lock_owner=$(cat "$lock_file" 2>/dev/null | cut -d: -f1)
             [ "$lock_owner" = "$$" ] && rm -f "$lock_file" 2>/dev/null
-        fi
+        fi; # ロックファイルを削除してから終了
         return 0
-    fi
-    
-    # レースコンディション防止：即座にプロセス内フラグを設定
+    fi; # レースコンディション防止：即座にプロセス内フラグを設定
     export "$var_name"=1
     
     # プロセス間重複チェック（第二の防御線）
