@@ -58,6 +58,104 @@ const REDIS_ERROR_CODES = {
   10: 'Wrong number of arguments'
 };
 
+// Issue #4126: マジックナンバーの定数化
+const INVALID_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F-\x9F]/g;
+const INVALID_STRING_VALUES = ['null', 'undefined', '', '[object Object]'];
+
+/**
+ * Issue #4126: 数値バリデーションの共通化
+ * @param {any} value - バリデーション対象の値
+ * @param {string} fieldName - フィールド名
+ * @returns {number} パースされた数値
+ * @throws {Error} 無効な値の場合
+ */
+function validateNumericValue(value, fieldName) {
+  const parsed = parseFloat(value);
+  if (isNaN(parsed) || !isFinite(parsed)) {
+    throw new Error(`無効な${fieldName}値: ${value}`);
+  }
+  return parsed;
+}
+
+/**
+ * Issue #4126: 文字列検証の共通化
+ * @param {string} str - 検証対象の文字列
+ * @param {string} fieldName - フィールド名
+ * @returns {boolean} 有効な文字列の場合true
+ */
+function isValidStringValue(str, fieldName) {
+  if (typeof str !== 'string') {
+    return false;
+  }
+  
+  // 無効な文字列値のチェック
+  if (INVALID_STRING_VALUES.includes(str) || str.includes(',') || str.includes('[object')) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Issue #4126: ロックパラメータの型チェック
+ * @param {any} lockInfo - ロック情報オブジェクト
+ * @returns {Object} バリデーション結果
+ */
+function validateLockInfo(lockInfo) {
+  if (!lockInfo || typeof lockInfo !== 'object') {
+    return { valid: false, error: '無効なlockInfo' };
+  }
+  
+  if (!lockInfo.lockKey || !lockInfo.lockValue) {
+    return { valid: false, error: 'パラメータが無効です' };
+  }
+  
+  // 無効な型をチェック
+  if (Array.isArray(lockInfo.lockKey) || typeof lockInfo.lockKey === 'function' || 
+      (typeof lockInfo.lockKey === 'object' && lockInfo.lockKey !== null)) {
+    return { valid: false, error: '無効な型のlockKey' };
+  }
+  
+  if (Array.isArray(lockInfo.lockValue) || typeof lockInfo.lockValue === 'function' || 
+      (typeof lockInfo.lockValue === 'object' && lockInfo.lockValue !== null)) {
+    return { valid: false, error: '無効な型のlockValue' };
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Issue #4126: 文字列サニタイズとバリデーション
+ * @param {string} str - サニタイズ対象の文字列
+ * @returns {string} サニタイズされた文字列
+ */
+function sanitizeString(str) {
+  return String(str).replace(CONTROL_CHARS_REGEX, '').trim();
+}
+
+/**
+ * Issue #4126: 最終的な引数検証
+ * @param {string} lockKey - ロックキー
+ * @param {string} lockValue - ロック値
+ * @returns {Object} バリデーション結果
+ */
+function validateFinalArguments(lockKey, lockValue) {
+  if (typeof lockKey !== 'string' || typeof lockValue !== 'string') {
+    return { valid: false, error: '最終的な型チェック失敗' };
+  }
+  
+  if (lockKey.length === 0 || lockValue.length === 0) {
+    return { valid: false, error: '空の引数' };
+  }
+  
+  if (INVALID_CHARS_REGEX.test(lockKey) || INVALID_CHARS_REGEX.test(lockValue)) {
+    return { valid: false, error: '不正な文字が含まれています' };
+  }
+  
+  return { valid: true };
+}
+
 /**
  * Redisエラーメッセージの改善された取得関数
  * Issue #3622: 数値エラーコードや意味のないエラーオブジェクトの適切な処理
@@ -1500,110 +1598,78 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
  */
 async function releaseDistributedLock(lockInfo) {
   try {
-    // lockInfoの厳密なバリデーション
-    if (!lockInfo || typeof lockInfo !== 'object') {
-      logger.warn(`分散ロック解放スキップ: 無効なlockInfo (${lockInfo})`);
+    // Issue #4126: 関数の複雑性を解決するため、バリデーションを段階的に実行
+    
+    // 1. 基本的なlockInfo検証
+    const lockValidation = validateLockInfo(lockInfo);
+    if (!lockValidation.valid) {
+      logger.warn(`分散ロック解放スキップ: ${lockValidation.error} (${lockInfo})`);
       return false;
     }
     
-    // lockKeyとlockValueの型安全性を確保
-    if (!lockInfo.lockKey || !lockInfo.lockValue) {
-      logger.warn(`分散ロック解放スキップ: パラメータが無効です (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue})`);
-      return false;
-    }
+    // 2. 文字列化とサニタイズ
+    const stringLockKey = sanitizeString(lockInfo.lockKey);
+    const stringLockValue = sanitizeString(lockInfo.lockValue);
     
-    // 無効な型をチェック（配列、関数、オブジェクトは処理しない）
-    if (Array.isArray(lockInfo.lockKey) || typeof lockInfo.lockKey === 'function' || (typeof lockInfo.lockKey === 'object' && lockInfo.lockKey !== null)) {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, type: ${typeof lockInfo.lockKey})`);
-      return false;
-    }
-    if (Array.isArray(lockInfo.lockValue) || typeof lockInfo.lockValue === 'function' || (typeof lockInfo.lockValue === 'object' && lockInfo.lockValue !== null)) {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockValue (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, type: ${typeof lockInfo.lockValue})`);
-      return false;
-    }
-    
-    // 文字列に変換してバリデーション
-    let stringLockKey = String(lockInfo.lockKey);
-    let stringLockValue = String(lockInfo.lockValue);
-    
-    // 文字列化された値が有効かチェック
-    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey.includes(',') || stringLockKey.includes('[object')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, stringified: ${stringLockKey})`);
-      return false;
-    }
-    if (stringLockValue === 'null' || stringLockValue === 'undefined' || stringLockValue === '' || stringLockValue === '[object Object]' || stringLockValue.includes(',') || stringLockValue.includes('[object')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockValue (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, stringified: ${stringLockValue})`);
-      return false;
-    }
-    
-    // Redis Luaスクリプト用に文字列をサニタイズ（制御文字・非印字文字を除去）
-    stringLockKey = stringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    stringLockValue = stringLockValue.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    
-    // サニタイズ後の最終チェック
+    // 3. サニタイズ後の空文字列チェック（先に実行）
     if (!stringLockKey || !stringLockValue) {
       logger.warn(`分散ロック解放スキップ: サニタイズ後に空文字列 (元lockKey: ${lockInfo.lockKey}, 元lockValue: ${lockInfo.lockValue})`);
       return false;
     }
     
-    // バリデーションは文字列化されたパラメータで実行
+    // 4. 文字列化された値の検証
+    if (!isValidStringValue(stringLockKey, 'lockKey')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (元: ${lockInfo.lockKey}, 変換後: ${stringLockKey})`);
+      return false;
+    }
+    if (!isValidStringValue(stringLockValue, 'lockValue')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockValue (元: ${lockInfo.lockValue}, 変換後: ${stringLockValue})`);
+      return false;
+    }
+    
+    // 5. 追加のバリデーション（既存の関数を使用）
     const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
     if (!validation.valid) {
       logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
       return false;
     }
 
-    const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
-
-    // Lua script for atomic lock release
-    const script = `
-      if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("del", KEYS[1])
-      else
-        return 0
-      end
-    `;
-
-    // Redis eval()に明示的に文字列として渡す
-    // Issue #3279: Redis Lua script引数の型安全性を強化
-    // Issue #4126: Lua script引数の型安全性をさらに強化
-    let finalLockKey = stringLockKey;
-    let finalLockValue = stringLockValue;
-    
-    // 文字列でない場合は強制的に文字列に変換
-    if (typeof finalLockKey !== 'string') {
-      finalLockKey = String(finalLockKey);
-    }
-    if (typeof finalLockValue !== 'string') {
-      finalLockValue = String(finalLockValue);
-    }
-    
-    // 最終的な型チェック
-    if (typeof finalLockKey !== 'string' || typeof finalLockValue !== 'string') {
-      logger.warn(`分散ロック解放スキップ: 最終的な型チェック失敗 (lockKey: ${typeof finalLockKey}, lockValue: ${typeof finalLockValue})`);
-      return false;
-    }
-    
-    // Issue #4126: Lua script実行前の最終的な引数検証
-    if (finalLockKey.length === 0 || finalLockValue.length === 0) {
-      logger.warn(`分散ロック解放スキップ: 空の引数 (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
-      return false;
-    }
-    
-    // 特殊文字や制御文字が含まれていないかチェック
-    const invalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
-    if (invalidChars.test(finalLockKey) || invalidChars.test(finalLockValue)) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字が含まれています (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
-      return false;
-    }
-    
-    const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
-    return result === 1;
+    // 6. Redis操作の実行
+    return await executeRedisLockRelease(stringLockKey, stringLockValue);
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
     return false;
   }
+}
+
+/**
+ * Issue #4126: Redis ロック解放の実行部分を分離
+ * @param {string} lockKey - ロックキー
+ * @param {string} lockValue - ロック値
+ * @returns {Promise<boolean>} 解放成功の場合true
+ */
+async function executeRedisLockRelease(lockKey, lockValue) {
+  // 最終的な引数検証
+  const finalValidation = validateFinalArguments(lockKey, lockValue);
+  if (!finalValidation.valid) {
+    logger.warn(`分散ロック解放スキップ: ${finalValidation.error} (lockKey: '${lockKey}', lockValue: '${lockValue}')`);
+    return false;
+  }
+
+  const redisDatabase = require('./redisDatabase');
+  const redisClient = redisDatabase.getClient();
+
+  // Lua script for atomic lock release
+  const script = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    else
+      return 0
+    end
+  `;
+
+  const result = await redisClient.eval(script, 1, lockKey, lockValue);
+  return result === 1;
 }
 
 /**
@@ -1761,17 +1827,9 @@ async function prepareRedisOperations(transaction, trade) {
   const commandNames = [];
 
   try {
-    // Issue #4126: Redis引数の型安全性を強化
-    const safeAmount = parseFloat(trade.amount);
-    const safeValue = parseFloat(trade.value);
-    
-    // 数値の妥当性チェック
-    if (isNaN(safeAmount) || !isFinite(safeAmount)) {
-      throw new Error(`無効なamount値: ${trade.amount}`);
-    }
-    if (isNaN(safeValue) || !isFinite(safeValue)) {
-      throw new Error(`無効なvalue値: ${trade.value}`);
-    }
+    // Issue #4126: Redis引数の型安全性を強化（共通化されたバリデーション関数を使用）
+    const safeAmount = validateNumericValue(trade.amount, 'amount');
+    const safeValue = validateNumericValue(trade.value, 'value');
     
     if (trade.side === 'buy') {
       transaction.hIncrByFloat(summaryKey, 'netPosition', safeAmount.toString());
@@ -1829,16 +1887,13 @@ async function executeRedisCompensation(trade) {
 
     const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
-    // Issue #4126: 補償トランザクションでも型安全性を強化
-    const safeAmount = parseFloat(trade.amount);
-    const safeValue = parseFloat(trade.value);
-    
-    // 数値の妥当性チェック
-    if (isNaN(safeAmount) || !isFinite(safeAmount)) {
-      throw new Error(`補償トランザクション: 無効なamount値: ${trade.amount}`);
-    }
-    if (isNaN(safeValue) || !isFinite(safeValue)) {
-      throw new Error(`補償トランザクション: 無効なvalue値: ${trade.value}`);
+    // Issue #4126: 補償トランザクションでも型安全性を強化（共通化されたバリデーション関数を使用）
+    let safeAmount, safeValue;
+    try {
+      safeAmount = validateNumericValue(trade.amount, 'amount');
+      safeValue = validateNumericValue(trade.value, 'value');
+    } catch (error) {
+      throw new Error(`補償トランザクション: ${error.message}`);
     }
 
     // 逆操作を実行
