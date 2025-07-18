@@ -51,6 +51,9 @@ log_startup_message() {
         return 0
     fi
     
+    # レースコンディション防止：即座にプロセス内フラグを設定
+    export "$var_name"=1
+    
     # プロセス間重複チェック（第二の防御線）
     # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
@@ -62,10 +65,7 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
-        # ロック取得成功：プロセス内フラグを設定
-        export "$var_name"=1
-        
-        # メッセージ出力
+        # ロック取得成功：メッセージ出力
         log "$message"
         
         # ロックファイルのクリーンアップ（30秒後）
@@ -73,8 +73,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグを設定（重複防止）
-        export "$var_name"=1
+        # プロセス内フラグは既に設定済みなので何もしない
         
         # 重複メッセージとして処理終了
         return 0
