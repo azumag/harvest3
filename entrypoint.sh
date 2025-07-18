@@ -36,6 +36,160 @@ log() {
     exec 1>&1
 }
 
+# 既存依存関係チェック関数 (Issue #4202)
+# Issue #4202 修正: 既存の依存関係の状態を事前確認
+check_existing_dependencies() {
+    log "Checking existing dependency status..."
+    local npm_check_log="/tmp/npm-check.log"
+    
+    if npm ls 2>"$npm_check_log" >/dev/null; then
+        log "Dependencies already satisfied, skipping npm install"
+        return 0
+    else
+        log "Dependencies check failed, npm install required:"
+        if [ -f "$npm_check_log" ]; then
+            cat "$npm_check_log" | head -10 | while read line; do
+                log "  dependency issue: $line"
+            done
+        fi
+        return 1
+    fi
+}
+
+# npm install リトライ処理 (Issue #4202)
+# Issue #4202 修正: 指数バックオフによるリトライとコンテナ再起動防止
+retry_npm_install_with_backoff() {
+    local max_npm_attempts=3
+    local npm_install_attempts=0
+    local npm_install_success=false
+    local restart_counter_file="/tmp/.npm_restart_counter"
+    local max_container_restarts=3
+    
+    # コンテナ再起動回数をチェック（無限ループ防止）
+    local restart_count=0
+    if [ -f "$restart_counter_file" ]; then
+        restart_count=$(cat "$restart_counter_file" 2>/dev/null || echo "0")
+    fi
+    restart_count=$((restart_count + 1))
+    echo "$restart_count" > "$restart_counter_file"
+    
+    log "Container restart count: $restart_count/$max_container_restarts"
+    
+    # 最大再起動回数に達した場合は依存関係チェックを緩和
+    if [ $restart_count -gt $max_container_restarts ]; then
+        log "WARNING: Maximum container restart count exceeded. Attempting minimal dependency install..."
+        max_npm_attempts=1  # 最小限のリトライに制限
+    fi
+    
+    while [ $npm_install_attempts -lt $max_npm_attempts ] && [ "$npm_install_success" = false ]; do
+        npm_install_attempts=$((npm_install_attempts + 1))
+        local attempt_log="/tmp/npm-install-error-${npm_install_attempts}.log"
+        local timeout_seconds=$((180 + npm_install_attempts * 60))  # 指数バックオフ: 180s, 240s, 300s
+        
+        log "Attempting npm install (attempt $npm_install_attempts/$max_npm_attempts, timeout: ${timeout_seconds}s)..."
+        
+        if timeout $timeout_seconds npm install 2>"$attempt_log"; then
+            log "npm install completed successfully on attempt $npm_install_attempts"
+            npm_install_success=true
+            # 成功時はカウンタをリセット
+            rm -f "$restart_counter_file"
+            break
+        else
+            log "npm install attempt $npm_install_attempts failed, error details:"
+            # エラーログを統合ログファイルにも保存 (Issue #2559 互換性)
+            if [ -f "$attempt_log" ]; then
+                cat "$attempt_log" >> "$npm_error_log"
+                cat "$attempt_log" | head -15 | while read line; do
+                    log "  npm error: $line"
+                done
+            fi
+            
+            # 最後の試行でない場合のみリトライ準備
+            if [ $npm_install_attempts -lt $max_npm_attempts ]; then
+                local retry_delay=$((npm_install_attempts * 10))  # 10s, 20s の待機
+                log "Cleaning npm cache and retrying..."
+                log "Waiting ${retry_delay}s before retry..."
+                npm cache clean --force 2>/dev/null || true
+                sleep $retry_delay
+            fi
+        fi
+    done
+    
+    # リトライ結果の処理
+    if [ "$npm_install_success" = false ]; then
+        if [ $restart_count -le $max_container_restarts ]; then
+            local error_msg="npm install failed after cache clean and $max_npm_attempts attempts (container restart $restart_count/$max_container_restarts)"
+            log "ERROR: $error_msg"
+            log "npm install failed after cache clean"  # Issue #2644 下位互換性
+            send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed - will retry on container restart"
+            return 1
+        else
+            # 最大再起動回数に達した場合は依存関係を部分的に無視して続行
+            log "WARNING: Maximum restart attempts reached. Continuing with partial dependencies..."
+            log "This may cause runtime errors, but prevents infinite restart loop"
+            send_startup_error_to_discord "npm install repeatedly failed - continuing with partial dependencies" "Infinite restart loop prevention activated"
+            return 0
+        fi
+    fi
+    
+    return 0
+}
+
+# npm依存関係インストール統合関数 (Issue #4202)
+install_npm_dependencies() {
+    log "Installing npm dependencies..."
+    
+    # Issue #2559 下位互換性: エラーログ変数を定義
+    npm_error_log="/tmp/npm-install-error.log"
+    local dep_install_error="/tmp/dep-install.log"
+    local dep_check_error="/tmp/dep-check.log"
+    local npm_ls_error="/tmp/npm-ls-error.log"
+    
+    # 事前診断情報の収集
+    log "Pre-install diagnostics:"
+    log "  Working directory: $(pwd)"
+    log "  Node.js version: $(node --version 2>/dev/null || echo 'Node.js not found')"
+    log "  npm version: $(npm --version 2>/dev/null || echo 'npm not found')"
+    log "  Disk space: $(df -h . | tail -1 | awk '{print $4}' || echo 'unknown')"
+    log "  package.json exists: $([ -f package.json ] && echo 'yes' || echo 'no')"
+    log "  node_modules exists: $([ -d node_modules ] && echo 'yes' || echo 'no')"
+    
+    # 既存の依存関係チェック
+    if check_existing_dependencies; then
+        return 0  # 依存関係が既に満たされている
+    fi
+    
+    # Issue #2559 下位互換性: 最初は固定タイムアウト（300秒）で実行
+    log "Attempting initial npm install with fixed timeout (Issue #2559 compatibility)..."
+    if timeout 300 npm install 2>"$npm_error_log"; then
+        log "npm install completed successfully with fixed timeout"
+        return 0
+    else
+        log "Fixed timeout npm install failed, switching to enhanced retry logic..."
+        # Issue #2644 下位互換性: エラーログの詳細表示
+        if [ -f "$npm_error_log" ]; then
+            log "npm error details:"
+            cat "$npm_error_log" | head -20 | while read line; do
+                log "  npm error: $line"
+            done
+        fi
+    fi
+    
+    # 拡張リトライロジックを実行
+    if ! retry_npm_install_with_backoff; then
+        return 1
+    fi
+    
+    # クリーンアップ (Issue #2559 下位互換性維持)
+    rm -f "$npm_error_log" 2>/dev/null || true
+    rm -f "$dep_install_error" 2>/dev/null || true  
+    rm -f "$dep_check_error" 2>/dev/null || true
+    rm -f "$npm_ls_error" 2>/dev/null || true
+    rm -f /tmp/npm-check.log /tmp/npm-install-error-*.log 2>/dev/null || true
+    
+    return 0
+}
+
 # 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 # プロセス内フラグとシンプルなatomic操作による重複防止
 log_startup_message() {
@@ -49,12 +203,12 @@ log_startup_message() {
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
-        # ロックファイルを削除してから終了
-        rm -f "$lock_file" 2>/dev/null
+        if [ -f "$lock_file" ]; then
+            local lock_owner=$(cat "$lock_file" 2>/dev/null | cut -d: -f1)
+            [ "$lock_owner" = "$$" ] && rm -f "$lock_file" 2>/dev/null
+        fi; # ロックファイルを削除してから終了
         return 0
-    fi
-    
-    # レースコンディション防止：即座にプロセス内フラグを設定
+    fi; # レースコンディション防止：即座にプロセス内フラグを設定
     export "$var_name"=1
     
     # プロセス間重複チェック（第二の防御線）
@@ -130,6 +284,7 @@ acquire_startup_lock() {
     
     # ロックファイルを作成
     echo "$$" > "$lock_file"
+    chmod 600 "$lock_file"  # 所有者のみアクセス可能
     
     # ロックファイルの作成を確認
     if [ ! -f "$lock_file" ] || [ "$(cat "$lock_file" 2>/dev/null)" != "$$" ]; then
@@ -270,49 +425,10 @@ pre_startup_checks() {
         fi
     done
     
-    # Node.js依存関係インストールとチェック
-    log "Installing npm dependencies..."
-    
-    # 事前診断情報の収集
-    log "Pre-install diagnostics:"
-    log "  Working directory: $(pwd)"
-    log "  Node.js version: $(node --version 2>/dev/null || echo 'Node.js not found')"
-    log "  npm version: $(npm --version 2>/dev/null || echo 'npm not found')"
-    log "  Disk space: $(df -h . | tail -1 | awk '{print $4}' || echo 'unknown')"
-    log "  package.json exists: $([ -f package.json ] && echo 'yes' || echo 'no')"
-    log "  node_modules exists: $([ -d node_modules ] && echo 'yes' || echo 'no')"
-    
-    # npm installを実行し、失敗した場合はキャッシュクリアして再試行
-    log "Attempting npm install with detailed error capture..."
-    local npm_error_log="/tmp/npm-install-error.log"
-    
-    if ! timeout 300 npm install 2>"$npm_error_log"; then
-        log "Initial npm install failed, error details:"
-        if [ -f "$npm_error_log" ]; then
-            cat "$npm_error_log" | head -20 | while read line; do
-                log "  npm error: $line"
-            done
-        fi
-        
-        log "Cleaning npm cache and retrying..."
-        npm cache clean --force 2>/dev/null || true
-        
-        if ! timeout 300 npm install 2>"$npm_error_log"; then
-            local error_msg="npm install failed after cache clean"
-            log "ERROR: $error_msg"
-            log "Final npm error details:"
-            if [ -f "$npm_error_log" ]; then
-                cat "$npm_error_log" | head -20 | while read line; do
-                    log "  npm error: $line"
-                done
-            fi
-            send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed"
-            exit 1
-        fi
+    # Node.js依存関係インストールとチェック（Issue #4202 修正: 無限再起動ループ防止）
+    if ! install_npm_dependencies; then
+        exit 1
     fi
-    
-    # クリーンアップ
-    rm -f "$npm_error_log" 2>/dev/null || true
     
     # critical dependenciesの存在を具体的にチェック（強化版）
     log "Checking critical dependencies..."
@@ -321,23 +437,25 @@ pre_startup_checks() {
         local dep_name=$(echo "$dep" | cut -d'@' -f1)
         log "Checking dependency: $dep_name"
         
-        local dep_check_error="/tmp/dep-check-$dep_name.log"
-        if ! node -e "require('$dep_name'); console.log('$dep_name OK');" 2>"$dep_check_error"; then
+        local dep_specific_check="/tmp/dep-check-$dep_name.log"
+        if ! node -e "require('$dep_name'); console.log('$dep_name OK');" 2>"$dep_specific_check"; then
             log "$dep_name not found, installation required. Error details:"
-            if [ -f "$dep_check_error" ]; then
-                cat "$dep_check_error" | head -5 | while read line; do
+            if [ -f "$dep_specific_check" ]; then
+                cat "$dep_specific_check" >> "$dep_check_error"
+                cat "$dep_specific_check" | head -5 | while read line; do
                     log "  require error: $line"
                 done
             fi
             
             log "Installing $dep specifically..."
-            local dep_install_error="/tmp/dep-install-$dep_name.log"
-            if ! timeout 120 npm install "$dep" 2>"$dep_install_error"; then
+            local dep_specific_install="/tmp/dep-install-$dep_name.log"
+            if ! timeout 120 npm install "$dep" 2>"$dep_specific_install"; then
                 local error_msg="Failed to install $dep specifically"
                 log "ERROR: $error_msg"
                 log "Install error details:"
-                if [ -f "$dep_install_error" ]; then
-                    cat "$dep_install_error" | head -10 | while read line; do
+                if [ -f "$dep_specific_install" ]; then
+                    cat "$dep_specific_install" >> "$dep_install_error"
+                    cat "$dep_specific_install" | head -10 | while read line; do
                         log "  install error: $line"
                     done
                 fi
@@ -346,12 +464,13 @@ pre_startup_checks() {
             fi
             
             # インストール後の再確認
-            if ! node -e "require('$dep_name'); console.log('$dep_name verified after install');" 2>"$dep_check_error"; then
+            if ! node -e "require('$dep_name'); console.log('$dep_name verified after install');" 2>"$dep_specific_check"; then
                 local error_msg="$dep_name still not accessible after installation"
                 log "ERROR: $error_msg"
                 log "Post-install verification error:"
-                if [ -f "$dep_check_error" ]; then
-                    cat "$dep_check_error" | head -5 | while read line; do
+                if [ -f "$dep_specific_check" ]; then
+                    cat "$dep_specific_check" >> "$dep_check_error"
+                    cat "$dep_specific_check" | head -5 | while read line; do
                         log "  verification error: $line"
                     done
                 fi
@@ -362,18 +481,17 @@ pre_startup_checks() {
             fi
             
             # クリーンアップ
-            rm -f "$dep_install_error" 2>/dev/null || true
+            rm -f "$dep_specific_install" 2>/dev/null || true
         else
             log "$dep_name OK"
         fi
         
         # クリーンアップ
-        rm -f "$dep_check_error" 2>/dev/null || true
+        rm -f "$dep_specific_check" 2>/dev/null || true
     done
     
     # 最終的な依存関係の検証
     log "Performing final dependency validation..."
-    local npm_ls_error="/tmp/npm-ls-error.log"
     if ! npm ls 2>"$npm_ls_error" >/dev/null; then
         local error_msg="npm dependencies validation failed"
         log "ERROR: $error_msg"
