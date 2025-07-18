@@ -37,9 +37,10 @@ describe('Database Manager - Issue #2682: Redis Lua script引数の型チェッ�
     // サニタイズ処理が実装されているかを確認
     expect(managerSource).toMatch(/replace\(\/\[\\x00-\\x1F\\x7F-\\x9F\]\/g, ''\)/);
     
-    // Redis evalに渡す引数がStringで明示的に変換されているかを確認
-    expect(managerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*stringLockKey\s*\)/);
-    expect(managerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*stringLockValue\s*\)/);
+    // Redis evalに渡す引数がfinalLockKey、finalLockValueとして型安全性が確保されているかを確認
+    expect(managerSource).toMatch(/redisClient\.eval\s*\(.*finalLockKey\s*,\s*finalLockValue\s*\)/);
+    expect(managerSource).toMatch(/let finalLockKey = stringLockKey/);
+    expect(managerSource).toMatch(/let finalLockValue = stringLockValue/);
   });
 
   it('関数が正常にエクスポートされていることを確認', function() {
