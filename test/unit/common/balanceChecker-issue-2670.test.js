@@ -73,16 +73,22 @@ const mockRedisDatabase = require('../../../src/database/redisDatabase');
 mockRedisDatabase.getClient.mockReturnValue(mockRedisClient);
 mockRedisDatabase.isConnected.mockReturnValue(true);
 
-const { validateLockParameters } = require('../../../src/common/utils');
-
 describe('Issue #2670: 分散ロック解放エラー修正テスト', () => {
   let balanceChecker;
 
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Mock validateLockParameters
-    validateLockParameters.mockReturnValue({ valid: true });
+    // Mock validateLockParameters to return valid for normal strings/numbers
+    const mockUtils = require('../../../src/common/utils');
+    mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
+      // Return valid for normal string/number inputs
+      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
+          lockKey.trim() !== '' && lockValue.trim() !== '') {
+        return { valid: true };
+      }
+      return { valid: false, error: 'Invalid parameters' };
+    });
     
     // バランスチェッカーを動的に読み込み
     balanceChecker = require('../../../src/common/balanceChecker');

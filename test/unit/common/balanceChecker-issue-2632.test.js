@@ -61,8 +61,17 @@ describe('BalanceChecker Issue #2632: Redis分散ロック解放時の型変換�
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // デフォルトでvalidationが成功するように設定
-    mockUtils.validateLockParameters.mockReturnValue({ valid: true });
+    
+    // Mock validateLockParameters to return valid for normal strings/numbers
+    mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
+      // Return valid for normal string/number inputs
+      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
+          lockKey.trim() !== '' && lockValue.trim() !== '') {
+        return { valid: true };
+      }
+      return { valid: false, error: 'Invalid parameters' };
+    });
+    
     balanceChecker = require('../../../src/common/balanceChecker');
   });
 

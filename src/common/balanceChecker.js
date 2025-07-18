@@ -497,21 +497,14 @@ async function releaseDistributedLock(lockKey, lockId) {
     let stringLockKey = String(lockKey);
     let stringLockId = String(lockId);
     
-    // 文字列化された値が有効かチェック（拡張版）
-    const invalidStringPatterns = [
-      'null', 'undefined', '', '[object Object]', 'NaN', 'Infinity', '-Infinity',
-      'Symbol(', '[object Symbol]', '[object BigInt]'
-    ];
-    
-    for (const pattern of invalidStringPatterns) {
-      if (stringLockKey === pattern || stringLockKey.includes(pattern)) {
-        logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey}, pattern: ${pattern})`);
-        return false;
-      }
-      if (stringLockId === pattern || stringLockId.includes(pattern)) {
-        logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId}, pattern: ${pattern})`);
-        return false;
-      }
+    // 文字列化された値が有効かチェック（直接比較版）
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey === 'NaN' || stringLockKey === 'Infinity' || stringLockKey === '-Infinity' || stringLockKey.includes('Symbol(') || stringLockKey.includes('[object Symbol]') || stringLockKey.includes('[object BigInt]')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey})`);
+      return false;
+    }
+    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]' || stringLockId === 'NaN' || stringLockId === 'Infinity' || stringLockId === '-Infinity' || stringLockId.includes('Symbol(') || stringLockId.includes('[object Symbol]') || stringLockId.includes('[object BigInt]')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
+      return false;
     }
     
     // カンマや特殊な文字列を含む場合もチェック
