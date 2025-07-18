@@ -36,7 +36,7 @@ log() {
     exec 1>&1
 }
 
-# 重複起動ログ防止関数（簡素化版）
+# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 # プロセス内フラグとシンプルなatomic操作による重複防止
 log_startup_message() {
     local message="$1"
@@ -45,21 +45,29 @@ log_startup_message() {
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    # プロセス内重複チェック（最初の防御線）
-    if [ "${!var_name}" = "1" ]; then
-        # 既に同じメッセージを出力済み
-        return 0
-    fi
-    
-    # レースコンディション防止：即座にプロセス内フラグを設定
-    export "$var_name"=1
-    
-    # プロセス間重複チェック（第二の防御線）
+    # プロセス間重複チェック（第一の防御線）
+    # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
-    # シンプルなatomic操作でロック取得を試行
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        # ロック取得成功：メッセージ出力
+    # より強固なatomic操作でロック取得を試行
+    local lock_acquired=false
+    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+        lock_acquired=true
+    fi
+    
+    if [ "$lock_acquired" = true ]; then
+        # ロック取得成功：プロセス内重複チェック（第二の防御線）
+        if [ "${!var_name}" = "1" ]; then
+            # 既に同じメッセージを出力済み（プロセス内重複）
+            # ロックファイルを削除してから終了
+            rm -f "$lock_file" 2>/dev/null
+            return 0
+        fi
+        
+        # プロセス内フラグを設定
+        export "$var_name"=1
+        
+        # メッセージ出力
         log "$message"
         
         # ロックファイルのクリーンアップ（30秒後）
@@ -67,7 +75,20 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグは既に設定済みなので何もしない
+        # プロセス内フラグをチェック（既に設定済みの場合は何もしない）
+        if [ "${!var_name}" != "1" ]; then
+            # 他のプロセスが処理中の場合は待機
+            local wait_count=0
+            while [ -f "$lock_file" ] && [ $wait_count -lt 10 ]; do
+                sleep 0.1
+                wait_count=$((wait_count + 1))
+            done
+            
+            # 処理完了後にプロセス内フラグを設定（重複防止）
+            export "$var_name"=1
+        fi
+        
+        # 重複メッセージとして処理終了
         return 0
     fi
 }
