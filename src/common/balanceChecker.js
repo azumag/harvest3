@@ -544,9 +544,9 @@ async function releaseDistributedLock(lockKey, lockId) {
     // Lua スクリプトを使用してアトミックにロックを解放
     const luaScript = `
       local lockValue = redis.call('GET', KEYS[1])
-      if lockValue then
+      if lockValue and type(lockValue) == 'string' and lockValue ~= '' then
         local success, lockData = pcall(cjson.decode, lockValue)
-        if success and lockData and lockData.lockId then
+        if success and lockData and type(lockData) == 'table' and lockData.lockId then
           -- lockIdが文字列でない場合は文字列に変換
           local lockIdStr = tostring(lockData.lockId)
           if lockIdStr == ARGV[1] then
