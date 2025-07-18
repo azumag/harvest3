@@ -43,6 +43,21 @@ class RedisCommitError extends Error {
   }
 }
 
+// 一般的なRedisエラーコードのマッピング（パフォーマンス最適化：関数外で定義）
+const REDIS_ERROR_CODES = {
+  0: 'Connection closed',
+  1: 'IO error',
+  2: 'Connection timeout',
+  3: 'Connection refused',
+  4: 'Protocol error',
+  5: 'Authentication failed',
+  6: 'Database selection failed',
+  7: 'Out of memory',
+  8: 'Redis server error',
+  9: 'Command not supported',
+  10: 'Wrong number of arguments'
+};
+
 /**
  * Redisエラーメッセージの改善された取得関数
  * Issue #3622: 数値エラーコードや意味のないエラーオブジェクトの適切な処理
@@ -69,22 +84,7 @@ function getRedisErrorMessage(error, commandIndex) {
   
   // 数値の場合（Redis エラーコード）
   if (typeof error === 'number') {
-    // 一般的なRedisエラーコードのマッピング
-    const redisErrorCodes = {
-      0: 'Connection closed',
-      1: 'IO error',
-      2: 'Connection timeout',
-      3: 'Connection refused',
-      4: 'Protocol error',
-      5: 'Authentication failed',
-      6: 'Database selection failed',
-      7: 'Out of memory',
-      8: 'Redis server error',
-      9: 'Command not supported',
-      10: 'Wrong number of arguments'
-    };
-    
-    const errorDescription = redisErrorCodes[error] || `Redis error code: ${error}`;
+    const errorDescription = REDIS_ERROR_CODES[error] || `Redis error code: ${error}`;
     return `Redis command ${commandIndex} failed: ${errorDescription}`;
   }
   
