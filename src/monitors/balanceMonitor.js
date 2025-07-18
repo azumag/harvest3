@@ -289,7 +289,7 @@ class BalanceMonitor {
 
     // 取引停止の検討
     const majorDiscrepancies = discrepancies.filter(d =>
-      d.discrepancies.max >= this.config.tradingHalt.majorDiscrepancyThreshold
+      d.discrepancyPercent >= this.config.tradingHalt.majorDiscrepancyThreshold
     );
 
     if (majorDiscrepancies.length > 0) {
