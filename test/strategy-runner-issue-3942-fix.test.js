@@ -32,15 +32,29 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
   });
 
   // 各テスト後のクリーンアップ
-  afterEach(() => {
+  afterEach(async () => {
+    // すべてのタイマーをクリア
+    clearTimeout();
+    
     // メッセージロックディレクトリとその中身を削除
     if (fs.existsSync(messageLockDir)) {
       const files = fs.readdirSync(messageLockDir);
       files.forEach(file => {
-        fs.unlinkSync(path.join(messageLockDir, file));
+        try {
+          fs.unlinkSync(path.join(messageLockDir, file));
+        } catch (error) {
+          // ファイルが既に削除されている場合は無視
+        }
       });
-      fs.rmdirSync(messageLockDir);
+      try {
+        fs.rmdirSync(messageLockDir);
+      } catch (error) {
+        // ディレクトリが既に削除されている場合は無視
+      }
     }
+    
+    // 非同期処理の完了を待機
+    await new Promise(resolve => setTimeout(resolve, 10));
   });
 
   describe('Issue #3942 修正の実装確認', () => {
@@ -117,7 +131,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(content).toMatch(/\d+:\d+\.\d+/);
     });
 
-    test('待機メカニズムによる処理同期のテスト', () => {
+    test('待機メカニズムによる処理同期のテスト', async () => {
       // メッセージロックディレクトリを作成
       fs.mkdirSync(messageLockDir, { recursive: true });
       
@@ -131,10 +145,15 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       fs.writeFileSync(lockFile, `${process.pid}:${Date.now()}.000000`);
       expect(fs.existsSync(lockFile)).toBe(true);
       
-      // 待機後の処理をシミュレート
-      setTimeout(() => {
-        fs.unlinkSync(lockFile);
-      }, 100);
+      // 待機後の処理をシミュレート（Promiseベースの適切な非同期処理）
+      const cleanupPromise = new Promise((resolve) => {
+        setTimeout(() => {
+          if (fs.existsSync(lockFile)) {
+            fs.unlinkSync(lockFile);
+          }
+          resolve();
+        }, 100);
+      });
       
       // 待機メカニズムの動作確認（実際には0.1秒間隔で最大10回待機）
       // 簡単な待機テストのため、ロックファイルが存在することを確認
@@ -146,8 +165,11 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(entrypointContent).toContain('sleep 0.1');
       expect(entrypointContent).toContain('wait_count=$((wait_count + 1))');
       
-      // クリーンアップ
-      fs.unlinkSync(lockFile);
+      // 非同期処理の完了を待機
+      await cleanupPromise;
+      
+      // クリーンアップ確認
+      expect(fs.existsSync(lockFile)).toBe(false);
     });
   });
 
@@ -166,15 +188,27 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
 
     test('entrypoint.shファイルの構文が正しい', async () => {
       // bashスクリプトの構文チェック
-      await expect(execAsync(`bash -n ${entrypointPath}`)).resolves.not.toThrow();
+      try {
+        await execAsync(`bash -n ${entrypointPath}`);
+      } catch (error) {
+        throw new Error(`Shell script syntax error: ${error.message}`);
+      }
     });
 
     test('必要なコマンドが利用可能', async () => {
       // md5sumコマンドの利用可能性確認
-      await expect(execAsync('which md5sum')).resolves.not.toThrow();
+      try {
+        await execAsync('which md5sum');
+      } catch (error) {
+        throw new Error(`md5sum command not available: ${error.message}`);
+      }
       
       // dateコマンドの利用可能性確認
-      await expect(execAsync('which date')).resolves.not.toThrow();
+      try {
+        await execAsync('which date');
+      } catch (error) {
+        throw new Error(`date command not available: ${error.message}`);
+      }
     });
   });
 
