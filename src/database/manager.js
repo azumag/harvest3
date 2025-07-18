@@ -61,11 +61,19 @@ const REDIS_ERROR_CODES = {
 /**
  * Redisエラーメッセージの改善された取得関数
  * Issue #3622: 数値エラーコードや意味のないエラーオブジェクトの適切な処理
+ * Issue #3873: より詳細なエラー情報を提供
  */
-function getRedisErrorMessage(error, commandIndex) {
-  // undefinedまたはnullの場合
+function getRedisErrorMessage(error, commandIndex, commandName = null, operationContext = null) {
+  // undefinedまたはnullの場合 - より詳細な情報を提供
   if (error === undefined || error === null) {
-    return 'Unknown error';
+    let contextInfo = '';
+    if (commandName) {
+      contextInfo += ` (${commandName})`;
+    }
+    if (operationContext) {
+      contextInfo += ` - Context: ${JSON.stringify(operationContext)}`;
+    }
+    return `Redis operation failed with null/undefined error${contextInfo}. This may indicate a connection issue or timeout.`;
   }
   
   // Errorオブジェクトの場合
@@ -1147,6 +1155,11 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis先行コミット（原子性保証）
+    // Issue #3873: Redis接続状態の事前チェック
+    if (!redisClient || !redisClient.isReady) {
+      throw new Error(`Redis Commit失敗: Redis接続が利用不可 (client=${!!redisClient}, ready=${redisClient?.isReady})`);
+    }
+    
     const redisResults = await redisTransaction.exec();
     if (!redisResults) {
       throw new Error('Redis Commit失敗: トランザクション結果がnull');
@@ -1157,14 +1170,25 @@ async function executeDistributedTransaction(trade, isBacktest) {
     
     // パフォーマンス改善: forEachをreduceに変更して効率的な分類処理
     // Issue #3620: 実際のコマンド名を使用してエラーハンドリングを改善
+    // Issue #3873: より詳細なエラー情報とコンテキストを提供
     const { failed: failedCommands, successful: successfulCommands } = redisResults.reduce((acc, result, index) => {
       if (result[0] !== null) {
         // エラーが発生したコマンド
+        const commandName = redisCommandNames[index] || `コマンド${index}`;
+        const operationContext = {
+          tradeId: trade.tradeId,
+          exchange: trade.exchange,
+          symbol: trade.symbol,
+          strategy: trade.strategy,
+          commandIndex: index,
+          totalCommands: redisResults.length
+        };
+        
         acc.failed.push({
           index,
           error: result[0],
-          errorMessage: getRedisErrorMessage(result[0], index),
-          command: redisCommandNames[index] || `コマンド${index}`
+          errorMessage: getRedisErrorMessage(result[0], index, commandName, operationContext),
+          command: commandName
         });
       } else {
         // 成功したコマンド
@@ -1186,6 +1210,17 @@ async function executeDistributedTransaction(trade, isBacktest) {
       if (!isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
+        
+        // Issue #3873: Redis接続状態の詳細情報を追加
+        const redisConnectionInfo = {
+          clientReady: redisClient?.isReady,
+          clientOpen: redisClient?.isOpen,
+          clientConnected: redisClient?.status === 'ready',
+          clientStatus: redisClient?.status,
+          serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable'
+        };
+        
+        logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
         logger.error(`[2PC] トレード情報: ${JSON.stringify({
           tradeId: trade.tradeId,
           exchange: trade.exchange,
@@ -1195,6 +1230,14 @@ async function executeDistributedTransaction(trade, isBacktest) {
           amount: trade.amount,
           value: trade.value
         })}`);
+        
+        // 失敗したコマンドの詳細情報
+        failedCommands.forEach(({ index, command, error, errorMessage }) => {
+          logger.error(`[2PC] 失敗コマンド詳細 [${index}] ${command}: ${errorMessage}`);
+          if (error && typeof error === 'object') {
+            logger.error(`[2PC] エラーオブジェクト [${index}]: ${JSON.stringify(error)}`);
+          }
+        });
       }
       
       throw new RedisCommitError(failedCommands, successfulCommands);
