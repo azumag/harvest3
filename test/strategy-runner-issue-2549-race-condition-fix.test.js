@@ -99,7 +99,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       expect(entrypointContent).toContain('メッセージハッシュを一度だけ計算（一貫性確保）');
       
       // atomic操作は変わらず維持
-      expect(entrypointContent).toContain('(set -C; echo "$$" > "$lock_file") 2>/dev/null');
+      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null');
       
       // クリーンアップ機能は維持
       expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');

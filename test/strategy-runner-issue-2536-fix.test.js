@@ -40,7 +40,7 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
       // atomic実装が使用されていることを確認（DRY原則適用後）
       expect(entrypointContent).toContain('message_hash=$(get_message_hash "$message")');
       expect(entrypointContent).toContain('lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
-      expect(entrypointContent).toContain('if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then');
+      expect(entrypointContent).toContain('if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then');
       
       // 複雑な処理が削除されていることを確認
       expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
@@ -86,7 +86,7 @@ log_startup_message() {
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # atomicな方法でメッセージの重複をチェック
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         # ロックが取得できた場合のみメッセージを出力
         log "$message"
         
@@ -160,7 +160,7 @@ log_startup_message() {
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # atomicな方法でメッセージの重複をチェック
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         # ロックが取得できた場合のみメッセージを出力
         log "$message"
         
