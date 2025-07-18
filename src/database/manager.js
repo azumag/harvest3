@@ -1070,7 +1070,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
         acc.failed.push({
           index,
           error: result[0],
-          errorMessage: result[0].message || result[0].toString(),
+          errorMessage: result[0]?.message || result[0]?.toString() || 'Unknown error',
           command: `コマンド${index}`
         });
       } else {
@@ -1878,7 +1878,7 @@ async function getAvailableFund(exchange, symbol, options = {}) {
 
     } catch (error) {
       consecutiveFailures++;
-      const errorMessage = error.message || '';
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
       logger.warn(`[残高取得エラー] ${exchange.id} 試行${attempt}/${maxRetries}: ${errorMessage}`);
 
       // throttleMonitorにエラーを記録
