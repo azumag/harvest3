@@ -528,8 +528,8 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
-    // 文字列に変換してからRedisに渡す
-    const result = await redisClient.eval(luaScript, 1, stringLockKey, stringLockId);
+    // Redis eval()に明示的に文字列として渡す
+    const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);
