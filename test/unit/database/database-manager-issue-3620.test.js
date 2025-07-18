@@ -72,6 +72,9 @@ jest.mock('../../../src/common/apiCoordinator', () => ({
   apiCoordinator: {}
 }));
 
+// Issue #3620: 実際のprepareRedisOperations関数をテストするため、グローバルモックを無効化
+jest.unmock('../../../src/database/manager');
+
 // テスト対象のモジュール
 const { prepareRedisOperations, executeDistributedTransaction } = require('../../../src/database/manager');
 

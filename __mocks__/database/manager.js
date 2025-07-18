@@ -181,8 +181,28 @@ module.exports = {
       throw new Error(`Redis操作準備時のバリデーションエラー: ${validationErrors.join(', ')}`);
     }
     
-    // Mock Redis operations
-    return Promise.resolve();
+    // Mock Redis operations - Issue #3620: Return command names based on trade data
+    const commandNames = [];
+    
+    if (trade.side === 'buy') {
+      commandNames.push('hIncrByFloat(netPosition)');
+      commandNames.push('hIncrByFloat(buyAmount)');
+      commandNames.push('hIncrByFloat(totalBuyCost)');
+    } else if (trade.side === 'sell') {
+      commandNames.push('hIncrByFloat(netPosition)');
+      commandNames.push('hIncrByFloat(sellAmount)');
+      commandNames.push('hIncrByFloat(totalSellRevenue)');
+    }
+    
+    // 未約定注文削除をトランザクションに追加
+    if (trade.orderId && trade.strategy !== 'OUTSIDE') {
+      commandNames.push('hDel(pendingOrder)');
+    }
+    
+    // タイムスタンプ更新
+    commandNames.push('hSet(updatedAt)');
+    
+    return Promise.resolve(commandNames);
   }),
 
   executeDistributedTransaction: jest.fn().mockResolvedValue(true)
