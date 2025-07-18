@@ -125,7 +125,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file")');
       
       // 重複チェック機能の実装確認
-      expect(entrypointContent).toContain('シンプルなatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
       
       // エラーハンドリングの実装確認
       expect(entrypointContent).toContain('2>/dev/null');
