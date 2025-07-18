@@ -1120,8 +1120,9 @@ async function executeDistributedTransaction(trade, isBacktest) {
     return { success: true };
 
   } catch (error) {
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
     if (!isBacktest) {
-      logger.error(`[2PC] エラー発生: ${trade.tradeId} - ${error.message}`);
+      logger.error(`[2PC] エラー発生: ${trade.tradeId} - ${errorMessage}`);
     }
 
     // フェイルバック処理
@@ -1146,15 +1147,16 @@ async function executeDistributedTransaction(trade, isBacktest) {
       await setTradeProcessingState(trade.tradeId, 'FAILED');
 
     } catch (rollbackError) {
+      const rollbackErrorMessage = rollbackError?.message || rollbackError?.toString() || 'Unknown rollback error';
       if (!isBacktest) {
-        logger.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackError.message}`);
+        logger.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackErrorMessage}`);
       }
     }
 
     return {
       success: false,
-      error: error.message,
-      severity: error.message.includes('MongoDB') ? 'critical' : 'warning'
+      error: errorMessage,
+      severity: errorMessage.includes('MongoDB') ? 'critical' : 'warning'
     };
 
   } finally {
