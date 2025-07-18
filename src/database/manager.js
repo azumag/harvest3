@@ -1268,7 +1268,25 @@ async function releaseDistributedLock(lockInfo) {
     `;
 
     // Redis eval()に明示的に文字列として渡す
-    const result = await redisClient.eval(script, 1, String(stringLockKey), String(stringLockValue));
+    // Issue #3279: Redis Lua script引数の型安全性を強化
+    let finalLockKey = stringLockKey;
+    let finalLockValue = stringLockValue;
+    
+    // 文字列でない場合は強制的に文字列に変換
+    if (typeof finalLockKey !== 'string') {
+      finalLockKey = String(finalLockKey);
+    }
+    if (typeof finalLockValue !== 'string') {
+      finalLockValue = String(finalLockValue);
+    }
+    
+    // 最終的な型チェック
+    if (typeof finalLockKey !== 'string' || typeof finalLockValue !== 'string') {
+      logger.warn(`分散ロック解放スキップ: 最終的な型チェック失敗 (lockKey: ${typeof finalLockKey}, lockValue: ${typeof finalLockValue})`);
+      return false;
+    }
+    
+    const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
     return result === 1;
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
