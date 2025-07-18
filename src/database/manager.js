@@ -140,6 +140,82 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
   return `Redis command ${commandIndex} failed: ${String(error)}`;
 }
 
+/**
+ * Redis接続の健全性を包括的にチェックする関数
+ * Issue #4090: Redis接続状態不整合の解決
+ * 
+ * @param {Object} redisClient - Redisクライアント
+ * @param {Object} logger - ログ出力用
+ * @returns {Promise<{isHealthy: boolean, details: Object}>} 接続状態の詳細情報
+ */
+async function checkRedisConnectionHealth(redisClient, logger) {
+  const details = {
+    clientExists: !!redisClient,
+    clientReady: redisClient?.isReady,
+    clientOpen: redisClient?.isOpen,
+    clientConnected: redisClient?.status === 'ready',
+    clientStatus: redisClient?.status,
+    serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
+    pingSuccess: false,
+    pingError: null
+  };
+
+  if (!redisClient) {
+    return { isHealthy: false, details };
+  }
+
+  // 基本的な状態チェック
+  if (!redisClient.isReady || !redisClient.isOpen || redisClient.status !== 'ready') {
+    return { isHealthy: false, details };
+  }
+
+  // 実際の接続テスト（ping）
+  try {
+    await redisClient.ping();
+    details.pingSuccess = true;
+    return { isHealthy: true, details };
+  } catch (error) {
+    details.pingError = error.message || error.toString();
+    logger.warn(`[Redis Health Check] Ping failed: ${details.pingError}`);
+    return { isHealthy: false, details };
+  }
+}
+
+/**
+ * Redis接続の回復を試行する関数
+ * Issue #4090: Redis接続失敗時の自動回復
+ * 
+ * @param {Object} redisDatabase - redisDatabase モジュール
+ * @param {Object} logger - ログ出力用
+ * @param {number} maxRetries - 最大再試行回数
+ * @returns {Promise<Object|null>} 回復したRedisクライアント、または null
+ */
+async function attemptRedisConnectionRecovery(redisDatabase, logger, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    logger.info(`[Redis Recovery] 接続回復試行 ${attempt}/${maxRetries}`);
+    
+    try {
+      // 短時間待機してから再試行
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      
+      const newClient = redisDatabase.getClient();
+      const healthCheck = await checkRedisConnectionHealth(newClient, logger);
+      
+      if (healthCheck.isHealthy) {
+        logger.info(`[Redis Recovery] 接続回復成功 (試行回数: ${attempt})`);
+        return newClient;
+      } else {
+        logger.warn(`[Redis Recovery] 試行 ${attempt} 失敗:`, healthCheck.details);
+      }
+    } catch (error) {
+      logger.error(`[Redis Recovery] 試行 ${attempt} でエラー: ${error.message}`);
+    }
+  }
+  
+  logger.error(`[Redis Recovery] 最大試行回数 ${maxRetries} 回に達しました。接続回復に失敗しました。`);
+  return null;
+}
+
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
 
@@ -811,6 +887,69 @@ async function updateFilledTrades(exchange, symbol) {
 }
 
 /**
+ * Issue #4090: Redis接続状態チェック機能付きの取引記録追加
+ * 
+ * @param {Object} trade - 取引データ
+ * @param {string} trade.tradeId - 取引ID
+ * @param {string} trade.exchange - 取引所名
+ * @param {string} trade.symbol - 通貨ペア
+ * @param {string} trade.strategy - 戦略名
+ * @param {string} trade.side - 売買方向
+ * @param {number} trade.amount - 取引量
+ * @param {number} trade.value - 取引額
+ * @param {string} trade.orderId - 注文ID
+ * @returns {Promise<boolean>} 成功時true
+ */
+async function addTradeRecord(trade) {
+  const logger = new Logger('DatabaseManager');
+  const redisDatabase = require('./redisDatabase');
+  const { getMongoClient } = require('./mongoDatabase');
+  
+  try {
+    // Redis接続チェック
+    const redisClient = redisDatabase.getClient();
+    const healthCheck = await checkRedisConnectionHealth(redisClient, logger);
+    
+    if (!healthCheck.isHealthy) {
+      logger.warn(`[2PC] Redis接続不良を検出: ${JSON.stringify(healthCheck.details)}`);
+      
+      // 接続回復を試行
+      const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger);
+      if (!recoveredClient) {
+        logger.error(`[Redis Recovery] 最大試行回数に達しました。接続回復に失敗しました。`);
+        throw new Error('Redis Commit失敗: 接続回復に失敗しました');
+      }
+      
+      logger.info(`[Redis Recovery] 接続回復成功`);
+    }
+    
+    // 成功時は MongoDB への取引記録も追加
+    try {
+      const mongoClient = getMongoClient();
+      const db = mongoClient.db('trading');
+      const collection = db.collection('trades');
+      
+      await collection.insertOne({
+        ...trade,
+        timestamp: new Date(),
+        createdAt: new Date()
+      });
+      
+      logger.info(`[Trade Record] 取引記録追加成功: ${trade.tradeId}`);
+      return true;
+      
+    } catch (mongoError) {
+      logger.error(`[Trade Record] MongoDB書き込みエラー:`, mongoError);
+      throw mongoError;
+    }
+    
+  } catch (error) {
+    logger.error(`[Trade Record] 取引記録追加失敗:`, error);
+    throw error;
+  }
+}
+
+/**
  * 分散トランザクション対応の約定履歴更新実装
  * データ整合性とACID特性を保証
  */
@@ -1155,9 +1294,32 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis先行コミット（原子性保証）
-    // Issue #3873: Redis接続状態の事前チェック
-    if (!redisClient || !redisClient.isReady) {
-      throw new Error(`Redis Commit失敗: Redis接続が利用不可 (client=${!!redisClient}, ready=${redisClient?.isReady})`);
+    // Issue #4090: 包括的なRedis接続状態チェックと自動回復
+    let currentRedisClient = redisClient;
+    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    
+    if (!healthCheck.isHealthy) {
+      if (!isBacktest) {
+        logger.warn(`[2PC] Redis接続不良を検出: ${JSON.stringify(healthCheck.details)}`);
+        logger.info(`[2PC] Redis接続回復を試行中...`);
+      }
+      
+      // 接続回復を試行
+      const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger);
+      if (recoveredClient) {
+        currentRedisClient = recoveredClient;
+        // 新しいクライアントでトランザクションを再作成
+        redisTransaction = currentRedisClient.multi();
+        
+        // 再度Redis操作を追加（既存のprepareRedisOperations関数を使用）
+        redisCommandNames = await prepareRedisOperations(redisTransaction, trade);
+        
+        if (!isBacktest) {
+          logger.info(`[2PC] Redis接続回復成功 - トランザクション再作成完了`);
+        }
+      } else {
+        throw new Error(`Redis Commit失敗: 接続回復に失敗しました - ${JSON.stringify(healthCheck.details)}`);
+      }
     }
     
     const redisResults = await redisTransaction.exec();
@@ -2757,5 +2919,6 @@ module.exports = {
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
-  getRedisErrorMessage // Issue #3622: テスト用にエクスポート
+  getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
+  addTradeRecord // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
 };
