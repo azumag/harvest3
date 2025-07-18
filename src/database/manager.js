@@ -43,6 +43,95 @@ class RedisCommitError extends Error {
   }
 }
 
+/**
+ * Redisエラーメッセージの改善された取得関数
+ * Issue #3622: 数値エラーコードや意味のないエラーオブジェクトの適切な処理
+ */
+function getRedisErrorMessage(error, commandIndex) {
+  // undefinedまたはnullの場合
+  if (error === undefined || error === null) {
+    return 'Unknown error';
+  }
+  
+  // Errorオブジェクトの場合
+  if (error instanceof Error) {
+    return error.message || error.toString();
+  }
+  
+  // 文字列の場合
+  if (typeof error === 'string') {
+    // 意味のない文字列パターンをチェック
+    if (error === '-' || error === '' || error.trim() === '') {
+      return `Redis command ${commandIndex} failed: Invalid response`;
+    }
+    return error;
+  }
+  
+  // 数値の場合（Redis エラーコード）
+  if (typeof error === 'number') {
+    // 一般的なRedisエラーコードのマッピング
+    const redisErrorCodes = {
+      0: 'Connection closed',
+      1: 'IO error',
+      2: 'Connection timeout',
+      3: 'Connection refused',
+      4: 'Protocol error',
+      5: 'Authentication failed',
+      6: 'Database selection failed',
+      7: 'Out of memory',
+      8: 'Redis server error',
+      9: 'Command not supported',
+      10: 'Wrong number of arguments'
+    };
+    
+    const errorDescription = redisErrorCodes[error] || `Redis error code: ${error}`;
+    return `Redis command ${commandIndex} failed: ${errorDescription}`;
+  }
+  
+  // オブジェクトの場合
+  if (typeof error === 'object') {
+    // messageプロパティがある場合
+    if (error.message) {
+      return error.message;
+    }
+    
+    // codeプロパティがある場合
+    if (error.code) {
+      return `Redis error: ${error.code}`;
+    }
+    
+    // nameプロパティがある場合
+    if (error.name) {
+      return `Redis error: ${error.name}`;
+    }
+    
+    // JSON.stringifyで内容を取得しようとする
+    try {
+      const jsonStr = JSON.stringify(error);
+      if (jsonStr && jsonStr !== '{}') {
+        return `Redis command ${commandIndex} failed: ${jsonStr}`;
+      }
+    } catch (e) {
+      // JSON.stringifyが失敗した場合は無視
+    }
+    
+    // toString()を試す
+    try {
+      const stringified = error.toString();
+      if (stringified && stringified !== '[object Object]') {
+        return `Redis command ${commandIndex} failed: ${stringified}`;
+      }
+    } catch (e) {
+      // toString()が失敗した場合は無視
+    }
+    
+    return `Redis command ${commandIndex} failed: Unknown object error`;
+  }
+  
+  // その他の型の場合
+  return `Redis command ${commandIndex} failed: ${String(error)}`;
+}
+
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
 
@@ -1070,7 +1159,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
         acc.failed.push({
           index,
           error: result[0],
-          errorMessage: result[0]?.message || result[0]?.toString() || 'Unknown error',
+          errorMessage: getRedisErrorMessage(result[0], index),
           command: `コマンド${index}`
         });
       } else {
@@ -2601,5 +2690,6 @@ module.exports = {
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
-  prepareRedisOperations // Issue #2856: テスト用にエクスポート
+  prepareRedisOperations, // Issue #2856: テスト用にエクスポート
+  getRedisErrorMessage // Issue #3622: テスト用にエクスポート
 };
