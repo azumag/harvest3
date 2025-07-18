@@ -1567,6 +1567,7 @@ async function releaseDistributedLock(lockInfo) {
 
     // Redis eval()に明示的に文字列として渡す
     // Issue #3279: Redis Lua script引数の型安全性を強化
+    // Issue #4126: Lua script引数の型安全性をさらに強化
     let finalLockKey = stringLockKey;
     let finalLockValue = stringLockValue;
     
@@ -1581,6 +1582,19 @@ async function releaseDistributedLock(lockInfo) {
     // 最終的な型チェック
     if (typeof finalLockKey !== 'string' || typeof finalLockValue !== 'string') {
       logger.warn(`分散ロック解放スキップ: 最終的な型チェック失敗 (lockKey: ${typeof finalLockKey}, lockValue: ${typeof finalLockValue})`);
+      return false;
+    }
+    
+    // Issue #4126: Lua script実行前の最終的な引数検証
+    if (finalLockKey.length === 0 || finalLockValue.length === 0) {
+      logger.warn(`分散ロック解放スキップ: 空の引数 (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
+      return false;
+    }
+    
+    // 特殊文字や制御文字が含まれていないかチェック
+    const invalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+    if (invalidChars.test(finalLockKey) || invalidChars.test(finalLockValue)) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字が含まれています (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
       return false;
     }
     
@@ -1747,35 +1761,54 @@ async function prepareRedisOperations(transaction, trade) {
   const commandNames = [];
 
   try {
+    // Issue #4126: Redis引数の型安全性を強化
+    const safeAmount = parseFloat(trade.amount);
+    const safeValue = parseFloat(trade.value);
+    
+    // 数値の妥当性チェック
+    if (isNaN(safeAmount) || !isFinite(safeAmount)) {
+      throw new Error(`無効なamount値: ${trade.amount}`);
+    }
+    if (isNaN(safeValue) || !isFinite(safeValue)) {
+      throw new Error(`無効なvalue値: ${trade.value}`);
+    }
+    
     if (trade.side === 'buy') {
-      transaction.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'netPosition', safeAmount.toString());
       commandNames.push('hIncrByFloat(netPosition)');
       
-      transaction.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'buyAmount', safeAmount.toString());
       commandNames.push('hIncrByFloat(buyAmount)');
       
-      transaction.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
+      transaction.hIncrByFloat(summaryKey, 'totalBuyCost', safeValue.toString());
       commandNames.push('hIncrByFloat(totalBuyCost)');
     } else if (trade.side === 'sell') {
-      transaction.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'netPosition', (-safeAmount).toString());
       commandNames.push('hIncrByFloat(netPosition)');
       
-      transaction.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'sellAmount', safeAmount.toString());
       commandNames.push('hIncrByFloat(sellAmount)');
       
-      transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', trade.value);
+      transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', safeValue.toString());
       commandNames.push('hIncrByFloat(totalSellRevenue)');
     }
 
     // 未約定注文削除をトランザクションに追加
     if (trade.orderId && trade.strategy !== 'OUTSIDE') {
       const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-      transaction.hDel(pendingKey, trade.orderId.toString());
+      // Issue #4126: orderIdの型安全性を強化
+      const safeOrderId = String(trade.orderId);
+      if (!safeOrderId || safeOrderId === 'undefined' || safeOrderId === 'null') {
+        throw new Error(`無効なorderId値: ${trade.orderId}`);
+      }
+      transaction.hDel(pendingKey, safeOrderId);
       commandNames.push('hDel(pendingOrder)');
     }
 
     // タイムスタンプ更新
-    transaction.hSet(summaryKey, 'updatedAt', Date.now().toString());
+    // Issue #4126: タイムスタンプの型安全性を強化
+    const timestamp = Date.now();
+    transaction.hSet(summaryKey, 'updatedAt', timestamp.toString());
     commandNames.push('hSet(updatedAt)');
     
     // Issue #3620: コマンド名を返す
@@ -1796,15 +1829,27 @@ async function executeRedisCompensation(trade) {
 
     const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
+    // Issue #4126: 補償トランザクションでも型安全性を強化
+    const safeAmount = parseFloat(trade.amount);
+    const safeValue = parseFloat(trade.value);
+    
+    // 数値の妥当性チェック
+    if (isNaN(safeAmount) || !isFinite(safeAmount)) {
+      throw new Error(`補償トランザクション: 無効なamount値: ${trade.amount}`);
+    }
+    if (isNaN(safeValue) || !isFinite(safeValue)) {
+      throw new Error(`補償トランザクション: 無効なvalue値: ${trade.value}`);
+    }
+
     // 逆操作を実行
     if (trade.side === 'buy') {
-      compensation.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
-      compensation.hIncrByFloat(summaryKey, 'buyAmount', -trade.amount);
-      compensation.hIncrByFloat(summaryKey, 'totalBuyCost', -trade.value);
+      compensation.hIncrByFloat(summaryKey, 'netPosition', (-safeAmount).toString());
+      compensation.hIncrByFloat(summaryKey, 'buyAmount', (-safeAmount).toString());
+      compensation.hIncrByFloat(summaryKey, 'totalBuyCost', (-safeValue).toString());
     } else if (trade.side === 'sell') {
-      compensation.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
-      compensation.hIncrByFloat(summaryKey, 'sellAmount', -trade.amount);
-      compensation.hIncrByFloat(summaryKey, 'totalSellRevenue', -trade.value);
+      compensation.hIncrByFloat(summaryKey, 'netPosition', safeAmount.toString());
+      compensation.hIncrByFloat(summaryKey, 'sellAmount', (-safeAmount).toString());
+      compensation.hIncrByFloat(summaryKey, 'totalSellRevenue', (-safeValue).toString());
     }
 
     await compensation.exec();
@@ -2920,5 +2965,6 @@ module.exports = {
   validateTradeData, // Issue #2790: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
   getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
-  addTradeRecord // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
+  addTradeRecord, // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
+  executeRedisCompensation // Issue #4126: テスト用にエクスポート
 };
