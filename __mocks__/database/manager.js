@@ -110,5 +110,80 @@ module.exports = {
       unit === 'h' ? value * 60 * 60 * 1000 :
         unit === 'd' ? value * 24 * 60 * 60 * 1000 : 0;
     return Date.now() - ms;
-  })
+  }),
+
+  // Issue #2790 & #2856: Add missing functions for tests
+  validateTradeData: jest.fn().mockImplementation((trade) => {
+    if (!trade || typeof trade !== 'object') {
+      return { valid: false, errors: ['トレードオブジェクトが無効'] };
+    }
+    
+    const errors = [];
+    
+    // 必須フィールドの存在チェック
+    if (!trade.amount || !trade.value || !trade.price) {
+      errors.push('必須フィールド (amount, value, price) が不足');
+    }
+    
+    // 数値の有効性チェック
+    if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
+      errors.push(`無効なamount値: ${trade.amount}`);
+    }
+    
+    if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
+      errors.push(`無効なvalue値: ${trade.value}`);
+    }
+    
+    if (typeof trade.price !== 'number' || !Number.isFinite(trade.price) || trade.price <= 0) {
+      errors.push(`無効なprice値: ${trade.price}`);
+    }
+    
+    // 極端な値のチェック
+    const MAX_TRADE_VALUE = 1e15;
+    if (trade.amount > MAX_TRADE_VALUE || 
+        trade.value > MAX_TRADE_VALUE || 
+        trade.price > MAX_TRADE_VALUE) {
+      errors.push('トレード値が上限を超過');
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors: errors
+    };
+  }),
+
+  prepareRedisOperations: jest.fn().mockImplementation(async (transaction, trade) => {
+    const validationErrors = [];
+    
+    // 必須フィールドの検証
+    if (!trade.exchange || typeof trade.exchange !== 'string') {
+      validationErrors.push('無効なexchange値');
+    }
+    if (!trade.symbol || typeof trade.symbol !== 'string') {
+      validationErrors.push('無効なsymbol値');
+    }
+    if (!trade.strategy || typeof trade.strategy !== 'string') {
+      validationErrors.push('無効なstrategy値');
+    }
+    if (!trade.side || !['buy', 'sell'].includes(trade.side)) {
+      validationErrors.push('無効なside値');
+    }
+    
+    // 数値フィールドの再検証
+    if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
+      validationErrors.push(`Redis操作のためのamount値が無効: ${trade.amount}`);
+    }
+    if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
+      validationErrors.push(`Redis操作のためのvalue値が無効: ${trade.value}`);
+    }
+    
+    if (validationErrors.length > 0) {
+      throw new Error(`Redis操作準備時のバリデーションエラー: ${validationErrors.join(', ')}`);
+    }
+    
+    // Mock Redis operations
+    return Promise.resolve();
+  }),
+
+  executeDistributedTransaction: jest.fn().mockResolvedValue(true)
 };

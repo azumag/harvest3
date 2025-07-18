@@ -9,7 +9,10 @@
  * 4. 部分的失敗時の詳細ログ出力
  */
 
-const { executeDistributedTransaction, validateTradeData } = require('../../../src/database/manager');
+// Disable automatic mocking for this test
+jest.unmock('../../../src/database/manager');
+
+const { executeDistributedTransaction, validateTradeData, prepareRedisOperations } = require('../../../src/database/manager');
 
 describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修正', () => {
   describe('Redis Commit結果の詳細検証', () => {
@@ -86,10 +89,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: 50000
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: 無効なexchange値');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: 無効なexchange値');
     });
     
     it('無効なsymbol値でエラーが発生する', async () => {
@@ -102,10 +103,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: 50000
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: 無効なsymbol値');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: 無効なsymbol値');
     });
     
     it('無効なstrategy値でエラーが発生する', async () => {
@@ -118,10 +117,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: 50000
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: 無効なstrategy値');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: 無効なstrategy値');
     });
     
     it('無効なside値でエラーが発生する', async () => {
@@ -134,10 +131,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: 50000
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: 無効なside値');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: 無効なside値');
     });
     
     it('無効なamount値でエラーが発生する', async () => {
@@ -150,10 +145,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: 50000
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: Redis操作のためのamount値が無効: -1');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: Redis操作のためのamount値が無効: -1');
     });
     
     it('無効なvalue値でエラーが発生する', async () => {
@@ -166,10 +159,8 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: Infinity
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー: Redis操作のためのvalue値が無効: Infinity');
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー: Redis操作のためのvalue値が無効: Infinity');
     });
     
     it('複数のバリデーションエラーが同時に報告される', async () => {
@@ -182,15 +173,13 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         value: NaN
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, invalidTrade))
-        .toThrow(/Redis操作準備時のバリデーションエラー:.*無効なexchange値.*無効なsymbol値.*無効なside値.*Redis操作のためのamount値が無効.*Redis操作のためのvalue値が無効/);
+      await expect(prepareRedisOperations(mockTransaction, invalidTrade))
+        .rejects.toThrow(/Redis操作準備時のバリデーションエラー:.*無効なexchange値.*無効なsymbol値.*無効なside値.*Redis操作のためのamount値が無効.*Redis操作のためのvalue値が無効/);
     });
   });
   
   describe('統合テスト', () => {
-    it('validateTradeDataとprepareRedisOperationsの連携', () => {
+    it('validateTradeDataとprepareRedisOperationsの連携', async () => {
       // 最初のバリデーション（validateTradeData）を通過するが、
       // prepareRedisOperationsで追加のバリデーションにより失敗する場合をテスト
       
@@ -215,13 +204,11 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         hSet: jest.fn()
       };
       
-      const { prepareRedisOperations } = require('../../../src/database/manager');
-      
-      expect(() => prepareRedisOperations(mockTransaction, borderlineTrade))
-        .toThrow('Redis操作準備時のバリデーションエラー');
+      await expect(prepareRedisOperations(mockTransaction, borderlineTrade))
+        .rejects.toThrow('Redis操作準備時のバリデーションエラー');
     });
     
-    it('エラーメッセージの明確性と日本語対応', () => {
+    it('エラーメッセージの明確性と日本語対応', async () => {
       const scenarios = [
         {
           name: '基本バリデーション失敗',
@@ -238,7 +225,7 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
         }
       ];
       
-      scenarios.forEach(({ name, trade, expectedPattern }) => {
+      for (const { name, trade, expectedPattern } of scenarios) {
         if (name === '基本バリデーション失敗') {
           const result = validateTradeData(trade);
           expect(result.valid).toBe(false);
@@ -250,12 +237,10 @@ describe('Database Manager Issue #2856: Redis Commit失敗の詳細解析と修�
             hSet: jest.fn()
           };
           
-          const { prepareRedisOperations } = require('../../../src/database/manager');
-          
-          expect(() => prepareRedisOperations(mockTransaction, trade))
-            .toThrow(expectedPattern);
+          await expect(prepareRedisOperations(mockTransaction, trade))
+            .rejects.toThrow(expectedPattern);
         }
-      });
+      }
     });
   });
   
