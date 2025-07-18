@@ -33,9 +33,6 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
 
   // 各テスト後のクリーンアップ
   afterEach(async () => {
-    // すべてのタイマーをクリア
-    clearTimeout();
-    
     // メッセージロックディレクトリとその中身を削除
     if (fs.existsSync(messageLockDir)) {
       const files = fs.readdirSync(messageLockDir);
@@ -53,8 +50,8 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       }
     }
     
-    // 非同期処理の完了を待機
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // 非同期処理の完了を待機（Jest の安定性向上のため）
+    await new Promise(resolve => setTimeout(resolve, 50));
   });
 
   describe('Issue #3942 修正の実装確認', () => {
@@ -145,28 +142,16 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       fs.writeFileSync(lockFile, `${process.pid}:${Date.now()}.000000`);
       expect(fs.existsSync(lockFile)).toBe(true);
       
-      // 待機後の処理をシミュレート（Promiseベースの適切な非同期処理）
-      const cleanupPromise = new Promise((resolve) => {
-        setTimeout(() => {
-          if (fs.existsSync(lockFile)) {
-            fs.unlinkSync(lockFile);
-          }
-          resolve();
-        }, 100);
-      });
-      
-      // 待機メカニズムの動作確認（実際には0.1秒間隔で最大10回待機）
-      // 簡単な待機テストのため、ロックファイルが存在することを確認
-      expect(fs.existsSync(lockFile)).toBe(true);
-      
       // 待機メカニズムの実装確認（直接実行はせず、コード存在確認のみ）
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       expect(entrypointContent).toContain('while [ -f "$lock_file" ] && [ $wait_count -lt 10 ]; do');
       expect(entrypointContent).toContain('sleep 0.1');
       expect(entrypointContent).toContain('wait_count=$((wait_count + 1))');
       
-      // 非同期処理の完了を待機
-      await cleanupPromise;
+      // 同期的なクリーンアップ（非同期処理を避ける）
+      if (fs.existsSync(lockFile)) {
+        fs.unlinkSync(lockFile);
+      }
       
       // クリーンアップ確認
       expect(fs.existsSync(lockFile)).toBe(false);
