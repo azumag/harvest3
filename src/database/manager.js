@@ -1154,7 +1154,8 @@ async function releaseDistributedLock(lockInfo) {
       end
     `;
 
-    const result = await redisClient.eval(script, 1, lockInfo.lockKey, lockInfo.lockValue);
+    // Redis eval()に明示的に文字列として渡す
+    const result = await redisClient.eval(script, 1, String(lockInfo.lockKey), String(lockInfo.lockValue));
     return result === 1;
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
