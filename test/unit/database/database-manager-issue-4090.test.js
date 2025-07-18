@@ -103,14 +103,12 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       apiCoordinator: {}
     }));
 
-    // addTradeRecordの関数をモック
-    const mockAddTradeRecord = jest.fn().mockResolvedValue(true);
-
     // DatabaseManagerをインポート
     const DatabaseManager = require('../../../src/database/manager');
-    databaseManager = new DatabaseManager();
+    databaseManager = DatabaseManager;
     
-    // addTradeRecordをモック
+    // addTradeRecordの関数をモック（テスト用の関数を追加）
+    const mockAddTradeRecord = jest.fn().mockResolvedValue(true);
     databaseManager.addTradeRecord = mockAddTradeRecord;
   });
 
@@ -126,9 +124,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       mockRedisClient.status = 'ready';
       mockRedisClient.ping.mockResolvedValue('PONG');
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
-      
       // addTradeRecordを呼び出し
       const testTrade = {
         tradeId: 'test-trade-123',
@@ -164,8 +159,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       };
       mockRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
       
       const testTrade = {
         tradeId: 'test-trade-456',
@@ -229,8 +222,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       };
       mockRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
       
       const testTrade = {
         tradeId: 'test-trade-789',
@@ -262,8 +253,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
         ping: jest.fn().mockRejectedValue(new Error('Connection timeout'))
       });
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
       
       const testTrade = {
         tradeId: 'test-trade-fail',
@@ -290,8 +279,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       // Redis client が null の場合
       mockRedisDatabase.getClient = jest.fn().mockReturnValue(null);
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
       
       const testTrade = {
         tradeId: 'test-trade-null',
@@ -318,8 +305,6 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       mockRedisClient.status = 'connecting';
       mockRedisClient.ping.mockRejectedValue(new Error('Ping failed'));
 
-      // DatabaseManagerをインポート
-      const DatabaseManager = require('../../../src/database/manager');
       
       const testTrade = {
         tradeId: 'test-inconsistent',
