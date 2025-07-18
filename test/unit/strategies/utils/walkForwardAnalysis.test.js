@@ -277,11 +277,19 @@ describe('Walk-Forward Analysis 包括テストスイート', () => {
 
     test('パラメータドリフトが検出される', () => {
       const driftDetector = new ParameterDriftDetector();
-      const driftingData = createParameterDriftData();
+      
+      // 大きなドリフトを持つパラメータセットを作成
+      const driftingParameters = [
+        { period: 20, threshold: 0.02, riskLevel: 0.01 },
+        { period: 25, threshold: 0.025, riskLevel: 0.015 },
+        { period: 80, threshold: 0.08, riskLevel: 0.05 },  // 大幅な変化
+        { period: 90, threshold: 0.09, riskLevel: 0.06 },  // さらに大きな変化
+        { period: 100, threshold: 0.10, riskLevel: 0.07 }  // 極端な変化
+      ];
 
       // Node.js バージョン間の互換性のため、エラーまたは結果の検証に変更
       try {
-        const result = driftDetector.detectSignificantDrift(driftingData);
+        const result = driftDetector.detectSignificantDrift(driftingParameters);
         // ドリフトが検出された場合の結果を確認
         expect(result).toBeDefined();
         if (result && typeof result === 'object') {

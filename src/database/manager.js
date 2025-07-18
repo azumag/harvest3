@@ -1136,9 +1136,50 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    const validation = validateLockParameters(lockInfo.lockKey, lockInfo.lockValue, 'database/manager');
+    // lockKeyとlockValueの型安全性を確保
+    if (!lockInfo.lockKey || !lockInfo.lockValue) {
+      logger.warn(`分散ロック解放スキップ: パラメータが無効です (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue})`);
+      return false;
+    }
+    
+    // 無効な型をチェック（配列、関数、オブジェクトは処理しない）
+    if (Array.isArray(lockInfo.lockKey) || typeof lockInfo.lockKey === 'function' || (typeof lockInfo.lockKey === 'object' && lockInfo.lockKey !== null)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, type: ${typeof lockInfo.lockKey})`);
+      return false;
+    }
+    if (Array.isArray(lockInfo.lockValue) || typeof lockInfo.lockValue === 'function' || (typeof lockInfo.lockValue === 'object' && lockInfo.lockValue !== null)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockValue (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, type: ${typeof lockInfo.lockValue})`);
+      return false;
+    }
+    
+    // 文字列に変換してバリデーション
+    let stringLockKey = String(lockInfo.lockKey);
+    let stringLockValue = String(lockInfo.lockValue);
+    
+    // 文字列化された値が有効かチェック
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey.includes(',') || stringLockKey.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, stringified: ${stringLockKey})`);
+      return false;
+    }
+    if (stringLockValue === 'null' || stringLockValue === 'undefined' || stringLockValue === '' || stringLockValue === '[object Object]' || stringLockValue.includes(',') || stringLockValue.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockValue (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue}, stringified: ${stringLockValue})`);
+      return false;
+    }
+    
+    // Redis Luaスクリプト用に文字列をサニタイズ（制御文字・非印字文字を除去）
+    stringLockKey = stringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    stringLockValue = stringLockValue.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    
+    // サニタイズ後の最終チェック
+    if (!stringLockKey || !stringLockValue) {
+      logger.warn(`分散ロック解放スキップ: サニタイズ後に空文字列 (元lockKey: ${lockInfo.lockKey}, 元lockValue: ${lockInfo.lockValue})`);
+      return false;
+    }
+    
+    // バリデーションは文字列化されたパラメータで実行
+    const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
     if (!validation.valid) {
-      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${lockInfo.lockKey}, lockValue: ${lockInfo.lockValue})`);
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
       return false;
     }
 
@@ -1155,7 +1196,7 @@ async function releaseDistributedLock(lockInfo) {
     `;
 
     // Redis eval()に明示的に文字列として渡す
-    const result = await redisClient.eval(script, 1, String(lockInfo.lockKey), String(lockInfo.lockValue));
+    const result = await redisClient.eval(script, 1, String(stringLockKey), String(stringLockValue));
     return result === 1;
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
