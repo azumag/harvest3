@@ -183,7 +183,9 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
   if (typeof error === 'string') {
     // 意味のない文字列パターンをチェック
     if (error === '-' || error === '' || error.trim() === '') {
-      return `Redis command ${commandIndex} failed: Invalid response`;
+      // Issue #4155: より詳細なエラーメッセージを提供
+      const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
+      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. This may indicate a connection issue or Redis server timeout.`;
     }
     return error;
   }
@@ -262,14 +264,21 @@ async function checkRedisConnectionHealth(redisClient, logger) {
     return { isHealthy: false, details };
   }
 
-  // 基本的な状態チェック
-  if (!redisClient.isReady || !redisClient.isOpen || redisClient.status !== 'ready') {
+  // Issue #4155: 改良された状態チェック
+  // isReady と isOpen を優先し、status は参考程度に使用
+  if (!redisClient.isReady || !redisClient.isOpen) {
     return { isHealthy: false, details };
   }
 
-  // 実際の接続テスト（ping）
+  // 実際の接続テスト（ping）を主要な健全性判定として使用
   try {
-    await redisClient.ping();
+    // Issue #4155: pingテストのタイムアウトを追加
+    const pingPromise = redisClient.ping();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Ping timeout')), 5000);
+    });
+    
+    await Promise.race([pingPromise, timeoutPromise]);
     details.pingSuccess = true;
     return { isHealthy: true, details };
   } catch (error) {
@@ -1196,7 +1205,8 @@ async function updateFilledTradesInternal(exchange, symbol, startTime) {
         }
 
         // 分散トランザクション実行（Two-Phase Commit）
-        const result = await executeDistributedTransaction(_trade, isBacktest);
+        // Issue #4155: リトライ機能付きの2PC実行
+        const result = await executeDistributedTransactionWithRetry(_trade, isBacktest);
 
         if (result.success) {
           successCount++;
@@ -1310,6 +1320,71 @@ async function checkTradeExists(tradeId) {
 }
 
 /**
+ * Redis接続問題に対するリトライ機能付き分散トランザクション実行
+ * Issue #4155: strategy-runnerサービスでの例外対応
+ * 
+ * @param {Object} trade - 取引データ
+ * @param {boolean} isBacktest - バックテストモード
+ * @param {number} maxRetries - 最大再試行回数
+ * @returns {Promise<Object>} 実行結果
+ */
+async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetries = 2) {
+  const logger = new Logger('DatabaseManager');
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await executeDistributedTransaction(trade, isBacktest);
+      
+      // 成功した場合はそのまま返す
+      if (result.success) {
+        if (attempt > 1 && !isBacktest) {
+          logger.info(`[2PC Retry] 再試行 ${attempt} で成功: ${trade.tradeId}`);
+        }
+        return result;
+      }
+      
+      // 失敗した場合、Redis接続関連のエラーかチェック
+      const isConnectionError = result.error && (
+        result.error.includes('Redis Commit失敗') ||
+        result.error.includes('Invalid response') ||
+        result.error.includes('connection issue') ||
+        result.error.includes('timeout')
+      );
+      
+      if (!isConnectionError || attempt === maxRetries) {
+        return result;
+      }
+      
+      if (!isBacktest) {
+        logger.warn(`[2PC Retry] 試行 ${attempt}/${maxRetries} 失敗: ${result.error}`);
+        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
+      }
+      
+      // 指数バックオフで待機
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      
+    } catch (error) {
+      if (attempt === maxRetries) {
+        if (!isBacktest) {
+          logger.error(`[2PC Retry] 最大試行回数に達しました: ${error.message}`);
+        }
+        return { success: false, error: error.message };
+      }
+      
+      if (!isBacktest) {
+        logger.warn(`[2PC Retry] 例外発生 ${attempt}/${maxRetries}: ${error.message}`);
+        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
+      }
+      
+      // 指数バックオフで待機
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  
+  return { success: false, error: 'Maximum retry attempts exceeded' };
+}
+
+/**
  * Two-Phase Commit Protocol実装による分散トランザクション
  * Phase 1: Prepare - 全参加者がコミット準備完了を確認
  * Phase 2: Commit - 全参加者が同時にコミット実行
@@ -1420,9 +1495,20 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
     }
     
+    // Issue #4155: トランザクション実行前の最終接続確認
+    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    if (!finalHealthCheck.isHealthy) {
+      throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
+    }
+    
     const redisResults = await redisTransaction.exec();
     if (!redisResults) {
       throw new Error('Redis Commit失敗: トランザクション結果がnull');
+    }
+    
+    // Issue #4155: 結果配列の検証を追加
+    if (!Array.isArray(redisResults) || redisResults.length === 0) {
+      throw new Error('Redis Commit失敗: 無効なトランザクション結果');
     }
     
     // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
@@ -3017,6 +3103,8 @@ module.exports = {
   recalculateTradeSummaryFromMongoDB,
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
+  executeDistributedTransactionWithRetry, // Issue #4155: リトライ機能付き2PC実行
+  checkRedisConnectionHealth, // Issue #4155: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
   getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
