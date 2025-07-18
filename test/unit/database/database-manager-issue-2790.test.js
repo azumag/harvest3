@@ -8,6 +8,9 @@
  * 3. エラーハンドリングの強化
  */
 
+// Disable automatic mocking for this test
+jest.unmock('../../../src/database/manager');
+
 const { validateTradeData } = require('../../../src/database/manager');
 
 describe('Database Manager Issue #2790: Redis Commit失敗とエラーハンドリング修正', () => {

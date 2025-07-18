@@ -26,6 +26,23 @@ const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/co
 const { throttleMonitor } = require('../common/throttleMonitor');
 const { apiCoordinator } = require('../common/apiCoordinator');
 
+/**
+ * Redisコミットエラークラス（構造化されたエラーハンドリング）
+ */
+class RedisCommitError extends Error {
+  constructor(failedCommands, successfulCommands) {
+    const errorDetails = failedCommands.map(({ command, errorMessage }) => 
+      `${command}: ${errorMessage}`
+    ).join(', ');
+    
+    super(`Redis Commit失敗: ${failedCommands.length}個のコマンドが失敗しました - ${errorDetails}`);
+    this.name = 'RedisCommitError';
+    this.code = 'REDIS_COMMIT_FAILED';
+    this.failedCommands = failedCommands;
+    this.successfulCommands = successfulCommands;
+  }
+}
+
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
 
@@ -1043,16 +1060,51 @@ async function executeDistributedTransaction(trade, isBacktest) {
       throw new Error('Redis Commit失敗: トランザクション結果がnull');
     }
     
-    // Issue #2790: 詳細なエラー情報を提供
-    const failedCommands = redisResults
-      .map((result, index) => ({ index, result }))
-      .filter(({ result }) => result[0] !== null);
+    // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
+    // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
+    
+    // パフォーマンス改善: forEachをreduceに変更して効率的な分類処理
+    const { failed: failedCommands, successful: successfulCommands } = redisResults.reduce((acc, result, index) => {
+      if (result[0] !== null) {
+        // エラーが発生したコマンド
+        acc.failed.push({
+          index,
+          error: result[0],
+          errorMessage: result[0].message || result[0].toString(),
+          command: `コマンド${index}`
+        });
+      } else {
+        // 成功したコマンド
+        acc.successful.push({
+          index,
+          result: result[1]
+        });
+      }
+      return acc;
+    }, { failed: [], successful: [] });
     
     if (failedCommands.length > 0) {
-      const errorDetails = failedCommands.map(({ index, result }) => 
-        `コマンド${index}: ${result[0].message || result[0]}`
+      // 詳細なエラー情報を構築
+      const errorDetails = failedCommands.map(({ index, errorMessage, command }) => 
+        `${command}: ${errorMessage}`
       ).join(', ');
-      throw new Error(`Redis Commit失敗: ${errorDetails}`);
+      
+      // Redis操作の詳細をログに記録
+      if (!isBacktest) {
+        logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
+        logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
+        logger.error(`[2PC] トレード情報: ${JSON.stringify({
+          tradeId: trade.tradeId,
+          exchange: trade.exchange,
+          symbol: trade.symbol,
+          strategy: trade.strategy,
+          side: trade.side,
+          amount: trade.amount,
+          value: trade.value
+        })}`);
+      }
+      
+      throw new RedisCommitError(failedCommands, successfulCommands);
     }
 
     // MongoDB後続コミット
@@ -1278,6 +1330,41 @@ async function setTradeProcessingState(tradeId, state) {
 }
 
 /**
+ * 数値フィールドのバリデーション（共通関数）
+ * DRY原則に従い、重複するバリデーションロジックを統合
+ */
+function validateNumericFields(trade, context = '') {
+  const errors = [];
+  
+  // 数値の有効性チェック
+  if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
+    const message = context ? `${context}のためのamount値が無効: ${trade.amount}` : `無効なamount値: ${trade.amount}`;
+    errors.push(message);
+  }
+  
+  if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
+    const message = context ? `${context}のためのvalue値が無効: ${trade.value}` : `無効なvalue値: ${trade.value}`;
+    errors.push(message);
+  }
+  
+  // priceは必須ではない場合もあるため、存在する場合のみチェック
+  if (trade.price !== undefined && (typeof trade.price !== 'number' || !Number.isFinite(trade.price) || trade.price <= 0)) {
+    const message = context ? `${context}のためのprice値が無効: ${trade.price}` : `無効なprice値: ${trade.price}`;
+    errors.push(message);
+  }
+  
+  // 極端な値のチェック（定数を使用）
+  if (trade.amount > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      trade.value > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
+      (trade.price && trade.price > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE)) {
+    const message = context ? `${context}のためのトレード値が上限を超過` : `トレード値が上限を超過`;
+    errors.push(message);
+  }
+  
+  return errors;
+}
+
+/**
  * トレードデータの数値バリデーション
  * Issue #2790: Redis commit失敗を防ぐための数値検証
  */
@@ -1295,25 +1382,9 @@ function validateTradeData(trade) {
     errors.push('必須フィールド (amount, value, price) が不足');
   }
   
-  // 数値の有効性チェック
-  if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
-    errors.push(`無効なamount値: ${trade.amount}`);
-  }
-  
-  if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
-    errors.push(`無効なvalue値: ${trade.value}`);
-  }
-  
-  if (typeof trade.price !== 'number' || !Number.isFinite(trade.price) || trade.price <= 0) {
-    errors.push(`無効なprice値: ${trade.price}`);
-  }
-  
-  // 極端な値のチェック（定数を使用）
-  if (trade.amount > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
-      trade.value > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE || 
-      trade.price > TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE) {
-    errors.push('トレード値が上限を超過');
-  }
+  // 数値フィールドの検証（共通関数を使用）
+  const numericErrors = validateNumericFields(trade);
+  errors.push(...numericErrors);
   
   return {
     valid: errors.length === 0,
@@ -1325,27 +1396,56 @@ function validateTradeData(trade) {
  * Redis操作の準備（トランザクションキューに追加）
  */
 async function prepareRedisOperations(transaction, trade) {
+  // Issue #2856: Redis操作の事前バリデーション
+  const validationErrors = [];
+  
+  // 必須フィールドの検証
+  if (!trade.exchange || typeof trade.exchange !== 'string') {
+    validationErrors.push('無効なexchange値');
+  }
+  if (!trade.symbol || typeof trade.symbol !== 'string') {
+    validationErrors.push('無効なsymbol値');
+  }
+  if (!trade.strategy || typeof trade.strategy !== 'string') {
+    validationErrors.push('無効なstrategy値');
+  }
+  if (!trade.side || !['buy', 'sell'].includes(trade.side)) {
+    validationErrors.push('無効なside値');
+  }
+  
+  // 数値フィールドの再検証（共通関数を使用）
+  const numericErrors = validateNumericFields(trade, 'Redis操作');
+  validationErrors.push(...numericErrors);
+  
+  if (validationErrors.length > 0) {
+    throw new Error(`Redis操作準備時のバリデーションエラー: ${validationErrors.join(', ')}`);
+  }
+
   // updateTradeSummary相当の操作をトランザクションに追加
   const summaryKey = `summary:trade:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
 
-  if (trade.side === 'buy') {
-    transaction.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
-    transaction.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
-    transaction.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
-  } else if (trade.side === 'sell') {
-    transaction.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
-    transaction.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
-    transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', trade.value);
-  }
+  try {
+    if (trade.side === 'buy') {
+      transaction.hIncrByFloat(summaryKey, 'netPosition', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'buyAmount', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'totalBuyCost', trade.value);
+    } else if (trade.side === 'sell') {
+      transaction.hIncrByFloat(summaryKey, 'netPosition', -trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'sellAmount', trade.amount);
+      transaction.hIncrByFloat(summaryKey, 'totalSellRevenue', trade.value);
+    }
 
-  // 未約定注文削除をトランザクションに追加
-  if (trade.orderId && trade.strategy !== 'OUTSIDE') {
-    const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-    transaction.hDel(pendingKey, trade.orderId.toString());
-  }
+    // 未約定注文削除をトランザクションに追加
+    if (trade.orderId && trade.strategy !== 'OUTSIDE') {
+      const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
+      transaction.hDel(pendingKey, trade.orderId.toString());
+    }
 
-  // タイムスタンプ更新
-  transaction.hSet(summaryKey, 'updatedAt', Date.now().toString());
+    // タイムスタンプ更新
+    transaction.hSet(summaryKey, 'updatedAt', Date.now().toString());
+  } catch (error) {
+    throw new Error(`Redis操作準備エラー: ${error.message}`);
+  }
 }
 
 /**
@@ -2480,5 +2580,6 @@ module.exports = {
   recalculateTradeSummaryFromMongoDB,
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
-  validateTradeData // Issue #2790: テスト用にエクスポート
+  validateTradeData, // Issue #2790: テスト用にエクスポート
+  prepareRedisOperations // Issue #2856: テスト用にエクスポート
 };
