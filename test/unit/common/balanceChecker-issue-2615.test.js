@@ -146,7 +146,7 @@ describe('Issue #2615: 分散ロック解放エラー修正のテスト', () => 
   });
 
   describe('releaseDistributedLock', () => {
-    it.skip('分散ロックを正常に解放する', async () => {
+    it('分散ロックを正常に解放する', async () => {
       const lockKey = 'test_lock';
       const lockId = 'test-lock-id';
       
@@ -205,7 +205,7 @@ describe('Issue #2615: 分散ロック解放エラー修正のテスト', () => 
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
-    it.skip('Issue #2615: 数値型のlockIdを文字列に変換して処理する', async () => {
+    it('Issue #2615: 数値型のlockIdを文字列に変換して処理する', async () => {
       const lockKey = 'test_lock';
       const lockId = 12345; // 数値型のlockId
       
@@ -283,7 +283,7 @@ describe('Issue #2615: 分散ロック解放エラー修正のテスト', () => 
   });
 
   describe('withDistributedLock', () => {
-    it.skip('分散ロックを使用して関数を実行する', async () => {
+    it('分散ロックを使用して関数を実行する', async () => {
       const lockKey = 'test_lock';
       const testFunction = jest.fn().mockResolvedValue('test result');
       
