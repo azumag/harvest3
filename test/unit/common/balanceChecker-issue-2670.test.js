@@ -70,6 +70,7 @@ const mockRedisClient = {
 };
 
 const mockRedisDatabase = require('../../../src/database/redisDatabase');
+const mockUtils = require('../../../src/common/utils');
 mockRedisDatabase.getClient.mockReturnValue(mockRedisClient);
 mockRedisDatabase.isConnected.mockReturnValue(true);
 
@@ -80,7 +81,6 @@ describe('Issue #2670: 分散ロック解放エラー修正テスト', () => {
     jest.clearAllMocks();
     
     // Mock validateLockParameters to return valid for normal strings/numbers
-    const mockUtils = require('../../../src/common/utils');
     mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
       // Return valid for normal string/number inputs
       if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
@@ -190,7 +190,7 @@ describe('Issue #2670: 分散ロック解放エラー修正テスト', () => {
     });
 
     it('validateLockParametersが無効を返す場合は早期リターンしてfalseを返す', async () => {
-      validateLockParameters.mockReturnValue({ 
+      mockUtils.validateLockParameters.mockReturnValue({ 
         valid: false, 
         error: 'Invalid lock parameters' 
       });
