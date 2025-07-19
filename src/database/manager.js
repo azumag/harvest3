@@ -299,7 +299,7 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
 }
 
 /**
- * Redis接続の健全性を包括的にチェックする関数
+ * Issue #4920: 拡張Redis接続健全性チェック機能
  * Issue #4090: Redis接続状態不整合の解決
  * Issue #4883: 接続の実用性を検証するため実際のRedis操作テストを追加
  * 
@@ -309,6 +309,10 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
  * @returns {Promise<{isHealthy: boolean, details: Object}>} 接続状態の詳細情報
  */
 async function checkRedisConnectionHealth(redisClient, logger, includeOperationTest = false) {
+  // Issue #4920: Circuit Breaker状態をチェック
+  const { isCircuitBreakerOpen, getCircuitBreakerState } = require('./redisClient');
+  const circuitState = getCircuitBreakerState();
+  
   const details = {
     clientExists: !!redisClient,
     clientReady: redisClient?.isReady,
@@ -319,10 +323,23 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     pingSuccess: false,
     pingError: null,
     operationTestSuccess: false,
-    operationTestError: null
+    operationTestError: null,
+    // Issue #4920: Circuit Breaker情報を追加
+    circuitBreaker: {
+      state: circuitState.state,
+      failures: circuitState.failures,
+      isOpen: circuitState.isOpen,
+      timeSinceLastFailure: circuitState.timeSinceLastFailure
+    }
   };
 
   if (!redisClient) {
+    return { isHealthy: false, details };
+  }
+
+  // Issue #4920: Circuit Breakerがオープンの場合は即座に不健全と判定
+  if (isCircuitBreakerOpen()) {
+    logger.warn('[Redis Health Check] Circuit Breakerが開放中のため接続不健全と判定');
     return { isHealthy: false, details };
   }
 
@@ -345,7 +362,7 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     return { isHealthy: false, details };
   }
 
-  // 実際の接続テスト（ping）を主要な健全性判定として使用
+  // Issue #4920: 改善されたping操作テスト（タイムアウト付き）
   try {
     // Issue #4155: pingテストのタイムアウトを追加
     // Configurable timeout for different environments
@@ -509,13 +526,35 @@ const logger = new Logger('DatabaseManager');
  */
 async function executeRedisTransactionWithTimeout(redisTransaction, commandNames, trade, logger) {
   const { MONITORING_SETTINGS } = require('../common/const');
-  const transactionTimeout = MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT || 45000;
+  const { isCircuitBreakerOpen, updateCircuitBreakerOnFailure, updateCircuitBreakerOnSuccess } = require('./redisClient');
   
-  // トランザクション実行をタイムアウト制御下で実行
+  // Issue #4920: Circuit Breakerチェック
+  if (isCircuitBreakerOpen()) {
+    throw new Error('Redis Commit失敗: Circuit Breakerが開放中です');
+  }
+  
+  // Issue #4920: 適応的タイムアウト設定
+  const baseTimeout = MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT || 45000;
+  const commandCount = commandNames.length;
+  // コマンド数に応じてタイムアウトを調整（最大60秒）
+  const adaptiveTimeout = Math.min(baseTimeout + (commandCount * 2000), 60000);
+  
+  // Issue #4920: トランザクション実行前の詳細検証
+  if (!redisTransaction || typeof redisTransaction.exec !== 'function') {
+    throw new Error('Redis Commit失敗: 無効なトランザクションオブジェクト');
+  }
+  
+  if (!Array.isArray(commandNames) || commandNames.length === 0) {
+    throw new Error('Redis Commit失敗: コマンド名配列が無効です');
+  }
+  
+  logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
+  
+  // Issue #4920: 改善されたタイムアウト制御
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
-      reject(new Error(`Redis transaction timeout after ${transactionTimeout}ms`));
-    }, transactionTimeout);
+      reject(new Error(`Redis transaction timeout after ${adaptiveTimeout}ms (${commandCount} commands)`));
+    }, adaptiveTimeout);
   });
   
   const transactionPromise = redisTransaction.exec();
@@ -525,25 +564,49 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     const redisResults = await Promise.race([transactionPromise, timeoutPromise]);
     
     if (!redisResults) {
+      updateCircuitBreakerOnFailure();
       throw new Error('Redis Commit失敗: トランザクション結果がnull');
     }
     
     if (!Array.isArray(redisResults) || redisResults.length === 0) {
+      updateCircuitBreakerOnFailure();
       throw new Error('Redis Commit失敗: 無効なトランザクション結果');
     }
     
-    // トランザクション結果の事前検証
+    // Issue #4920: より厳密なトランザクション結果検証
     const expectedCommandCount = commandNames.length;
     if (redisResults.length !== expectedCommandCount) {
       logger.warn(`[Redis Transaction] コマンド数不一致: 期待値=${expectedCommandCount}, 実際=${redisResults.length}`);
+      // 軽微な不一致の場合は警告のみで続行
     }
     
+    // Issue #4920: 各結果の基本的な妥当性チェック
+    let nullResultCount = 0;
+    for (let i = 0; i < redisResults.length; i++) {
+      const result = redisResults[i];
+      if (!Array.isArray(result) || result.length !== 2) {
+        logger.warn(`[Redis Transaction] 結果${i}の形式が不正: ${JSON.stringify(result)}`);
+      }
+      if (result && result[0] === null && result[1] === null) {
+        nullResultCount++;
+      }
+    }
+    
+    // Issue #4920: 過度のnull結果を検出した場合の警告
+    if (nullResultCount > expectedCommandCount * 0.5) {
+      logger.warn(`[Redis Transaction] 過度のnull結果を検出: ${nullResultCount}/${expectedCommandCount}`);
+    }
+    
+    updateCircuitBreakerOnSuccess();
+    logger.info(`[Redis Transaction] 実行成功: ${commandCount}コマンド完了`);
     return redisResults;
     
   } catch (error) {
+    updateCircuitBreakerOnFailure();
+    
     if (error.message.includes('timeout')) {
-      logger.error(`[Redis Transaction] タイムアウト: ${trade.tradeId} - ${transactionTimeout}ms経過`);
-      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${transactionTimeout}ms)`);
+      logger.error(`[Redis Transaction] タイムアウト: ${trade.tradeId} - ${adaptiveTimeout}ms経過`);
+      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${adaptiveTimeout}ms, ${commandCount}コマンド)`);
     } else {
       logger.error(`[Redis Transaction] 実行エラー: ${trade.tradeId} - ${error.message}`);
       throw error;
@@ -1586,7 +1649,7 @@ async function checkTradeExists(tradeId) {
 }
 
 /**
- * Redis接続問題に対するリトライ機能付き分散トランザクション実行
+ * Issue #4920: 大幅改善されたRedis接続問題対応リトライ機能付き分散トランザクション実行
  * Issue #4155: strategy-runnerサービスでの例外対応
  * 
  * @param {Object} trade - 取引データ
@@ -1594,11 +1657,22 @@ async function checkTradeExists(tradeId) {
  * @param {number} maxRetries - 最大再試行回数
  * @returns {Promise<Object>} 実行結果
  */
-async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetries = 2) {
+async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetries = 3) {
   const logger = new Logger('DatabaseManager');
+  const { isCircuitBreakerOpen, getCircuitBreakerState } = require('./redisClient');
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Issue #4920: Circuit Breakerチェック
+      if (isCircuitBreakerOpen()) {
+        if (!isBacktest) {
+          logger.warn(`[2PC Retry] Circuit Breakerが開放中のため試行 ${attempt} をスキップ`);
+        }
+        // Circuit Breakerが開放中でも最低限の待機時間を設ける
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
+      }
+      
       const result = await executeDistributedTransaction(trade, isBacktest);
       
       // 成功した場合はそのまま返す
@@ -1609,12 +1683,13 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         return result;
       }
       
-      // 失敗した場合、Redis接続関連のエラーかチェック
+      // Issue #4920: より包括的なエラー分類
       const isConnectionError = result.error && (
         result.error.includes('Redis Commit失敗') ||
         result.error.includes('Invalid response') ||
         result.error.includes('connection issue') ||
-        result.error.includes('timeout')
+        result.error.includes('timeout') ||
+        result.error.includes('Circuit Breaker')
       );
       
       // Issue #4883: "Invalid response (empty/dash)" エラーの特別処理
@@ -1625,7 +1700,9 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
       }
       
       if (!isBacktest) {
+        const circuitState = getCircuitBreakerState();
         logger.warn(`[2PC Retry] 試行 ${attempt}/${maxRetries} 失敗: ${result.error}`);
+        logger.info(`[2PC Retry] Circuit Breaker状態: ${circuitState.state} (failures: ${circuitState.failures})`);
         
         // Issue #4883: Invalid responseエラーの場合は接続を強制的にリフレッシュ
         if (isInvalidResponseError) {
@@ -1642,12 +1719,18 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
             logger.warn(`[2PC Retry] 接続回復エラー: ${recoveryError.message}`);
           }
         }
-        
-        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
       }
       
-      // 指数バックオフで待機
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Issue #4920: 改善されたバックオフ戦略（ジッター付き指数バックオフ）
+      const baseDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 最大10秒
+      const jitter = Math.random() * 1000; // 0-1秒のランダムジッター
+      const totalDelay = baseDelay + jitter;
+      
+      if (!isBacktest) {
+        logger.info(`[2PC Retry] ${totalDelay.toFixed(0)}ms後に再試行します...`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, totalDelay));
       
     } catch (error) {
       if (attempt === maxRetries) {
@@ -1659,11 +1742,18 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
       
       if (!isBacktest) {
         logger.warn(`[2PC Retry] 例外発生 ${attempt}/${maxRetries}: ${error.message}`);
-        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
       }
       
-      // 指数バックオフで待機
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Issue #4920: 例外時も改善されたバックオフ戦略を適用
+      const baseDelay = Math.min(1000 * Math.pow(2, attempt - 1), 8000); // 最大8秒
+      const jitter = Math.random() * 500; // 0-500msのランダムジッター
+      const totalDelay = baseDelay + jitter;
+      
+      if (!isBacktest) {
+        logger.info(`[2PC Retry] ${totalDelay.toFixed(0)}ms後に再試行します...`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, totalDelay));
     }
   }
   
