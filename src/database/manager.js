@@ -2176,10 +2176,11 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 2. 危険な制御文字の事前チェック（null文字など、sanitize前に実行）
-    const dangerousCharsRegex = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
-    if (dangerousCharsRegex.test(lockInfo.lockKey)) {
-      logger.warn(`分散ロック解放スキップ: lockKeyに危険な制御文字が含まれています (lockKey: ${JSON.stringify(lockInfo.lockKey)})`);
+    // 2. 極めて危険な制御文字の事前チェック（null文字のみ、sanitize前に実行）
+    // 他の制御文字(\x01-\x1F)はサニタイズ処理で除去される
+    const extremelyDangerousCharsRegex = /\x00/;
+    if (extremelyDangerousCharsRegex.test(lockInfo.lockKey)) {
+      logger.warn(`分散ロック解放スキップ: lockKeyにnull文字が含まれています (lockKey: ${JSON.stringify(lockInfo.lockKey)})`);
       return false;
     }
     

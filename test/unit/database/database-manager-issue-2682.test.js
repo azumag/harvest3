@@ -31,7 +31,8 @@ describe('Database Manager - Issue #2682: Redis Lua script引数の型チェッ�
     expect(managerSource).toMatch(/stringLockValue === 'null'/);
     expect(managerSource).toMatch(/stringLockValue === 'undefined'/);
     expect(managerSource).toMatch(/stringLockValue === '\[object Object\]'/);
-    expect(managerSource).toMatch(/stringLockValue\.includes\(','\)/);
+    // Note: stringLockValue.includes(',') check was removed as it incorrectly rejected JSON values
+    // JSON strings legitimately contain commas, so this check was causing false rejections
     expect(managerSource).toMatch(/stringLockValue\.includes\('\[object'\)/);
     
     // サニタイズ処理が実装されているかを確認
