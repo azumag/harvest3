@@ -19,7 +19,9 @@ jest.mock('../../../src/database/mongoDatabase', () => ({
     updateOne: jest.fn(),
     insertOne: jest.fn()
   },
-  getMongoClient: jest.fn()
+  getMongoClient: jest.fn(),
+  getClient: jest.fn(),
+  addTradeMongoDB: jest.fn()
 }));
 
 jest.mock('../../../src/hft/utils/Logger', () => jest.fn());
@@ -37,7 +39,8 @@ jest.mock('../../../src/database/redisClient', () => ({
   checkRedisConnectionHealth: jest.fn(),
   isCircuitBreakerOpen: jest.fn(),
   updateCircuitBreakerOnFailure: jest.fn(),
-  updateCircuitBreakerOnSuccess: jest.fn()
+  updateCircuitBreakerOnSuccess: jest.fn(),
+  getCircuitBreakerState: jest.fn()
 }));
 
 describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
@@ -68,7 +71,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
-      ping: jest.fn().mockResolvedValue('PONG')
+      ping: jest.fn().mockResolvedValue('PONG'),
+      set: jest.fn().mockResolvedValue('OK'),
+      get: jest.fn().mockResolvedValue('test-value')
     };
 
     mockRedisDatabase = {
@@ -94,7 +99,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mongoDatabase.tradesCollection.findOne.mockResolvedValue(null);
     mongoDatabase.tradesCollection.updateOne.mockResolvedValue({ acknowledged: true });
     mongoDatabase.tradesCollection.insertOne.mockResolvedValue({ acknowledged: true });
-    mongoDatabase.getMongoClient.mockReturnValue({
+    
+    const mockMongoClient = {
       db: jest.fn().mockReturnValue({
         collection: jest.fn().mockReturnValue({
           findOne: jest.fn().mockResolvedValue(null),
@@ -107,7 +113,11 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         abortTransaction: jest.fn().mockResolvedValue(),
         endSession: jest.fn().mockResolvedValue()
       })
-    });
+    };
+    
+    mongoDatabase.getMongoClient.mockReturnValue(mockMongoClient);
+    mongoDatabase.getClient.mockReturnValue(mockMongoClient);
+    mongoDatabase.addTradeMongoDB.mockResolvedValue({ acknowledged: true });
 
     const constModule = require('../../../src/common/const');
     constModule.MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT = 30000;
@@ -126,6 +136,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     redisClient.isCircuitBreakerOpen.mockReturnValue(false);
     redisClient.updateCircuitBreakerOnFailure.mockImplementation(() => {});
     redisClient.updateCircuitBreakerOnSuccess.mockImplementation(() => {});
+    redisClient.getCircuitBreakerState.mockReturnValue({ isOpen: false, failureCount: 0 });
 
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
@@ -151,7 +162,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       exec: jest.fn().mockResolvedValue([
         [null, 'OK'],
         [new Error('Redis command failed'), null]
-      ])
+      ]),
+      hIncrByFloat: jest.fn().mockReturnThis(),
+      hDel: jest.fn().mockReturnThis(),
+      hSet: jest.fn().mockReturnThis(),
+      del: jest.fn().mockReturnThis(),
+      multi: jest.fn().mockReturnThis()
     };
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
@@ -213,7 +229,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       exec: jest.fn().mockResolvedValue([
         [null, 'OK'],
         [new Error('Redis command failed'), null]
-      ])
+      ]),
+      hIncrByFloat: jest.fn().mockReturnThis(),
+      hDel: jest.fn().mockReturnThis(),
+      hSet: jest.fn().mockReturnThis(),
+      del: jest.fn().mockReturnThis(),
+      multi: jest.fn().mockReturnThis()
     };
 
     sameClient.multi.mockReturnValue(mockRedisTransaction);
@@ -260,7 +281,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     const mockRedisTransaction = {
-      client: invalidClient
+      client: invalidClient,
+      hIncrByFloat: jest.fn().mockReturnThis(),
+      hDel: jest.fn().mockReturnThis(),
+      hSet: jest.fn().mockReturnThis(),
+      del: jest.fn().mockReturnThis(),
+      multi: jest.fn().mockReturnThis()
     };
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
