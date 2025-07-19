@@ -65,6 +65,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         isHealthy: true,
         connectionStatus: 'ready',
         ping: 'PONG'
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getCircuitBreakerState: jest.fn().mockReturnValue({
+        state: 'CLOSED',
+        failureCount: 0,
+        lastFailureTime: null
       })
     }));
 
@@ -98,6 +104,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     // トランザクション失敗をシミュレート
     const mockRedisTransaction = {
       client: mockCurrentRedisClient,
+      hSet: jest.fn().mockReturnThis(),
+      hMSet: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([
         [null, 'OK'],
         [new Error('Redis command failed'), null]
@@ -159,6 +167,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     
     const mockRedisTransaction = {
       client: sameClient,
+      hSet: jest.fn().mockReturnThis(),
+      hMSet: jest.fn().mockReturnThis(),
       exec: jest.fn().mockResolvedValue([
         [null, 'OK'],
         [new Error('Redis command failed'), null]
