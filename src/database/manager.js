@@ -200,19 +200,27 @@ function formatNullErrorMessage(commandIndex, commandName, operationContext) {
 
 /**
  * 文字列エラーのメッセージを生成
+ * Issue #4910: "Invalid response (empty/dash)" エラーの改善
  */
 function formatStringError(error, commandIndex, operationContext) {
   // 意味のない文字列パターンをチェック
   if (error === '-' || error === '' || error.trim() === '') {
     // Issue #4826: より詳細なエラーメッセージと診断情報を提供
     const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
+    
+    // Issue #4910: 改善された診断情報とリカバリ指針
     const diagnosticInfo = 'This may indicate: ' + [
       '1. Redis connection timeout or instability',
       '2. Redis server memory pressure or resource exhaustion',
       '3. Network connectivity issues between application and Redis',
-      '4. Redis client library response parsing issues'
+      '4. Redis client library response parsing issues',
+      '5. Redis transaction queue overflow or corruption'
     ].join(', ');
-    return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}`;
+    
+    // Issue #4910: リカバリ提案の追加
+    const recoveryInfo = 'Recovery actions: Connection retry with exponential backoff, Circuit breaker activation, Transaction re-validation';
+    
+    return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}. ${recoveryInfo}`;
   }
   return error;
 }
@@ -593,7 +601,9 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     }
     
     // Issue #4920: 各結果の基本的な妥当性チェック
+    // Issue #4910: "Invalid response (empty/dash)" エラーの検出と処理を強化
     let nullResultCount = 0;
+    let invalidResponseCount = 0;
     for (let i = 0; i < redisResults.length; i++) {
       const result = redisResults[i];
       if (!Array.isArray(result) || result.length !== 2) {
@@ -602,11 +612,32 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       if (result && result[0] === null && result[1] === null) {
         nullResultCount++;
       }
+      
+      // Issue #4910: "Invalid response (empty/dash)" パターンの検出
+      if (result && result[0] !== null) {
+        const error = result[0];
+        if (typeof error === 'string' && (error === '-' || error === '' || error.trim() === '')) {
+          invalidResponseCount++;
+          logger.warn(`[Redis Transaction] Invalid response detected at index ${i}: "${error}" (command: ${commandNames[i] || 'unknown'})`);
+        }
+      }
     }
     
     // Issue #4920: 過度のnull結果を検出した場合の警告
     if (nullResultCount > expectedCommandCount * 0.5) {
       logger.warn(`[Redis Transaction] 過度のnull結果を検出: ${nullResultCount}/${expectedCommandCount}`);
+    }
+    
+    // Issue #4910: Invalid response エラーが検出された場合の詳細ログと対処
+    if (invalidResponseCount > 0) {
+      logger.error(`[Redis Transaction] Invalid response (empty/dash) errors detected: ${invalidResponseCount}/${expectedCommandCount}`);
+      logger.error(`[Redis Transaction] Connection health check recommended for trade ${trade.tradeId}`);
+      
+      // Invalid response が多数検出された場合は接続問題として扱う
+      if (invalidResponseCount > expectedCommandCount * 0.3) {
+        updateCircuitBreakerOnFailure();
+        throw new Error(`Redis Commit失敗: Multiple invalid responses detected (${invalidResponseCount}/${expectedCommandCount}). Connection instability suspected.`);
+      }
     }
     
     updateCircuitBreakerOnSuccess();
@@ -2149,9 +2180,10 @@ async function executeRedisLockRelease(lockKey, lockValue) {
     return false;
   }
 
-  // 最終的な変数名を設定（テストで期待される形式）
-  const finalLockKey = lockKey;
-  const finalLockValue = lockValue;
+  // Issue #4910: 強化されたLuaスクリプト引数の型安全性
+  // 文字列変換を明示的に実行し、エラーを防ぐ
+  const finalLockKey = String(lockKey || '');
+  const finalLockValue = String(lockValue || '');
 
   // 最終的な型チェック（テストで期待される検証）
   if (typeof finalLockKey !== 'string' || typeof finalLockValue !== 'string') {
@@ -2159,20 +2191,67 @@ async function executeRedisLockRelease(lockKey, lockValue) {
     return false;
   }
 
+  // Issue #4910: 空文字列やnull文字列の追加チェック
+  if (finalLockKey === '' || finalLockKey === 'null' || finalLockKey === 'undefined' ||
+      finalLockValue === '' || finalLockValue === 'null' || finalLockValue === 'undefined') {
+    logger.warn(`分散ロック解放スキップ: 無効な文字列値 (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
+    return false;
+  }
+
   const redisDatabase = require('./redisDatabase');
   const redisClient = redisDatabase.getClient();
 
-  // Lua script for atomic lock release
-  const script = `
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("del", KEYS[1])
-    else
-      return 0
-    end
-  `;
+  // Issue #4910: Redis接続状態の事前検証
+  if (!redisClient || !redisClient.isReady || !redisClient.isOpen) {
+    logger.warn(`分散ロック解放スキップ: Redis接続状態が無効 (ready: ${redisClient?.isReady}, open: ${redisClient?.isOpen})`);
+    return false;
+  }
 
-  const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
-  return result === 1;
+  try {
+    // Lua script for atomic lock release
+    const script = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+      else
+        return 0
+      end
+    `;
+
+    // Issue #4910: Luaスクリプト実行前の最終引数検証ログ
+    logger.debug(`[Lock Release] Luaスクリプト実行: key='${finalLockKey}', value='${finalLockValue}'`);
+
+    // Issue #4910: タイムアウト付きのLuaスクリプト実行
+    const executeWithTimeout = async () => {
+      return await redisClient.eval(script, 1, finalLockKey, finalLockValue);
+    };
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Lua script execution timeout')), 5000);
+    });
+
+    const result = await Promise.race([executeWithTimeout(), timeoutPromise]);
+    const success = result === 1;
+    
+    if (success) {
+      logger.debug(`[Lock Release] 成功: ${finalLockKey}`);
+    } else {
+      logger.debug(`[Lock Release] ロックが存在しないか値が不一致: ${finalLockKey}`);
+    }
+    
+    return success;
+  } catch (error) {
+    // Issue #4910: Luaスクリプトエラーの詳細ログ
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    logger.error(`分散ロック解放エラー: ${errorMessage} (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
+    
+    // Issue #4910: 特定のエラータイプに応じた処理
+    if (errorMessage.includes('Lua redis lib command arguments must be strings or integers')) {
+      logger.error(`[Lock Release] Luaスクリプト引数型エラー: key type=${typeof finalLockKey}, value type=${typeof finalLockValue}`);
+      logger.error(`[Lock Release] 引数内容: key='${finalLockKey}', value='${finalLockValue}'`);
+    }
+    
+    return false;
+  }
 }
 
 /**
