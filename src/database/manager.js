@@ -2176,25 +2176,17 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 2. 極めて危険な制御文字の事前チェック（null文字のみ、sanitize前に実行）
-    // 他の制御文字(\x01-\x1F)はサニタイズ処理で除去される
-    const extremelyDangerousCharsRegex = /\x00/;
-    if (extremelyDangerousCharsRegex.test(lockInfo.lockKey)) {
-      logger.warn(`分散ロック解放スキップ: lockKeyにnull文字が含まれています (lockKey: ${JSON.stringify(lockInfo.lockKey)})`);
-      return false;
-    }
-    
-    // 3. 文字列化とサニタイズ（制御文字は除去される）
+    // 2. 文字列化とサニタイズ（制御文字は除去される）
     const stringLockKey = sanitizeString(lockInfo.lockKey);
     const stringLockValue = sanitizeString(lockInfo.lockValue);
     
-    // 4. サニタイズ後の空文字列チェック（先に実行）
+    // 3. サニタイズ後の空文字列チェック（先に実行）
     if (!stringLockKey || !stringLockValue) {
       logger.warn(`分散ロック解放スキップ: サニタイズ後に空文字列 (元lockKey: ${lockInfo.lockKey}, 元lockValue: ${lockInfo.lockValue})`);
       return false;
     }
     
-    // 5. 文字列化された値の検証 - 明示的な型チェック（テスト要件）
+    // 4. 文字列化された値の検証 - 明示的な型チェック（テスト要件）
     if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '[object Object]' || 
         stringLockKey.includes(',') || stringLockKey.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (元: ${lockInfo.lockKey}, 変換後: ${stringLockKey})`);
@@ -2206,7 +2198,7 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 6. 追加の文字列検証（共通関数による）
+    // 5. 追加の文字列検証（共通関数による）
     if (!isValidStringValue(stringLockKey, 'lockKey')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (元: ${lockInfo.lockKey}, 変換後: ${stringLockKey})`);
       return false;
@@ -2216,7 +2208,7 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 7. 追加のバリデーション（既存の関数を使用）
+    // 6. 追加のバリデーション（既存の関数を使用）
     const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
     if (!validation.valid) {
       logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
