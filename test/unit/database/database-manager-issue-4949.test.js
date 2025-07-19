@@ -45,6 +45,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisDatabase = {
       getClient: jest.fn().mockReturnValue(mockCurrentRedisClient)
     };
+    
+    // Ensure the Redis set operation returns 'OK' for successful lock acquisition
+    mockCurrentRedisClient.set.mockResolvedValue('OK');
 
     mockLogger = {
       info: jest.fn(),
@@ -83,7 +86,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // mongoDatabase をモック
     const mockTradesCollection = {
-      findOne: jest.fn().mockResolvedValue(null),
+      findOne: jest.fn().mockResolvedValue(null), // No existing trade found
       updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
       insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
       findOneAndUpdate: jest.fn().mockResolvedValue({ value: { state: 'PENDING' } })
@@ -124,21 +127,17 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       listFilledPositions: jest.fn().mockResolvedValue([])
     }));
 
+    // Mock the Redis client to make lock acquisition succeed  
+    mockCurrentRedisClient.set.mockResolvedValue('OK'); // This makes the lock acquisition succeed
+    
+    // Add debug logging to verify mock calls
+    console.log = jest.fn();
+    console.error = jest.fn();
+    console.info = jest.fn();
+    
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
     
-    // Mock only the exported functions we need
-    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
-      acquired: true,
-      lockKey: 'lock:trade:test:BTC/JPY:test-trade-id',
-      lockValue: 'mock-lock-value',
-      ttl: 30000
-    });
-    
-    jest.spyOn(databaseManager, 'checkRedisConnectionHealth').mockResolvedValue({
-      isHealthy: true,
-      details: { status: 'connected' }
-    });
   });
 
   afterEach(() => {
