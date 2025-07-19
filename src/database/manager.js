@@ -151,14 +151,7 @@ function validateLockInfo(lockInfo) {
   return { valid: true };
 }
 
-/**
- * Issue #4126: 文字列サニタイズとバリデーション
- * @param {string} str - サニタイズ対象の文字列
- * @returns {string} サニタイズされた文字列
- */
-function sanitizeString(str) {
-  return String(str).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-}
+// Issue #4126: 文字列サニタイズは共通関数sanitizeRedisArgumentを使用（DRY原則の実装）
 
 /**
  * Issue #4126: 最終的な引数検証
@@ -750,7 +743,7 @@ const { fetchOHLCVDataAPI } = require('./exchangeAPI');
 const { getOHLCVQueue } = require('./ohlcvQueue');
 const { getOHLCVCacheManager } = require('./ohlcvCache');
 
-const { sleep, timeframeToMs, isBacktestMode, validateLockParameters } = require('../common/utils');
+const { sleep, timeframeToMs, isBacktestMode, validateLockParameters, sanitizeRedisArgument, REDIS_ARG_PATTERNS } = require('../common/utils');
 const { withBitbankErrorHandling } = require('../common/bitbankErrorHandler');
 
 // このモジュールは、DBへのアクセス層として、MongoDBとRedisの両方のデータベースにアクセスするための関数を提供します。
@@ -2176,9 +2169,9 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 2. 文字列化とサニタイズ（制御文字は除去される）
-    const stringLockKey = sanitizeString(lockInfo.lockKey);
-    const stringLockValue = sanitizeString(lockInfo.lockValue);
+    // 2. 文字列化とサニタイズ（制御文字は除去される）- 共通関数を使用（DRY原則の実装）
+    const stringLockKey = sanitizeRedisArgument(lockInfo.lockKey);
+    const stringLockValue = sanitizeRedisArgument(lockInfo.lockValue);
     
     // 3. サニタイズ後の空文字列チェック（先に実行）
     if (!stringLockKey || !stringLockValue) {
@@ -2275,18 +2268,13 @@ async function executeRedisLockRelease(lockKey, lockValue) {
     return false;
   }
   
-  // 制御文字や特殊文字の最終チェック - validateLockParametersと同じパターンを使用
-  // lockKey: 英数字、アンダースコア、コロン、ハイフン、ドットのみ許可
-  // lockValue: JSON文字列のため波括弧、引用符、カンマ、数字、英字、ハイフンなど許可
-  const lockKeyRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
-  
-  if (!lockKeyRegex.test(finalLockKey)) {
+  // 制御文字や特殊文字の最終チェック - 定数化された正規表現パターンを使用（DRY原則の実装）
+  if (!REDIS_ARG_PATTERNS.LOCK_KEY.test(finalLockKey)) {
     logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockKey (lockKey: '${finalLockKey}')`);
     return false;
   }
   
-  if (!lockValueRegex.test(finalLockValue)) {
+  if (!REDIS_ARG_PATTERNS.LOCK_VALUE.test(finalLockValue)) {
     logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockValue (lockValue: '${finalLockValue}')`);
     return false;
   }

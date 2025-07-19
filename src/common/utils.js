@@ -260,6 +260,26 @@ async function executeWithRetry(asyncFunction, maxRetries = 3, delayMs = 1000, c
   throw lastError;
 }
 
+// Issue #4997: Redis Lua script引数検証の定数化（DRY原則の実装）
+const REDIS_ARG_PATTERNS = {
+  // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロンのみ許可
+  LOCK_KEY: /^[a-zA-Z0-9_:\-\.]+$/,
+  // lockValue: JSON文字も許可（database/managerでJSONデータを格納する場合があるため）
+  LOCK_VALUE: /^[a-zA-Z0-9_:\-\.{}"",]+$/
+};
+
+// 制御文字除去パターン（サニタイズ用）
+const CONTROL_CHARS_PATTERN = /[\x00-\x1F\x7F-\x9F]/g;
+
+/**
+ * Redis引数のサニタイズ処理（DRY原則による共通化）
+ * @param {any} value - サニタイズ対象の値
+ * @returns {string} サニタイズ済みの文字列
+ */
+function sanitizeRedisArgument(value) {
+  return String(value).replace(CONTROL_CHARS_PATTERN, '').trim();
+}
+
 /**
  * 分散ロックパラメータの厳密なバリデーション
  * @param {string} lockKey - ロックキー
@@ -282,20 +302,15 @@ function validateLockParameters(lockKey, lockValue, context = 'lock') {
     };
   }
   
-  // Issue #4997: Redis Lua script引数の文字検証強化
-  // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロンのみ許可
-  const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-  // lockValue: JSON文字も許可（database/managerでJSONデータを格納する場合があるため）
-  const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
-  
-  if (!validCharRegex.test(lockKey)) {
+  // Issue #4997: 定数化された正規表現パターンを使用
+  if (!REDIS_ARG_PATTERNS.LOCK_KEY.test(lockKey)) {
     return {
       valid: false,
       error: `lockKeyに無効な文字が含まれています: ${lockKey}`
     };
   }
   
-  if (!validLockValueRegex.test(lockValue)) {
+  if (!REDIS_ARG_PATTERNS.LOCK_VALUE.test(lockValue)) {
     return {
       valid: false,
       error: `lockValueに無効な文字が含まれています: ${lockValue}`
@@ -321,5 +336,9 @@ module.exports = {
   validateOHLCVData,
   executeWithRetry,
   // 分散ロック関数
-  validateLockParameters
+  validateLockParameters,
+  sanitizeRedisArgument,
+  // Redis関連定数
+  REDIS_ARG_PATTERNS,
+  CONTROL_CHARS_PATTERN
 };

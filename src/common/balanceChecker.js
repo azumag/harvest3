@@ -10,7 +10,7 @@ const {
 } = require('../database/redisDatabase');
 const { initRedisClient } = require('../database/redisClient');
 const Logger = require('../hft/utils/Logger');
-const { validateLockParameters } = require('./utils');
+const { validateLockParameters, sanitizeRedisArgument, REDIS_ARG_PATTERNS } = require('./utils');
 
 const logger = new Logger('BalanceChecker');
 const { withBitbankErrorHandling } = require('./bitbankErrorHandler');
@@ -481,13 +481,9 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // Issue #4997: 文字列化とサニタイズ処理（制御文字は除去される）
-    const preStringLockKey = String(lockKey);
-    const preStringLockId = String(lockId);
-    
-    // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
-    const stringLockKey = preStringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    const stringLockId = preStringLockId.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    // Issue #4997: 共通のサニタイズ処理を使用（DRY原則の実装）
+    const stringLockKey = sanitizeRedisArgument(lockKey);
+    const stringLockId = sanitizeRedisArgument(lockId);
     
     // 空文字列チェック
     if (!stringLockKey || !stringLockId) {
@@ -574,8 +570,8 @@ async function releaseDistributedLock(lockKey, lockId) {
         throw new Error(`無効な文字列値: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
       }
       
-      // 制御文字や特殊文字のチェック
-      if (!/^[a-zA-Z0-9_:\-\.]+$/.test(finalLockKey) || !/^[a-zA-Z0-9_:\-\.]+$/.test(finalLockId)) {
+      // 制御文字や特殊文字のチェック（定数化された正規表現を使用）
+      if (!REDIS_ARG_PATTERNS.LOCK_KEY.test(finalLockKey) || !REDIS_ARG_PATTERNS.LOCK_KEY.test(finalLockId)) {
         throw new Error(`不正な文字を含む値: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
       }
       
