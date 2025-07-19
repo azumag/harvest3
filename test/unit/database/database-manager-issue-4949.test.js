@@ -92,6 +92,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // mongoDatabase をモック
     jest.doMock('../../../src/database/mongoDatabase', () => ({
+      connectDB: jest.fn().mockResolvedValue(),
+      tradesCollection: {
+        findOne: jest.fn().mockResolvedValue(null),
+        updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+        insertOne: jest.fn().mockResolvedValue({ acknowledged: true })
+      },
       getMongoClient: jest.fn().mockReturnValue({
         db: jest.fn().mockReturnValue({
           collection: jest.fn().mockReturnValue({

@@ -1801,7 +1801,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // 分散ロック取得（並行処理制御）
-    distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
+    distributedLock = await module.exports.acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
     if (!distributedLock.acquired) {
       if (!isBacktest) {
         logger.info(`[2PC] 分散ロック取得失敗: ${trade.tradeId} - 他の処理が進行中`);
@@ -2079,7 +2079,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       await mongoSession.endSession();
     }
     if (distributedLock && distributedLock.acquired) {
-      await releaseDistributedLock(distributedLock);
+      await module.exports.releaseDistributedLock(distributedLock);
       if (!isBacktest) {
         logger.info(`[2PC] 分散ロック解放: ${trade.tradeId}`);
       }
@@ -3573,5 +3573,7 @@ module.exports = {
   addTradeRecord, // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
   executeRedisCompensation, // Issue #4126: テスト用にエクスポート
   executeRedisTransactionWithTimeout, // Issue #4826: タイムアウト制御付きトランザクション実行
-  validateRedisTransactionBeforeExecution // Issue #4826: トランザクション事前検証
+  validateRedisTransactionBeforeExecution, // Issue #4826: トランザクション事前検証
+  acquireDistributedLock, // Issue #4949: テスト用にエクスポート
+  releaseDistributedLock // Issue #4949: テスト用にエクスポート
 };
