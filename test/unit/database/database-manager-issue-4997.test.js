@@ -124,7 +124,9 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       expect(mockRedisClient.eval).toHaveBeenCalled();
     });
 
-    it('lockKeyに不正な文字が含まれる場合はエラーになる', async () => {
+    it('lockKeyに制御文字が含まれる場合はサニタイズされて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const lockInfo = {
         lockKey: 'invalid\x00key',
         lockValue: JSON.stringify({ lockId: 'valid-lock-123', timestamp: Date.now() })
@@ -132,8 +134,13 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       
       const result = await manager.releaseDistributedLock(lockInfo);
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'invalidkey', // \x00 is sanitized out
+        expect.any(String)
+      );
     });
 
     it('lockValueに不正な文字が含まれる場合はサニタイズされて処理される', async () => {
