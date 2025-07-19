@@ -174,7 +174,7 @@ module.exports = {
       validationErrors.push('amount値が無効');
     } else if (!Number.isFinite(trade.amount) || trade.amount <= 0) {
       validationErrors.push(`Redis操作のためのamount値が無効: ${trade.amount}`);
-    } else if (trade.amount > Number.MAX_SAFE_INTEGER) {
+    } else if (trade.amount > Number.MAX_SAFE_INTEGER || trade.amount > Number.MAX_VALUE) {
       // Enhanced range validation for Issue #4912
       validationErrors.push('amount値が範囲外です');
     }
@@ -196,12 +196,17 @@ module.exports = {
       'hSet(updatedAt)'
     ];
     
+    // Apply precision limiting (8 decimal places max) to match real implementation
+    const limitPrecision = (value) => {
+      return Math.round(value * 100000000) / 100000000; // 8 decimal places
+    };
+    
     // Simulate actual Redis transaction calls
     if (transaction && typeof transaction === 'object') {
       if (transaction.hIncrByFloat) {
-        transaction.hIncrByFloat('position:key', 'netPosition', trade.amount);
-        transaction.hIncrByFloat('position:key', 'buyAmount', trade.amount);
-        transaction.hIncrByFloat('position:key', 'totalBuyCost', trade.value);
+        transaction.hIncrByFloat('position:key', 'netPosition', limitPrecision(trade.amount));
+        transaction.hIncrByFloat('position:key', 'buyAmount', limitPrecision(trade.amount));
+        transaction.hIncrByFloat('position:key', 'totalBuyCost', limitPrecision(trade.value));
       }
       if (transaction.hDel) {
         transaction.hDel('pendingOrder:key');
@@ -218,6 +223,11 @@ module.exports = {
 
   // Issue #4912: Add missing test functions
   validateNumericValue: jest.fn().mockImplementation((value, fieldName) => {
+    // Handle null and undefined explicitly
+    if (value === null || value === undefined) {
+      throw new Error(`無効な${fieldName}値: ${value}`);
+    }
+    
     const parsed = parseFloat(value);
     if (isNaN(parsed) || !isFinite(parsed)) {
       throw new Error(`無効な${fieldName}値: ${value}`);
