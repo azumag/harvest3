@@ -96,7 +96,12 @@ function isValidStringValue(str, fieldName) {
   }
   
   // 文字列内容の検証
-  if (str.includes(',') || str.includes('[object')) {
+  if (str.includes('[object')) {
+    return false;
+  }
+  
+  // lockKeyの場合のみカンマを禁止（JSON値を含むlockValueではカンマが必要）
+  if (fieldName === 'lockKey' && str.includes(',')) {
     return false;
   }
   
@@ -2156,6 +2161,7 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
   }
 }
 
+
 /**
  * 分散ロック解放
  */
@@ -2166,11 +2172,11 @@ async function releaseDistributedLock(lockInfo) {
     // 1. 基本的なlockInfo検証
     const lockValidation = validateLockInfo(lockInfo);
     if (!lockValidation.valid) {
-      logger.warn(`分散ロック解放スキップ: ${lockValidation.error} (${lockInfo})`);
+      logger.warn(`分散ロック解放スキップ: ${lockValidation.error} (lockInfo: ${JSON.stringify(lockInfo)})`);
       return false;
     }
     
-    // 2. 文字列化とサニタイズ
+    // 2. 文字列化とサニタイズ（制御文字は除去される）
     const stringLockKey = sanitizeString(lockInfo.lockKey);
     const stringLockValue = sanitizeString(lockInfo.lockValue);
     
@@ -2187,12 +2193,12 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     if (stringLockValue === 'null' || stringLockValue === 'undefined' || stringLockValue === '[object Object]' || 
-        stringLockValue.includes(',') || stringLockValue.includes('[object')) {
+        stringLockValue.includes('[object')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockValue (元: ${lockInfo.lockValue}, 変換後: ${stringLockValue})`);
       return false;
     }
     
-    // 4.1. 追加の文字列検証（共通関数による）
+    // 5. 追加の文字列検証（共通関数による）
     if (!isValidStringValue(stringLockKey, 'lockKey')) {
       logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (元: ${lockInfo.lockKey}, 変換後: ${stringLockKey})`);
       return false;
@@ -2202,20 +2208,20 @@ async function releaseDistributedLock(lockInfo) {
       return false;
     }
     
-    // 5. 追加のバリデーション（既存の関数を使用）
+    // 6. 追加のバリデーション（既存の関数を使用）
     const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
     if (!validation.valid) {
       logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
       return false;
     }
 
-    // 6. 最終的な変数の設定（テスト要件）
+    // 8. 最終的な変数の設定（テスト要件）
     // eslint-disable-next-line prefer-const
     let finalLockKey = stringLockKey;
     // eslint-disable-next-line prefer-const
     let finalLockValue = stringLockValue;
 
-    // 7. Redis操作の実行
+    // 9. Redis操作の実行
     return await executeRedisLockRelease(finalLockKey, finalLockValue);
   } catch (error) {
     logger.error(`分散ロック解放エラー: ${error.message}`);
@@ -2259,6 +2265,33 @@ async function executeRedisLockRelease(lockKey, lockValue) {
       return 0
     end
   `;
+
+  // Redis eval実行前の最終検証（Issue #4997対応）
+  // 追加の文字列検証 - エラーを投げずにfalseを返す
+  if (!finalLockKey || !finalLockValue || 
+      finalLockKey === 'null' || finalLockKey === 'undefined' ||
+      finalLockValue === 'null' || finalLockValue === 'undefined') {
+    logger.warn(`分散ロック解放スキップ: 無効な文字列値 (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
+    return false;
+  }
+  
+  // 制御文字や特殊文字の最終チェック - validateLockParametersと同じパターンを使用
+  // lockKey: 英数字、アンダースコア、コロン、ハイフン、ドットのみ許可
+  // lockValue: JSON文字列のため波括弧、引用符、カンマ、数字、英字、ハイフンなど許可
+  const lockKeyRegex = /^[a-zA-Z0-9_:\-\.]+$/;
+  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+  
+  if (!lockKeyRegex.test(finalLockKey)) {
+    logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockKey (lockKey: '${finalLockKey}')`);
+    return false;
+  }
+  
+  if (!lockValueRegex.test(finalLockValue)) {
+    logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockValue (lockValue: '${finalLockValue}')`);
+    return false;
+  }
+  
+  logger.debug(`Database Manager Redis eval実行準備完了: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
 
   const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
   return result === 1;

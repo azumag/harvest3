@@ -282,6 +282,26 @@ function validateLockParameters(lockKey, lockValue, context = 'lock') {
     };
   }
   
+  // Issue #4997: Redis Lua script引数の文字検証強化
+  // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロンのみ許可
+  const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
+  // lockValue: JSON文字も許可（database/managerでJSONデータを格納する場合があるため）
+  const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+  
+  if (!validCharRegex.test(lockKey)) {
+    return {
+      valid: false,
+      error: `lockKeyに無効な文字が含まれています: ${lockKey}`
+    };
+  }
+  
+  if (!validLockValueRegex.test(lockValue)) {
+    return {
+      valid: false,
+      error: `lockValueに無効な文字が含まれています: ${lockValue}`
+    };
+  }
+  
   return { valid: true };
 }
 
