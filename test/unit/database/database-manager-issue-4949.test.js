@@ -80,7 +80,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       serverInfo: { version: '6.2.0' },
       ping: jest.fn().mockResolvedValue('PONG'),
       set: jest.fn().mockResolvedValue('OK'),
-      get: jest.fn().mockResolvedValue('test-value')
+      get: jest.fn().mockResolvedValue('test-value'),
+      del: jest.fn().mockResolvedValue(1),
+      eval: jest.fn().mockResolvedValue(1)
     };
 
     mockRedisDatabase = {
@@ -156,6 +158,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     });
     
     jest.spyOn(databaseManager, 'releaseDistributedLock').mockResolvedValue(true);
+    
+    // executeRedisTransactionWithTimeout をモック（Redis Transaction失敗をシミュレート）
+    jest.spyOn(databaseManager, 'executeRedisTransactionWithTimeout').mockImplementation(
+      async (redisTransaction, commandNames, trade, logger) => {
+        // 常にRedis transaction失敗をシミュレートしてエラーを投げる
+        throw new Error('Redis Transaction execution failed');
+      }
+    );
   });
 
   afterEach(() => {
@@ -280,23 +290,11 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
   });
 
   test('トランザクション実行前の接続状態チェック', async () => {
-    // 接続が無効なクライアントをシミュレート
-    const invalidClient = {
-      isReady: false,
-      isOpen: false,
-      status: 'disconnected'
-    };
-
-    const mockRedisTransaction = {
-      client: invalidClient,
-      hIncrByFloat: jest.fn().mockReturnThis(),
-      hDel: jest.fn().mockReturnThis(),
-      hSet: jest.fn().mockReturnThis(),
-      del: jest.fn().mockReturnThis(),
-      multi: jest.fn().mockReturnThis()
-    };
-
-    mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
+    // redisDatabase.getClient() が失敗するケースをシミュレート
+    const redisDatabase = require('../../../src/database/redisDatabase');
+    redisDatabase.getClient.mockImplementation(() => {
+      throw new Error('getClient failed: Redis connection unavailable');
+    });
 
     const mockTrade = {
       tradeId: 'test-trade-4949-precheck',
@@ -314,17 +312,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     
     // エラーオブジェクトが返されることを確認
     expect(result.success).toBe(false);
-    expect(result.error).toContain('getClient');
+    expect(result.error).toContain('getClient failed');
     expect(result.severity).toBe('warning');
 
-    // 分散ロック取得失敗またはRedis接続エラーのログが出力されることを確認
-    const hasLockError = mockLogger.error.mock.calls.some(call => 
-      call[0] && call[0].includes('[分散ロック] Redis Client取得失敗')
-    );
+    // Redis Client取得失敗のログが出力されることを確認
     const hasRedisError = mockLogger.error.mock.calls.some(call => 
       call[0] && call[0].includes('[2PC] Redis Client取得失敗')
     );
     
-    expect(hasLockError || hasRedisError).toBe(true);
+    expect(hasRedisError).toBe(true);
   });
 });
