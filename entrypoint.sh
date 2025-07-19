@@ -492,21 +492,34 @@ pre_startup_checks() {
     
     # 最終的な依存関係の検証
     log "Performing final dependency validation..."
-    if ! npm ls 2>"$npm_ls_error" >/dev/null; then
+    
+    # Issue #4646 修正: npm_ls_error変数の安全な定義と検証
+    local npm_ls_error_safe="${npm_ls_error:-/tmp/npm-ls-error-fallback.log}"
+    
+    # 一時ファイルのディレクトリが存在することを確認
+    mkdir -p "$(dirname "$npm_ls_error_safe")" 2>/dev/null || true
+    
+    # npm ls実行時のエラーハンドリング強化
+    if ! npm ls 2>"$npm_ls_error_safe" >/dev/null; then
         local error_msg="npm dependencies validation failed"
         log "ERROR: $error_msg"
         log "npm ls error details:"
-        if [ -f "$npm_ls_error" ]; then
-            cat "$npm_ls_error" | head -15 | while read line; do
+        if [ -f "$npm_ls_error_safe" ] && [ -s "$npm_ls_error_safe" ]; then
+            cat "$npm_ls_error_safe" | head -15 | while read line; do
                 log "  npm ls error: $line"
             done
+        else
+            log "  npm ls error log file not found or empty"
         fi
         send_startup_error_to_discord "$error_msg" "Node.js dependency validation failed"
+        
+        # クリーンアップ
+        rm -f "$npm_ls_error_safe" 2>/dev/null || true
         exit 1
     fi
     
     # クリーンアップ
-    rm -f "$npm_ls_error" 2>/dev/null || true
+    rm -f "$npm_ls_error_safe" 2>/dev/null || true
     
     log "All dependencies successfully installed and validated"
     
