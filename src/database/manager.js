@@ -1843,9 +1843,32 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis Prepare
-    const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
-    redisTransaction = redisClient.multi();
+    let redisClient;
+    try {
+      const redisDatabase = require('./redisDatabase');
+      redisClient = redisDatabase.getClient();
+      redisTransaction = redisClient.multi();
+    } catch (getClientError) {
+      // Issue #4949: redisDatabase.getClient()でエラーが発生した場合の詳細ログ
+      if (!isBacktest) {
+        logger.error(`[2PC] Redis Client取得失敗: ${getClientError.message}`);
+        // Redis接続状態ログ（getClient失敗時）
+        const redisConnectionInfo = {
+          clientReady: false,
+          clientOpen: false,
+          clientConnected: false,
+          clientStatus: 'unavailable',
+          serverInfo: 'unavailable',
+          rawIsReady: false,
+          rawIsOpen: false,
+          capturedAt: new Date().toISOString(),
+          clientRecovered: false,
+          getClientError: getClientError.message
+        };
+        logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
+      }
+      throw new Error(`Redis Prepare失敗: ${getClientError.message}`);
+    }
 
     // Issue #3620: コマンド名を記録
     let redisCommandNames = [];
@@ -2093,7 +2116,13 @@ async function executeDistributedTransaction(trade, isBacktest) {
 async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
   try {
     const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
+    let redisClient;
+    try {
+      redisClient = redisDatabase.getClient();
+    } catch (getClientError) {
+      logger.error(`[分散ロック] Redis Client取得失敗: ${getClientError.message}`);
+      return { acquired: false, error: `getClient失敗: ${getClientError.message}` };
+    }
     const lockKey = `lock:trade:${exchange}:${symbol}:${tradeId}`;
     const lockValue = `${Date.now()}_${Math.random()}`;
 
