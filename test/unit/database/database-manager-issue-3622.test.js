@@ -299,7 +299,7 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       ).join(', ');
       
       expect(errorDetails).toBe(
-        'コマンド0: Redis command 0 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout., ' +
+        'コマンド0: Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues, ' +
         'コマンド1: Redis command 1 failed: Connection closed, ' +
         'コマンド2: Redis command 2 failed: Redis server error, ' +
         'コマンド3: Redis operation failed with null/undefined error. This may indicate a connection issue or timeout., ' +
