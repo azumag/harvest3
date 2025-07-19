@@ -62,6 +62,7 @@ const REDIS_ERROR_CODES = {
 const INVALID_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F-\x9F]/g;
 const INVALID_STRING_VALUES = ['null', 'undefined', '', '[object Object]'];
+const REDIS_PING_TIMEOUT_MS = 5000; // Redis ping operation timeout
 
 /**
  * Issue #4126: 数値バリデーションの共通化
@@ -302,7 +303,7 @@ async function checkRedisConnectionHealth(redisClient, logger) {
     // Issue #4155: pingテストのタイムアウトを追加
     const pingPromise = redisClient.ping();
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Ping timeout')), 5000);
+      setTimeout(() => reject(new Error('Ping timeout')), REDIS_PING_TIMEOUT_MS);
     });
     
     await Promise.race([pingPromise, timeoutPromise]);

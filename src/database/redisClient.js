@@ -5,6 +5,9 @@
 const redis = require('redis');
 const { SETTINGS } = require('../config/settings');
 const { MONITORING_SETTINGS } = require('../common/const');
+const Logger = require('../hft/utils/Logger');
+
+const logger = new Logger('RedisClient');
 
 // 環境変数からRedis接続URLを取得、または既定値を使用
 // Docker環境では適切なサービス名を使用
@@ -28,15 +31,15 @@ const client = redis.createClient({
   },
   // Issue #4826: より堅牢な再試行戦略
   retry_strategy: (options) => {
-    console.log(`[Redis Retry] 試行 ${options.attempt}, 経過時間: ${options.total_retry_time}ms`);
+    logger.info(`[Redis Retry] 試行 ${options.attempt}, 経過時間: ${options.total_retry_time}ms`);
     
     if (options.error && options.error.code === 'ECONNREFUSED') {
-      console.error('Redis接続が拒否されました。再接続を試みます...');
+      logger.error('Redis接続が拒否されました。再接続を試みます...');
       return Math.min(options.attempt * 200, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX); // より長い間隔
     }
     
     if (options.total_retry_time > SETTINGS.DATABASE.REDIS.CONNECTION_TIMEOUT) {
-      console.error('Redis接続のタイムアウトに達しました。');
+      logger.error('Redis接続のタイムアウトに達しました。');
       return new Error('Redis接続のタイムアウトに達しました。');
     }
     
@@ -62,19 +65,19 @@ client.on('error', (err) => {
 });
 
 client.on('connect', () => {
-  console.log(`Redisに接続しました: ${REDIS_URL}`);
+  logger.info(`Redisに接続しました: ${REDIS_URL}`);
 });
 
 client.on('ready', () => {
-  console.log('Redisクライアントが準備完了しました');
+  logger.info('Redisクライアントが準備完了しました');
 });
 
 client.on('end', () => {
-  console.log('Redis接続が閉じられました');
+  logger.info('Redis接続が閉じられました');
 });
 
 client.on('reconnecting', () => {
-  console.log('Redisに再接続中...');
+  logger.info('Redisに再接続中...');
 });
 
 // 自動再接続を試みる関数
