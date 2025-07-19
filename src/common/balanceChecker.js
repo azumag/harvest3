@@ -461,77 +461,62 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
  */
 async function releaseDistributedLock(lockKey, lockId) {
   try {
-    // lockKeyとlockIdの型安全性を確保
-    if (!lockKey || !lockId) {
-      logger.warn(`分散ロック解放スキップ: パラメータが無効です (lockKey: ${lockKey}, lockId: ${lockId})`);
+    // 基本的なnull/undefinedチェック
+    if (lockKey == null || lockId == null) {
+      logger.warn(`分散ロック解放スキップ: パラメータがnull/undefined (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
     
-    // 特殊な型をチェック（Symbol、BigInt、関数など）
-    if (typeof lockKey === 'symbol' || typeof lockKey === 'bigint' || typeof lockKey === 'function') {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockKey (lockKey: ${lockKey}, type: ${typeof lockKey})`);
-      return false;
-    }
-    if (typeof lockId === 'symbol' || typeof lockId === 'bigint' || typeof lockId === 'function') {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockId: ${lockId}, type: ${typeof lockId})`);
+    // 型チェック - 配列、オブジェクト、関数、Symbol、BigIntは拒否
+    if (Array.isArray(lockKey) || Array.isArray(lockId)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId`);
       return false;
     }
     
-    // 数値型の特殊値をチェック（NaN、Infinity、-Infinity）
-    if (typeof lockKey === 'number' && (!Number.isFinite(lockKey) || Number.isNaN(lockKey))) {
-      logger.warn(`分散ロック解放スキップ: 特殊な数値のlockKey (lockKey: ${lockKey})`);
-      return false;
-    }
-    if (typeof lockId === 'number' && (!Number.isFinite(lockId) || Number.isNaN(lockId))) {
-      logger.warn(`分散ロック解放スキップ: 特殊な数値のlockId (lockId: ${lockId})`);
-      return false;
-    }
-    
-    // 無効な型をチェック（配列、関数、オブジェクトは処理しない）
-    if (Array.isArray(lockId) || typeof lockId === 'function' || (typeof lockId === 'object' && lockId !== null)) {
-      logger.warn(`分散ロック解放スキップ: 無効な型のlockId (lockKey: ${lockKey}, lockId: ${lockId}, type: ${typeof lockId})`);
+    if (typeof lockKey === 'object' || typeof lockId === 'object' ||
+        typeof lockKey === 'function' || typeof lockId === 'function' ||
+        typeof lockKey === 'symbol' || typeof lockId === 'symbol' ||
+        typeof lockKey === 'bigint' || typeof lockId === 'bigint') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId`);
       return false;
     }
     
-    // 文字列に変換してバリデーション
-    let stringLockKey = String(lockKey);
-    let stringLockId = String(lockId);
+    // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
+    const stringLockKey = String(lockKey).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    const stringLockId = String(lockId).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     
-    // 文字列化された値が有効かチェック（直接比較版）
-    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '' || stringLockKey === '[object Object]' || stringLockKey === 'NaN' || stringLockKey === 'Infinity' || stringLockKey === '-Infinity' || stringLockKey.includes('Symbol(') || stringLockKey.includes('[object Symbol]') || stringLockKey.includes('[object BigInt]')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey})`);
-      return false;
-    }
-    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '' || stringLockId === '[object Object]' || stringLockId === 'NaN' || stringLockId === 'Infinity' || stringLockId === '-Infinity' || stringLockId.includes('Symbol(') || stringLockId.includes('[object Symbol]') || stringLockId.includes('[object BigInt]')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
-      return false;
-    }
-    
-    // カンマや特殊な文字列を含む場合もチェック
-    if (stringLockKey.includes(',') || stringLockKey.includes('[object')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockKey (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockKey})`);
-      return false;
-    }
-    if (stringLockId.includes(',') || stringLockId.includes('[object')) {
-      logger.warn(`分散ロック解放スキップ: 不正な文字列化されたlockId (lockKey: ${lockKey}, lockId: ${lockId}, stringified: ${stringLockId})`);
-      return false;
-    }
-    
-    // Redis Luaスクリプト用に文字列をサニタイズ（制御文字・非印字文字を除去）
-    stringLockKey = stringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    stringLockId = stringLockId.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    
-    // サニタイズ後の最終チェック
+    // 空文字列チェック
     if (!stringLockKey || !stringLockId) {
-      logger.warn(`分散ロック解放スキップ: サニタイズ後に空文字列 (元lockKey: ${lockKey}, 元lockId: ${lockId})`);
+      logger.warn(`分散ロック解放スキップ: 空文字列または無効な値 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
       return false;
     }
     
-    // バリデーションは文字列化されたパラメータで実行
-    const validation = validateLockParameters(stringLockKey, stringLockId, 'balanceChecker');
-    if (!validation.valid) {
-      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockId: ${stringLockId})`);
+    // 明らかに無効な文字列化結果をチェック（テスト要件に対応）
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '[object Object]' || 
+        stringLockKey.includes(',') || stringLockKey.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
       return false;
+    }
+    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '[object Object]' || 
+        stringLockId.includes(',') || stringLockId.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
+      return false;
+    }
+    
+    // 追加の無効な文字列化結果をチェック
+    const additionalInvalidStrings = ['NaN', 'Infinity', '-Infinity'];
+    if (additionalInvalidStrings.includes(stringLockKey) || additionalInvalidStrings.includes(stringLockId)) {
+      logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
+      return false;
+    }
+    
+    // バリデーション関数が利用可能であればチェック
+    if (typeof validateLockParameters === 'function') {
+      const validation = validateLockParameters(stringLockKey, stringLockId, 'balanceChecker');
+      if (!validation.valid) {
+        logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockId: ${stringLockId})`);
+        return false;
+      }
     }
     
     await ensureRedisConnection();
@@ -543,14 +528,21 @@ async function releaseDistributedLock(lockKey, lockId) {
     
     // Lua スクリプトを使用してアトミックにロックを解放
     const luaScript = `
+      local lockKey = KEYS[1]
+      local lockIdToCheck = ARGV[1]
+      
+      -- 引数の型チェック
+      if type(lockKey) ~= 'string' or type(lockIdToCheck) ~= 'string' then
+        return 0
+      end
+      
       local lockValue = redis.call('GET', KEYS[1])
       if lockValue and type(lockValue) == 'string' and lockValue ~= '' then
         local success, lockData = pcall(cjson.decode, lockValue)
         if success and lockData and type(lockData) == 'table' and lockData.lockId then
-          -- lockIdが文字列でない場合は文字列に変換
           local lockIdStr = tostring(lockData.lockId)
           if lockIdStr == ARGV[1] then
-            redis.call('DEL', KEYS[1])
+            redis.call('DEL', lockKey)
             return 1
           end
         end
@@ -558,23 +550,7 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
-    // Redis eval()前の最終バリデーション（Issue #4973対応）
-    const finalLockKey = String(stringLockKey);
-    const finalLockId = String(stringLockId);
-    
-    // 最終的な引数が空文字列でないことを確認
-    if (!finalLockKey || !finalLockId || finalLockKey.trim() === '' || finalLockId.trim() === '') {
-      logger.warn(`分散ロック解放スキップ: Redis eval直前で無効な引数を検出 (finalLockKey: '${finalLockKey}', finalLockId: '${finalLockId}')`);
-      return false;
-    }
-    
-    // 引数がRedis Luaスクリプトに安全に渡せることを確認
-    if (typeof finalLockKey !== 'string' || typeof finalLockId !== 'string') {
-      logger.warn(`分散ロック解放スキップ: Redis eval直前で非文字列引数を検出 (finalLockKey type: ${typeof finalLockKey}, finalLockId type: ${typeof finalLockId})`);
-      return false;
-    }
-    
-    // Redis eval()に明示的に文字列として渡す（Issue #2689対応）
+    // Redis eval()を実行（Issue #2689対応: 明示的文字列変換）
     const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
     
     if (result === 1) {
