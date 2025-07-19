@@ -37,7 +37,12 @@ async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
  */
 async function postErrorToDiscord(message, options = {}) {
   if (!discordErrorWebhookUrl) {
-    console.error('Discord Webhook URLが設定されていません');
+    // Issue #5003修正: backtest モードでは警告レベルを下げる
+    if (process.env.BACKTEST_MODE === 'true') {
+      console.warn('[BACKTEST] Discord Webhook URLが設定されていません (backtest mode では必須ではありません)');
+    } else {
+      console.error('Discord Webhook URLが設定されていません');
+    }
     return;
   }
 
@@ -84,7 +89,12 @@ async function postOrderToDiscord(message, options = {}) {
  */
 async function postResultToDiscord(message, discordWebhookURL = discordResultWebhookUrl, options = {}) {
   if (!discordWebhookURL) {
-    console.error('Discord Webhook URLが設定されていません');
+    // Issue #5003修正: backtest モードでは警告レベルを下げる
+    if (process.env.BACKTEST_MODE === 'true') {
+      console.warn('[BACKTEST] Discord Webhook URLが設定されていません (backtest mode では必須ではありません)');
+    } else {
+      console.error('Discord Webhook URLが設定されていません');
+    }
     return;
   }
 
