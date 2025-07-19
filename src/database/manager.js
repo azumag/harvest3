@@ -1901,6 +1901,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
       
       // 接続回復を試行
+      const redisDatabase = require('./redisDatabase');
       const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger, 3, true);
       if (recoveredClient) {
         currentRedisClient = recoveredClient;
