@@ -3537,6 +3537,7 @@ module.exports = {
   recalculateTradeSummaryFromMongoDB,
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
+  execute2PCTransaction: executeDistributedTransaction, // Issue #4949: テスト用エイリアス - 2PC実行
   executeDistributedTransactionWithRetry, // Issue #4155: リトライ機能付き2PC実行
   checkRedisConnectionHealth, // Issue #4155: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
