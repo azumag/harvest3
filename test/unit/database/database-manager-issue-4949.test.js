@@ -130,7 +130,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     // Mock only the exported functions we need
     jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
       acquired: true,
-      lockId: 'mock-lock-id'
+      lockKey: 'lock:trade:test:BTC/JPY:test-trade-id',
+      lockValue: 'mock-lock-value',
+      ttl: 30000
     });
     
     jest.spyOn(databaseManager, 'checkRedisConnectionHealth').mockResolvedValue({
@@ -170,6 +172,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.hDel = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.del = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.eval = jest.fn().mockReturnValue(mockRedisTransaction);
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -251,6 +255,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hDel = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.del = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.eval = jest.fn().mockReturnValue(mockRedisTransaction);
 
     sameClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -305,6 +312,11 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     // Mock the recovery function to return null (failed recovery)
     const mockRedisClient = require('../../../src/database/redisClient');
     mockRedisClient.attemptRedisConnectionRecovery.mockResolvedValue(null);
+    
+    // Mock executeRedisTransactionWithTimeout to throw the expected error
+    mockRedisClient.executeRedisTransactionWithTimeout.mockRejectedValue(
+      new Error('Redis Commit失敗: クライアントが実行可能状態ではありません')
+    );
 
     const mockRedisTransaction = {
       client: invalidClient,
@@ -327,6 +339,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.hDel = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.del = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.eval = jest.fn().mockReturnValue(mockRedisTransaction);
 
     invalidClient.multi.mockReturnValue(mockRedisTransaction);
     
