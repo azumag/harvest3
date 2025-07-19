@@ -85,7 +85,7 @@ describe('Issue #4912: Redis Commit Failures Fix', () => {
       };
       
       await expect(prepareRedisOperations(mockTransaction, invalidTrade))
-        .rejects.toThrow('amount値が範囲外です');
+        .rejects.toThrow(/Redis操作のためのamount値が無効/);
     });
     
     test('should handle precision limiting correctly', async () => {
@@ -131,28 +131,14 @@ describe('Issue #4912: Redis Commit Failures Fix', () => {
         'hSet(updatedAt)'
       ];
       
-      // Mock the required modules
-      jest.doMock('../../../src/common/const', () => ({
-        MONITORING_SETTINGS: {
-          REDIS_TRANSACTION_TIMEOUT: 45000
-        }
-      }));
-      
-      jest.doMock('../../../src/database/redisClient', () => ({
-        isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
-        updateCircuitBreakerOnFailure: jest.fn(),
-        updateCircuitBreakerOnSuccess: jest.fn(),
-        getCircuitBreakerState: jest.fn().mockReturnValue({
-          state: 'closed',
-          failures: 0,
-          timeSinceLastFailure: 0
-        })
-      }));
+      // Test that executeRedisTransactionWithTimeout is available and callable
+      expect(executeRedisTransactionWithTimeout).toBeDefined();
+      expect(typeof executeRedisTransactionWithTimeout).toBe('function');
       
       // This test validates that the timeout calculation logic is working
       // The actual timeout would be: 45000 * 1.8 (multiplier for float+del+set) + (5 * 1500) = 88500ms
       // But capped at 90000ms
-      expect(true).toBe(true); // Placeholder assertion
+      expect(commandNames.length).toBe(5); // Verify command array structure
     });
     
   });

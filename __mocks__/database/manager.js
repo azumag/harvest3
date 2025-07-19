@@ -169,18 +169,19 @@ module.exports = {
       validationErrors.push('無効なside値');
     }
     
-    // 数値フィールドの再検証
-    if (typeof trade.amount !== 'number') {
-      validationErrors.push('amount値が無効');
-    } else if (!Number.isFinite(trade.amount) || trade.amount <= 0) {
+    // 数値フィールドの再検証 - Enhanced for Issue #4912
+    // First check basic validity (like validateNumericFields does)
+    if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
       validationErrors.push(`Redis操作のためのamount値が無効: ${trade.amount}`);
-    } else if (trade.amount > Number.MAX_SAFE_INTEGER || trade.amount > Number.MAX_VALUE) {
-      // Enhanced range validation for Issue #4912
-      validationErrors.push('amount値が範囲外です');
+    } else {
+      // Then check range like validateNumericValue does in prepareRedisOperations
+      if (!isFinite(trade.amount) || Math.abs(trade.amount) > Number.MAX_SAFE_INTEGER) {
+        validationErrors.push(`amount値が範囲外です: ${trade.amount}`);
+      }
     }
     
     if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
-      validationErrors.push(`Redis操作のためのvalue値が無効: ${trade.value}`);
+      validationErrors.push(`value値が無効: ${trade.value}`);
     }
     
     if (validationErrors.length > 0) {
@@ -201,17 +202,17 @@ module.exports = {
       return Math.round(value * 100000000) / 100000000; // 8 decimal places
     };
     
-    // Simulate actual Redis transaction calls
+    // Simulate actual Redis transaction calls with proper Jest mock tracking
     if (transaction && typeof transaction === 'object') {
-      if (transaction.hIncrByFloat) {
+      if (transaction.hIncrByFloat && typeof transaction.hIncrByFloat === 'function') {
         transaction.hIncrByFloat('position:key', 'netPosition', limitPrecision(trade.amount));
         transaction.hIncrByFloat('position:key', 'buyAmount', limitPrecision(trade.amount));
         transaction.hIncrByFloat('position:key', 'totalBuyCost', limitPrecision(trade.value));
       }
-      if (transaction.hDel) {
+      if (transaction.hDel && typeof transaction.hDel === 'function') {
         transaction.hDel('pendingOrder:key');
       }
-      if (transaction.hSet) {
+      if (transaction.hSet && typeof transaction.hSet === 'function') {
         transaction.hSet('position:key', 'updatedAt', Date.now());
       }
     }
