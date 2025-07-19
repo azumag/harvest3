@@ -204,9 +204,16 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
   if (typeof error === 'string') {
     // 意味のない文字列パターンをチェック
     if (error === '-' || error === '' || error.trim() === '') {
-      // Issue #4155: より詳細なエラーメッセージを提供
+      // Issue #4826: より詳細なエラーメッセージと診断情報を提供
       const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
-      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. This may indicate a connection issue or Redis server timeout.`;
+      const diagnosticInfo = [
+        'This may indicate:',
+        '1. Redis connection timeout or instability',
+        '2. Redis server memory pressure or resource exhaustion',
+        '3. Network connectivity issues between application and Redis',
+        '4. Redis client library response parsing issues'
+      ].join(', ');
+      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}`;
     }
     return error;
   }
@@ -346,6 +353,101 @@ async function attemptRedisConnectionRecovery(redisDatabase, logger, maxRetries 
 
 // Logger instance for database operations
 const logger = new Logger('DatabaseManager');
+
+/**
+ * Issue #4826: Redis トランザクションの堅牢な実行関数
+ * タイムアウト制御と詳細なエラーハンドリングを提供
+ * 
+ * @param {Object} redisTransaction - Redis MULTI transaction
+ * @param {Array} commandNames - 実行コマンド名のリスト
+ * @param {Object} trade - トレード情報（エラー時のコンテキスト用）
+ * @param {Object} logger - ログ出力用
+ * @returns {Promise<Array>} トランザクション実行結果
+ */
+async function executeRedisTransactionWithTimeout(redisTransaction, commandNames, trade, logger) {
+  const { MONITORING_SETTINGS } = require('../common/const');
+  const transactionTimeout = MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT || 45000;
+  
+  // トランザクション実行をタイムアウト制御下で実行
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Redis transaction timeout after ${transactionTimeout}ms`));
+    }, transactionTimeout);
+  });
+  
+  const transactionPromise = redisTransaction.exec();
+  
+  try {
+    // Promise.raceを使用してタイムアウト制御
+    const redisResults = await Promise.race([transactionPromise, timeoutPromise]);
+    
+    if (!redisResults) {
+      throw new Error('Redis Commit失敗: トランザクション結果がnull');
+    }
+    
+    if (!Array.isArray(redisResults) || redisResults.length === 0) {
+      throw new Error('Redis Commit失敗: 無効なトランザクション結果');
+    }
+    
+    // トランザクション結果の事前検証
+    const expectedCommandCount = commandNames.length;
+    if (redisResults.length !== expectedCommandCount) {
+      logger.warn(`[Redis Transaction] コマンド数不一致: 期待値=${expectedCommandCount}, 実際=${redisResults.length}`);
+    }
+    
+    return redisResults;
+    
+  } catch (error) {
+    if (error.message.includes('timeout')) {
+      logger.error(`[Redis Transaction] タイムアウト: ${trade.tradeId} - ${transactionTimeout}ms経過`);
+      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${transactionTimeout}ms)`);
+    } else {
+      logger.error(`[Redis Transaction] 実行エラー: ${trade.tradeId} - ${error.message}`);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Issue #4826: Redis トランザクション事前検証関数
+ * トランザクション実行前に基本的な整合性をチェック
+ * 
+ * @param {Object} redisTransaction - Redis MULTI transaction
+ * @param {Array} commandNames - 実行予定のコマンド名
+ * @param {Object} trade - トレード情報
+ * @param {Object} logger - ログ出力用
+ * @returns {boolean} 検証結果（true: 正常, false: 異常）
+ */
+function validateRedisTransactionBeforeExecution(redisTransaction, commandNames, trade, logger) {
+  try {
+    // 基本的な前提条件チェック
+    if (!redisTransaction) {
+      logger.error(`[Redis Validation] トランザクションオブジェクトが存在しません: ${trade.tradeId}`);
+      return false;
+    }
+    
+    if (!Array.isArray(commandNames) || commandNames.length === 0) {
+      logger.error(`[Redis Validation] コマンド名配列が無効です: ${trade.tradeId}`);
+      return false;
+    }
+    
+    // トレード情報の必須フィールドチェック
+    const requiredTradeFields = ['tradeId', 'exchange', 'symbol', 'strategy'];
+    for (const field of requiredTradeFields) {
+      if (!trade[field]) {
+        logger.error(`[Redis Validation] 必須フィールド ${field} が存在しません: ${trade.tradeId}`);
+        return false;
+      }
+    }
+    
+    logger.debug(`[Redis Validation] トランザクション事前検証完了: ${trade.tradeId} (${commandNames.length} commands)`);
+    return true;
+    
+  } catch (error) {
+    logger.error(`[Redis Validation] 検証中にエラー: ${trade.tradeId} - ${error.message}`);
+    return false;
+  }
+}
 
 // フォールバック定数
 const FALLBACK_PRICE_PRECISION = 8; // デフォルトの価格精度
@@ -1522,15 +1624,13 @@ async function executeDistributedTransaction(trade, isBacktest) {
       throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
     }
     
-    const redisResults = await redisTransaction.exec();
-    if (!redisResults) {
-      throw new Error('Redis Commit失敗: トランザクション結果がnull');
+    // Issue #4826: トランザクション事前検証
+    if (!validateRedisTransactionBeforeExecution(redisTransaction, redisCommandNames, trade, logger)) {
+      throw new Error('Redis Commit失敗: トランザクション事前検証失敗');
     }
     
-    // Issue #4155: 結果配列の検証を追加
-    if (!Array.isArray(redisResults) || redisResults.length === 0) {
-      throw new Error('Redis Commit失敗: 無効なトランザクション結果');
-    }
+    // Issue #4826: 堅牢なトランザクション実行（タイムアウト制御付き）
+    const redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
     
     // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
     // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
@@ -3159,5 +3259,7 @@ module.exports = {
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
   getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
   addTradeRecord, // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
-  executeRedisCompensation // Issue #4126: テスト用にエクスポート
+  executeRedisCompensation, // Issue #4126: テスト用にエクスポート
+  executeRedisTransactionWithTimeout, // Issue #4826: タイムアウト制御付きトランザクション実行
+  validateRedisTransactionBeforeExecution // Issue #4826: トランザクション事前検証
 };
