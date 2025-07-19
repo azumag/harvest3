@@ -169,6 +169,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hDel = jest.fn().mockReturnValue(mockRedisTransaction);
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -291,11 +292,23 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     const invalidClient = {
       isReady: false,
       isOpen: false,
-      status: 'disconnected'
+      status: 'disconnected',
+      multi: jest.fn()
     };
 
+    // Override the health check to return unhealthy status for this test
+    jest.spyOn(databaseManager, 'checkRedisConnectionHealth').mockResolvedValue({
+      isHealthy: false,
+      details: { status: 'disconnected', error: 'Connection failed' }
+    });
+
+    // Mock the recovery function to return null (failed recovery)
+    const mockRedisClient = require('../../../src/database/redisClient');
+    mockRedisClient.attemptRedisConnectionRecovery.mockResolvedValue(null);
+
     const mockRedisTransaction = {
-      client: invalidClient
+      client: invalidClient,
+      exec: jest.fn().mockResolvedValue([])
     };
     
     // Add all the Redis commands that might be used in prepareRedisOperations
@@ -313,8 +326,13 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
     mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hDel = jest.fn().mockReturnValue(mockRedisTransaction);
 
-    mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
+    invalidClient.multi.mockReturnValue(mockRedisTransaction);
+    
+    // Mock the redisDatabase to return the invalid client for this test
+    const redisDatabase = require('../../../src/database/redisDatabase');
+    redisDatabase.getClient.mockReturnValue(invalidClient);
 
     const mockTrade = {
       tradeId: 'test-trade-4949-precheck',
