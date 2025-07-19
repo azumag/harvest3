@@ -3,6 +3,16 @@
  * Redis接続の包括的なヘルスチェックと自動回復機能のテスト
  */
 
+// ohlcvCache をモック (node-cache依存関係を回避)
+jest.mock('../../../src/database/ohlcvCache', () => ({
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+  has: jest.fn(),
+  keys: jest.fn().mockReturnValue([]),
+  close: jest.fn()
+}));
+
 // Jest テストフレームワークを使用
 jest.unmock('../../../src/database/manager');
 
@@ -103,6 +113,12 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       apiCoordinator: {}
     }));
 
+    // redisClient の initRedisClient をモック
+    jest.doMock('../../../src/database/redisClient', () => ({
+      initRedisClient: jest.fn().mockResolvedValue(true)
+    }));
+
+
     // DatabaseManagerをインポート
     const DatabaseManager = require('../../../src/database/manager');
     databaseManager = DatabaseManager;
@@ -181,43 +197,61 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
     });
 
     test('Redis接続回復機能が正常に動作する', async () => {
-      // 初回は接続不良、回復後は正常
-      let isFirstCall = true;
-      const originalGetClient = mockRedisDatabase.getClient;
+      // 接続回復のシミュレーション - 最初の健全性チェックで失敗、回復後に成功
+      let callCount = 0;
       
       mockRedisDatabase.getClient = jest.fn().mockImplementation(() => {
-        if (isFirstCall) {
-          isFirstCall = false;
-          return {
+        callCount++;
+        
+        if (callCount <= 2) {
+          // 最初の健全性チェック時と recovery の最初の試行時は接続不良なクライアントを返す
+          const badClient = {
             ...mockRedisClient,
             isReady: true,
             isOpen: true,
             status: 'connecting', // 不良状態
-            ping: jest.fn().mockRejectedValue(new Error('Connection timeout'))
+            ping: jest.fn().mockRejectedValue(new Error('Connection timeout')),
+            multi: jest.fn().mockReturnValue({
+              exec: jest.fn().mockResolvedValue([
+                [new Error('Connection failed'), null],
+                [null, 'OK']
+              ]),
+              hIncrByFloat: jest.fn(),
+              hDel: jest.fn(),
+              hSet: jest.fn()
+            }),
+            quit: jest.fn().mockResolvedValue('OK'),
+            disconnect: jest.fn().mockResolvedValue('OK')
           };
+          return badClient;
         } else {
-          return {
+          // 3回目以降（回復後）は正常なクライアントを返す
+          const goodClient = {
             ...mockRedisClient,
             isReady: true,
             isOpen: true,
             status: 'ready', // 正常状態
-            ping: jest.fn().mockResolvedValue('PONG')
+            ping: jest.fn().mockResolvedValue('PONG'),
+            // 操作テスト用のメソッドを追加
+            set: jest.fn().mockResolvedValue('OK'),
+            get: jest.fn().mockImplementation((key) => {
+              if (key.includes('health_check')) return 'health_check_test';
+              return 'mocked_value';
+            }),
+            del: jest.fn().mockResolvedValue(1),
+            multi: jest.fn().mockReturnValue({
+              exec: jest.fn().mockResolvedValue([
+                [null, 'OK'],
+                [null, 'OK']
+              ]),
+              hIncrByFloat: jest.fn(),
+              hDel: jest.fn(),
+              hSet: jest.fn()
+            })
           };
+          return goodClient;
         }
       });
-
-      // redisTransactionのモック
-      const mockRedisTransaction = {
-        exec: jest.fn().mockResolvedValue([
-          [null, 'OK'],
-          [null, 'OK']
-        ]),
-        hIncrByFloat: jest.fn(),
-        hDel: jest.fn(),
-        hSet: jest.fn()
-      };
-      mockRedisClient.multi.mockReturnValue(mockRedisTransaction);
-
       
       const testTrade = {
         tradeId: 'test-trade-789',
