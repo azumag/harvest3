@@ -206,8 +206,7 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
     if (error === '-' || error === '' || error.trim() === '') {
       // Issue #4826: より詳細なエラーメッセージと診断情報を提供
       const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
-      const diagnosticInfo = [
-        'This may indicate:',
+      const diagnosticInfo = 'This may indicate: ' + [
         '1. Redis connection timeout or instability',
         '2. Redis server memory pressure or resource exhaustion',
         '3. Network connectivity issues between application and Redis',

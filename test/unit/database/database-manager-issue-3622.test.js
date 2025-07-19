@@ -141,11 +141,11 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
     
     it('意味のない文字列が適切に処理される', () => {
       const testCases = [
-        { error: '-', commandIndex: 0, expected: 'Redis command 0 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
-        { error: '', commandIndex: 1, expected: 'Redis command 1 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
-        { error: '   ', commandIndex: 2, expected: 'Redis command 2 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
-        { error: '\t', commandIndex: 3, expected: 'Redis command 3 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
-        { error: '\n', commandIndex: 4, expected: 'Redis command 4 failed: Invalid response (empty/dash). This may indicate a connection issue or Redis server timeout.' },
+        { error: '-', commandIndex: 0, expected: 'Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues' },
+        { error: '', commandIndex: 1, expected: 'Redis command 1 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues' },
+        { error: '   ', commandIndex: 2, expected: 'Redis command 2 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues' },
+        { error: '\t', commandIndex: 3, expected: 'Redis command 3 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues' },
+        { error: '\n', commandIndex: 4, expected: 'Redis command 4 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues' },
       ];
       
       testCases.forEach(({ error, commandIndex, expected }) => {
