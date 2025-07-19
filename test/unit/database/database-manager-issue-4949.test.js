@@ -157,6 +157,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
   });
 
   test('Redis接続状態ログでcurrentRedisClientを正しく使用する', async () => {
+    // Mock the acquireDistributedLock function to ensure lock acquisition succeeds
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockKey: 'lock:trade:bitbank:BTC/JPY:test-trade-4949',
+      lockValue: 'test-lock-value',
+      ttl: 30000
+    });
+    
     // トランザクション失敗をシミュレート
     const mockRedisTransaction = {
       client: mockCurrentRedisClient,
@@ -240,6 +248,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
   });
 
   test('接続リカバリが発生していない場合のclientRecoveredフラグ', async () => {
+    // Mock the acquireDistributedLock function to ensure lock acquisition succeeds
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockKey: 'lock:trade:bitbank:BTC/JPY:test-trade-4949-2',
+      lockValue: 'test-lock-value-2',
+      ttl: 30000
+    });
+    
     // リカバリが発生していない状況をシミュレート（同じクライアント参照）
     const sameClient = mockCurrentRedisClient;
     
@@ -306,6 +322,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
   });
 
   test('トランザクション実行前の接続状態チェック', async () => {
+    // Mock the acquireDistributedLock function to ensure lock acquisition succeeds
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockKey: 'lock:trade:bitbank:BTC/JPY:test-trade-4949-precheck',
+      lockValue: 'test-lock-value-precheck',
+      ttl: 30000
+    });
+    
     // 接続が無効なクライアントをシミュレート
     const invalidClient = {
       isReady: false,
