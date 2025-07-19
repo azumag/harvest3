@@ -233,6 +233,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // Verify the logging occurred
     const errorCalls = mockLogger.error.mock.calls;
+    
+    // Redis接続状態のログを検索
     const connectionStateLog = errorCalls.find(call => 
       call[0] && call[0].includes('[2PC] Redis接続状態:')
     );
@@ -320,5 +322,38 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     
     // The key test: clientRecovered should be false when clients are the same
     expect(testCurrentClient !== testCurrentClient).toBe(false);
+  });
+
+  test('トランザクション実行前の接続状態チェック', async () => {
+    // Mock the lock acquisition to return failure for this test
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: false,
+      error: 'Lock acquisition failed'
+    });
+
+    const mockTrade = {
+      tradeId: 'test-trade-4949-precheck',
+      exchange: 'bitbank',
+      symbol: 'BTC/JPY',
+      strategy: 'test-strategy',
+      side: 'buy',
+      amount: 0.001,
+      value: 1000,
+      price: 1000000
+    };
+
+    // Lock acquisition should fail and return an error response
+    const result = await databaseManager.executeDistributedTransaction(mockTrade, false);
+    
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Lock acquisition failed');
+    expect(result.severity).toBe('warning');
+
+    // Verify that the lock acquisition was attempted
+    expect(databaseManager.acquireDistributedLock).toHaveBeenCalledWith(
+      mockTrade.exchange, 
+      mockTrade.symbol, 
+      mockTrade.tradeId
+    );
   });
 });
