@@ -287,7 +287,7 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       expect(successfulCommands).toHaveLength(0);
       
       // 個別エラーメッセージ検証
-      expect(failedCommands[0].errorMessage).toBe('Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues');
+      expect(failedCommands[0].errorMessage).toBe('Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues, 5. Redis transaction queue overflow or corruption. Recovery actions: Connection retry with exponential backoff, Circuit breaker activation, Transaction re-validation');
       expect(failedCommands[1].errorMessage).toBe('Redis command 1 failed: Connection closed');
       expect(failedCommands[2].errorMessage).toBe('Redis command 2 failed: Redis server error');
       expect(failedCommands[3].errorMessage).toBe('Redis operation failed with null/undefined error. This may indicate a connection issue or timeout.');
@@ -299,7 +299,7 @@ describe('Database Manager Issue #3622: Redisエラーメッセージの改善',
       ).join(', ');
       
       expect(errorDetails).toBe(
-        'コマンド0: Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues, ' +
+        'コマンド0: Redis command 0 failed: Invalid response (empty/dash). This may indicate: 1. Redis connection timeout or instability, 2. Redis server memory pressure or resource exhaustion, 3. Network connectivity issues between application and Redis, 4. Redis client library response parsing issues, 5. Redis transaction queue overflow or corruption. Recovery actions: Connection retry with exponential backoff, Circuit breaker activation, Transaction re-validation, ' +
         'コマンド1: Redis command 1 failed: Connection closed, ' +
         'コマンド2: Redis command 2 failed: Redis server error, ' +
         'コマンド3: Redis operation failed with null/undefined error. This may indicate a connection issue or timeout., ' +
