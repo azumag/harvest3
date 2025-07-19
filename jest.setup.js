@@ -129,22 +129,35 @@ afterAll(async () => {
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // CI環境では積極的なクリーンアップを避ける
-  if (!process.env.CI) {
-    // アクティブなハンドルを安全にクリーンアップ（非CI環境のみ）
-    if (process._getActiveHandles) {
-      const activeHandles = process._getActiveHandles();
-      if (activeHandles && activeHandles.length > 0) {
-        activeHandles.forEach(handle => {
-          if (handle && typeof handle.unref === 'function') {
-            try {
-              handle.unref();
-            } catch (error) {
-              // ハンドルのクリーンアップエラーを無視
-            }
+  // CI環境でも軽微なクリーンアップを実行してプロセス終了を改善
+  if (process._getActiveHandles) {
+    const activeHandles = process._getActiveHandles();
+    if (activeHandles && activeHandles.length > 0) {
+      activeHandles.forEach(handle => {
+        if (handle && typeof handle.unref === 'function') {
+          try {
+            handle.unref();
+          } catch (error) {
+            // ハンドルのクリーンアップエラーを無視
           }
-        });
-      }
+        }
+      });
+    }
+  }
+  
+  // タイマーの強制クリア
+  if (process._getActiveRequests) {
+    const activeRequests = process._getActiveRequests();
+    if (activeRequests && activeRequests.length > 0) {
+      activeRequests.forEach(request => {
+        if (request && typeof request.abort === 'function') {
+          try {
+            request.abort();
+          } catch (error) {
+            // リクエストのキャンセルエラーを無視
+          }
+        }
+      });
     }
   }
 });
