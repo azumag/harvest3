@@ -235,7 +235,9 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
             // 操作テスト用のメソッドを追加
             set: jest.fn().mockResolvedValue('OK'),
             get: jest.fn().mockImplementation((key) => {
-              if (key.includes('health_check')) return 'health_check_test';
+              if (key.includes('health_check')) {
+                return 'health_check_test';
+              }
               return 'mocked_value';
             }),
             del: jest.fn().mockResolvedValue(1),
