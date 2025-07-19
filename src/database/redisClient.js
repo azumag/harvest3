@@ -31,8 +31,8 @@ const CIRCUIT_BREAKER_CONFIG = {
 };
 
 // Issue #4920: 接続プールの状態管理
-let connectionPool = [];
-let circuitBreakerState = {
+const connectionPool = [];
+const circuitBreakerState = {
   failures: 0,
   lastFailureTime: 0,
   state: 'CLOSED' // CLOSED, OPEN, HALF_OPEN

@@ -462,7 +462,7 @@ async function acquireDistributedLock(lockKey, ttl = BALANCE_CONFIG.distributedL
 async function releaseDistributedLock(lockKey, lockId) {
   try {
     // 基本的なnull/undefinedチェック
-    if (lockKey == null || lockId == null) {
+    if (lockKey === null || lockKey === undefined || lockId === null || lockId === undefined) {
       logger.warn(`分散ロック解放スキップ: パラメータがnull/undefined (lockKey: ${lockKey}, lockId: ${lockId})`);
       return false;
     }
