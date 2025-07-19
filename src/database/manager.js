@@ -2216,12 +2216,11 @@ async function releaseDistributedLock(lockInfo) {
     }
     
     // 5. 追加のバリデーション（既存の関数を使用）
-    // TODO: Temporarily disable for debugging
-    // const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
-    // if (!validation.valid) {
-    //   logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
-    //   return false;
-    // }
+    const validation = validateLockParameters(stringLockKey, stringLockValue, 'database/manager');
+    if (!validation.valid) {
+      logger.warn(`分散ロック解放スキップ: ${validation.error} (lockKey: ${stringLockKey}, lockValue: ${stringLockValue})`);
+      return false;
+    }
 
     // 6. 最終的な変数の設定（テスト要件）
     // eslint-disable-next-line prefer-const

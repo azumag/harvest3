@@ -485,6 +485,13 @@ async function releaseDistributedLock(lockKey, lockId) {
     const preStringLockKey = String(lockKey);
     const preStringLockId = String(lockId);
     
+    // 制御文字の事前チェック（サニタイズ前に無効な文字を検出）
+    const controlCharRegex = /[\x00-\x1F\x7F-\x9F]/;
+    if (controlCharRegex.test(preStringLockKey) || controlCharRegex.test(preStringLockId)) {
+      logger.warn(`分散ロック解放スキップ: 制御文字を含む引数 (lockKey: '${preStringLockKey}', lockId: '${preStringLockId}')`);
+      return false;
+    }
+    
     // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
     const stringLockKey = preStringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     const stringLockId = preStringLockId.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
