@@ -19,21 +19,29 @@ const client = redis.createClient({
   socket: {
     connectTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
     commandTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
-    // 再接続の設定
+    // 再接続の設定 (Issue #4826: 改善された再接続設定)
     reconnectDelay: SETTINGS.DATABASE.REDIS.RECONNECT_DELAY,
-    lazyConnect: true
+    lazyConnect: true,
+    // Issue #4826: Keep-alive設定を追加して接続の安定性を向上
+    keepAlive: true,
+    family: 4 // IPv4を明示的に使用
   },
-  // 接続エラー時の再試行設定
+  // Issue #4826: より堅牢な再試行戦略
   retry_strategy: (options) => {
+    console.log(`[Redis Retry] 試行 ${options.attempt}, 経過時間: ${options.total_retry_time}ms`);
+    
     if (options.error && options.error.code === 'ECONNREFUSED') {
       console.error('Redis接続が拒否されました。再接続を試みます...');
-      return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
+      return Math.min(options.attempt * 200, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX); // より長い間隔
     }
+    
     if (options.total_retry_time > SETTINGS.DATABASE.REDIS.CONNECTION_TIMEOUT) {
       console.error('Redis接続のタイムアウトに達しました。');
       return new Error('Redis接続のタイムアウトに達しました。');
     }
-    return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
+    
+    // 指数バックオフ: より慎重な再試行間隔
+    return Math.min(Math.pow(2, options.attempt - 1) * 1000, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
   }
 });
 

@@ -236,7 +236,7 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
       const errorMessage = databaseManager.getRedisErrorMessage('', 2, 'hIncrByFloat(totalSellRevenue)', operationContext);
       expect(errorMessage).toContain('Invalid response (empty/dash)');
       expect(errorMessage).toContain('Context:');
-      expect(errorMessage).toContain('connection issue or Redis server timeout');
+      expect(errorMessage).toContain('This may indicate: 1. Redis connection timeout or instability');
 
       // ダッシュエラーのテスト
       const dashErrorMessage = databaseManager.getRedisErrorMessage('-', 2, 'hIncrByFloat(totalSellRevenue)', operationContext);
