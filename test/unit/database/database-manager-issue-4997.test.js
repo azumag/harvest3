@@ -9,76 +9,82 @@
  * - エラーログの詳細化
  */
 
-// Mock dependencies
-jest.mock('../../../src/database/mongoDatabase', () => ({
-  connectDB: jest.fn(),
-  getClient: jest.fn()
-}));
-
-jest.mock('../../../src/database/redisDatabase', () => ({
-  getClient: jest.fn(),
-  isConnected: jest.fn()
-}));
-
-jest.mock('../../../src/common/utils', () => ({
-  sleep: jest.fn(),
-  timeframeToMs: jest.fn(),
-  isBacktestMode: jest.fn().mockReturnValue(false),
-  validateLockParameters: jest.fn().mockReturnValue({ valid: true })
-}));
-
-jest.mock('../../../src/hft/utils/Logger', () => {
-  return jest.fn().mockImplementation(() => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
-  }));
-});
-
-jest.mock('../../../src/database/mongoDatabase', () => ({
-  connectDB: jest.fn(),
-  getClient: jest.fn()
-}));
-
-jest.mock('../../../src/common/notifications', () => ({
-  postErrorToDiscord: jest.fn()
-}));
-
-jest.mock('../../../src/data/marketDataProvider', () => ({}));
-
-jest.mock('../../../src/common/const', () => ({
-  TRADING_EXECUTION_CONSTANTS: {},
-  EXCHANGE_SETTINGS: {}
-}));
-
-jest.mock('../../../src/common/throttleMonitor', () => ({
-  throttleMonitor: {
-    getStats: jest.fn().mockReturnValue({})
-  }
-}));
-
-jest.mock('../../../src/common/apiCoordinator', () => ({
-  apiCoordinator: {
-    getStats: jest.fn().mockReturnValue({})
-  }
-}));
-
-const mockRedisClient = {
-  isReady: true,
-  eval: jest.fn(),
-  set: jest.fn(),
-  get: jest.fn()
-};
-
-const mockRedisDatabase = require('../../../src/database/redisDatabase');
-mockRedisDatabase.getClient.mockReturnValue(mockRedisClient);
+// Explicitly unmock the manager module
+jest.unmock('../../../src/database/manager');
 
 describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー修正テスト', () => {
   let manager;
+  let mockRedisClient;
+  let mockRedisDatabase;
+  let mockLogger;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Clear Jest module cache to ensure fresh imports
+    jest.resetModules();
+    
+    // Initialize mocks
+    mockRedisClient = {
+      isReady: true,
+      eval: jest.fn(),
+      set: jest.fn(),
+      get: jest.fn()
+    };
+
+    mockRedisDatabase = {
+      getClient: jest.fn().mockReturnValue(mockRedisClient),
+      isConnected: jest.fn().mockReturnValue(true)
+    };
+
+    mockLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    // Setup dynamic mocks
+    jest.doMock('../../../src/hft/utils/Logger', () => {
+      return jest.fn(() => mockLogger);
+    });
+
+    jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
+
+    jest.doMock('../../../src/database/mongoDatabase', () => ({
+      connectDB: jest.fn(),
+      getClient: jest.fn()
+    }));
+
+    jest.doMock('../../../src/common/utils', () => ({
+      sleep: jest.fn(),
+      timeframeToMs: jest.fn(),
+      isBacktestMode: jest.fn().mockReturnValue(false),
+      validateLockParameters: jest.fn().mockReturnValue({ valid: true })
+    }));
+
+    jest.doMock('../../../src/common/notifications', () => ({
+      postErrorToDiscord: jest.fn()
+    }));
+
+    jest.doMock('../../../src/data/marketDataProvider', () => ({}));
+
+    jest.doMock('../../../src/common/const', () => ({
+      TRADING_EXECUTION_CONSTANTS: {},
+      EXCHANGE_SETTINGS: {}
+    }));
+
+    jest.doMock('../../../src/common/throttleMonitor', () => ({
+      throttleMonitor: {
+        getStats: jest.fn().mockReturnValue({})
+      }
+    }));
+
+    jest.doMock('../../../src/common/apiCoordinator', () => ({
+      apiCoordinator: {
+        getStats: jest.fn().mockReturnValue({})
+      }
+    }));
+
+    // Import manager after all mocks are set up
     manager = require('../../../src/database/manager');
   });
 

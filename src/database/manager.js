@@ -96,7 +96,12 @@ function isValidStringValue(str, fieldName) {
   }
   
   // 文字列内容の検証
-  if (str.includes(',') || str.includes('[object')) {
+  if (str.includes('[object')) {
+    return false;
+  }
+  
+  // lockKeyの場合のみカンマを禁止（JSON値を含むlockValueではカンマが必要）
+  if (fieldName === 'lockKey' && str.includes(',')) {
     return false;
   }
   
@@ -2270,8 +2275,18 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   }
   
   // 制御文字や特殊文字の最終チェック - スペース、タブ、@、#なども無効とする
-  if (!/^[a-zA-Z0-9_:\-\.\/]+$/.test(finalLockKey) || !/^[a-zA-Z0-9_:\-\.\/\{\}]+$/.test(finalLockValue)) {
-    logger.warn(`分散ロック解放スキップ: 不正な文字を含む値 (lockKey: '${finalLockKey}', lockValue: '${finalLockValue}')`);
+  // lockKey: 英数字、アンダースコア、コロン、ハイフン、ドット、スラッシュのみ許可
+  // lockValue: JSON文字列のため波括弧、引用符、カンマ、数字、英字、ハイフンなど許可
+  const lockKeyRegex = /^[a-zA-Z0-9_:\-\.\/]+$/;
+  const lockValueRegex = /^[a-zA-Z0-9_:\-\.\/\{\}",]+$/;
+  
+  if (!lockKeyRegex.test(finalLockKey)) {
+    logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockKey (lockKey: '${finalLockKey}')`);
+    return false;
+  }
+  
+  if (!lockValueRegex.test(finalLockValue)) {
+    logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockValue (lockValue: '${finalLockValue}')`);
     return false;
   }
   
