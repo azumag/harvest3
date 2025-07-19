@@ -602,14 +602,29 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     
     // Issue #4920: 各結果の基本的な妥当性チェック
     let nullResultCount = 0;
+    const failedCommands = [];
     for (let i = 0; i < redisResults.length; i++) {
       const result = redisResults[i];
       if (!Array.isArray(result) || result.length !== 2) {
         logger.warn(`[Redis Transaction] 結果${i}の形式が不正: ${JSON.stringify(result)}`);
       }
+      
+      // Issue #4949: 個別コマンドのエラーチェック追加
+      if (result && result[0] instanceof Error) {
+        const commandName = commandNames[i] || `command-${i}`;
+        failedCommands.push(`${commandName}: ${result[0].message}`);
+        logger.error(`[Redis Transaction] コマンド失敗: ${commandName} - ${result[0].message}`);
+      }
+      
       if (result && result[0] === null && result[1] === null) {
         nullResultCount++;
       }
+    }
+    
+    // Issue #4949: 失敗したコマンドがある場合はエラーを投げる
+    if (failedCommands.length > 0) {
+      updateCircuitBreakerOnFailure();
+      throw new Error(`Redis Commit失敗: ${failedCommands.length}個のコマンドが失敗しました - ${failedCommands.join(', ')}`);
     }
     
     // Issue #4920: 過度のnull結果を検出した場合の警告
