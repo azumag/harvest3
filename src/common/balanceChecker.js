@@ -467,9 +467,23 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // 文字列に変換（シンプルで確実な方法）
-    const stringLockKey = String(lockKey).trim();
-    const stringLockId = String(lockId).trim();
+    // 型チェック - 配列、オブジェクト、関数、Symbol、BigIntは拒否
+    if (Array.isArray(lockKey) || Array.isArray(lockId)) {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId`);
+      return false;
+    }
+    
+    if (typeof lockKey === 'object' || typeof lockId === 'object' ||
+        typeof lockKey === 'function' || typeof lockId === 'function' ||
+        typeof lockKey === 'symbol' || typeof lockId === 'symbol' ||
+        typeof lockKey === 'bigint' || typeof lockId === 'bigint') {
+      logger.warn(`分散ロック解放スキップ: 無効な型のlockId`);
+      return false;
+    }
+    
+    // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
+    const stringLockKey = String(lockKey).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    const stringLockId = String(lockId).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     
     // 空文字列チェック
     if (!stringLockKey || !stringLockId) {
