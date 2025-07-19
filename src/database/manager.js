@@ -313,7 +313,7 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     clientExists: !!redisClient,
     clientReady: redisClient?.isReady,
     clientOpen: redisClient?.isOpen,
-    clientConnected: redisClient?.status === 'ready',
+    clientConnected: redisClient?.isReady && redisClient?.isOpen,
     clientStatus: redisClient?.status,
     serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
     pingSuccess: false,
@@ -326,11 +326,11 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     return { isHealthy: false, details };
   }
 
-  // Issue #4951: 厳格な接続状態チェック
-  // isReady、isOpen、およびstatus='ready'の全てが必要
-  // 部分的な接続状態ではRedisオペレーションがnull/undefinedを返す可能性があるため
-  if (!redisClient.isReady || !redisClient.isOpen || redisClient.status !== 'ready') {
-    // Issue #4951: 不健全な接続状態の詳細をログに記録
+  // Issue #4896: 修正された接続状態チェック  
+  // isReadyとisOpenの組み合わせで健全性を判定（statusは参考値として記録）
+  // 機能的な状態指標に基づく信頼性の高いチェック
+  if (!redisClient.isReady || !redisClient.isOpen) {
+    // Issue #4896: 機能的な接続状態の詳細をログに記録
     const failedChecks = [];
     if (!redisClient.isReady) {
       failedChecks.push('isReady=false');
@@ -338,11 +338,10 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     if (!redisClient.isOpen) {
       failedChecks.push('isOpen=false');
     }
-    if (redisClient.status !== 'ready') {
-      failedChecks.push(`status='${redisClient.status}'`);
-    }
+    // ステータスは参考情報として記録（健全性判定には使用しない）
+    const statusInfo = redisClient.status !== 'ready' ? ` (status='${redisClient.status}')` : '';
     
-    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}`);
+    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo}`);
     return { isHealthy: false, details };
   }
 
@@ -1842,11 +1841,11 @@ async function executeDistributedTransaction(trade, isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
         
-        // Issue #3873: Redis接続状態の詳細情報を追加
+        // Issue #4896: Redis接続状態の詳細情報を追加（修正版）
         const redisConnectionInfo = {
           clientReady: redisClient?.isReady,
           clientOpen: redisClient?.isOpen,
-          clientConnected: redisClient?.status === 'ready',
+          clientConnected: redisClient?.isReady && redisClient?.isOpen,
           clientStatus: redisClient?.status,
           serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable'
         };
