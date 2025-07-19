@@ -550,6 +550,18 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
   
+  // Issue #4949: トランザクション実行直前の接続状態チェック
+  try {
+    const client = redisTransaction.client;
+    if (!client || !client.isReady || !client.isOpen) {
+      logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
+      throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+    }
+  } catch (connectionError) {
+    logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
+    throw new Error(`Redis Commit失敗: 接続状態チェック失敗 - ${connectionError.message}`);
+  }
+  
   // Issue #4920: 改善されたタイムアウト制御
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
@@ -1931,13 +1943,15 @@ async function executeDistributedTransaction(trade, isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
         
-        // Issue #4896: Redis接続状態の詳細情報を追加（修正版）
+        // Issue #4949: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
         const redisConnectionInfo = {
-          clientReady: redisClient?.isReady,
-          clientOpen: redisClient?.isOpen,
-          clientConnected: redisClient?.isReady && redisClient?.isOpen,
-          clientStatus: redisClient?.status,
-          serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable'
+          clientReady: currentRedisClient?.isReady,
+          clientOpen: currentRedisClient?.isOpen,
+          clientConnected: currentRedisClient?.isReady && currentRedisClient?.isOpen,
+          clientStatus: currentRedisClient?.status,
+          serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
+          capturedAt: new Date().toISOString(),
+          clientRecovered: currentRedisClient !== redisClient
         };
         
         logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
