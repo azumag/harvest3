@@ -118,11 +118,11 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
   });
 
   describe('改良されたRedis接続ヘルスチェック', () => {
-    test('isReady/isOpen優先の健全性チェック（status無視）', async () => {
-      // checkRedisConnectionHealth 関数を直接テスト
+    test('isReady/isOpen/status全て正常な場合の健全性チェック', async () => {
+      // Issue #4951: 厳格な接続状態チェックに対応
       mockRedisClient.isReady = true;
       mockRedisClient.isOpen = true;
-      mockRedisClient.status = 'connecting'; // ready以外だが ping成功
+      mockRedisClient.status = 'ready'; // Issue #4951: statusも'ready'である必要がある
       mockRedisClient.ping.mockResolvedValue('PONG');
 
       // checkRedisConnectionHealth を直接呼び出し
@@ -134,6 +134,24 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
       expect(healthResult.details.pingSuccess).toBe(true);
       expect(healthResult.details.clientReady).toBe(true);
       expect(healthResult.details.clientOpen).toBe(true);
+    });
+
+    test('status が ready でない場合は不健全と判定（Issue #4951対応）', async () => {
+      // Issue #4951: status が 'ready' でない場合は不健全と判定する
+      mockRedisClient.isReady = true;
+      mockRedisClient.isOpen = true;
+      mockRedisClient.status = 'connecting'; // ready以外の状態
+      mockRedisClient.ping.mockResolvedValue('PONG');
+
+      // checkRedisConnectionHealth を直接呼び出し
+      const Logger = require('../../../src/hft/utils/Logger');
+      const logger = new Logger('Test');
+      const healthResult = await databaseManager.checkRedisConnectionHealth(mockRedisClient, logger);
+      
+      expect(healthResult.isHealthy).toBe(false);
+      expect(healthResult.details.clientReady).toBe(true);
+      expect(healthResult.details.clientOpen).toBe(true);
+      expect(healthResult.details.clientConnected).toBe(false); // status !== 'ready'
     });
 
     test('pingタイムアウトの検出', async () => {

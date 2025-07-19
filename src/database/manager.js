@@ -326,9 +326,23 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     return { isHealthy: false, details };
   }
 
-  // Issue #4155: 改良された状態チェック
-  // isReady と isOpen を優先し、status は参考程度に使用
-  if (!redisClient.isReady || !redisClient.isOpen) {
+  // Issue #4951: 厳格な接続状態チェック
+  // isReady、isOpen、およびstatus='ready'の全てが必要
+  // 部分的な接続状態ではRedisオペレーションがnull/undefinedを返す可能性があるため
+  if (!redisClient.isReady || !redisClient.isOpen || redisClient.status !== 'ready') {
+    // Issue #4951: 不健全な接続状態の詳細をログに記録
+    const failedChecks = [];
+    if (!redisClient.isReady) {
+      failedChecks.push('isReady=false');
+    }
+    if (!redisClient.isOpen) {
+      failedChecks.push('isOpen=false');
+    }
+    if (redisClient.status !== 'ready') {
+      failedChecks.push(`status='${redisClient.status}'`);
+    }
+    
+    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}`);
     return { isHealthy: false, details };
   }
 
