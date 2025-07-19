@@ -113,9 +113,26 @@ describe('Issue #4090: Redis接続状態不整合の修正', () => {
       apiCoordinator: {}
     }));
 
-    // redisClient の initRedisClient をモック
+    // redisClient の機能をモック
     jest.doMock('../../../src/database/redisClient', () => ({
-      initRedisClient: jest.fn().mockResolvedValue(true)
+      initRedisClient: jest.fn().mockResolvedValue(true),
+      getCircuitBreakerState: jest.fn().mockReturnValue({
+        failures: 0,
+        lastFailureTime: 0,
+        state: 'CLOSED',
+        isOpen: false,
+        timeSinceLastFailure: 0
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getExtendedConnectionHealth: jest.fn().mockResolvedValue({
+        clientExists: true,
+        clientReady: true,
+        clientOpen: true,
+        clientStatus: 'ready',
+        circuitBreaker: { state: 'CLOSED', isOpen: false },
+        ping: { success: true, latency: 10, error: null },
+        overallHealth: true
+      })
     }));
 
 
