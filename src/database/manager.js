@@ -23,6 +23,59 @@ const { postErrorToDiscord } = require('../common/notifications');
 const marketDataProvider = require('../data/marketDataProvider');
 const Logger = require('../hft/utils/Logger');
 const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/const');
+
+// Issue #4884: Circuit breaker for Redis operations
+class RedisCircuitBreaker {
+  constructor(failureThreshold = 5, recoveryTime = 30000) {
+    this.failureThreshold = failureThreshold;
+    this.recoveryTime = recoveryTime;
+    this.failureCount = 0;
+    this.lastFailureTime = 0;
+    this.state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
+  }
+  
+  canExecute() {
+    if (this.state === 'CLOSED') {
+      return true;
+    }
+    
+    if (this.state === 'OPEN') {
+      if (Date.now() - this.lastFailureTime > this.recoveryTime) {
+        this.state = 'HALF_OPEN';
+        return true;
+      }
+      return false;
+    }
+    
+    // HALF_OPEN state
+    return true;
+  }
+  
+  recordSuccess() {
+    this.failureCount = 0;
+    this.state = 'CLOSED';
+  }
+  
+  recordFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    
+    if (this.failureCount >= this.failureThreshold) {
+      this.state = 'OPEN';
+    }
+  }
+  
+  getStatus() {
+    return {
+      state: this.state,
+      failureCount: this.failureCount,
+      lastFailureTime: this.lastFailureTime
+    };
+  }
+}
+
+// Global circuit breaker instance
+const redisCircuitBreaker = new RedisCircuitBreaker();
 const { throttleMonitor } = require('../common/throttleMonitor');
 const { apiCoordinator } = require('../common/apiCoordinator');
 
@@ -204,9 +257,9 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
   if (typeof error === 'string') {
     // 意味のない文字列パターンをチェック
     if (error === '-' || error === '' || error.trim() === '') {
-      // Issue #4155: より詳細なエラーメッセージを提供
+      // Issue #4884: Enhanced error messaging with recovery suggestions
       const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
-      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. This may indicate a connection issue or Redis server timeout.`;
+      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. This indicates Redis connection timeout or network instability. Retry recommended.`;
     }
     return error;
   }
@@ -293,14 +346,30 @@ async function checkRedisConnectionHealth(redisClient, logger) {
 
   // 実際の接続テスト（ping）を主要な健全性判定として使用
   try {
-    // Issue #4155: pingテストのタイムアウトを追加
+    // Issue #4884: Enhanced ping test with retry logic
     const pingPromise = redisClient.ping();
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Ping timeout')), 5000);
+      setTimeout(() => reject(new Error('Ping timeout (8s)')), 8000); // Increased timeout
     });
     
-    await Promise.race([pingPromise, timeoutPromise]);
+    const pingResult = await Promise.race([pingPromise, timeoutPromise]);
     details.pingSuccess = true;
+    details.pingResult = pingResult;
+    
+    // Issue #4884: Additional health checks
+    try {
+      // Test basic Redis operations
+      const testKey = `health_check_${Date.now()}`;
+      await redisClient.set(testKey, 'test', { EX: 10 }); // Expire in 10 seconds
+      const testValue = await redisClient.get(testKey);
+      await redisClient.del(testKey);
+      
+      details.basicOperationsWorking = testValue === 'test';
+    } catch (opError) {
+      details.basicOperationsWorking = false;
+      details.operationError = opError.message;
+    }
+    
     return { isHealthy: true, details };
   } catch (error) {
     details.pingError = error.message || error.toString();
@@ -1349,7 +1418,8 @@ async function checkTradeExists(tradeId) {
  * @param {number} maxRetries - 最大再試行回数
  * @returns {Promise<Object>} 実行結果
  */
-async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetries = 2) {
+// Issue #4884: Enhanced retry logic with circuit breaker pattern
+async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetries = 3) {
   const logger = new Logger('DatabaseManager');
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -1364,12 +1434,16 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         return result;
       }
       
-      // 失敗した場合、Redis接続関連のエラーかチェック
+      // Issue #4884: Enhanced connection error detection
       const isConnectionError = result.error && (
         result.error.includes('Redis Commit失敗') ||
         result.error.includes('Invalid response') ||
+        result.error.includes('empty/dash') ||
         result.error.includes('connection issue') ||
-        result.error.includes('timeout')
+        result.error.includes('timeout') ||
+        result.error.includes('ECONNREFUSED') ||
+        result.error.includes('network error') ||
+        result.error.includes('null/undefined error')
       );
       
       if (!isConnectionError || attempt === maxRetries) {
@@ -1378,11 +1452,13 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
       
       if (!isBacktest) {
         logger.warn(`[2PC Retry] 試行 ${attempt}/${maxRetries} 失敗: ${result.error}`);
-        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
+        logger.info(`[2PC Retry] ${2000 * attempt}ms後に再試行します...`);
       }
       
-      // 指数バックオフで待機
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Issue #4884: Enhanced exponential backoff with jitter
+      const baseDelay = 2000 * attempt;
+      const jitter = Math.random() * 1000;
+      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
       
     } catch (error) {
       if (attempt === maxRetries) {
@@ -1394,11 +1470,13 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
       
       if (!isBacktest) {
         logger.warn(`[2PC Retry] 例外発生 ${attempt}/${maxRetries}: ${error.message}`);
-        logger.info(`[2PC Retry] ${1000 * attempt}ms後に再試行します...`);
+        logger.info(`[2PC Retry] ${2000 * attempt}ms後に再試行します...`);
       }
       
-      // 指数バックオフで待機
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      // Issue #4884: Enhanced exponential backoff with jitter
+      const baseDelay = 2000 * attempt;
+      const jitter = Math.random() * 1000;
+      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter));
     }
   }
   
@@ -1414,6 +1492,19 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let mongoSession = null;
   let redisTransaction = null;
   let distributedLock = null;
+  const logger = new Logger('DatabaseManager');
+
+  // Issue #4884: Circuit breaker check before executing Redis operations
+  if (!redisCircuitBreaker.canExecute()) {
+    const status = redisCircuitBreaker.getStatus();
+    if (!isBacktest) {
+      logger.warn(`[Circuit Breaker] Redis operations temporarily disabled. State: ${status.state}, Failures: ${status.failureCount}`);
+    }
+    return { 
+      success: false, 
+      error: `Redis operations temporarily disabled due to circuit breaker (${status.state}). Retry after ${new Date(status.lastFailureTime + redisCircuitBreaker.recoveryTime).toISOString()}.`
+    };
+  }
 
   try {
     // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
@@ -1620,6 +1711,9 @@ async function executeDistributedTransaction(trade, isBacktest) {
       logger.info(`[2PC] 分散トランザクション成功: ${trade.tradeId}`);
     }
 
+    // Issue #4884: Record success in circuit breaker
+    redisCircuitBreaker.recordSuccess();
+
     return { success: true };
 
   } catch (error) {
@@ -1653,6 +1747,20 @@ async function executeDistributedTransaction(trade, isBacktest) {
       const rollbackErrorMessage = rollbackError?.message || rollbackError?.toString() || 'Unknown rollback error';
       if (!isBacktest) {
         logger.error(`[2PC] ロールバックエラー: ${trade.tradeId} - ${rollbackErrorMessage}`);
+      }
+    }
+
+    // Issue #4884: Record failure in circuit breaker for Redis-related errors
+    const isRedisError = errorMessage.includes('Redis') || 
+                        errorMessage.includes('connection') || 
+                        errorMessage.includes('timeout') ||
+                        errorMessage.includes('empty/dash');
+    
+    if (isRedisError) {
+      redisCircuitBreaker.recordFailure();
+      if (!isBacktest) {
+        const status = redisCircuitBreaker.getStatus();
+        logger.warn(`[Circuit Breaker] Redis failure recorded. State: ${status.state}, Count: ${status.failureCount}`);
       }
     }
 

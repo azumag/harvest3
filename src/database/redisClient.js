@@ -13,7 +13,7 @@ const REDIS_URL = SETTINGS.DATABASE.REDIS.DEFAULT_URL;
 // Redis接続の無効化フラグ
 const DISABLE_REDIS = process.env.DISABLE_REDIS === 'true';
 
-// Redisクライアントの作成
+// Redisクライアントの作成 - Issue #4884: Enhanced Redis connection resilience
 const client = redis.createClient({
   url: REDIS_URL,
   socket: {
@@ -21,19 +21,28 @@ const client = redis.createClient({
     commandTimeout: MONITORING_SETTINGS.REDIS_CONNECTION_TIMEOUT,
     // 再接続の設定
     reconnectDelay: SETTINGS.DATABASE.REDIS.RECONNECT_DELAY,
-    lazyConnect: true
+    lazyConnect: true,
+    // Issue #4884: Additional socket configuration for stability
+    keepAlive: 30000, // 30 seconds keep-alive
+    noDelay: true // Disable Nagle's algorithm for lower latency
   },
-  // 接続エラー時の再試行設定
+  // Issue #4884: Enhanced retry strategy for 2PC transaction resilience
   retry_strategy: (options) => {
+    // Log retry attempts for debugging
+    console.log(`[Redis Retry] Attempt ${options.attempt}, total time: ${options.total_retry_time}ms`);
+    
     if (options.error && options.error.code === 'ECONNREFUSED') {
       console.error('Redis接続が拒否されました。再接続を試みます...');
-      return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
+      return Math.min(options.attempt * 200, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX); // Increased delay
     }
     if (options.total_retry_time > SETTINGS.DATABASE.REDIS.CONNECTION_TIMEOUT) {
       console.error('Redis接続のタイムアウトに達しました。');
       return new Error('Redis接続のタイムアウトに達しました。');
     }
-    return Math.min(options.attempt * 100, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
+    // Issue #4884: Exponential backoff with jitter
+    const baseDelay = Math.min(options.attempt * 200, SETTINGS.DATABASE.REDIS.RETRY_DELAY_MAX);
+    const jitter = Math.random() * 500; // Add up to 500ms jitter
+    return baseDelay + jitter;
   }
 });
 
