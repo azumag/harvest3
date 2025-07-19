@@ -491,9 +491,21 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // 明らかに無効な文字列化結果をチェック
-    const invalidStrings = ['null', 'undefined', '[object Object]', 'NaN', 'Infinity', '-Infinity'];
-    if (invalidStrings.includes(stringLockKey) || invalidStrings.includes(stringLockId)) {
+    // 明らかに無効な文字列化結果をチェック（テスト要件に対応）
+    if (stringLockKey === 'null' || stringLockKey === 'undefined' || stringLockKey === '[object Object]' || 
+        stringLockKey.includes(',') || stringLockKey.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
+      return false;
+    }
+    if (stringLockId === 'null' || stringLockId === 'undefined' || stringLockId === '[object Object]' || 
+        stringLockId.includes(',') || stringLockId.includes('[object')) {
+      logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
+      return false;
+    }
+    
+    // 追加の無効な文字列化結果をチェック
+    const additionalInvalidStrings = ['NaN', 'Infinity', '-Infinity'];
+    if (additionalInvalidStrings.includes(stringLockKey) || additionalInvalidStrings.includes(stringLockId)) {
       logger.warn(`分散ロック解放スキップ: 無効な文字列化結果 (lockKey: '${stringLockKey}', lockId: '${stringLockId}')`);
       return false;
     }
@@ -524,12 +536,12 @@ async function releaseDistributedLock(lockKey, lockId) {
         return 0
       end
       
-      local lockValue = redis.call('GET', lockKey)
+      local lockValue = redis.call('GET', KEYS[1])
       if lockValue and type(lockValue) == 'string' and lockValue ~= '' then
         local success, lockData = pcall(cjson.decode, lockValue)
         if success and lockData and type(lockData) == 'table' and lockData.lockId then
           local lockIdStr = tostring(lockData.lockId)
-          if lockIdStr == lockIdToCheck then
+          if lockIdStr == ARGV[1] then
             redis.call('DEL', lockKey)
             return 1
           end
