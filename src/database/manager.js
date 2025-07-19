@@ -1792,6 +1792,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let mongoSession = null;
   let redisTransaction = null;
   let distributedLock = null;
+  const redisDatabase = require('./redisDatabase');
 
   try {
     // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
@@ -1845,7 +1846,6 @@ async function executeDistributedTransaction(trade, isBacktest) {
     // Redis Prepare
     let redisClient;
     try {
-      const redisDatabase = require('./redisDatabase');
       redisClient = redisDatabase.getClient();
       redisTransaction = redisClient.multi();
     } catch (getClientError) {
