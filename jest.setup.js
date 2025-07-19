@@ -95,72 +95,56 @@ process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.MONGO_URL = process.env.MONGO_URL || 'mongodb://harvest3-mongodb:27017';
 process.env.MONGODB_DB_NAME = 'test';
 
-// Suppress console outputs in CI environment to prevent false test failures
-// Tests legitimately use console.log/warn outputs which CI treats as failures
-// Error-level output is preserved for debugging
+// CI環境でのコンソール出力抑制を無効化（EPIPEエラー防止のため）
+// console mockingがworker間通信でEPIPEエラーを引き起こすため、CI環境では使用しない
+// 代わりにJest設定でsilent:falseを使用してログを制御
 if (process.env.CI) {
-  const originalConsoleError = console.error;
-  const originalConsoleWarn = console.warn;
-  const originalConsoleLog = console.log;
-
-  console.error = jest.fn().mockImplementation((...args) => {
-    // Always preserve error-level output for debugging
-    originalConsoleError.apply(console, args);
-  });
-
-  console.warn = jest.fn().mockImplementation((...args) => {
-    // Still log to stderr for debugging if needed
-    if (process.env.DEBUG_CI_ERRORS) {
-      originalConsoleWarn.apply(console, args);
-    }
-  });
-
-  console.log = jest.fn().mockImplementation((...args) => {
-    // Still log to stdout for debugging if needed
-    if (process.env.DEBUG_CI_ERRORS) {
-      originalConsoleLog.apply(console, args);
-    }
-  });
+  // CI環境では console mocking を完全に無効化してワーカー通信エラーを防止
+  // テストログは jest.config.js の silent 設定で制御
 }
 
 // 安全なクリーンアップ処理 - ワーカープロセスクラッシュを防止
 afterAll(async () => {
-  // 基本的なクリーンアップのみ実行
+  // CI環境では最小限のクリーンアップのみ実行してワーカー通信エラーを防止
+  if (process.env.CI) {
+    // CI環境では基本的なクリーンアップのみ（EPIPE/ワーカークラッシュ防止）
+    jest.clearAllTimers();
+    return; // 早期リターンで複雑なクリーンアップを避ける
+  }
+  
+  // 非CI環境では通常のクリーンアップを実行
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // CI環境では最小限のクリーンアップのみ実行してEPIPEエラーを防止
-  if (!process.env.CI) {
-    // 非CI環境でのみ詳細なクリーンアップを実行
-    if (process._getActiveHandles) {
-      const activeHandles = process._getActiveHandles();
-      if (activeHandles && activeHandles.length > 0) {
-        activeHandles.forEach(handle => {
-          if (handle && typeof handle.unref === 'function') {
-            try {
-              handle.unref();
-            } catch (error) {
-              // ハンドルのクリーンアップエラーを無視
-            }
+  // 詳細なクリーンアップを実行（非CI環境のみ）
+  if (process._getActiveHandles) {
+    const activeHandles = process._getActiveHandles();
+    if (activeHandles && activeHandles.length > 0) {
+      activeHandles.forEach(handle => {
+        if (handle && typeof handle.unref === 'function') {
+          try {
+            handle.unref();
+          } catch (error) {
+            // ハンドルのクリーンアップエラーを無視
           }
-        });
-      }
+        }
+      });
     }
-    
-    // タイマーの強制クリア（非CI環境のみ）
-    if (process._getActiveRequests) {
-      const activeRequests = process._getActiveRequests();
-      if (activeRequests && activeRequests.length > 0) {
-        activeRequests.forEach(request => {
-          if (request && typeof request.abort === 'function') {
-            try {
-              request.abort();
-            } catch (error) {
-              // リクエストのキャンセルエラーを無視
-            }
+  }
+  
+  // タイマーの強制クリア（非CI環境のみ）
+  if (process._getActiveRequests) {
+    const activeRequests = process._getActiveRequests();
+    if (activeRequests && activeRequests.length > 0) {
+      activeRequests.forEach(request => {
+        if (request && typeof request.abort === 'function') {
+          try {
+            request.abort();
+          } catch (error) {
+            // リクエストのキャンセルエラーを無視
           }
-        });
-      }
+        }
+      });
     }
   }
 });
