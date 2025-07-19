@@ -3,8 +3,6 @@
  * Issue #4883: strategy-runnerサービスで例外が発生
  */
 
-const { jest } = require('@jest/globals');
-
 // Mock Redis client
 const mockRedisClient = {
   isReady: true,
