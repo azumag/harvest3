@@ -526,20 +526,32 @@ const logger = new Logger('DatabaseManager');
  */
 async function executeRedisTransactionWithTimeout(redisTransaction, commandNames, trade, logger) {
   const { MONITORING_SETTINGS } = require('../common/const');
-  const { isCircuitBreakerOpen, updateCircuitBreakerOnFailure, updateCircuitBreakerOnSuccess } = require('./redisClient');
+  const { isCircuitBreakerOpen, updateCircuitBreakerOnFailure, updateCircuitBreakerOnSuccess, getCircuitBreakerState } = require('./redisClient');
   
-  // Issue #4920: Circuit Breakerチェック
+  // Issue #4912: 実行時のCircuit Breakerチェック（詳細ログ付き）
   if (isCircuitBreakerOpen()) {
+    const circuitState = getCircuitBreakerState();
+    logger.warn(`[Redis Transaction] Circuit Breaker開放中: state=${circuitState.state}, failures=${circuitState.failures}, timeSinceLastFailure=${circuitState.timeSinceLastFailure}ms`);
     throw new Error('Redis Commit失敗: Circuit Breakerが開放中です');
   }
   
-  // Issue #4920: 適応的タイムアウト設定
+  // Issue #4912: 動的タイムアウト設定（コマンドの種類を考慮）
   const baseTimeout = MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT || 45000;
   const commandCount = commandNames.length;
-  // コマンド数に応じてタイムアウトを調整（最大60秒）
-  const adaptiveTimeout = Math.min(baseTimeout + (commandCount * 2000), 60000);
   
-  // Issue #4920: トランザクション実行前の詳細検証
+  // Issue #4912: コマンドタイプ別のタイムアウト調整
+  const hasFloatOperations = commandNames.some(cmd => cmd.includes('hIncrByFloat'));
+  const hasDelOperations = commandNames.some(cmd => cmd.includes('hDel'));
+  const hasSetOperations = commandNames.some(cmd => cmd.includes('hSet'));
+  
+  let timeoutMultiplier = 1.0;
+  if (hasFloatOperations) timeoutMultiplier += 0.5; // Float操作は時間がかかる場合がある
+  if (hasDelOperations) timeoutMultiplier += 0.2;   // Del操作も追加時間
+  if (hasSetOperations) timeoutMultiplier += 0.1;   // Set操作も追加時間
+  
+  const adaptiveTimeout = Math.min(baseTimeout * timeoutMultiplier + (commandCount * 1500), 90000);
+  
+  // Issue #4912: トランザクション実行前の詳細検証
   if (!redisTransaction || typeof redisTransaction.exec !== 'function') {
     throw new Error('Redis Commit失敗: 無効なトランザクションオブジェクト');
   }
@@ -548,65 +560,114 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     throw new Error('Redis Commit失敗: コマンド名配列が無効です');
   }
   
-  logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
+  // Issue #4912: トランザクション状態の事前確認
+  try {
+    if (redisTransaction.multi === undefined) {
+      logger.warn(`[Redis Transaction] トランザクションは既にcommit済みの可能性があります`);
+    }
+  } catch (stateCheckError) {
+    logger.warn(`[Redis Transaction] 状態確認エラー: ${stateCheckError.message}`);
+  }
   
-  // Issue #4920: 改善されたタイムアウト制御
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(`Redis transaction timeout after ${adaptiveTimeout}ms (${commandCount} commands)`));
-    }, adaptiveTimeout);
-  });
+  logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms, multiplier: ${timeoutMultiplier}`);
+  logger.debug(`[Redis Transaction] コマンド詳細: [${commandNames.join(', ')}]`);
   
-  const transactionPromise = redisTransaction.exec();
+  // Issue #4912: 改善されたタイムアウト制御とAbortController
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, adaptiveTimeout);
   
   try {
+    // Issue #4912: より堅牢なトランザクション実行
+    const startTime = Date.now();
+    const transactionPromise = redisTransaction.exec();
+    
+    // タイムアウトプロミス
+    const timeoutPromise = new Promise((_, reject) => {
+      const timeoutHandle = setTimeout(() => {
+        reject(new Error(`Redis transaction timeout after ${adaptiveTimeout}ms (${commandCount} commands)`));
+      }, adaptiveTimeout);
+      
+      // AbortControllerでタイムアウトをキャンセル可能にする
+      abortController.signal.addEventListener('abort', () => {
+        clearTimeout(timeoutHandle);
+        reject(new Error(`Redis transaction aborted after ${Date.now() - startTime}ms`));
+      });
+    });
+    
     // Promise.raceを使用してタイムアウト制御
     const redisResults = await Promise.race([transactionPromise, timeoutPromise]);
+    clearTimeout(timeoutId);
     
-    if (!redisResults) {
+    const executionTime = Date.now() - startTime;
+    
+    // Issue #4912: 結果の詳細検証
+    if (redisResults === null || redisResults === undefined) {
       updateCircuitBreakerOnFailure();
-      throw new Error('Redis Commit失敗: トランザクション結果がnull');
+      throw new Error(`Redis Commit失敗: トランザクション結果がnull/undefined (実行時間: ${executionTime}ms)`);
     }
     
-    if (!Array.isArray(redisResults) || redisResults.length === 0) {
+    if (!Array.isArray(redisResults)) {
       updateCircuitBreakerOnFailure();
-      throw new Error('Redis Commit失敗: 無効なトランザクション結果');
+      throw new Error(`Redis Commit失敗: 無効なトランザクション結果形式 (type: ${typeof redisResults}, 実行時間: ${executionTime}ms)`);
     }
     
-    // Issue #4920: より厳密なトランザクション結果検証
+    if (redisResults.length === 0) {
+      updateCircuitBreakerOnFailure();
+      throw new Error(`Redis Commit失敗: 空のトランザクション結果 (実行時間: ${executionTime}ms)`);
+    }
+    
+    // Issue #4912: より厳密なトランザクション結果検証
     const expectedCommandCount = commandNames.length;
     if (redisResults.length !== expectedCommandCount) {
-      logger.warn(`[Redis Transaction] コマンド数不一致: 期待値=${expectedCommandCount}, 実際=${redisResults.length}`);
-      // 軽微な不一致の場合は警告のみで続行
+      const message = `コマンド数不一致: 期待値=${expectedCommandCount}, 実際=${redisResults.length}, 実行時間=${executionTime}ms`;
+      logger.warn(`[Redis Transaction] ${message}`);
+      
+      // 結果数が期待値と大きく異なる場合はエラーとする
+      if (Math.abs(redisResults.length - expectedCommandCount) > 1) {
+        updateCircuitBreakerOnFailure();
+        throw new Error(`Redis Commit失敗: ${message}`);
+      }
     }
     
-    // Issue #4920: 各結果の基本的な妥当性チェック
+    // Issue #4912: 各結果の詳細な妥当性チェック
     let nullResultCount = 0;
+    let invalidFormatCount = 0;
     for (let i = 0; i < redisResults.length; i++) {
       const result = redisResults[i];
       if (!Array.isArray(result) || result.length !== 2) {
-        logger.warn(`[Redis Transaction] 結果${i}の形式が不正: ${JSON.stringify(result)}`);
+        invalidFormatCount++;
+        logger.warn(`[Redis Transaction] 結果${i}の形式が不正: ${JSON.stringify(result)} (コマンド: ${commandNames[i] || 'unknown'})`);
       }
       if (result && result[0] === null && result[1] === null) {
         nullResultCount++;
       }
     }
     
-    // Issue #4920: 過度のnull結果を検出した場合の警告
-    if (nullResultCount > expectedCommandCount * 0.5) {
-      logger.warn(`[Redis Transaction] 過度のnull結果を検出: ${nullResultCount}/${expectedCommandCount}`);
+    // Issue #4912: 過度の異常結果を検出した場合はエラー
+    if (invalidFormatCount > 0) {
+      logger.error(`[Redis Transaction] ${invalidFormatCount}個の結果が無効な形式です`);
+    }
+    
+    if (nullResultCount > expectedCommandCount * 0.7) {
+      updateCircuitBreakerOnFailure();
+      throw new Error(`Redis Commit失敗: 過度のnull結果を検出 (${nullResultCount}/${expectedCommandCount}, 実行時間: ${executionTime}ms)`);
     }
     
     updateCircuitBreakerOnSuccess();
-    logger.info(`[Redis Transaction] 実行成功: ${commandCount}コマンド完了`);
+    logger.info(`[Redis Transaction] 実行成功: ${commandCount}コマンド完了 (実行時間: ${executionTime}ms)`);
     return redisResults;
     
   } catch (error) {
+    clearTimeout(timeoutId);
     updateCircuitBreakerOnFailure();
     
-    if (error.message.includes('timeout')) {
-      logger.error(`[Redis Transaction] タイムアウト: ${trade.tradeId} - ${adaptiveTimeout}ms経過`);
-      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${adaptiveTimeout}ms, ${commandCount}コマンド)`);
+    const executionTime = Date.now() - Date.now(); // startTimeが上のスコープにないので概算
+    
+    if (error.message.includes('timeout') || error.message.includes('aborted')) {
+      logger.error(`[Redis Transaction] タイムアウト/中断: ${trade.tradeId} - ${error.message}`);
+      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${adaptiveTimeout}ms, ${commandCount}コマンド, 実行時間: ${executionTime}ms)`);
     } else {
       logger.error(`[Redis Transaction] 実行エラー: ${trade.tradeId} - ${error.message}`);
       throw error;
@@ -1882,16 +1943,66 @@ async function executeDistributedTransaction(trade, isBacktest) {
       throw new Error('Redis Commit失敗: トランザクション事前検証失敗');
     }
     
-    // Issue #4826: 堅牢なトランザクション実行（タイムアウト制御付き）
-    const redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+    // Issue #4912: 改善されたトランザクション実行（追加の事前チェック付き）
+    let redisResults;
+    try {
+      // Issue #4912: トランザクション実行前の最終検証
+      const { isCircuitBreakerOpen } = require('./redisClient');
+      if (isCircuitBreakerOpen()) {
+        throw new Error('Redis Commit失敗: Circuit Breakerが実行直前に開放されました');
+      }
+      
+      // Issue #4912: トランザクションコマンド数の最終確認
+      if (!redisCommandNames || redisCommandNames.length === 0) {
+        throw new Error('Redis Commit失敗: 実行すべきコマンドが存在しません');
+      }
+      
+      if (!isBacktest) {
+        logger.info(`[2PC] Redis Transaction実行開始 - コマンド数: ${redisCommandNames.length}, Commands: [${redisCommandNames.join(', ')}]`);
+      }
+      
+      redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+      
+      // Issue #4912: 結果の基本検証
+      if (!Array.isArray(redisResults)) {
+        throw new Error(`Redis Commit失敗: 無効なトランザクション結果形式 (type: ${typeof redisResults})`);
+      }
+      
+      if (redisResults.length !== redisCommandNames.length) {
+        throw new Error(`Redis Commit失敗: 結果数とコマンド数の不一致 (結果: ${redisResults.length}, コマンド: ${redisCommandNames.length})`);
+      }
+      
+    } catch (transactionError) {
+      // Issue #4912: トランザクション実行エラーの詳細ログ
+      if (!isBacktest) {
+        logger.error(`[2PC] トランザクション実行失敗: ${transactionError.message}`);
+        logger.error(`[2PC] 実行予定だったコマンド: [${redisCommandNames.join(', ')}]`);
+        logger.error(`[2PC] トレード情報: ${JSON.stringify({
+          tradeId: trade.tradeId,
+          exchange: trade.exchange,
+          symbol: trade.symbol,
+          strategy: trade.strategy,
+          side: trade.side,
+          amount: trade.amount,
+          value: trade.value
+        })}`);
+      }
+      throw transactionError;
+    }
     
-    // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
-    // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
-    
-    // パフォーマンス改善: forEachをreduceに変更して効率的な分類処理
-    // Issue #3620: 実際のコマンド名を使用してエラーハンドリングを改善
-    // Issue #3873: より詳細なエラー情報とコンテキストを提供
+    // Issue #4912: 改善されたRedis結果検証とエラーハンドリング
     const { failed: failedCommands, successful: successfulCommands } = redisResults.reduce((acc, result, index) => {
+      // Issue #4912: より厳密な結果検証
+      if (!Array.isArray(result) || result.length !== 2) {
+        acc.failed.push({
+          index,
+          error: new Error('Invalid result format'),
+          errorMessage: `Redis結果形式エラー: 期待値[error, result]、実際=${JSON.stringify(result)}`,
+          command: redisCommandNames[index] || `コマンド${index}`
+        });
+        return acc;
+      }
+      
       if (result[0] !== null) {
         // エラーが発生したコマンド
         const commandName = redisCommandNames[index] || `コマンド${index}`;
@@ -1914,7 +2025,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
         // 成功したコマンド
         acc.successful.push({
           index,
-          result: result[1]
+          result: result[1],
+          command: redisCommandNames[index] || `コマンド${index}`
         });
       }
       return acc;
@@ -1931,13 +2043,21 @@ async function executeDistributedTransaction(trade, isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
         
+        // Issue #4912: 成功したコマンドの情報も記録（デバッグ用）
+        if (successfulCommands.length > 0) {
+          const successDetails = successfulCommands.map(({ index, command, result }) => 
+            `${command}: ${JSON.stringify(result)}`
+          ).join(', ');
+          logger.info(`[2PC] 成功したコマンド: ${successDetails}`);
+        }
+        
         // Issue #4896: Redis接続状態の詳細情報を追加（修正版）
         const redisConnectionInfo = {
-          clientReady: redisClient?.isReady,
-          clientOpen: redisClient?.isOpen,
-          clientConnected: redisClient?.isReady && redisClient?.isOpen,
-          clientStatus: redisClient?.status,
-          serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable'
+          clientReady: currentRedisClient?.isReady,
+          clientOpen: currentRedisClient?.isOpen,
+          clientConnected: currentRedisClient?.isReady && currentRedisClient?.isOpen,
+          clientStatus: currentRedisClient?.status,
+          serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable'
         };
         
         logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
@@ -2284,7 +2404,7 @@ function validateTradeData(trade) {
  * Issue #3620: コマンド名を記録してデバッグ情報を改善
  */
 async function prepareRedisOperations(transaction, trade) {
-  // Issue #2856: Redis操作の事前バリデーション
+  // Issue #4912: 強化されたRedis操作の事前バリデーション
   const validationErrors = [];
   
   // 必須フィールドの検証
@@ -2316,9 +2436,33 @@ async function prepareRedisOperations(transaction, trade) {
   const commandNames = [];
 
   try {
-    // Issue #4126: Redis引数の型安全性を強化（共通化されたバリデーション関数を使用）
-    const safeAmount = validateNumericValue(trade.amount, 'amount');
-    const safeValue = validateNumericValue(trade.value, 'value');
+    // Issue #4912: 堅牢な数値検証と型変換
+    let safeAmount, safeValue;
+    try {
+      safeAmount = validateNumericValue(trade.amount, 'amount');
+      safeValue = validateNumericValue(trade.value, 'value');
+      
+      // Issue #4912: 追加の数値検証 - NaN、Infinity、過大値のチェック
+      if (!isFinite(safeAmount) || Math.abs(safeAmount) > Number.MAX_SAFE_INTEGER) {
+        throw new Error(`amount値が範囲外です: ${safeAmount}`);
+      }
+      if (!isFinite(safeValue) || Math.abs(safeValue) > Number.MAX_SAFE_INTEGER) {
+        throw new Error(`value値が範囲外です: ${safeValue}`);
+      }
+      
+      // Issue #4912: Redis精度制限対応 - 小数点以下8桁に制限
+      safeAmount = Math.round(safeAmount * 100000000) / 100000000;
+      safeValue = Math.round(safeValue * 100000000) / 100000000;
+      
+    } catch (numericError) {
+      throw new Error(`数値変換エラー: ${numericError.message}, trade: ${JSON.stringify({
+        tradeId: trade.tradeId,
+        amount: trade.amount,
+        value: trade.value,
+        amountType: typeof trade.amount,
+        valueType: typeof trade.value
+      })}`);
+    }
     
     if (trade.side === 'buy') {
       transaction.hIncrByFloat(summaryKey, 'netPosition', safeAmount.toString());
