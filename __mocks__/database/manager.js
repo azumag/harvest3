@@ -233,6 +233,12 @@ module.exports = {
     if (isNaN(parsed) || !isFinite(parsed)) {
       throw new Error(`無効な${fieldName}値: ${value}`);
     }
+    
+    // Check for extreme values that would exceed Redis safe ranges
+    if (!isFinite(parsed) || Math.abs(parsed) > Number.MAX_SAFE_INTEGER || Math.abs(parsed) > Number.MAX_VALUE) {
+      throw new Error(`${fieldName}値が範囲外です: ${parsed}`);
+    }
+    
     return parsed;
   }),
 
