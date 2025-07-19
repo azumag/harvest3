@@ -56,6 +56,25 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // redisDatabase をモック
     jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
+    
+    // const.js をモック（各種設定用）
+    jest.doMock('../../../src/common/const', () => ({
+      MONITORING_SETTINGS: {
+        REDIS_TRANSACTION_TIMEOUT: 30000
+      },
+      NOTIFICATION_SETTINGS: {
+        RATE_LIMIT_WINDOW_MS: 60000
+      },
+      EXCHANGE_SETTINGS: {
+        THROTTLE_QUEUE_MONITORING: {
+          enabled: true,
+          maxQueueSize: 100
+        }
+      },
+      TRADING_EXECUTION_CONSTANTS: {
+        MAX_TRADE_VALUE: 1e15
+      }
+    }));
 
     // redisClient の機能をモック
     jest.doMock('../../../src/database/redisClient', () => ({
@@ -65,7 +84,10 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         isHealthy: true,
         connectionStatus: 'ready',
         ping: 'PONG'
-      })
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      updateCircuitBreakerOnFailure: jest.fn(),
+      updateCircuitBreakerOnSuccess: jest.fn()
     }));
 
     // mongoDatabase をモック
@@ -88,6 +110,15 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
+    
+    // 分散ロック機能をモック（spyOnを使用してモジュール内部の関数をモック）
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockKey: 'test-lock-key',
+      lockValue: 'test-lock-value'
+    });
+    
+    jest.spyOn(databaseManager, 'releaseDistributedLock').mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -113,7 +144,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     try {
@@ -174,7 +206,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     try {
@@ -220,7 +253,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     // 接続前チェックでエラーが発生することを期待
