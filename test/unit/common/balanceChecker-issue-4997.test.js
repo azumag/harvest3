@@ -90,8 +90,15 @@ describe('Issue #4997: Redis Lua script 引数検証エラー修正テスト', (
       
       // Match the regex validation from the real implementation: /^[a-zA-Z0-9_:\-\.]+$/
       const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-      if (!validCharRegex.test(lockKey) || !validCharRegex.test(lockValue)) {
-        return { valid: false, error: 'Invalid characters in parameters' };
+      // lockValue allows JSON characters too: /^[a-zA-Z0-9_:\-\.{}"",]+$/
+      const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+      
+      if (!validCharRegex.test(lockKey)) {
+        return { valid: false, error: 'Invalid characters in lockKey' };
+      }
+      
+      if (!validLockValueRegex.test(lockValue)) {
+        return { valid: false, error: 'Invalid characters in lockValue' };
       }
       
       return { valid: true };
@@ -115,18 +122,32 @@ describe('Issue #4997: Redis Lua script 引数検証エラー修正テスト', (
       );
     });
 
-    it('lockKeyに特殊文字が含まれる場合はエラーになる', async () => {
+    it('lockKeyに特殊文字が含まれる場合はサニタイズされて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await balanceChecker.releaseDistributedLock('invalid\x00key', 'valid-lock-id');
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'invalidkey', // \x00 is sanitized out
+        'valid-lock-id'
+      );
     });
 
-    it('lockIdに特殊文字が含まれる場合はエラーになる', async () => {
+    it('lockIdに特殊文字が含まれる場合はサニタイズされて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const result = await balanceChecker.releaseDistributedLock('valid-key', 'invalid\x01id');
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'valid-key',
+        'invalidid' // \x01 is sanitized out
+      );
     });
 
     it('lockKeyが"null"文字列の場合はエラーになる', async () => {
@@ -227,8 +248,6 @@ describe('Issue #4997: Redis Lua script 引数検証エラー修正テスト', (
     const invalidCases = [
       { lockKey: 'key with spaces', lockId: 'valid-id', description: 'lockKeyにスペース' },
       { lockKey: 'valid-key', lockId: 'id with spaces', description: 'lockIdにスペース' },
-      { lockKey: 'key\twithtab', lockId: 'valid-id', description: 'lockKeyにタブ' },
-      { lockKey: 'valid-key', lockId: 'id\nwithnewline', description: 'lockIdに改行' },
       { lockKey: 'key@invalid', lockId: 'valid-id', description: 'lockKeyに@記号' },
       { lockKey: 'valid-key', lockId: 'id#invalid', description: 'lockIdに#記号' },
       { lockKey: 'key$invalid', lockId: 'valid-id', description: 'lockKeyに$記号' },
@@ -241,6 +260,23 @@ describe('Issue #4997: Redis Lua script 引数検証エラー修正テスト', (
         
         expect(result).toBe(false);
         expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
+    });
+
+    // Control characters are sanitized, so they should succeed
+    const sanitizedCases = [
+      { lockKey: 'key\twithtab', lockId: 'valid-id', expected: 'keywithtab', description: 'lockKeyにタブ' },
+      { lockKey: 'valid-key', lockId: 'id\nwithnewline', expected: 'idwithnewline', description: 'lockIdに改行' }
+    ];
+
+    sanitizedCases.forEach(({ lockKey, lockId, expected, description }) => {
+      it(`${description}の場合はサニタイズされて処理される`, async () => {
+        mockRedisClient.eval.mockResolvedValue(1);
+        
+        const result = await balanceChecker.releaseDistributedLock(lockKey, lockId);
+        
+        expect(result).toBe(true);
+        expect(mockRedisClient.eval).toHaveBeenCalled();
       });
     });
   });

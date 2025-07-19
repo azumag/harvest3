@@ -65,7 +65,7 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
         }
         
         // Match the regex validation from the real implementation: /^[a-zA-Z0-9_:\-\.]+$/
-        // For lockValue, we allow JSON characters like {}"", since it may contain JSON data
+        // For lockValue, we allow JSON characters like {}"",
         const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
         const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
         
@@ -136,7 +136,9 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       expect(mockRedisClient.eval).not.toHaveBeenCalled();
     });
 
-    it('lockValueに不正な文字が含まれる場合はエラーになる', async () => {
+    it('lockValueに不正な文字が含まれる場合はサニタイズされて処理される', async () => {
+      mockRedisClient.eval.mockResolvedValue(1);
+      
       const lockInfo = {
         lockKey: 'valid-key',
         lockValue: 'invalid\x01value'
@@ -144,8 +146,13 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       
       const result = await manager.releaseDistributedLock(lockInfo);
       
-      expect(result).toBe(false);
-      expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockRedisClient.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'valid-key',
+        'invalidvalue' // \x01 is sanitized out
+      );
     });
 
     it('lockKeyが"null"文字列の場合はエラーになる', async () => {
@@ -282,16 +289,6 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
         description: 'lockValueにスペース' 
       },
       { 
-        lockKey: 'key\twithtab', 
-        lockValue: 'valid-value', 
-        description: 'lockKeyにタブ' 
-      },
-      { 
-        lockKey: 'valid-key', 
-        lockValue: 'value\nwithnewline', 
-        description: 'lockValueに改行' 
-      },
-      { 
         lockKey: 'key@invalid', 
         lockValue: 'valid-value', 
         description: 'lockKeyに@記号' 
@@ -310,6 +307,34 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
         
         expect(result).toBe(false);
         expect(mockRedisClient.eval).not.toHaveBeenCalled();
+      });
+    });
+
+    // Control characters are sanitized, so they should succeed
+    const sanitizedCases = [
+      { 
+        lockKey: 'key\twithtab', 
+        lockValue: 'valid-value',
+        expectedKey: 'keywithtab',
+        description: 'lockKeyにタブ' 
+      },
+      { 
+        lockKey: 'valid-key', 
+        lockValue: 'value\nwithnewline',
+        expectedValue: 'valuewithnewline',
+        description: 'lockValueに改行' 
+      }
+    ];
+
+    sanitizedCases.forEach(({ lockKey, lockValue, expectedKey, expectedValue, description }) => {
+      it(`${description}の場合はサニタイズされて処理される`, async () => {
+        mockRedisClient.eval.mockResolvedValue(1);
+        
+        const lockInfo = { lockKey, lockValue };
+        const result = await manager.releaseDistributedLock(lockInfo);
+        
+        expect(result).toBe(true);
+        expect(mockRedisClient.eval).toHaveBeenCalled();
       });
     });
   });
