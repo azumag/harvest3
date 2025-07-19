@@ -35,7 +35,11 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
-      ping: jest.fn().mockResolvedValue('PONG')
+      ping: jest.fn().mockResolvedValue('PONG'),
+      set: jest.fn().mockResolvedValue('OK'),  // For distributed lock
+      del: jest.fn().mockResolvedValue(1),     // For lock release
+      get: jest.fn().mockResolvedValue(null),   // For lock checking
+      eval: jest.fn().mockResolvedValue(1)     // For Lua scripts
     };
 
     mockRedisDatabase = {
@@ -65,29 +69,74 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         isHealthy: true,
         connectionStatus: 'ready',
         ping: 'PONG'
-      })
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getCircuitBreakerState: jest.fn().mockReturnValue({ isOpen: false }),
+      attemptRedisConnectionRecovery: jest.fn().mockResolvedValue(mockCurrentRedisClient),
+      validateRedisTransactionBeforeExecution: jest.fn().mockReturnValue(true),
+      executeRedisTransactionWithTimeout: jest.fn().mockResolvedValue([
+        [null, 'OK'],
+        [new Error('Redis command failed'), null],
+        [null, 1]
+      ])
     }));
 
     // mongoDatabase をモック
-    jest.doMock('../../../src/database/mongoDatabase', () => ({
-      getMongoClient: jest.fn().mockReturnValue({
-        db: jest.fn().mockReturnValue({
-          collection: jest.fn().mockReturnValue({
-            findOne: jest.fn().mockResolvedValue(null),
-            updateOne: jest.fn().mockResolvedValue({ acknowledged: true })
-          })
-        }),
-        startSession: jest.fn().mockReturnValue({
-          startTransaction: jest.fn(),
-          commitTransaction: jest.fn().mockResolvedValue(),
-          abortTransaction: jest.fn().mockResolvedValue(),
-          endSession: jest.fn().mockResolvedValue()
-        })
+    const mockTradesCollection = {
+      findOne: jest.fn().mockResolvedValue(null),
+      updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+      insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+      findOneAndUpdate: jest.fn().mockResolvedValue({ value: { state: 'PENDING' } })
+    };
+    
+    const mockMongoClient = {
+      db: jest.fn().mockReturnValue({
+        collection: jest.fn().mockReturnValue(mockTradesCollection)
+      }),
+      startSession: jest.fn().mockReturnValue({
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn().mockResolvedValue(),
+        abortTransaction: jest.fn().mockResolvedValue(),
+        endSession: jest.fn().mockResolvedValue()
       })
+    };
+    
+    jest.doMock('../../../src/database/mongoDatabase', () => ({
+      getMongoClient: jest.fn().mockReturnValue(mockMongoClient),
+      connectDB: jest.fn().mockResolvedValue(true),
+      getClient: jest.fn().mockReturnValue(mockMongoClient),  // Should return the same mock client
+      tradesCollection: mockTradesCollection,  // Add the missing collection property
+      addTradeMongoDB: jest.fn().mockResolvedValue(true),  // Mock the MongoDB trade adding function
+      addSignalMongoDB: jest.fn().mockResolvedValue(true),
+      addOrderMongoDB: jest.fn().mockResolvedValue(true),
+      getOrderByOrderId: jest.fn().mockResolvedValue(null),
+      updateOrderByOrderId: jest.fn().mockResolvedValue(true),
+      deleteOrderByOrderId: jest.fn().mockResolvedValue(true),
+      connectWithRetry: jest.fn().mockResolvedValue(true),
+      startHealthCheck: jest.fn().mockResolvedValue(true),
+      listOrders: jest.fn().mockResolvedValue([]),
+      listTrades: jest.fn().mockResolvedValue([]),
+      listSignals: jest.fn().mockResolvedValue([]),
+      countSignals: jest.fn().mockResolvedValue(0),
+      addOhlcvMongoDB: jest.fn().mockResolvedValue(true),
+      fetchHistoricalOHLCVData: jest.fn().mockResolvedValue([]),
+      fetchTickerFromMongoDB: jest.fn().mockResolvedValue({}),
+      listFilledPositions: jest.fn().mockResolvedValue([])
     }));
 
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
+    
+    // Mock only the exported functions we need
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockId: 'mock-lock-id'
+    });
+    
+    jest.spyOn(databaseManager, 'checkRedisConnectionHealth').mockResolvedValue({
+      isHealthy: true,
+      details: { status: 'connected' }
+    });
   });
 
   afterEach(() => {
@@ -103,6 +152,23 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         [new Error('Redis command failed'), null]
       ])
     };
+    
+    // Add all the Redis commands that might be used in prepareRedisOperations
+    // These need to return the transaction object itself for chaining
+    mockRedisTransaction.hIncrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hGet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hMSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.set = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.get = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incr = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.decrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.lPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -113,7 +179,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 1000000
     };
 
     try {
@@ -125,6 +192,9 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
 
     // Issue #4949の修正を検証: エラーログがcurrentRedisClientの状態を使用している
     const errorCalls = mockLogger.error.mock.calls;
+    const allCalls = mockLogger.info.mock.calls.concat(mockLogger.error.mock.calls).concat(mockLogger.warn.mock.calls);
+    
+    console.log('All logger calls:', allCalls.map(call => call[0]));
     
     // Redis接続状態のログを検索
     const connectionStateLog = errorCalls.find(call => 
@@ -164,6 +234,22 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         [new Error('Redis command failed'), null]
       ])
     };
+    
+    // Add all the Redis commands that might be used in prepareRedisOperations
+    mockRedisTransaction.hIncrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hGet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hMSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.set = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.get = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incr = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.decrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.lPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
 
     sameClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -174,7 +260,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 1000000
     };
 
     try {
@@ -210,6 +297,22 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     const mockRedisTransaction = {
       client: invalidClient
     };
+    
+    // Add all the Redis commands that might be used in prepareRedisOperations
+    mockRedisTransaction.hIncrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hGet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.hMSet = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.set = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.get = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incr = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.incrByFloat = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.decrBy = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.lPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.rPush = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.sAdd = jest.fn().mockReturnValue(mockRedisTransaction);
+    mockRedisTransaction.zAdd = jest.fn().mockReturnValue(mockRedisTransaction);
 
     mockCurrentRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
@@ -220,7 +323,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 1000000
     };
 
     // 接続前チェックでエラーが発生することを期待
