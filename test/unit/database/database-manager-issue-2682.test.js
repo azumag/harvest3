@@ -38,7 +38,7 @@ describe('Database Manager - Issue #2682: Redis Lua script引数の型チェッ�
     expect(managerSource).toMatch(/replace\(\/\[\\x00-\\x1F\\x7F-\\x9F\]\/g, ''\)/);
     
     // Redis evalに渡す引数がfinalLockKey、finalLockValueとして型安全性が確保されているかを確認
-    expect(managerSource).toMatch(/redisClient\.eval\s*\(.*finalLockKey\s*,\s*finalLockValue\s*\)/);
+    expect(managerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*finalLockKey\s*\)\s*,\s*String\s*\(\s*finalLockValue\s*\)\s*\)/);
     expect(managerSource).toMatch(/let finalLockKey = stringLockKey/);
     expect(managerSource).toMatch(/let finalLockValue = stringLockValue/);
   });

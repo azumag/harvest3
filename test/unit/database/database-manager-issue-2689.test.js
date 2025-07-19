@@ -56,7 +56,7 @@ describe('Database Manager Issue #2689: Redis eval引数の明示的文字列変
       expect(managerSource).toMatch(/String\s*\(\s*lockInfo\.lockKey\s*\)/);
       expect(managerSource).toMatch(/String\s*\(\s*lockInfo\.lockValue\s*\)/);
       // Issue #3279で実装が変更されたため、新しいパターンをチェック
-      expect(managerSource).toMatch(/redisClient\.eval\s*\(.*finalLockKey,\s*finalLockValue\s*\)/);
+      expect(managerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*finalLockKey\s*\)\s*,\s*String\s*\(\s*finalLockValue\s*\)\s*\)/);
       expect(managerSource).toMatch(/typeof finalLockKey !== 'string'/);
     });
 

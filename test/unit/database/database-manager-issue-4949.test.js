@@ -117,8 +117,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     try {
-      // execute2PCTransactionを実行（失敗することを期待）
-      await databaseManager.execute2PCTransaction(mockTrade);
+      // executeDistributedTransactionを実行（失敗することを期待）
+      await databaseManager.executeDistributedTransaction(mockTrade, false);
     } catch (error) {
       // エラーは期待される（トランザクション失敗のため）
     }
@@ -178,7 +178,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     try {
-      await databaseManager.execute2PCTransaction(mockTrade);
+      await databaseManager.executeDistributedTransaction(mockTrade, false);
     } catch (error) {
       // エラーは期待される
     }
@@ -224,7 +224,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     // 接続前チェックでエラーが発生することを期待
-    await expect(databaseManager.execute2PCTransaction(mockTrade))
+    await expect(databaseManager.executeDistributedTransaction(mockTrade, false))
       .rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
     // 実行前接続チェック失敗のログが出力されることを確認
