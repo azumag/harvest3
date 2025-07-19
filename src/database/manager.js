@@ -313,13 +313,21 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
   const { isCircuitBreakerOpen, getCircuitBreakerState } = require('./redisClient');
   const circuitState = getCircuitBreakerState();
   
+  // Issue #4925: 改善されたRedis接続状態検証
+  const clientReady = Boolean(redisClient?.isReady);
+  const clientOpen = Boolean(redisClient?.isOpen);
+  const clientConnected = clientReady && clientOpen;
+  
   const details = {
     clientExists: !!redisClient,
-    clientReady: redisClient?.isReady,
-    clientOpen: redisClient?.isOpen,
-    clientConnected: redisClient?.isReady && redisClient?.isOpen,
+    clientReady,
+    clientOpen, 
+    clientConnected,
     clientStatus: redisClient?.status,
     serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
+    // Issue #4925: デバッグ用の詳細情報を追加
+    rawIsReady: redisClient?.isReady,
+    rawIsOpen: redisClient?.isOpen,
     pingSuccess: false,
     pingError: null,
     operationTestSuccess: false,
@@ -343,22 +351,22 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     return { isHealthy: false, details };
   }
 
-  // Issue #4896: 修正された接続状態チェック  
+  // Issue #4925: 改善された接続状態チェック  
   // isReadyとisOpenの組み合わせで健全性を判定（statusは参考値として記録）
   // 機能的な状態指標に基づく信頼性の高いチェック
-  if (!redisClient.isReady || !redisClient.isOpen) {
-    // Issue #4896: 機能的な接続状態の詳細をログに記録
+  if (!clientConnected) {
+    // Issue #4925: 機能的な接続状態の詳細をログに記録
     const failedChecks = [];
-    if (!redisClient.isReady) {
+    if (!clientReady) {
       failedChecks.push('isReady=false');
     }
-    if (!redisClient.isOpen) {
+    if (!clientOpen) {
       failedChecks.push('isOpen=false');
     }
     // ステータスは参考情報として記録（健全性判定には使用しない）
     const statusInfo = redisClient.status !== 'ready' ? ` (status='${redisClient.status}')` : '';
     
-    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo}`);
+    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo} [raw: isReady=${details.rawIsReady}, isOpen=${details.rawIsOpen}]`);
     return { isHealthy: false, details };
   }
 
@@ -594,14 +602,29 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     
     // Issue #4920: 各結果の基本的な妥当性チェック
     let nullResultCount = 0;
+    const failedCommands = [];
     for (let i = 0; i < redisResults.length; i++) {
       const result = redisResults[i];
       if (!Array.isArray(result) || result.length !== 2) {
         logger.warn(`[Redis Transaction] 結果${i}の形式が不正: ${JSON.stringify(result)}`);
       }
+      
+      // Issue #4949: 個別コマンドのエラーチェック追加
+      if (result && result[0] instanceof Error) {
+        const commandName = commandNames[i] || `command-${i}`;
+        failedCommands.push(`${commandName}: ${result[0].message}`);
+        logger.error(`[Redis Transaction] コマンド失敗: ${commandName} - ${result[0].message}`);
+      }
+      
       if (result && result[0] === null && result[1] === null) {
         nullResultCount++;
       }
+    }
+    
+    // Issue #4949: 失敗したコマンドがある場合はエラーを投げる
+    if (failedCommands.length > 0) {
+      updateCircuitBreakerOnFailure();
+      throw new Error(`Redis Commit失敗: ${failedCommands.length}個のコマンドが失敗しました - ${failedCommands.join(', ')}`);
     }
     
     // Issue #4920: 過度のnull結果を検出した場合の警告
@@ -1704,8 +1727,10 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         result.error.includes('Circuit Breaker')
       );
       
-      // Issue #4883: "Invalid response (empty/dash)" エラーの特別処理
+      // Issue #4925: "Invalid response (empty/dash)" および null/undefined エラーの特別処理
       const isInvalidResponseError = result.error && result.error.includes('Invalid response (empty/dash)');
+      const isNullResponseError = result.error && result.error.includes('Redis operation failed with null/undefined error');
+      const isGhostConnectionError = isInvalidResponseError || isNullResponseError;
       
       if (!isConnectionError || attempt === maxRetries) {
         return result;
@@ -1716,9 +1741,10 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         logger.warn(`[2PC Retry] 試行 ${attempt}/${maxRetries} 失敗: ${result.error}`);
         logger.info(`[2PC Retry] Circuit Breaker状態: ${circuitState.state} (failures: ${circuitState.failures})`);
         
-        // Issue #4883: Invalid responseエラーの場合は接続を強制的にリフレッシュ
-        if (isInvalidResponseError) {
-          logger.info(`[2PC Retry] Invalid responseエラーを検出 - 接続強制リフレッシュを実行`);
+        // Issue #4925: Ghost connection エラーの場合は接続を強制的にリフレッシュ
+        if (isGhostConnectionError) {
+          const errorType = isInvalidResponseError ? 'Invalid response' : 'null/undefined response';
+          logger.info(`[2PC Retry] ${errorType}エラーを検出 - 接続強制リフレッシュを実行`);
           try {
             const redisDatabase = require('./redisDatabase');
             const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger, 2, true);
@@ -1781,6 +1807,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let mongoSession = null;
   let redisTransaction = null;
   let distributedLock = null;
+  const redisDatabase = require('./redisDatabase');
 
   try {
     // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
@@ -1790,7 +1817,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // 分散ロック取得（並行処理制御）
-    distributedLock = await acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
+    distributedLock = await module.exports.acquireDistributedLock(trade.exchange, trade.symbol, trade.tradeId);
     if (!distributedLock.acquired) {
       if (!isBacktest) {
         logger.info(`[2PC] 分散ロック取得失敗: ${trade.tradeId} - 他の処理が進行中`);
@@ -1832,9 +1859,31 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis Prepare
-    const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
-    redisTransaction = redisClient.multi();
+    let redisClient;
+    try {
+      redisClient = redisDatabase.getClient();
+      redisTransaction = redisClient.multi();
+    } catch (getClientError) {
+      // Issue #4949: redisDatabase.getClient()でエラーが発生した場合の詳細ログ
+      if (!isBacktest) {
+        logger.error(`[2PC] Redis Client取得失敗: ${getClientError.message}`);
+        // Redis接続状態ログ（getClient失敗時）
+        const redisConnectionInfo = {
+          clientReady: false,
+          clientOpen: false,
+          clientConnected: false,
+          clientStatus: 'unavailable',
+          serverInfo: 'unavailable',
+          rawIsReady: false,
+          rawIsOpen: false,
+          capturedAt: new Date().toISOString(),
+          clientRecovered: false,
+          getClientError: getClientError.message
+        };
+        logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
+      }
+      throw new Error(`Redis Prepare失敗: ${getClientError.message}`);
+    }
 
     // Issue #3620: コマンド名を記録
     let redisCommandNames = [];
@@ -1855,9 +1904,10 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis先行コミット（原子性保証）
-    // Issue #4090: 包括的なRedis接続状態チェックと自動回復
+    // Issue #4925: 強化されたRedis接続状態チェックと自動回復
+    // 2PC操作では必ず詳細な操作テストを実行して"ghost connection"を検出
     let currentRedisClient = redisClient;
-    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
     
     if (!healthCheck.isHealthy) {
       if (!isBacktest) {
@@ -1866,6 +1916,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
       
       // 接続回復を試行
+      const redisDatabase = require('./redisDatabase');
       const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger, 3, true);
       if (recoveredClient) {
         currentRedisClient = recoveredClient;
@@ -1883,8 +1934,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
     }
     
-    // Issue #4155: トランザクション実行前の最終接続確認
-    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    // Issue #4925: トランザクション実行前の最終接続確認（操作テスト付き）
+    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
     if (!finalHealthCheck.isHealthy) {
       throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
     }
@@ -1895,7 +1946,34 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
     
     // Issue #4826: 堅牢なトランザクション実行（タイムアウト制御付き）
-    const redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+    let redisResults;
+    try {
+      redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+    } catch (transactionError) {
+      // Issue #4949: トランザクション実行エラー時も接続状態をログ出力
+      if (!isBacktest) {
+        logger.error(`[2PC] Redis Transaction実行エラー: ${transactionError.message}`);
+        
+        // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        const clientReady = Boolean(currentRedisClient?.isReady);
+        const clientOpen = Boolean(currentRedisClient?.isOpen);
+        const redisConnectionInfo = {
+          clientReady,
+          clientOpen,
+          clientConnected: clientReady && clientOpen,
+          clientStatus: currentRedisClient?.status,
+          serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
+          // Issue #4925: デバッグ情報を追加
+          rawIsReady: currentRedisClient?.isReady,
+          rawIsOpen: currentRedisClient?.isOpen,
+          capturedAt: new Date().toISOString(),
+          clientRecovered: currentRedisClient !== redisClient
+        };
+        
+        logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
+      }
+      throw transactionError;
+    }
     
     // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
     // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
@@ -1943,13 +2021,18 @@ async function executeDistributedTransaction(trade, isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
         
-        // Issue #4949: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        const clientReady = Boolean(currentRedisClient?.isReady);
+        const clientOpen = Boolean(currentRedisClient?.isOpen);
         const redisConnectionInfo = {
-          clientReady: currentRedisClient?.isReady,
-          clientOpen: currentRedisClient?.isOpen,
-          clientConnected: currentRedisClient?.isReady && currentRedisClient?.isOpen,
+          clientReady,
+          clientOpen,
+          clientConnected: clientReady && clientOpen,
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
+          // Issue #4925: デバッグ情報を追加
+          rawIsReady: currentRedisClient?.isReady,
+          rawIsOpen: currentRedisClient?.isOpen,
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
@@ -2035,7 +2118,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
       await mongoSession.endSession();
     }
     if (distributedLock && distributedLock.acquired) {
-      await releaseDistributedLock(distributedLock);
+      await module.exports.releaseDistributedLock(distributedLock);
       if (!isBacktest) {
         logger.info(`[2PC] 分散ロック解放: ${trade.tradeId}`);
       }
@@ -2049,7 +2132,13 @@ async function executeDistributedTransaction(trade, isBacktest) {
 async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
   try {
     const redisDatabase = require('./redisDatabase');
-    const redisClient = redisDatabase.getClient();
+    let redisClient;
+    try {
+      redisClient = redisDatabase.getClient();
+    } catch (getClientError) {
+      logger.error(`[分散ロック] Redis Client取得失敗: ${getClientError.message}`);
+      return { acquired: false, error: `getClient失敗: ${getClientError.message}` };
+    }
     const lockKey = `lock:trade:${exchange}:${symbol}:${tradeId}`;
     const lockValue = `${Date.now()}_${Math.random()}`;
 
@@ -3520,6 +3609,7 @@ module.exports = {
   recalculateTradeSummaryFromMongoDB,
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
+  execute2PCTransaction: executeDistributedTransaction, // Issue #4949: テスト用エイリアス - 2PC実行
   executeDistributedTransactionWithRetry, // Issue #4155: リトライ機能付き2PC実行
   checkRedisConnectionHealth, // Issue #4155: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
@@ -3528,5 +3618,7 @@ module.exports = {
   addTradeRecord, // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
   executeRedisCompensation, // Issue #4126: テスト用にエクスポート
   executeRedisTransactionWithTimeout, // Issue #4826: タイムアウト制御付きトランザクション実行
-  validateRedisTransactionBeforeExecution // Issue #4826: トランザクション事前検証
+  validateRedisTransactionBeforeExecution, // Issue #4826: トランザクション事前検証
+  acquireDistributedLock, // Issue #4949: テスト用にエクスポート
+  releaseDistributedLock // Issue #4949: テスト用にエクスポート
 };
