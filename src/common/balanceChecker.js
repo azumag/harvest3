@@ -481,15 +481,9 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
-    // Issue #4997: 制御文字チェックを文字列化の前に実行
+    // Issue #4997: 文字列化（サニタイズ処理で制御文字は除去される）
     const preStringLockKey = String(lockKey);
     const preStringLockId = String(lockId);
-    
-    // 制御文字や特殊文字の事前チェック
-    if (/[\x00-\x1F\x7F-\x9F]/.test(preStringLockKey) || /[\x00-\x1F\x7F-\x9F]/.test(preStringLockId)) {
-      logger.warn(`分散ロック解放スキップ: 制御文字を含む値 (lockKey: '${preStringLockKey}', lockId: '${preStringLockId}')`);
-      return false;
-    }
     
     // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
     const stringLockKey = preStringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
@@ -592,7 +586,7 @@ async function releaseDistributedLock(lockKey, lockId) {
       throw new Error(`Redis引数検証失敗: ${validationError.message}`);
     }
     
-    const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
+    const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);

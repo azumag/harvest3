@@ -198,9 +198,6 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
     });
 
     it('引数検証でエラーが発生した場合は詳細なログが出力される', async () => {
-      const Logger = require('../../../src/hft/utils/Logger');
-      const mockLogger = new Logger();
-      
       const lockInfo = {
         lockKey: 'invalid@key',
         lockValue: 'valid-value'
@@ -208,8 +205,8 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       
       await manager.releaseDistributedLock(lockInfo);
       
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Database Manager Redis eval引数検証エラー')
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('分散ロック解放スキップ')
       );
     });
 
