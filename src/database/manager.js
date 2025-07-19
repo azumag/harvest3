@@ -1781,6 +1781,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
   let mongoSession = null;
   let redisTransaction = null;
   let distributedLock = null;
+  let currentRedisClient = null;
 
   try {
     // Issue #2790: トレードデータのバリデーション（トランザクション開始前）
@@ -1856,7 +1857,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
 
     // Redis先行コミット（原子性保証）
     // Issue #4090: 包括的なRedis接続状態チェックと自動回復
-    let currentRedisClient = redisClient;
+    currentRedisClient = redisClient;
     const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
     
     if (!healthCheck.isHealthy) {
