@@ -208,8 +208,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     // Override the mock to ensure Redis transaction failures are properly triggered
-    const mockRedisClient = require('../../../src/database/redisClient');
-    mockRedisClient.executeRedisTransactionWithTimeout.mockResolvedValue([
+    // executeRedisTransactionWithTimeout is defined in manager.js itself, so we need to spy on it
+    jest.spyOn(databaseManager, 'executeRedisTransactionWithTimeout').mockResolvedValue([
       [null, 'OK'],                          // Success
       [new Error('Redis command failed'), null],  // Failure - this should trigger error logging
       [null, 1]                              // Success
@@ -308,8 +308,8 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     };
 
     // Override the mock to ensure Redis transaction failures are properly triggered
-    const mockRedisClient = require('../../../src/database/redisClient');
-    mockRedisClient.executeRedisTransactionWithTimeout.mockResolvedValue([
+    // executeRedisTransactionWithTimeout is defined in manager.js itself, so we need to spy on it
+    jest.spyOn(databaseManager, 'executeRedisTransactionWithTimeout').mockResolvedValue([
       [null, 'OK'],                          // Success
       [new Error('Redis command failed'), null],  // Failure - this should trigger error logging
       [null, 1]                              // Success
@@ -371,7 +371,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     mockRedisClient.attemptRedisConnectionRecovery.mockResolvedValue(null);
     
     // Mock executeRedisTransactionWithTimeout to throw the expected error
-    mockRedisClient.executeRedisTransactionWithTimeout.mockRejectedValue(
+    jest.spyOn(databaseManager, 'executeRedisTransactionWithTimeout').mockRejectedValue(
       new Error('Redis Commit失敗: クライアントが実行可能状態ではありません')
     );
 
