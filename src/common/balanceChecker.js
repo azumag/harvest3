@@ -481,9 +481,19 @@ async function releaseDistributedLock(lockKey, lockId) {
       return false;
     }
     
+    // Issue #4997: 制御文字チェックを文字列化の前に実行
+    const preStringLockKey = String(lockKey);
+    const preStringLockId = String(lockId);
+    
+    // 制御文字や特殊文字の事前チェック
+    if (/[\x00-\x1F\x7F-\x9F]/.test(preStringLockKey) || /[\x00-\x1F\x7F-\x9F]/.test(preStringLockId)) {
+      logger.warn(`分散ロック解放スキップ: 制御文字を含む値 (lockKey: '${preStringLockKey}', lockId: '${preStringLockId}')`);
+      return false;
+    }
+    
     // 文字列に変換とサニタイズ（制御文字・非印字文字の除去）
-    const stringLockKey = String(lockKey).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
-    const stringLockId = String(lockId).replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    const stringLockKey = preStringLockKey.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+    const stringLockId = preStringLockId.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
     
     // 空文字列チェック
     if (!stringLockKey || !stringLockId) {
@@ -550,8 +560,39 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
-    // Redis eval()を実行（Issue #2689対応: 明示的文字列変換）
-    const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
+    // Redis eval()を実行（Issue #2689, #4997対応: 明示的文字列変換と最終検証）
+    
+    // 最終的な引数検証と変換（Issue #4997対応）
+    let finalLockKey, finalLockId;
+    try {
+      finalLockKey = String(stringLockKey);
+      finalLockId = String(stringLockId);
+      
+      // 文字列変換後の追加検証
+      if (typeof finalLockKey !== 'string' || typeof finalLockId !== 'string') {
+        throw new Error(`文字列変換失敗: lockKey=${typeof finalLockKey}, lockId=${typeof finalLockId}`);
+      }
+      
+      // 空文字列や無効な文字列のチェック
+      if (!finalLockKey || !finalLockId || 
+          finalLockKey === 'null' || finalLockKey === 'undefined' ||
+          finalLockId === 'null' || finalLockId === 'undefined') {
+        throw new Error(`無効な文字列値: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
+      }
+      
+      // 制御文字や特殊文字のチェック
+      if (!/^[a-zA-Z0-9_:\-\.]+$/.test(finalLockKey) || !/^[a-zA-Z0-9_:\-\.]+$/.test(finalLockId)) {
+        throw new Error(`不正な文字を含む値: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
+      }
+      
+      logger.debug(`Redis eval実行準備完了: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
+    } catch (validationError) {
+      logger.error(`Redis eval引数検証エラー: ${validationError.message}`);
+      logger.error(`元の値: stringLockKey='${stringLockKey}', stringLockId='${stringLockId}'`);
+      throw new Error(`Redis引数検証失敗: ${validationError.message}`);
+    }
+    
+    const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);

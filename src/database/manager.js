@@ -2260,6 +2260,26 @@ async function executeRedisLockRelease(lockKey, lockValue) {
     end
   `;
 
+  // Redis eval実行前の最終検証（Issue #4997対応）
+  try {
+    // 追加の文字列検証
+    if (!finalLockKey || !finalLockValue || 
+        finalLockKey === 'null' || finalLockKey === 'undefined' ||
+        finalLockValue === 'null' || finalLockValue === 'undefined') {
+      throw new Error(`無効な文字列値: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
+    }
+    
+    // 制御文字や特殊文字の最終チェック
+    if (!/^[a-zA-Z0-9_:\-\.\/]+$/.test(finalLockKey) || !/^[a-zA-Z0-9_:\-\.\/\{\}]+$/.test(finalLockValue)) {
+      throw new Error(`不正な文字を含む値: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
+    }
+    
+    logger.debug(`Database Manager Redis eval実行準備完了: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
+  } catch (validationError) {
+    logger.error(`Database Manager Redis eval引数検証エラー: ${validationError.message}`);
+    throw new Error(`Database Manager Redis引数検証失敗: ${validationError.message}`);
+  }
+
   const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
   return result === 1;
 }
