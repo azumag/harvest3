@@ -3548,6 +3548,16 @@ async function recalculateTradeSummaryFromMongoDB(exchangeId, symbol, strategyKe
   }
 }
 
+/**
+ * 2PC (Two-Phase Commit) トランザクション実行のエイリアス関数
+ * executeDistributedTransactionのラッパー関数として提供
+ * @param {Object} trade - 取引データ
+ * @returns {Promise<Object>} 実行結果
+ */
+async function execute2PCTransaction(trade) {
+  return executeDistributedTransaction(trade, false);
+}
+
 module.exports = {
   fetchOHLCVData,
   updateFilledTrades,
@@ -3600,6 +3610,7 @@ module.exports = {
   getStrategyKey, // 戦略名マッピング関数を追加
   executeDistributedTransaction, // Issue #2790: テスト用にエクスポート
   executeDistributedTransactionWithRetry, // Issue #4155: リトライ機能付き2PC実行
+  execute2PCTransaction, // Issue #4949: 2PCトランザクション実行のエイリアス関数
   checkRedisConnectionHealth, // Issue #4155: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
