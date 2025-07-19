@@ -313,13 +313,21 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
   const { isCircuitBreakerOpen, getCircuitBreakerState } = require('./redisClient');
   const circuitState = getCircuitBreakerState();
   
+  // Issue #4925: 改善されたRedis接続状態検証
+  const clientReady = Boolean(redisClient?.isReady);
+  const clientOpen = Boolean(redisClient?.isOpen);
+  const clientConnected = clientReady && clientOpen;
+  
   const details = {
     clientExists: !!redisClient,
-    clientReady: redisClient?.isReady,
-    clientOpen: redisClient?.isOpen,
-    clientConnected: redisClient?.isReady && redisClient?.isOpen,
+    clientReady,
+    clientOpen, 
+    clientConnected,
     clientStatus: redisClient?.status,
     serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
+    // Issue #4925: デバッグ用の詳細情報を追加
+    rawIsReady: redisClient?.isReady,
+    rawIsOpen: redisClient?.isOpen,
     pingSuccess: false,
     pingError: null,
     operationTestSuccess: false,
@@ -343,22 +351,22 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     return { isHealthy: false, details };
   }
 
-  // Issue #4896: 修正された接続状態チェック  
+  // Issue #4925: 改善された接続状態チェック  
   // isReadyとisOpenの組み合わせで健全性を判定（statusは参考値として記録）
   // 機能的な状態指標に基づく信頼性の高いチェック
-  if (!redisClient.isReady || !redisClient.isOpen) {
-    // Issue #4896: 機能的な接続状態の詳細をログに記録
+  if (!clientConnected) {
+    // Issue #4925: 機能的な接続状態の詳細をログに記録
     const failedChecks = [];
-    if (!redisClient.isReady) {
+    if (!clientReady) {
       failedChecks.push('isReady=false');
     }
-    if (!redisClient.isOpen) {
+    if (!clientOpen) {
       failedChecks.push('isOpen=false');
     }
     // ステータスは参考情報として記録（健全性判定には使用しない）
     const statusInfo = redisClient.status !== 'ready' ? ` (status='${redisClient.status}')` : '';
     
-    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo}`);
+    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo} [raw: isReady=${details.rawIsReady}, isOpen=${details.rawIsOpen}]`);
     return { isHealthy: false, details };
   }
 
@@ -1704,8 +1712,10 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         result.error.includes('Circuit Breaker')
       );
       
-      // Issue #4883: "Invalid response (empty/dash)" エラーの特別処理
+      // Issue #4925: "Invalid response (empty/dash)" および null/undefined エラーの特別処理
       const isInvalidResponseError = result.error && result.error.includes('Invalid response (empty/dash)');
+      const isNullResponseError = result.error && result.error.includes('Redis operation failed with null/undefined error');
+      const isGhostConnectionError = isInvalidResponseError || isNullResponseError;
       
       if (!isConnectionError || attempt === maxRetries) {
         return result;
@@ -1716,9 +1726,10 @@ async function executeDistributedTransactionWithRetry(trade, isBacktest, maxRetr
         logger.warn(`[2PC Retry] 試行 ${attempt}/${maxRetries} 失敗: ${result.error}`);
         logger.info(`[2PC Retry] Circuit Breaker状態: ${circuitState.state} (failures: ${circuitState.failures})`);
         
-        // Issue #4883: Invalid responseエラーの場合は接続を強制的にリフレッシュ
-        if (isInvalidResponseError) {
-          logger.info(`[2PC Retry] Invalid responseエラーを検出 - 接続強制リフレッシュを実行`);
+        // Issue #4925: Ghost connection エラーの場合は接続を強制的にリフレッシュ
+        if (isGhostConnectionError) {
+          const errorType = isInvalidResponseError ? 'Invalid response' : 'null/undefined response';
+          logger.info(`[2PC Retry] ${errorType}エラーを検出 - 接続強制リフレッシュを実行`);
           try {
             const redisDatabase = require('./redisDatabase');
             const recoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger, 2, true);
@@ -1855,9 +1866,10 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis先行コミット（原子性保証）
-    // Issue #4090: 包括的なRedis接続状態チェックと自動回復
+    // Issue #4925: 強化されたRedis接続状態チェックと自動回復
+    // 2PC操作では必ず詳細な操作テストを実行して"ghost connection"を検出
     let currentRedisClient = redisClient;
-    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
     
     if (!healthCheck.isHealthy) {
       if (!isBacktest) {
@@ -1883,8 +1895,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
     }
     
-    // Issue #4155: トランザクション実行前の最終接続確認
-    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger);
+    // Issue #4925: トランザクション実行前の最終接続確認（操作テスト付き）
+    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
     if (!finalHealthCheck.isHealthy) {
       throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
     }
@@ -1943,13 +1955,18 @@ async function executeDistributedTransaction(trade, isBacktest) {
         logger.error(`[2PC] Redis Commit詳細 - 成功: ${successfulCommands.length}, 失敗: ${failedCommands.length}`);
         logger.error(`[2PC] 失敗したコマンド: ${errorDetails}`);
         
-        // Issue #4949: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        const clientReady = Boolean(currentRedisClient?.isReady);
+        const clientOpen = Boolean(currentRedisClient?.isOpen);
         const redisConnectionInfo = {
-          clientReady: currentRedisClient?.isReady,
-          clientOpen: currentRedisClient?.isOpen,
-          clientConnected: currentRedisClient?.isReady && currentRedisClient?.isOpen,
+          clientReady,
+          clientOpen,
+          clientConnected: clientReady && clientOpen,
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
+          // Issue #4925: デバッグ情報を追加
+          rawIsReady: currentRedisClient?.isReady,
+          rawIsOpen: currentRedisClient?.isOpen,
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
