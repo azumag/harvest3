@@ -138,6 +138,18 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
     
+    // Mock only the exported functions we need with proper return format
+    jest.spyOn(databaseManager, 'acquireDistributedLock').mockResolvedValue({
+      acquired: true,
+      lockKey: 'lock:trade:bitbank:BTC/JPY:test-trade-4949',
+      lockValue: 'mock-lock-value-12345',
+      ttl: 30000
+    });
+    
+    jest.spyOn(databaseManager, 'checkRedisConnectionHealth').mockResolvedValue({
+      isHealthy: true,
+      details: { status: 'connected' }
+    });
   });
 
   afterEach(() => {
