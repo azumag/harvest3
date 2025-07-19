@@ -2171,7 +2171,7 @@ async function executeRedisLockRelease(lockKey, lockValue) {
     end
   `;
 
-  const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
+  const result = await redisClient.eval(script, 1, String(finalLockKey), String(finalLockValue));
   return result === 1;
 }
 
