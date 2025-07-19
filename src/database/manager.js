@@ -297,9 +297,15 @@ async function checkRedisConnectionHealth(redisClient, logger) {
   if (!redisClient.isReady || !redisClient.isOpen || redisClient.status !== 'ready') {
     // Issue #4951: 不健全な接続状態の詳細をログに記録
     const failedChecks = [];
-    if (!redisClient.isReady) failedChecks.push('isReady=false');
-    if (!redisClient.isOpen) failedChecks.push('isOpen=false');
-    if (redisClient.status !== 'ready') failedChecks.push(`status='${redisClient.status}'`);
+    if (!redisClient.isReady) {
+      failedChecks.push('isReady=false');
+    }
+    if (!redisClient.isOpen) {
+      failedChecks.push('isOpen=false');
+    }
+    if (redisClient.status !== 'ready') {
+      failedChecks.push(`status='${redisClient.status}'`);
+    }
     
     logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}`);
     return { isHealthy: false, details };
