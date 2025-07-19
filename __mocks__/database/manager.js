@@ -170,9 +170,15 @@ module.exports = {
     }
     
     // 数値フィールドの再検証
-    if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
+    if (typeof trade.amount !== 'number') {
+      validationErrors.push('amount値が無効');
+    } else if (!Number.isFinite(trade.amount) || trade.amount <= 0) {
       validationErrors.push(`Redis操作のためのamount値が無効: ${trade.amount}`);
+    } else if (trade.amount > Number.MAX_SAFE_INTEGER) {
+      // Enhanced range validation for Issue #4912
+      validationErrors.push('amount値が範囲外です');
     }
+    
     if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
       validationErrors.push(`Redis操作のためのvalue値が無効: ${trade.value}`);
     }
@@ -181,9 +187,43 @@ module.exports = {
       throw new Error(`Redis操作準備時のバリデーションエラー: ${validationErrors.join(', ')}`);
     }
     
-    // Mock Redis operations
-    return Promise.resolve();
+    // Mock Redis operations - simulate the actual commands that would be generated
+    const commandNames = [
+      'hIncrByFloat(netPosition)',
+      'hIncrByFloat(buyAmount)', 
+      'hIncrByFloat(totalBuyCost)',
+      'hDel(pendingOrder)',
+      'hSet(updatedAt)'
+    ];
+    
+    // Simulate actual Redis transaction calls
+    if (transaction && typeof transaction === 'object') {
+      if (transaction.hIncrByFloat) {
+        transaction.hIncrByFloat('position:key', 'netPosition', trade.amount);
+        transaction.hIncrByFloat('position:key', 'buyAmount', trade.amount);
+        transaction.hIncrByFloat('position:key', 'totalBuyCost', trade.value);
+      }
+      if (transaction.hDel) {
+        transaction.hDel('pendingOrder:key');
+      }
+      if (transaction.hSet) {
+        transaction.hSet('position:key', 'updatedAt', Date.now());
+      }
+    }
+    
+    return Promise.resolve(commandNames);
   }),
 
-  executeDistributedTransaction: jest.fn().mockResolvedValue(true)
+  executeDistributedTransaction: jest.fn().mockResolvedValue(true),
+
+  // Issue #4912: Add missing test functions
+  validateNumericValue: jest.fn().mockImplementation((value, fieldName) => {
+    const parsed = parseFloat(value);
+    if (isNaN(parsed) || !isFinite(parsed)) {
+      throw new Error(`無効な${fieldName}値: ${value}`);
+    }
+    return parsed;
+  }),
+
+  executeRedisTransactionWithTimeout: jest.fn().mockResolvedValue(['OK', 'OK', 'OK', 1, 1])
 };

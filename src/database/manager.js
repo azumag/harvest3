@@ -3655,6 +3655,7 @@ module.exports = {
   executeDistributedTransactionWithRetry, // Issue #4155: リトライ機能付き2PC実行
   checkRedisConnectionHealth, // Issue #4155: テスト用にエクスポート
   validateTradeData, // Issue #2790: テスト用にエクスポート
+  validateNumericValue, // Issue #4912: テスト用にエクスポート
   prepareRedisOperations, // Issue #2856: テスト用にエクスポート
   getRedisErrorMessage, // Issue #3622: テスト用にエクスポート
   addTradeRecord, // Issue #4090: Redis接続状態チェック機能付きの取引記録追加
