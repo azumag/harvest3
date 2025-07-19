@@ -26,6 +26,8 @@ const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/co
 const { throttleMonitor } = require('../common/throttleMonitor');
 const { apiCoordinator } = require('../common/apiCoordinator');
 
+/* global AbortController */
+
 /**
  * Redisコミットエラークラス（構造化されたエラーハンドリング）
  */
