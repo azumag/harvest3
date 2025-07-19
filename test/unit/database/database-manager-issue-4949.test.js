@@ -7,6 +7,39 @@
 // Jest テストフレームワークを使用
 jest.unmock('../../../src/database/manager');
 
+// 外部依存関係をモック  
+jest.mock('../../../src/database/redisDatabase', () => ({
+  getClient: jest.fn()
+}));
+
+jest.mock('../../../src/database/mongoDatabase', () => ({
+  connectDB: jest.fn(),
+  tradesCollection: {
+    findOne: jest.fn(),
+    updateOne: jest.fn(),
+    insertOne: jest.fn()
+  },
+  getMongoClient: jest.fn()
+}));
+
+jest.mock('../../../src/hft/utils/Logger', () => jest.fn());
+
+jest.mock('../../../src/common/const', () => ({
+  MONITORING_SETTINGS: {},
+  NOTIFICATION_SETTINGS: {},
+  EXCHANGE_SETTINGS: {},
+  TRADING_EXECUTION_CONSTANTS: {}
+}));
+
+jest.mock('../../../src/database/redisClient', () => ({
+  initRedisClient: jest.fn(),
+  getClient: jest.fn(),
+  checkRedisConnectionHealth: jest.fn(),
+  isCircuitBreakerOpen: jest.fn(),
+  updateCircuitBreakerOnFailure: jest.fn(),
+  updateCircuitBreakerOnSuccess: jest.fn()
+}));
+
 describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
   let mockRedisClient;
   let mockCurrentRedisClient;
@@ -49,70 +82,50 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       debug: jest.fn()
     };
 
-    // Logger クラスをモック
-    jest.doMock('../../../src/hft/utils/Logger', () => {
-      return jest.fn(() => mockLogger);
+    // Setup mock implementations
+    const Logger = require('../../../src/hft/utils/Logger');
+    Logger.mockImplementation(() => mockLogger);
+
+    const redisDatabase = require('../../../src/database/redisDatabase');
+    redisDatabase.getClient.mockReturnValue(mockCurrentRedisClient);
+
+    const mongoDatabase = require('../../../src/database/mongoDatabase');
+    mongoDatabase.connectDB.mockResolvedValue();
+    mongoDatabase.tradesCollection.findOne.mockResolvedValue(null);
+    mongoDatabase.tradesCollection.updateOne.mockResolvedValue({ acknowledged: true });
+    mongoDatabase.tradesCollection.insertOne.mockResolvedValue({ acknowledged: true });
+    mongoDatabase.getMongoClient.mockReturnValue({
+      db: jest.fn().mockReturnValue({
+        collection: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue(null),
+          updateOne: jest.fn().mockResolvedValue({ acknowledged: true })
+        })
+      }),
+      startSession: jest.fn().mockReturnValue({
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn().mockResolvedValue(),
+        abortTransaction: jest.fn().mockResolvedValue(),
+        endSession: jest.fn().mockResolvedValue()
+      })
     });
 
-    // redisDatabase をモック
-    jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
-    
-    // const.js をモック（各種設定用）
-    jest.doMock('../../../src/common/const', () => ({
-      MONITORING_SETTINGS: {
-        REDIS_TRANSACTION_TIMEOUT: 30000
-      },
-      NOTIFICATION_SETTINGS: {
-        RATE_LIMIT_WINDOW_MS: 60000
-      },
-      EXCHANGE_SETTINGS: {
-        THROTTLE_QUEUE_MONITORING: {
-          enabled: true,
-          maxQueueSize: 100
-        }
-      },
-      TRADING_EXECUTION_CONSTANTS: {
-        MAX_TRADE_VALUE: 1e15
-      }
-    }));
+    const constModule = require('../../../src/common/const');
+    constModule.MONITORING_SETTINGS.REDIS_TRANSACTION_TIMEOUT = 30000;
+    constModule.NOTIFICATION_SETTINGS.RATE_LIMIT_WINDOW_MS = 60000;
+    constModule.EXCHANGE_SETTINGS.THROTTLE_QUEUE_MONITORING = { enabled: true, maxQueueSize: 100 };
+    constModule.TRADING_EXECUTION_CONSTANTS.MAX_TRADE_VALUE = 1e15;
 
-    // redisClient の機能をモック
-    jest.doMock('../../../src/database/redisClient', () => ({
-      initRedisClient: jest.fn().mockResolvedValue(true),
-      getClient: jest.fn().mockReturnValue(mockCurrentRedisClient),
-      checkRedisConnectionHealth: jest.fn().mockResolvedValue({
-        isHealthy: true,
-        connectionStatus: 'ready',
-        ping: 'PONG'
-      }),
-      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
-      updateCircuitBreakerOnFailure: jest.fn(),
-      updateCircuitBreakerOnSuccess: jest.fn()
-    }));
-
-    // mongoDatabase をモック
-    jest.doMock('../../../src/database/mongoDatabase', () => ({
-      connectDB: jest.fn().mockResolvedValue(),
-      tradesCollection: {
-        findOne: jest.fn().mockResolvedValue(null),
-        updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
-        insertOne: jest.fn().mockResolvedValue({ acknowledged: true })
-      },
-      getMongoClient: jest.fn().mockReturnValue({
-        db: jest.fn().mockReturnValue({
-          collection: jest.fn().mockReturnValue({
-            findOne: jest.fn().mockResolvedValue(null),
-            updateOne: jest.fn().mockResolvedValue({ acknowledged: true })
-          })
-        }),
-        startSession: jest.fn().mockReturnValue({
-          startTransaction: jest.fn(),
-          commitTransaction: jest.fn().mockResolvedValue(),
-          abortTransaction: jest.fn().mockResolvedValue(),
-          endSession: jest.fn().mockResolvedValue()
-        })
-      })
-    }));
+    const redisClient = require('../../../src/database/redisClient');
+    redisClient.initRedisClient.mockResolvedValue(true);
+    redisClient.getClient.mockReturnValue(mockCurrentRedisClient);
+    redisClient.checkRedisConnectionHealth.mockResolvedValue({
+      isHealthy: true,
+      connectionStatus: 'ready',
+      ping: 'PONG'
+    });
+    redisClient.isCircuitBreakerOpen.mockReturnValue(false);
+    redisClient.updateCircuitBreakerOnFailure.mockImplementation(() => {});
+    redisClient.updateCircuitBreakerOnSuccess.mockImplementation(() => {});
 
     // database manager をインポート
     databaseManager = require('../../../src/database/manager');
