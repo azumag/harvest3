@@ -558,8 +558,24 @@ async function releaseDistributedLock(lockKey, lockId) {
       return 0
     `;
     
+    // Redis eval()前の最終バリデーション（Issue #4973対応）
+    const finalLockKey = String(stringLockKey);
+    const finalLockId = String(stringLockId);
+    
+    // 最終的な引数が空文字列でないことを確認
+    if (!finalLockKey || !finalLockId || finalLockKey.trim() === '' || finalLockId.trim() === '') {
+      logger.warn(`分散ロック解放スキップ: Redis eval直前で無効な引数を検出 (finalLockKey: '${finalLockKey}', finalLockId: '${finalLockId}')`);
+      return false;
+    }
+    
+    // 引数がRedis Luaスクリプトに安全に渡せることを確認
+    if (typeof finalLockKey !== 'string' || typeof finalLockId !== 'string') {
+      logger.warn(`分散ロック解放スキップ: Redis eval直前で非文字列引数を検出 (finalLockKey type: ${typeof finalLockKey}, finalLockId type: ${typeof finalLockId})`);
+      return false;
+    }
+    
     // Redis eval()に明示的に文字列として渡す
-    const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
+    const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);
