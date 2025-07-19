@@ -81,13 +81,20 @@ describe('Issue #4997: Redis Lua script 引数検証エラー修正テスト', (
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Mock validateLockParameters to return valid for normal strings
+    // Mock validateLockParameters to match implementation validation logic
     mockUtils.validateLockParameters.mockImplementation((lockKey, lockValue, context) => {
-      if (typeof lockKey === 'string' && typeof lockValue === 'string' && 
-          lockKey.trim() !== '' && lockValue.trim() !== '') {
-        return { valid: true };
+      if (typeof lockKey !== 'string' || typeof lockValue !== 'string' || 
+          lockKey.trim() === '' || lockValue.trim() === '') {
+        return { valid: false, error: 'Invalid parameters' };
       }
-      return { valid: false, error: 'Invalid parameters' };
+      
+      // Match the regex validation from the real implementation: /^[a-zA-Z0-9_:\-\.]+$/
+      const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
+      if (!validCharRegex.test(lockKey) || !validCharRegex.test(lockValue)) {
+        return { valid: false, error: 'Invalid characters in parameters' };
+      }
+      
+      return { valid: true };
     });
     
     balanceChecker = require('../../../src/common/balanceChecker');

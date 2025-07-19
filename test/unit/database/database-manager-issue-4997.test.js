@@ -58,7 +58,27 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
       sleep: jest.fn(),
       timeframeToMs: jest.fn(),
       isBacktestMode: jest.fn().mockReturnValue(false),
-      validateLockParameters: jest.fn().mockReturnValue({ valid: true })
+      validateLockParameters: jest.fn().mockImplementation((lockKey, lockValue, context) => {
+        if (typeof lockKey !== 'string' || typeof lockValue !== 'string' || 
+            lockKey.trim() === '' || lockValue.trim() === '') {
+          return { valid: false, error: 'Invalid parameters' };
+        }
+        
+        // Match the regex validation from the real implementation: /^[a-zA-Z0-9_:\-\.]+$/
+        // For lockValue, we allow JSON characters like {}"", since it may contain JSON data
+        const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
+        const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+        
+        if (!validCharRegex.test(lockKey)) {
+          return { valid: false, error: 'Invalid characters in lockKey' };
+        }
+        
+        if (!validLockValueRegex.test(lockValue)) {
+          return { valid: false, error: 'Invalid characters in lockValue' };
+        }
+        
+        return { valid: true };
+      })
     }));
 
     jest.doMock('../../../src/common/notifications', () => ({
