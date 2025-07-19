@@ -181,90 +181,121 @@ function validateFinalArguments(lockKey, lockValue) {
  * Redisエラーメッセージの改善された取得関数
  * Issue #3622: 数値エラーコードや意味のないエラーオブジェクトの適切な処理
  * Issue #3873: より詳細なエラー情報を提供
+ * Refactored for better maintainability and KISS principle
  */
-function getRedisErrorMessage(error, commandIndex, commandName = null, operationContext = null) {
-  // undefinedまたはnullの場合 - より詳細な情報を提供
-  if (error === undefined || error === null) {
-    let contextInfo = '';
-    if (commandName) {
-      contextInfo += ` (${commandName})`;
-    }
-    if (operationContext) {
-      contextInfo += ` - Context: ${JSON.stringify(operationContext)}`;
-    }
-    return `Redis operation failed with null/undefined error${contextInfo}. This may indicate a connection issue or timeout.`;
+
+/**
+ * nullまたはundefinedエラーのメッセージを生成
+ */
+function formatNullErrorMessage(commandIndex, commandName, operationContext) {
+  let contextInfo = '';
+  if (commandName) {
+    contextInfo += ` (${commandName})`;
+  }
+  if (operationContext) {
+    contextInfo += ` - Context: ${JSON.stringify(operationContext)}`;
+  }
+  return `Redis operation failed with null/undefined error${contextInfo}. This may indicate a connection issue or timeout.`;
+}
+
+/**
+ * 文字列エラーのメッセージを生成
+ */
+function formatStringError(error, commandIndex, operationContext) {
+  // 意味のない文字列パターンをチェック
+  if (error === '-' || error === '' || error.trim() === '') {
+    // Issue #4826: より詳細なエラーメッセージと診断情報を提供
+    const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
+    const diagnosticInfo = 'This may indicate: ' + [
+      '1. Redis connection timeout or instability',
+      '2. Redis server memory pressure or resource exhaustion',
+      '3. Network connectivity issues between application and Redis',
+      '4. Redis client library response parsing issues'
+    ].join(', ');
+    return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}`;
+  }
+  return error;
+}
+
+/**
+ * 数値エラーコードのメッセージを生成
+ */
+function formatNumericError(error, commandIndex) {
+  const errorDescription = REDIS_ERROR_CODES[error] || `Redis error code: ${error}`;
+  return `Redis command ${commandIndex} failed: ${errorDescription}`;
+}
+
+/**
+ * オブジェクトエラーのメッセージを生成
+ */
+function formatObjectError(error, commandIndex) {
+  // messageプロパティがある場合
+  if (error.message) {
+    return error.message;
   }
   
-  // Errorオブジェクトの場合
+  // codeプロパティがある場合
+  if (error.code) {
+    return `Redis error: ${error.code}`;
+  }
+  
+  // nameプロパティがある場合
+  if (error.name) {
+    return `Redis error: ${error.name}`;
+  }
+  
+  // JSON.stringifyで内容を取得しようとする
+  try {
+    const jsonStr = JSON.stringify(error);
+    if (jsonStr && jsonStr !== '{}') {
+      return `Redis command ${commandIndex} failed: ${jsonStr}`;
+    }
+  } catch (e) {
+    // JSON.stringifyが失敗した場合は無視
+  }
+  
+  // toString()を試す
+  try {
+    const stringified = error.toString();
+    if (stringified && stringified !== '[object Object]') {
+      return `Redis command ${commandIndex} failed: ${stringified}`;
+    }
+  } catch (e) {
+    // toString()が失敗した場合は無視
+  }
+  
+  return `Redis command ${commandIndex} failed: Unknown object error`;
+}
+
+/**
+ * フォールバック用のエラーメッセージを生成
+ */
+function formatFallbackError(error, commandIndex) {
+  return `Redis command ${commandIndex} failed: ${String(error)}`;
+}
+
+function getRedisErrorMessage(error, commandIndex, commandName = null, operationContext = null) {
+  if (error === undefined || error === null) {
+    return formatNullErrorMessage(commandIndex, commandName, operationContext);
+  }
+  
   if (error instanceof Error) {
     return error.message || error.toString();
   }
   
-  // 文字列の場合
   if (typeof error === 'string') {
-    // 意味のない文字列パターンをチェック
-    if (error === '-' || error === '' || error.trim() === '') {
-      // Issue #4826: より詳細なエラーメッセージと診断情報を提供
-      const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
-      const diagnosticInfo = 'This may indicate: ' + [
-        '1. Redis connection timeout or instability',
-        '2. Redis server memory pressure or resource exhaustion',
-        '3. Network connectivity issues between application and Redis',
-        '4. Redis client library response parsing issues'
-      ].join(', ');
-      return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}`;
-    }
-    return error;
+    return formatStringError(error, commandIndex, operationContext);
   }
   
-  // 数値の場合（Redis エラーコード）
   if (typeof error === 'number') {
-    const errorDescription = REDIS_ERROR_CODES[error] || `Redis error code: ${error}`;
-    return `Redis command ${commandIndex} failed: ${errorDescription}`;
+    return formatNumericError(error, commandIndex);
   }
   
-  // オブジェクトの場合
   if (typeof error === 'object') {
-    // messageプロパティがある場合
-    if (error.message) {
-      return error.message;
-    }
-    
-    // codeプロパティがある場合
-    if (error.code) {
-      return `Redis error: ${error.code}`;
-    }
-    
-    // nameプロパティがある場合
-    if (error.name) {
-      return `Redis error: ${error.name}`;
-    }
-    
-    // JSON.stringifyで内容を取得しようとする
-    try {
-      const jsonStr = JSON.stringify(error);
-      if (jsonStr && jsonStr !== '{}') {
-        return `Redis command ${commandIndex} failed: ${jsonStr}`;
-      }
-    } catch (e) {
-      // JSON.stringifyが失敗した場合は無視
-    }
-    
-    // toString()を試す
-    try {
-      const stringified = error.toString();
-      if (stringified && stringified !== '[object Object]') {
-        return `Redis command ${commandIndex} failed: ${stringified}`;
-      }
-    } catch (e) {
-      // toString()が失敗した場合は無視
-    }
-    
-    return `Redis command ${commandIndex} failed: Unknown object error`;
+    return formatObjectError(error, commandIndex);
   }
   
-  // その他の型の場合
-  return `Redis command ${commandIndex} failed: ${String(error)}`;
+  return formatFallbackError(error, commandIndex);
 }
 
 /**
@@ -304,9 +335,11 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
   // 実際の接続テスト（ping）を主要な健全性判定として使用
   try {
     // Issue #4155: pingテストのタイムアウトを追加
+    // Configurable timeout for different environments
+    const PING_TIMEOUT = process.env.REDIS_PING_TIMEOUT || 5000;
     const pingPromise = redisClient.ping();
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Ping timeout')), 5000);
+      setTimeout(() => reject(new Error('Ping timeout')), PING_TIMEOUT);
     });
     
     await Promise.race([pingPromise, timeoutPromise]);
@@ -353,9 +386,41 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
 }
 
 /**
+ * 既存のRedis接続を安全にクリーンアップする関数
+ */
+async function cleanupExistingConnection(currentClient, logger, attempt) {
+  try {
+    if (currentClient && (currentClient.isOpen || currentClient.isReady)) {
+      logger.info(`[Redis Recovery] 既存接続を閉じて再接続を試行 (attempt ${attempt})`);
+      await safeDisconnect(currentClient);
+    }
+  } catch (error) {
+    logger.warn(`[Redis Recovery] 接続クローズエラー: ${error.message}`);
+  }
+}
+
+/**
+ * Redis接続を安全に切断する関数
+ */
+async function safeDisconnect(client) {
+  try {
+    await client.quit();
+  } catch (quitError) {
+    // quit失敗時はdisconnectで強制切断
+    try {
+      await client.disconnect();
+    } catch (disconnectError) {
+      // 最終的な切断エラーは呼び出し元で処理される
+      throw disconnectError;
+    }
+  }
+}
+
+/**
  * Redis接続の回復を試行する関数
  * Issue #4090: Redis接続失敗時の自動回復
  * Issue #4883: より厳密な接続テストを含む回復処理
+ * Refactored for better maintainability and reduced complexity
  * 
  * @param {Object} redisDatabase - redisDatabase モジュール
  * @param {Object} logger - ログ出力用
@@ -371,26 +436,9 @@ async function attemptRedisConnectionRecovery(redisDatabase, logger, maxRetries 
       // 短時間待機してから再試行（指数バックオフ）
       await new Promise(resolve => setTimeout(resolve, Math.min(1000 * Math.pow(2, attempt - 1), 5000)));
       
-      // Issue #4883: 強制的に接続を閉じて再接続を試行
-      try {
-        const currentClient = redisDatabase.getClient();
-        if (currentClient && (currentClient.isOpen || currentClient.isReady)) {
-          logger.info(`[Redis Recovery] 既存接続を閉じて再接続を試行 (attempt ${attempt})`);
-          // 既存接続を安全に閉じる
-          try {
-            await currentClient.quit();
-          } catch (quitError) {
-            // quit失敗時はdisconnectで強制切断
-            try {
-              await currentClient.disconnect();
-            } catch (disconnectError) {
-              logger.warn(`[Redis Recovery] 接続切断エラー: ${disconnectError.message}`);
-            }
-          }
-        }
-      } catch (closeError) {
-        logger.warn(`[Redis Recovery] 接続クローズエラー: ${closeError.message}`);
-      }
+      // 既存接続のクリーンアップ
+      const currentClient = redisDatabase.getClient();
+      await cleanupExistingConnection(currentClient, logger, attempt);
 
       // Redis接続の再初期化
       const { initRedisClient } = require('./redisClient');
