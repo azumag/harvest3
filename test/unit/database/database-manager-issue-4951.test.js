@@ -45,6 +45,28 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
     // redisDatabase をモック
     jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
 
+    // redisClient の機能をモック
+    jest.doMock('../../../src/database/redisClient', () => ({
+      initRedisClient: jest.fn().mockResolvedValue(true),
+      getCircuitBreakerState: jest.fn().mockReturnValue({
+        failures: 0,
+        lastFailureTime: 0,
+        state: 'CLOSED',
+        isOpen: false,
+        timeSinceLastFailure: 0
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getExtendedConnectionHealth: jest.fn().mockResolvedValue({
+        clientExists: true,
+        clientReady: true,
+        clientOpen: true,
+        clientStatus: 'ready',
+        circuitBreaker: { state: 'CLOSED', isOpen: false },
+        ping: { success: true, latency: 10, error: null },
+        overallHealth: true
+      })
+    }));
+
     // database manager を再インポート
     databaseManager = require('../../../src/database/manager');
   });

@@ -103,6 +103,28 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
       apiCoordinator: {}
     }));
 
+    // redisClient の機能をモック
+    jest.doMock('../../../src/database/redisClient', () => ({
+      initRedisClient: jest.fn().mockResolvedValue(true),
+      getCircuitBreakerState: jest.fn().mockReturnValue({
+        failures: 0,
+        lastFailureTime: 0,
+        state: 'CLOSED',
+        isOpen: false,
+        timeSinceLastFailure: 0
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getExtendedConnectionHealth: jest.fn().mockResolvedValue({
+        clientExists: true,
+        clientReady: true,
+        clientOpen: true,
+        clientStatus: 'ready',
+        circuitBreaker: { state: 'CLOSED', isOpen: false },
+        ping: { success: true, latency: 10, error: null },
+        overallHealth: true
+      })
+    }));
+
     // DatabaseManagerをインポート
     const DatabaseManager = require('../../../src/database/manager');
     databaseManager = DatabaseManager;
