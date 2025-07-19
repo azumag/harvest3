@@ -159,7 +159,7 @@ describe('Issue #4912: Redis Commit Failures Fix', () => {
   
   describe('Error Handling Improvements', () => {
     
-    test('should provide detailed error information for debugging', () => {
+    test('should provide detailed error information for debugging', async () => {
       const trade = {
         tradeId: 'test_001',
         exchange: 'bitbank', 
@@ -176,9 +176,8 @@ describe('Issue #4912: Redis Commit Failures Fix', () => {
         hSet: jest.fn()
       };
       
-      expect(async () => {
-        await prepareRedisOperations(mockTransaction, trade);
-      }).rejects.toThrow(/数値変換エラー.*trade:/);
+      await expect(prepareRedisOperations(mockTransaction, trade))
+        .rejects.toThrow(/Redis操作準備時のバリデーションエラー.*amount値が無効/);
     });
     
   });
