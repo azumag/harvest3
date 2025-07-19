@@ -35,7 +35,11 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
-      ping: jest.fn().mockResolvedValue('PONG')
+      ping: jest.fn().mockResolvedValue('PONG'),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+      get: jest.fn().mockResolvedValue(null),
+      eval: jest.fn().mockResolvedValue(1)
     };
 
     mockRedisDatabase = {
@@ -65,7 +69,14 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
         isHealthy: true,
         connectionStatus: 'ready',
         ping: 'PONG'
-      })
+      }),
+      isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
+      getCircuitBreakerState: jest.fn().mockReturnValue({
+        state: 'closed',
+        failures: 0
+      }),
+      updateCircuitBreakerOnFailure: jest.fn(),
+      updateCircuitBreakerOnSuccess: jest.fn()
     }));
 
     // mongoDatabase をモック
@@ -83,7 +94,13 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
           abortTransaction: jest.fn().mockResolvedValue(),
           endSession: jest.fn().mockResolvedValue()
         })
-      })
+      }),
+      connectDB: jest.fn().mockResolvedValue(true),
+      tradesCollection: {
+        findOne: jest.fn().mockResolvedValue(null),
+        updateOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+        insertOne: jest.fn().mockResolvedValue({ acknowledged: true })
+      }
     }));
 
     // database manager をインポート
@@ -113,12 +130,13 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     try {
-      // execute2PCTransactionを実行（失敗することを期待）
-      await databaseManager.execute2PCTransaction(mockTrade);
+      // executeDistributedTransactionを実行（失敗することを期待）
+      await databaseManager.executeDistributedTransaction(mockTrade, false);
     } catch (error) {
       // エラーは期待される（トランザクション失敗のため）
     }
@@ -130,7 +148,7 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
     const connectionStateLog = errorCalls.find(call => 
       call[0] && call[0].includes('[2PC] Redis接続状態:')
     );
-
+    
     expect(connectionStateLog).toBeDefined();
 
     // ログメッセージから接続状態情報を抽出
@@ -174,11 +192,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     try {
-      await databaseManager.execute2PCTransaction(mockTrade);
+      await databaseManager.executeDistributedTransaction(mockTrade, false);
     } catch (error) {
       // エラーは期待される
     }
@@ -220,11 +239,12 @@ describe('Issue #4949: Redis接続状態の整合性バグ修正', () => {
       strategy: 'test-strategy',
       side: 'buy',
       amount: 0.001,
-      value: 1000
+      value: 1000,
+      price: 10000000
     };
 
     // 接続前チェックでエラーが発生することを期待
-    await expect(databaseManager.execute2PCTransaction(mockTrade))
+    await expect(databaseManager.executeDistributedTransaction(mockTrade, false))
       .rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
     // 実行前接続チェック失敗のログが出力されることを確認
