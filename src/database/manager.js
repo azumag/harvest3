@@ -1907,7 +1907,34 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
     
     // Issue #4826: 堅牢なトランザクション実行（タイムアウト制御付き）
-    const redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+    let redisResults;
+    try {
+      redisResults = await executeRedisTransactionWithTimeout(redisTransaction, redisCommandNames, trade, logger);
+    } catch (transactionError) {
+      // Issue #4949: トランザクション実行エラー時も接続状態をログ出力
+      if (!isBacktest) {
+        logger.error(`[2PC] Redis Transaction実行エラー: ${transactionError.message}`);
+        
+        // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
+        const clientReady = Boolean(currentRedisClient?.isReady);
+        const clientOpen = Boolean(currentRedisClient?.isOpen);
+        const redisConnectionInfo = {
+          clientReady,
+          clientOpen,
+          clientConnected: clientReady && clientOpen,
+          clientStatus: currentRedisClient?.status,
+          serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
+          // Issue #4925: デバッグ情報を追加
+          rawIsReady: currentRedisClient?.isReady,
+          rawIsOpen: currentRedisClient?.isOpen,
+          capturedAt: new Date().toISOString(),
+          clientRecovered: currentRedisClient !== redisClient
+        };
+        
+        logger.error(`[2PC] Redis接続状態: ${JSON.stringify(redisConnectionInfo)}`);
+      }
+      throw transactionError;
+    }
     
     // Issue #2856: 改善されたRedis結果検証とエラーハンドリング
     // パフォーマンス改善: reduceで結果を分類するため、初期化を削除
