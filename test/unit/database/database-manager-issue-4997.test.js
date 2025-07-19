@@ -36,6 +36,34 @@ jest.mock('../../../src/hft/utils/Logger', () => {
   }));
 });
 
+jest.mock('../../../src/database/mongoDatabase', () => ({
+  connectDB: jest.fn(),
+  getClient: jest.fn()
+}));
+
+jest.mock('../../../src/common/notifications', () => ({
+  postErrorToDiscord: jest.fn()
+}));
+
+jest.mock('../../../src/data/marketDataProvider', () => ({}));
+
+jest.mock('../../../src/common/const', () => ({
+  TRADING_EXECUTION_CONSTANTS: {},
+  EXCHANGE_SETTINGS: {}
+}));
+
+jest.mock('../../../src/common/throttleMonitor', () => ({
+  throttleMonitor: {
+    getStats: jest.fn().mockReturnValue({})
+  }
+}));
+
+jest.mock('../../../src/common/apiCoordinator', () => ({
+  apiCoordinator: {
+    getStats: jest.fn().mockReturnValue({})
+  }
+}));
+
 const mockRedisClient = {
   isReady: true,
   eval: jest.fn(),
