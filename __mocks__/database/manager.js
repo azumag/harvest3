@@ -153,92 +153,65 @@ module.exports = {
   }),
 
   prepareRedisOperations: jest.fn().mockImplementation(async (transaction, trade) => {
-    const validationErrors = [];
-    
-    // 必須フィールドの検証
-    if (!trade.exchange || typeof trade.exchange !== 'string') {
-      validationErrors.push('無効なexchange値');
-    }
-    if (!trade.symbol || typeof trade.symbol !== 'string') {
-      validationErrors.push('無効なsymbol値');
-    }
-    if (!trade.strategy || typeof trade.strategy !== 'string') {
-      validationErrors.push('無効なstrategy値');
-    }
-    if (!trade.side || !['buy', 'sell'].includes(trade.side)) {
-      validationErrors.push('無効なside値');
-    }
-    
-    // 数値フィールドの再検証 - Enhanced for Issue #4912
-    // First check basic validity (like validateNumericFields does)
-    if (typeof trade.amount !== 'number' || !Number.isFinite(trade.amount) || trade.amount <= 0) {
-      validationErrors.push(`Redis操作のためのamount値が無効: ${trade.amount}`);
-    } else {
-      // Then check range like validateNumericValue does in prepareRedisOperations
-      if (!isFinite(trade.amount) || Math.abs(trade.amount) > Number.MAX_SAFE_INTEGER) {
-        validationErrors.push(`amount値が範囲外です: ${trade.amount}`);
+    try {
+      // Use the mock validateNumericValue function to simulate real validation
+      const validateNumericValue = module.exports.validateNumericValue;
+      
+      // Validate numeric fields using the same logic as the real implementation
+      const safeAmount = validateNumericValue(trade.amount, 'amount');
+      const safeValue = validateNumericValue(trade.value, 'value');
+      
+      // Additional range checks for Redis compatibility (Issue #4912)
+      if (!isFinite(safeAmount) || Math.abs(safeAmount) > Number.MAX_SAFE_INTEGER) {
+        throw new Error(`amount値が範囲外です: ${safeAmount}`);
       }
-    }
-    
-    if (typeof trade.value !== 'number' || !Number.isFinite(trade.value) || trade.value <= 0) {
-      validationErrors.push(`value値が無効: ${trade.value}`);
-    }
-    
-    if (validationErrors.length > 0) {
-      throw new Error(`Redis操作準備時のバリデーションエラー: ${validationErrors.join(', ')}`);
-    }
-    
-    // Mock Redis operations - simulate the actual commands that would be generated
-    const commandNames = [
-      'hIncrByFloat(netPosition)',
-      'hIncrByFloat(buyAmount)', 
-      'hIncrByFloat(totalBuyCost)',
-      'hDel(pendingOrder)',
-      'hSet(updatedAt)'
-    ];
-    
-    // Apply precision limiting (8 decimal places max) to match real implementation
-    const limitPrecision = (value) => {
-      return Math.round(value * 100000000) / 100000000; // 8 decimal places
-    };
-    
-    // Simulate actual Redis transaction calls with proper Jest mock tracking
-    if (transaction && typeof transaction === 'object') {
-      if (transaction.hIncrByFloat && typeof transaction.hIncrByFloat === 'function') {
-        transaction.hIncrByFloat('position:key', 'netPosition', limitPrecision(trade.amount));
-        transaction.hIncrByFloat('position:key', 'buyAmount', limitPrecision(trade.amount));
-        transaction.hIncrByFloat('position:key', 'totalBuyCost', limitPrecision(trade.value));
+      if (!isFinite(safeValue) || Math.abs(safeValue) > Number.MAX_SAFE_INTEGER) {
+        throw new Error(`value値が範囲外です: ${safeValue}`);
       }
-      if (transaction.hDel && typeof transaction.hDel === 'function') {
-        transaction.hDel('pendingOrder:key');
+      
+      // Mock Redis operations - simulate the actual commands that would be generated
+      const commandNames = [
+        'hIncrByFloat(netPosition)',
+        'hIncrByFloat(buyAmount)', 
+        'hIncrByFloat(totalBuyCost)',
+        'hDel(pendingOrder)',
+        'hSet(updatedAt)'
+      ];
+      
+      // Apply precision limiting (8 decimal places max) to match real implementation
+      const limitPrecision = (value) => {
+        return Math.round(value * 100000000) / 100000000; // 8 decimal places
+      };
+      
+      // Simulate actual Redis transaction calls with proper Jest mock tracking
+      if (transaction && typeof transaction === 'object') {
+        if (transaction.hIncrByFloat && typeof transaction.hIncrByFloat === 'function') {
+          transaction.hIncrByFloat('position:key', 'netPosition', limitPrecision(safeAmount));
+          transaction.hIncrByFloat('position:key', 'buyAmount', limitPrecision(safeAmount));
+          transaction.hIncrByFloat('position:key', 'totalBuyCost', limitPrecision(safeValue));
+        }
+        if (transaction.hDel && typeof transaction.hDel === 'function') {
+          transaction.hDel('pendingOrder:key');
+        }
+        if (transaction.hSet && typeof transaction.hSet === 'function') {
+          transaction.hSet('position:key', 'updatedAt', Date.now());
+        }
       }
-      if (transaction.hSet && typeof transaction.hSet === 'function') {
-        transaction.hSet('position:key', 'updatedAt', Date.now());
-      }
+      
+      return Promise.resolve(commandNames);
+    } catch (error) {
+      throw new Error(`Redis操作準備時のバリデーションエラー: ${error.message}`);
     }
-    
-    return Promise.resolve(commandNames);
   }),
 
   executeDistributedTransaction: jest.fn().mockResolvedValue(true),
 
   // Issue #4912: Add missing test functions
   validateNumericValue: jest.fn().mockImplementation((value, fieldName) => {
-    // Handle null and undefined explicitly
-    if (value === null || value === undefined) {
-      throw new Error(`無効な${fieldName}値: ${value}`);
-    }
-    
     const parsed = parseFloat(value);
     if (isNaN(parsed) || !isFinite(parsed)) {
       throw new Error(`無効な${fieldName}値: ${value}`);
     }
-    
-    // Check for extreme values that would exceed Redis safe ranges
-    if (!isFinite(parsed) || Math.abs(parsed) > Number.MAX_SAFE_INTEGER || Math.abs(parsed) > Number.MAX_VALUE) {
-      throw new Error(`${fieldName}値が範囲外です: ${parsed}`);
-    }
-    
     return parsed;
   }),
 
