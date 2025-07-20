@@ -2439,11 +2439,13 @@ async function executeDistributedTransaction(trade, isBacktest) {
     if (mongoSession) {
       await mongoSession.endSession();
     }
-    if (distributedLock && distributedLock.acquired) {
+    if (distributedLock && distributedLock.acquired && distributedLock.lockKey && distributedLock.lockValue) {
       await module.exports.releaseDistributedLock(distributedLock);
       if (!isBacktest) {
         logger.info(`[2PC] 分散ロック解放: ${trade.tradeId}`);
       }
+    } else if (distributedLock && distributedLock.acquired && (!distributedLock.lockKey || !distributedLock.lockValue)) {
+      logger.warn(`[2PC] 分散ロック解放スキップ: 不完全なロック情報 - lockKey: ${distributedLock.lockKey}, lockValue: ${distributedLock.lockValue}`);
     }
   }
 }
