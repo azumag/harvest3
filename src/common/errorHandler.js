@@ -1,6 +1,7 @@
 const rateLimiter = require('./discordRateLimiter');
 const crypto = require('crypto');
 const { discordErrorWebhookUrl } = require('./notifications');
+const { checkWebhookUrl } = require('./webhookUtils');
 
 /**
  * 統一エラーハンドラークラス
@@ -161,8 +162,8 @@ class UnifiedErrorHandler {
 
     // DiscordRateLimiterを使用して通知を送信
     try {
-      if (!discordErrorWebhookUrl) {
-        console.error('[UnifiedErrorHandler] Discord Webhook URLが設定されていません');
+      if (!checkWebhookUrl(discordErrorWebhookUrl)) {
+        // ウェブフックURLが未設定の場合はcheckWebhookUrl内でログ出力済み
       } else {
         const result = await rateLimiter.send(discordErrorWebhookUrl, discordMessage, {
           priority,

@@ -2,6 +2,7 @@ const axios = require('axios');
 const dotenv = require('dotenv');
 const rateLimiter = require('./discordRateLimiter');
 const crypto = require('crypto');
+const { checkWebhookUrl } = require('./webhookUtils');
 dotenv.config();
 
 // 残高チェック機能は balanceChecker.js に分離
@@ -36,8 +37,7 @@ async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
  * @param {Object} options - 通知オプション
  */
 async function postErrorToDiscord(message, options = {}) {
-  if (!discordErrorWebhookUrl) {
-    console.error('Discord Webhook URLが設定されていません');
+  if (!checkWebhookUrl(discordErrorWebhookUrl)) {
     return;
   }
 
@@ -59,8 +59,7 @@ async function postErrorToDiscord(message, options = {}) {
  * @param {Object} options - 通知オプション
  */
 async function postOrderToDiscord(message, options = {}) {
-  if (!discordOrderWebhookUrl) {
-    console.error('Discord Webhook URLが設定されていません');
+  if (!checkWebhookUrl(discordOrderWebhookUrl, 'Order')) {
     return;
   }
 
@@ -83,8 +82,7 @@ async function postOrderToDiscord(message, options = {}) {
  * @param {Object} options - 通知オプション
  */
 async function postResultToDiscord(message, discordWebhookURL = discordResultWebhookUrl, options = {}) {
-  if (!discordWebhookURL) {
-    console.error('Discord Webhook URLが設定されていません');
+  if (!checkWebhookUrl(discordWebhookURL, 'Result')) {
     return;
   }
 
