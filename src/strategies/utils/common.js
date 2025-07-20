@@ -1693,6 +1693,125 @@ function recordOrderExecutionFeedback(testId, orderData, urgencyData, executionR
   }
 }
 
+/**
+ * オブジェクトから数値型のプロパティキーを抽出する
+ * @param {Object|null|undefined} config - 設定オブジェクト
+ * @returns {Array} 数値型のプロパティキーの配列
+ */
+function extractNumericParameterKeys(config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return [];
+  }
+  return Object.keys(config).filter(key => typeof config[key] === 'number');
+}
+
+/**
+ * パラメータの全ての組み合わせを生成する
+ * @param {Object} defaultConfig - デフォルト設定
+ * @param {Array} numericKeys - 数値型のキーの配列
+ * @param {number} n - パラメータの変動幅（デフォルト0.5）
+ * @param {number} step - パラメータのステップ数（デフォルト10）
+ * @returns {Array} 全ての組み合わせの配列
+ */
+function generateParameterCombinations(defaultConfig, numericKeys, n = 0.5, step = 10) {
+  if (numericKeys.length === 0) {
+    return [{}];
+  }
+
+  const combinations = [];
+
+  // デフォルト設定を最初に追加
+  const defaultCombo = {};
+  for (const key of numericKeys) {
+    defaultCombo[key] = defaultConfig[key];
+  }
+  combinations.push(defaultCombo);
+
+  // 組み合わせ生成のループ
+  for (const key of numericKeys) {
+    const currentCombinations = [...combinations];
+    combinations.length = 0; // 既存のcombinationsをクリア
+
+    for (const combo of currentCombinations) {
+      const originalValue = defaultConfig[key];
+      const stepSize = Math.max(1, originalValue * n / step);
+
+      for (let i = -step; i <= step; i++) {
+        if (i === 0) {
+          combinations.push({ ...combo, [key]: originalValue }); // デフォルト値
+        } else {
+          const adjustedValue = Math.round(originalValue + (i * stepSize));
+          if (adjustedValue > 0) { // 正の値のみ
+            combinations.push({ ...combo, [key]: adjustedValue });
+          }
+        }
+      }
+    }
+  }
+
+  return combinations;
+}
+
+/**
+ * 正規分布ランダム値を生成（Box-Muller変換）
+ * @param {number} mean - 平均値
+ * @param {number} stdDev - 標準偏差
+ * @returns {number} 正規分布に従ったランダム値
+ */
+function generateNormalRandom(mean, stdDev) {
+  let u = 0, v = 0;
+  while (u === 0) {
+    u = Math.random();
+  } // 0を回避
+  while (v === 0) {
+    v = Math.random();
+  } // 0を回避
+  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return mean + z * stdDev;
+}
+
+/**
+ * 正規乱数を使ったパラメータ組み合わせを生成する
+ * @param {Object} defaultConfig - デフォルト設定
+ * @param {Array} numericKeys - 数値型のキーの配列
+ * @param {number} count - 生成する組み合わせの数（デフォルト60）
+ * @param {number} n - パラメータの変動幅（デフォルト0.1）
+ * @returns {Array} ランダムに生成されたパラメータ組合せの配列
+ */
+function generateRandomParameterCombinations(defaultConfig, numericKeys, count = 60, n = 0.1) {
+  if (numericKeys.length === 0) {
+    return [{}];
+  }
+
+  const combinations = [];
+
+  // デフォルト設定を最初に追加
+  const defaultCombo = {};
+  for (const key of numericKeys) {
+    defaultCombo[key] = defaultConfig[key];
+  }
+  combinations.push(defaultCombo);
+
+  // 残りのランダム組み合わせを生成
+  for (let i = 0; i < count - 1; i++) {
+    const combo = {};
+    for (const key of numericKeys) {
+      const defaultValue = defaultConfig[key];
+      // 標準偏差はデフォルト値のn%程度に設定
+      const stdDev = Math.max(1, defaultValue * n);
+      // 正規分布に従ったランダム値を生成し、整数に丸める
+      let value = Math.round(generateNormalRandom(defaultValue, stdDev));
+      // 最小値を1に制限
+      value = Math.max(1, value);
+
+      combo[key] = value;
+    }
+    combinations.push(combo);
+  }
+
+  return combinations;
+}
+
 module.exports = {
   fetchAndValidateOHLCVData,
   handleStrategySignals,
@@ -1716,7 +1835,11 @@ module.exports = {
   executeStrategyTemplate,
   // 動的ポジションサイジング関連
   calculateCurrentVolatility,
-  analyzeMarketConditions
+  analyzeMarketConditions,
+  // バックテスト関連のパラメータ操作関数
+  extractNumericParameterKeys,
+  generateParameterCombinations,
+  generateRandomParameterCombinations
 };
 
 /**
