@@ -190,8 +190,8 @@ install_npm_dependencies() {
     return 0
 }
 
-# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
-# プロセス内フラグとシンプルなatomic操作による重複防止
+# 重複起動ログ防止関数（Issue #5021 修正）
+# プロセス内フラグとatomic操作による重複防止（修正版）
 log_startup_message() {
     local message="$1"
     
@@ -203,39 +203,25 @@ log_startup_message() {
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
-        if [ -f "$lock_file" ]; then
-            local lock_owner=$(cat "$lock_file" 2>/dev/null | cut -d: -f1)
-            [ "$lock_owner" = "$$" ] && rm -f "$lock_file" 2>/dev/null
-        fi; # ロックファイルを削除してから終了
         return 0
-    fi; # レースコンディション防止：即座にプロセス内フラグを設定
-    export "$var_name"=1
-    
-    # プロセス間重複チェック（第二の防御線）
-    # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
-    local lock_acquired=false
-    
-    # より強固なatomic操作でロック取得を試行
-    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
-        lock_acquired=true
     fi
     
-    # 条件分岐による処理制御
-    if [ "$lock_acquired" = true ]; then
-        # ロック取得成功：プロセス内重複チェック（第二の防御線）
+    # プロセス間重複チェック（第二の防御線）
+    # atomic操作でロック取得を試行
+    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         # ロック取得成功：メッセージ出力
         log "$message"
+        
+        # ロック取得成功後にプロセス内フラグを設定（重複防止）
+        export "$var_name"=1
         
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         
-        # 処理完了後にプロセス内フラグを設定（重複防止）
         return 0
     else
-        # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグは既に設定済みなので何もしない
-        # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
-        # 重複メッセージとして処理終了
+        # ロック取得失敗：他のプロセスが既に処理済みまたは処理中
+        # プロセス内フラグは設定せず、単純に終了
         return 0
     fi
 }
