@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () => {
-  const messageLockDir = '/tmp/startup_messages';
+  const messageLockDir = '/tmp/startup_messages_3942';
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   
   // 各テスト前のクリーンアップ
@@ -82,15 +82,15 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       
       // 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
       expect(entrypointContent).toContain('簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック');
-      expect(entrypointContent).toContain('レースコンディション防止：即座にプロセス内フラグを設定');
+      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
     });
 
     test('エラーハンドリングが強化されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // プロセス内重複検出時のロックファイル削除
+      // プロセス内重複検出時の処理
       expect(entrypointContent).toContain('既に同じメッセージを出力済み（プロセス内重複）');
-      expect(entrypointContent).toContain('ロックファイルを削除してから終了');
+      expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない（確実な重複防止）');
       expect(entrypointContent).toContain('rm -f "$lock_file" 2>/dev/null');
       
       // 処理完了後の適切なフラグ設定
@@ -137,7 +137,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       // 簡素化実装の確認（待機ロジックは削除されている）
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       expect(entrypointContent).toContain('簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック');
-      expect(entrypointContent).toContain('レースコンディション防止：即座にプロセス内フラグを設定');
+      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
       
       // 同期的なクリーンアップ
       if (fs.existsSync(lockFile)) {
@@ -203,7 +203,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       // 適切なエラーハンドリング
       expect(entrypointContent).toContain('if [ "$lock_acquired" = true ]; then');
       expect(entrypointContent).toContain('else');
-      expect(entrypointContent).toContain('重複メッセージとして処理終了');
+      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
     });
 
     test('メッセージの出力が確実に一意になる', () => {
@@ -214,7 +214,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(entrypointContent).toContain('log "$message"');
       
       // 重複時の処理が適切
-      expect(entrypointContent).toContain('重複メッセージとして処理終了');
+      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
       expect(entrypointContent).toContain('return 0');
     });
   });

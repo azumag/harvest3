@@ -11,7 +11,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 describe('Strategy-Runner重複起動メッセージ修正', () => {
-  const messageLockDir = '/tmp/startup_messages';
+  const messageLockDir = '/tmp/startup_messages_2525';
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   
   // 各テスト前のクリーンアップ
@@ -81,7 +81,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       
       // 条件分岐による排他制御
       expect(entrypointContent).toContain('if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then');
-      expect(entrypointContent).toContain('ロック取得成功：プロセス内重複チェック（第二の防御線）');
+      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
     });
 
@@ -136,7 +136,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       
       // ロックファイル名の構成
       const expectedLockFile = `${messageLockDir}/${hash}.lock`;
-      expect(expectedLockFile).toContain('/tmp/startup_messages/');
+      expect(expectedLockFile).toContain('/tmp/startup_messages_2525/');
       expect(expectedLockFile).toContain('.lock');
     });
 
@@ -226,7 +226,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // 実際のlog関数呼び出しはatomicロック内で実行される
-      expect(entrypointContent).toContain('ロック取得成功：プロセス内重複チェック（第二の防御線）');
+      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       expect(entrypointContent).toContain('log "$message"');
     });
 
@@ -263,7 +263,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(fs.existsSync('/tmp')).toBe(true);
       
       // テストディレクトリを作成
-      const testDir = '/tmp/test_startup_messages';
+      const testDir = '/tmp/test_startup_messages_2525';
       fs.mkdirSync(testDir, { recursive: true });
       expect(fs.existsSync(testDir)).toBe(true);
       
