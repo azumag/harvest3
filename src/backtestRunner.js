@@ -483,7 +483,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
           .filter(pair =>
             pair.exchangeId === exchange.id &&
             pair.symbol !== symbol &&
-            !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+            !(config.global?.excludeSymbols || []).some(excludePattern => pair.symbol.startsWith(excludePattern))
           )
           .map(pair => pair.symbol);
 
@@ -536,7 +536,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       const result = rankedResults[index];
       // ランキング結果の処理
 
-      const paramStr = Object.entries(result.parameters)
+      const paramStr = Object.entries(result.parameters || {})
         .map(([key, value]) => `${key}: ${value}`)
         .join(', ');
 
@@ -567,7 +567,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     const result = rankedAllTimeframeResults[index];
     // 全タイムフレーム結果の処理
 
-    const paramStr = Object.entries(result.parameters)
+    const paramStr = Object.entries(result.parameters || {})
       .map(([key, value]) => `${key}: ${value}`)
       .join(', ');
 
@@ -876,7 +876,7 @@ function evaluateParameterCombination(
         .filter(pair =>
           pair.exchangeId === exchange.id &&
           pair.symbol !== symbol &&
-          !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+          !(config.global?.excludeSymbols || []).some(excludePattern => pair.symbol.startsWith(excludePattern))
         )
         .map(pair => pair.symbol);
       
@@ -1145,7 +1145,7 @@ async function runWalkForwardBacktest(exchange, symbol, strategy, strategyKey, m
         .filter(pair =>
           pair.exchangeId === exchange.id &&
           pair.symbol !== symbol &&
-          !config.global.excludeSymbols.some(excludePattern => pair.symbol.startsWith(excludePattern))
+          !(config.global?.excludeSymbols || []).some(excludePattern => pair.symbol.startsWith(excludePattern))
         )
         .map(pair => pair.symbol);
 
