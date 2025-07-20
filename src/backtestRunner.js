@@ -929,10 +929,13 @@ function evaluateParameterCombination(
 
 /**
  * オブジェクトから数値型のプロパティキーを抽出する
- * @param {Object} config - 設定オブジェクト
+ * @param {Object|null|undefined} config - 設定オブジェクト
  * @returns {Array} 数値型のプロパティキーの配列
  */
 function extractNumericParameterKeys(config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return [];
+  }
   return Object.keys(config).filter(key => typeof config[key] === 'number');
 }
 
