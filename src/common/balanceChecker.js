@@ -586,7 +586,7 @@ async function releaseDistributedLock(lockKey, lockId) {
       throw new Error(`Redis引数検証失敗: ${validationError.message}`);
     }
     
-    const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
+    const result = await redisClient.eval(luaScript, 1, String(stringLockKey), String(stringLockId));
     
     if (result === 1) {
       logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);
