@@ -546,7 +546,7 @@ async function releaseDistributedLock(lockKey, lockId) {
         if success and lockData and type(lockData) == 'table' and lockData.lockId then
           local lockIdStr = tostring(lockData.lockId)
           if lockIdStr == ARGV[1] then
-            redis.call('DEL', lockKey)
+            redis.call('DEL', KEYS[1])
             return 1
           end
         end
