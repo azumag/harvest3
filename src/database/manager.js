@@ -209,15 +209,25 @@ function formatNullErrorMessage(commandIndex, commandName, operationContext) {
 function formatStringError(error, commandIndex, operationContext) {
   // 意味のない文字列パターンをチェック
   if (error === '-' || error === '' || error.trim() === '') {
-    // Issue #4826: より詳細なエラーメッセージと診断情報を提供
+    // Issue #4910: より詳細なエラーメッセージと診断情報を提供
     const contextInfo = operationContext ? ` - Context: ${JSON.stringify(operationContext)}` : '';
     const diagnosticInfo = 'This may indicate: ' + [
       '1. Redis connection timeout or instability',
       '2. Redis server memory pressure or resource exhaustion',
       '3. Network connectivity issues between application and Redis',
-      '4. Redis client library response parsing issues'
+      '4. Redis client library response parsing issues',
+      '5. Redis transaction queue overflow or memory limit'
     ].join(', ');
-    return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}`;
+    
+    // Issue #4910: リカバリガイダンスを追加
+    const recoveryGuidance = ' Recovery suggestions: ' + [
+      'Check Redis connection health',
+      'Verify Redis memory usage',
+      'Monitor network connectivity',
+      'Consider implementing exponential backoff for retries'
+    ].join(', ');
+    
+    return `Redis command ${commandIndex} failed: Invalid response (empty/dash)${contextInfo}. ${diagnosticInfo}.${recoveryGuidance}`;
   }
   return error;
 }
@@ -570,6 +580,18 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
       throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
     }
+    
+    // Issue #4910: 追加の接続ヘルスチェック
+    try {
+      // PING コマンドで実際の通信確認（軽量なテスト）
+      const pingResult = await client.ping();
+      if (pingResult !== 'PONG') {
+        logger.warn(`[Redis Transaction] PING応答異常: ${pingResult}`);
+      }
+    } catch (pingError) {
+      logger.error(`[Redis Transaction] 接続ヘルスチェック失敗: ${pingError.message}`);
+      throw new Error(`Redis Commit失敗: 接続ヘルスチェック失敗 - ${pingError.message}`);
+    }
   } catch (connectionError) {
     logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
     throw new Error(`Redis Commit失敗: 接続状態チェック失敗 - ${connectionError.message}`);
@@ -608,6 +630,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4920: 各結果の基本的な妥当性チェック
     let nullResultCount = 0;
     const failedCommands = [];
+    let invalidResponseCount = 0; // Issue #4910: Invalid response の検出用
+    
     for (let i = 0; i < redisResults.length; i++) {
       const result = redisResults[i];
       if (!Array.isArray(result) || result.length !== 2) {
@@ -619,10 +643,22 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
         const commandName = commandNames[i] || `command-${i}`;
         failedCommands.push(`${commandName}: ${result[0].message}`);
         logger.error(`[Redis Transaction] コマンド失敗: ${commandName} - ${result[0].message}`);
+        
+        // Issue #4910: Invalid response (empty/dash) エラーの特別な検出
+        if (result[0].message && result[0].message.includes('Invalid response (empty/dash)')) {
+          invalidResponseCount++;
+        }
       }
       
       if (result && result[0] === null && result[1] === null) {
         nullResultCount++;
+      }
+      
+      // Issue #4910: 追加の Invalid response パターン検出
+      if (result && typeof result[1] === 'string' && 
+          (result[1] === '-' || result[1] === '' || result[1].trim() === '')) {
+        invalidResponseCount++;
+        logger.warn(`[Redis Transaction] Invalid response detected for command ${i}: ${JSON.stringify(result)}`);
       }
     }
     
@@ -635,6 +671,18 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4920: 過度のnull結果を検出した場合の警告
     if (nullResultCount > expectedCommandCount * 0.5) {
       logger.warn(`[Redis Transaction] 過度のnull結果を検出: ${nullResultCount}/${expectedCommandCount}`);
+    }
+    
+    // Issue #4910: Invalid response エラーの適応的処理
+    if (invalidResponseCount > 0) {
+      const threshold = Math.max(1, Math.ceil(expectedCommandCount * 0.3)); // 30%のしきい値
+      if (invalidResponseCount >= threshold) {
+        logger.error(`[Redis Transaction] 重大な接続問題: ${invalidResponseCount}/${expectedCommandCount} コマンドでInvalid response`);
+        updateCircuitBreakerOnFailure();
+        throw new Error(`Redis Commit失敗: ${invalidResponseCount}個のコマンドでInvalid response (empty/dash) エラーが発生。接続不安定の可能性。`);
+      } else {
+        logger.warn(`[Redis Transaction] 軽微な接続問題: ${invalidResponseCount}/${expectedCommandCount} コマンドでInvalid response (警告レベル)`);
+      }
     }
     
     updateCircuitBreakerOnSuccess();
@@ -2279,7 +2327,7 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   // lockKey: 英数字、アンダースコア、コロン、ハイフン、ドットのみ許可
   // lockValue: JSON文字列のため波括弧、引用符、カンマ、数字、英字、ハイフンなど許可
   const lockKeyRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}\",]+$/;
   
   if (!lockKeyRegex.test(finalLockKey)) {
     logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockKey (lockKey: '${finalLockKey}')`);
@@ -2293,8 +2341,25 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   
   logger.debug(`Database Manager Redis eval実行準備完了: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
 
-  const result = await redisClient.eval(script, 1, finalLockKey, finalLockValue);
-  return result === 1;
+  // Issue #4910: Lua script引数の明示的な文字列変換を追加
+  // "ERR Lua redis lib command arguments must be strings or integers" エラーを防ぐ
+  const stringLockKey = String(finalLockKey);
+  const stringLockValue = String(finalLockValue);
+  
+  // Issue #4910: タイムアウト保護とより詳細なエラーハンドリング
+  try {
+    // 接続状態の事前チェック
+    if (!redisClient || !redisClient.isReady || !redisClient.isOpen) {
+      logger.error(`分散ロック解放失敗: Redis接続が無効 (ready: ${redisClient?.isReady}, open: ${redisClient?.isOpen})`);
+      return false;
+    }
+    
+    const result = await redisClient.eval(script, 1, stringLockKey, stringLockValue);
+    return result === 1;
+  } catch (evalError) {
+    logger.error(`分散ロック解放エラー: ${evalError.message} - lockKey: '${stringLockKey}', lockValue: '${stringLockValue}'`);
+    return false;
+  }
 }
 
 /**

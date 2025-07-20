@@ -25,6 +25,7 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
     // Initialize mocks
     mockRedisClient = {
       isReady: true,
+      isOpen: true,
       eval: jest.fn(),
       set: jest.fn(),
       get: jest.fn()
@@ -65,9 +66,9 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
         }
         
         // Match the regex validation from the real implementation: /^[a-zA-Z0-9_:\-\.]+$/
-        // For lockValue, we allow JSON characters like {}"",
+        // For lockValue, we allow JSON characters like {}\",
         const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-        const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+        const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}\",]+$/;
         
         if (!validCharRegex.test(lockKey)) {
           return { valid: false, error: 'Invalid characters in lockKey' };
