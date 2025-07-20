@@ -2695,10 +2695,39 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   
   logger.debug(`Database Manager Redis eval実行準備完了: lockKey='${finalLockKey}', lockValue='${finalLockValue}'`);
 
-  // Issue #4910: Lua script引数の明示的な文字列変換を追加
+  // Issue #4942: Lua script引数の型安全性を更に強化
   // "ERR Lua redis lib command arguments must be strings or integers" エラーを防ぐ
-  const stringLockKey = String(finalLockKey);
-  const stringLockValue = String(finalLockValue);
+  let stringLockKey = null;
+  let stringLockValue = null;
+  
+  try {
+    // lockKeyの厳密な変換と検証
+    if (finalLockKey === null || finalLockKey === undefined) {
+      throw new Error(`finalLockKey is null or undefined`);
+    }
+    stringLockKey = String(finalLockKey);
+    if (typeof stringLockKey !== 'string' || stringLockKey === 'undefined' || stringLockKey === 'null') {
+      throw new Error(`lockKey converts to invalid string: '${stringLockKey}'`);
+    }
+    
+    // lockValueの厳密な変換と検証
+    if (finalLockValue === null || finalLockValue === undefined) {
+      throw new Error(`finalLockValue is null or undefined`);
+    }
+    stringLockValue = String(finalLockValue);
+    if (typeof stringLockValue !== 'string' || stringLockValue === 'undefined' || stringLockValue === 'null') {
+      throw new Error(`lockValue converts to invalid string: '${stringLockValue}'`);
+    }
+    
+    // Lua引数として適切な型かチェック（文字列または数値の文字列表現）
+    if (stringLockKey.length === 0 || stringLockValue.length === 0) {
+      throw new Error(`Empty string arguments not allowed for Lua script`);
+    }
+    
+  } catch (conversionError) {
+    logger.error(`Luaスクリプト引数変換エラー: ${conversionError.message}`);
+    return false;
+  }
   
   // Issue #4910: タイムアウト保護とより詳細なエラーハンドリング
   try {
@@ -2898,19 +2927,65 @@ async function prepareRedisOperations(transaction, trade) {
     // 未約定注文削除をトランザクションに追加
     if (trade.orderId && trade.strategy !== 'OUTSIDE') {
       const pendingKey = `pending:${trade.exchange}:${trade.symbol}:${trade.strategy}`;
-      // Issue #4126: orderIdの型安全性を強化
-      const safeOrderId = String(trade.orderId);
-      if (!safeOrderId || safeOrderId === 'undefined' || safeOrderId === 'null') {
-        throw new Error(`無効なorderId値: ${trade.orderId}`);
+      // Issue #4942: orderIdの型安全性を更に強化
+      let safeOrderId = null;
+      try {
+        // 多段階での厳密な検証
+        if (trade.orderId === null || trade.orderId === undefined) {
+          throw new Error(`orderId is null or undefined`);
+        }
+        safeOrderId = String(trade.orderId);
+        if (!safeOrderId || safeOrderId === 'undefined' || safeOrderId === 'null' || safeOrderId.trim() === '') {
+          throw new Error(`orderId converts to invalid string: '${safeOrderId}'`);
+        }
+        // 英数字のみの文字列であることを確認（セキュリティ強化）
+        if (!/^[a-zA-Z0-9_\-]+$/.test(safeOrderId)) {
+          throw new Error(`orderId contains invalid characters: '${safeOrderId}'`);
+        }
+      } catch (validationError) {
+        throw new Error(`無効なorderId値: ${trade.orderId} - ${validationError.message}`);
       }
+      
+      // Redis操作実行直前の最終確認
+      if (!safeOrderId || typeof safeOrderId !== 'string') {
+        throw new Error(`hDel operation validation failed: safeOrderId is not a valid string: ${safeOrderId}`);
+      }
+      
       transaction.hDel(pendingKey, safeOrderId);
       commandNames.push('hDel(pendingOrder)');
     }
 
     // タイムスタンプ更新
-    // Issue #4126: タイムスタンプの型安全性を強化
-    const timestamp = Date.now();
-    transaction.hSet(summaryKey, 'updatedAt', timestamp.toString());
+    // Issue #4942: タイムスタンプの型安全性を更に強化
+    let safeTimestamp = null;
+    try {
+      const timestamp = Date.now();
+      // 基本的な妥当性チェック
+      if (!timestamp || typeof timestamp !== 'number' || !isFinite(timestamp) || timestamp <= 0) {
+        throw new Error(`Invalid timestamp from Date.now(): ${timestamp}`);
+      }
+      safeTimestamp = timestamp.toString();
+      // 文字列変換後の妥当性チェック
+      if (!safeTimestamp || safeTimestamp === 'undefined' || safeTimestamp === 'null' || !/^\d+$/.test(safeTimestamp)) {
+        throw new Error(`Timestamp converts to invalid string: '${safeTimestamp}'`);
+      }
+    } catch (timestampError) {
+      // フォールバック: 現在時刻を再取得
+      const fallbackTimestamp = new Date().getTime();
+      if (fallbackTimestamp && typeof fallbackTimestamp === 'number' && isFinite(fallbackTimestamp)) {
+        safeTimestamp = fallbackTimestamp.toString();
+        logger.warn(`タイムスタンプ生成エラー、フォールバック使用: ${timestampError.message} -> ${safeTimestamp}`);
+      } else {
+        throw new Error(`タイムスタンプ生成完全失敗: ${timestampError.message}`);
+      }
+    }
+    
+    // Redis操作実行直前の最終確認
+    if (!safeTimestamp || typeof safeTimestamp !== 'string' || !/^\d+$/.test(safeTimestamp)) {
+      throw new Error(`hSet operation validation failed: safeTimestamp is not a valid string: ${safeTimestamp}`);
+    }
+    
+    transaction.hSet(summaryKey, 'updatedAt', safeTimestamp);
     commandNames.push('hSet(updatedAt)');
     
     // Issue #3620: コマンド名を返す
