@@ -16,6 +16,19 @@
 function extractConfigParameters(config, parameterMap) {
   const extractedParams = {};
 
+  // Handle null, undefined, or non-plain-object parameters safely
+  if (!parameterMap || typeof parameterMap !== 'object' || Array.isArray(parameterMap)) {
+    return extractedParams;
+  }
+
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    // If config is null/undefined/array, return default values
+    for (const [key, defaultValue] of Object.entries(parameterMap)) {
+      extractedParams[key] = defaultValue;
+    }
+    return extractedParams;
+  }
+
   for (const [key, defaultValue] of Object.entries(parameterMap)) {
     extractedParams[key] = config[key] !== undefined ? config[key] : defaultValue;
   }
