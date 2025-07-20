@@ -314,16 +314,18 @@ function getRedisErrorMessage(error, commandIndex, commandName = null, operation
 }
 
 /**
- * Issue #4920: 拡張Redis接続健全性チェック機能
+ * Issue #4932: 2PC操作用の厳格なRedis接続健全性チェック機能
+ * Issue #4920: 拡張Redis接続健全性チェック機能  
  * Issue #4090: Redis接続状態不整合の解決
  * Issue #4883: 接続の実用性を検証するため実際のRedis操作テストを追加
  * 
  * @param {Object} redisClient - Redisクライアント
  * @param {Object} logger - ログ出力用
  * @param {boolean} includeOperationTest - 実際のRedis操作テストを含めるか (default: false)
+ * @param {boolean} include2PCTest - 2PC用の厳格なトランザクションテストを含めるか (default: false)
  * @returns {Promise<{isHealthy: boolean, details: Object}>} 接続状態の詳細情報
  */
-async function checkRedisConnectionHealth(redisClient, logger, includeOperationTest = false) {
+async function checkRedisConnectionHealth(redisClient, logger, includeOperationTest = false, include2PCTest = false) {
   // Issue #4920: Circuit Breaker状態をチェック
   const { isCircuitBreakerOpen, getCircuitBreakerState } = require('./redisClient');
   const circuitState = getCircuitBreakerState();
@@ -435,7 +437,100 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     }
   }
 
+  // Issue #4932: 2PC操作用の厳格なトランザクションテスト
+  if (include2PCTest) {
+    try {
+      const testKey = `__2pc_health_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const testValue = Math.random().toString(36);
+      
+      // 2PC操作で使用される実際のトランザクションパターンをテスト
+      const transactionTestPromise = (async () => {
+        // マルチトランザクションを作成してテスト
+        const transaction = redisClient.multi();
+        transaction.hSet(testKey, 'testField', testValue);
+        transaction.hIncrByFloat(testKey, 'testIncr', 1.5);
+        transaction.hGet(testKey, 'testField');
+        transaction.hDel(testKey, 'testField', 'testIncr');
+        transaction.del(testKey);
+        
+        const results = await transaction.exec();
+        
+        // 結果の検証 - null/undefined が返されないことを確認
+        if (!results || !Array.isArray(results)) {
+          throw new Error('Transaction results is null or not an array');
+        }
+        
+        for (let i = 0; i < results.length; i++) {
+          const [error, result] = results[i];
+          if (error !== null) {
+            throw new Error(`Transaction command ${i} failed: ${error}`);
+          }
+          // Issue #4932: null/undefined結果の検出
+          if (result === null || result === undefined) {
+            throw new Error(`Transaction command ${i} returned null/undefined result`);
+          }
+        }
+        
+        // hGetの結果を検証
+        const [hGetError, hGetResult] = results[2];
+        if (hGetError === null && hGetResult !== testValue) {
+          throw new Error(`Transaction hGet mismatch: expected '${testValue}', got '${hGetResult}'`);
+        }
+        
+        return true;
+      })();
+      
+      const transactionTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('2PC transaction test timeout')), 5000);
+      });
+      
+      await Promise.race([transactionTestPromise, transactionTimeoutPromise]);
+      details.transaction2PCTestSuccess = true;
+    } catch (error) {
+      details.transaction2PCTestError = error.message || error.toString();
+      logger.warn(`[Redis Health Check] 2PC transaction test failed: ${details.transaction2PCTestError}`);
+      return { isHealthy: false, details };
+    }
+  }
+
   return { isHealthy: true, details };
+}
+
+/**
+ * Issue #4932: null/undefined エラーの検出とRedis接続回復の判定
+ * @param {Array} redisResults - Redis トランザクション結果
+ * @param {Array} commandNames - 実行されたコマンド名の配列
+ * @returns {boolean} 接続回復が必要かどうか
+ */
+function shouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
+  if (!redisResults || !Array.isArray(redisResults)) {
+    return true; // 結果がnull/undefinedまたは配列でない場合は回復が必要
+  }
+  
+  let nullUndefinedCount = 0;
+  const totalCommands = redisResults.length;
+  
+  for (let i = 0; i < totalCommands; i++) {
+    const result = redisResults[i];
+    
+    // Redis の multi/exec 結果は [error, value] の形式
+    if (Array.isArray(result) && result.length === 2) {
+      const [error, value] = result;
+      
+      // エラーがnull/undefinedで値もnull/undefinedの場合
+      if ((error === null || error === undefined) && 
+          (value === null || value === undefined)) {
+        nullUndefinedCount++;
+      }
+    } else {
+      // 結果の形式が予期しない場合
+      nullUndefinedCount++;
+    }
+  }
+  
+  // Issue #4932: 50%以上のコマンドでnull/undefined問題が発生した場合は接続回復
+  const errorRate = nullUndefinedCount / totalCommands;
+  return errorRate >= 0.5;
 }
 
 /**
@@ -2106,10 +2201,10 @@ async function executeDistributedTransaction(trade, isBacktest) {
     }
 
     // Redis先行コミット（原子性保証）
-    // Issue #4925: 強化されたRedis接続状態チェックと自動回復
-    // 2PC操作では必ず詳細な操作テストを実行して"ghost connection"を検出
+    // Issue #4932: 強化されたRedis接続状態チェックと自動回復
+    // 2PC操作では必ず厳格なトランザクションテストを実行して"ghost connection"を検出
     let currentRedisClient = redisClient;
-    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
+    const healthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true, true);
     
     if (!healthCheck.isHealthy) {
       if (!isBacktest) {
@@ -2136,8 +2231,8 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
     }
     
-    // Issue #4925: トランザクション実行前の最終接続確認（操作テスト付き）
-    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true);
+    // Issue #4932: トランザクション実行前の最終接続確認（2PCテスト付き）
+    const finalHealthCheck = await checkRedisConnectionHealth(currentRedisClient, logger, true, true);
     if (!finalHealthCheck.isHealthy) {
       throw new Error(`Redis Commit失敗: 最終接続確認失敗 - ${JSON.stringify(finalHealthCheck.details)}`);
     }
@@ -2211,6 +2306,28 @@ async function executeDistributedTransaction(trade, isBacktest) {
       }
       return acc;
     }, { failed: [], successful: [] });
+    
+    // Issue #4932: null/undefined エラーパターンの検出と即座の接続回復
+    if (shouldRecoverFromNullUndefinedErrors(redisResults, redisCommandNames)) {
+      if (!isBacktest) {
+        logger.warn(`[2PC] null/undefined エラーパターンを検出 - 即座の接続回復を実行`);
+      }
+      
+      // 即座に接続回復を試行
+      const redisDatabase = require('./redisDatabase');
+      const emergencyRecoveredClient = await attemptRedisConnectionRecovery(redisDatabase, logger, 2, true);
+      
+      if (emergencyRecoveredClient) {
+        if (!isBacktest) {
+          logger.info(`[2PC] 緊急接続回復成功 - 次回のトランザクションで使用されます`);
+        }
+        // 次回のトランザクションで新しいクライアントが使用される
+      } else {
+        if (!isBacktest) {
+          logger.error(`[2PC] 緊急接続回復失敗 - システム管理者による確認が必要`);
+        }
+      }
+    }
     
     if (failedCommands.length > 0) {
       // 詳細なエラー情報を構築
@@ -3887,5 +4004,6 @@ module.exports = {
   executeRedisTransactionWithTimeout, // Issue #4826: タイムアウト制御付きトランザクション実行
   validateRedisTransactionBeforeExecution, // Issue #4826: トランザクション事前検証
   acquireDistributedLock, // Issue #4949: テスト用にエクスポート
-  releaseDistributedLock // Issue #4949: テスト用にエクスポート
+  releaseDistributedLock, // Issue #4949: テスト用にエクスポート
+  shouldRecoverFromNullUndefinedErrors // Issue #4932: null/undefined エラー検出機能
 };
