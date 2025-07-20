@@ -162,7 +162,12 @@ class UnifiedErrorHandler {
     // DiscordRateLimiterを使用して通知を送信
     try {
       if (!discordErrorWebhookUrl) {
-        console.error('[UnifiedErrorHandler] Discord Webhook URLが設定されていません');
+        // バックテストモードでは警告レベルでログ、通常モードではエラーレベル
+        if (process.env.BACKTEST_MODE === 'true') {
+          console.warn('[UnifiedErrorHandler] Discord Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+        } else {
+          console.error('[UnifiedErrorHandler] Discord Webhook URLが設定されていません');
+        }
       } else {
         const result = await rateLimiter.send(discordErrorWebhookUrl, discordMessage, {
           priority,
