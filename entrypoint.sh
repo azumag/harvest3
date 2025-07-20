@@ -191,7 +191,7 @@ install_npm_dependencies() {
     return 0
 }
 
-# 重複起動ログ防止関数（Issue #5021 修正）
+# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 log_startup_message() {
     local message="$1"
     
