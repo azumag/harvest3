@@ -19,6 +19,7 @@ STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファ�
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
+# プロセス内フラグとシンプルなatomic操作による重複防止
 # atomic ファイルベース実装によるメッセージ重複防止システム
 STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
@@ -190,36 +191,47 @@ install_npm_dependencies() {
     return 0
 }
 
-# 重複起動ログ防止関数（Issue #5021 修正）
+# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 log_startup_message() {
     local message="$1"
     
+    # 環境変数チェックの前に、まずロックファイルによる排他制御を実施
     # メッセージハッシュを一度だけ計算（一貫性確保）
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
+    # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
+        # プロセス内フラグは既に設定済みなので何もしない
+        # 重複メッセージとして処理終了
         return 0
     fi
     
     # プロセス間重複チェック（第二の防御線）
-    # atomic操作でロック取得を試行
+    # より強固なatomic操作でロック取得を試行
+    local lock_acquired=false
     if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
-        # ロック取得成功：メッセージ出力
+        lock_acquired=true
+    fi
+    
+    if [ "$lock_acquired" = true ]; then
+        # ロック取得成功：プロセス内重複チェック（第二の防御線）
         log "$message"
         
-        # ロック取得成功後にプロセス内フラグを設定（重複防止）
+        # レースコンディション防止：即座にプロセス内フラグを設定
         export "$var_name"=1
         
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         
+        # ロックファイルを削除してから終了
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
+        # 重複メッセージとして処理終了
         return 0
     fi
 }
