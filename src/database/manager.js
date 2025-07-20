@@ -573,7 +573,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
   
-  // Issue #4949: トランザクション実行直前の接続状態チェック
+  // Issue #4941: 強化されたトランザクション実行直前の接続検証
   try {
     const client = redisTransaction.client;
     if (!client || !client.isReady || !client.isOpen) {
@@ -581,16 +581,56 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
     }
     
-    // Issue #4910: 追加の接続ヘルスチェック
+    // Issue #4941: より厳密な接続実用性テスト
     try {
       // PING コマンドで実際の通信確認（軽量なテスト）
+      const pingStart = Date.now();
       const pingResult = await client.ping();
+      const pingDuration = Date.now() - pingStart;
+      
       if (pingResult !== 'PONG') {
         logger.warn(`[Redis Transaction] PING応答異常: ${pingResult}`);
+        throw new Error(`PING応答異常: ${pingResult}`);
       }
-    } catch (pingError) {
-      logger.error(`[Redis Transaction] 接続ヘルスチェック失敗: ${pingError.message}`);
-      throw new Error(`Redis Commit失敗: 接続ヘルスチェック失敗 - ${pingError.message}`);
+      
+      // Issue #4941: PING応答時間による接続品質チェック
+      if (pingDuration > 1000) { // 1秒以上の場合は接続品質低下を警告
+        logger.warn(`[Redis Transaction] PING応答時間が長い: ${pingDuration}ms`);
+      }
+      
+      // Issue #4941: 実際のRedis操作テスト（ghost connection検出用）
+      // トランザクション操作に近いテストを実行
+      const testKey = `__tx_health_${trade.tradeId}_${Date.now()}`;
+      const testValue = 'tx_test';
+      
+      const operationStart = Date.now();
+      await client.set(testKey, testValue, 'EX', 5); // 5秒で期限切れ
+      const retrievedValue = await client.get(testKey);
+      await client.del(testKey);
+      const operationDuration = Date.now() - operationStart;
+      
+      if (retrievedValue !== testValue) {
+        throw new Error(`操作テスト失敗: 期待値='${testValue}', 実際='${retrievedValue}'`);
+      }
+      
+      logger.debug(`[Redis Transaction] 接続テスト成功: ping=${pingDuration}ms, operation=${operationDuration}ms`);
+      
+    } catch (testError) {
+      logger.error(`[Redis Transaction] 接続実用性テスト失敗: ${testError.message}`);
+      
+      // Issue #4941: テスト失敗時の詳細な診断情報を収集
+      const diagnosticInfo = {
+        clientReady: client.isReady,
+        clientOpen: client.isOpen,
+        clientStatus: client.status,
+        serverInfo: client.serverInfo ? 'available' : 'unavailable',
+        testError: testError.message,
+        tradeId: trade.tradeId,
+        timestamp: new Date().toISOString()
+      };
+      
+      logger.error(`[Redis Transaction] 診断情報: ${JSON.stringify(diagnosticInfo)}`);
+      throw new Error(`Redis Commit失敗: 接続実用性テスト失敗 - ${testError.message}`);
     }
   } catch (connectionError) {
     logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
@@ -604,11 +644,39 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     }, adaptiveTimeout);
   });
   
+  // Issue #4941: トランザクション実行直前の最終チェック
+  logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
+  const client = redisTransaction.client;
+  if (!client.isReady || !client.isOpen) {
+    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
+    throw new Error('Redis Commit失敗: exec()直前に接続が失われました');
+  }
+  
   const transactionPromise = redisTransaction.exec();
   
   try {
     // Promise.raceを使用してタイムアウト制御
+    const execStart = Date.now();
     const redisResults = await Promise.race([transactionPromise, timeoutPromise]);
+    const execDuration = Date.now() - execStart;
+    
+    // Issue #4941: トランザクション実行直後の接続状態確認
+    const postExecConnectionState = {
+      clientReady: client.isReady,
+      clientOpen: client.isOpen,
+      clientStatus: client.status,
+      execDuration: execDuration,
+      resultsReceived: !!redisResults,
+      timestamp: new Date().toISOString()
+    };
+    logger.debug(`[Redis Transaction] exec()完了: ${JSON.stringify(postExecConnectionState)}`);
+    
+    // Issue #4941: 接続状態異常の早期検出
+    if (!client.isReady || !client.isOpen) {
+      logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);
+      updateCircuitBreakerOnFailure();
+      throw new Error(`Redis Commit失敗: exec()後に接続が失われました - ${JSON.stringify(postExecConnectionState)}`);
+    }
     
     if (!redisResults) {
       updateCircuitBreakerOnFailure();
@@ -630,6 +698,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4920: 各結果の基本的な妥当性チェック
     let nullResultCount = 0;
     const failedCommands = [];
+    const failedCommandDetails = []; // Issue #4941: 詳細情報用
     let invalidResponseCount = 0; // Issue #4910: Invalid response の検出用
     
     for (let i = 0; i < redisResults.length; i++) {
@@ -641,11 +710,39 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       // Issue #4949: 個別コマンドのエラーチェック追加
       if (result && result[0] instanceof Error) {
         const commandName = commandNames[i] || `command-${i}`;
-        failedCommands.push(`${commandName}: ${result[0].message}`);
-        logger.error(`[Redis Transaction] コマンド失敗: ${commandName} - ${result[0].message}`);
+        const errorMessage = result[0].message || 'Unknown error';
+        
+        failedCommands.push(`${commandName}: ${errorMessage}`);
+        
+        // Issue #4941: より詳細なコマンド失敗情報を収集
+        const commandFailureDetail = {
+          index: i,
+          command: commandName,
+          error: result[0],
+          errorMessage: errorMessage,
+          errorType: result[0].constructor.name,
+          tradeId: trade.tradeId,
+          timestamp: new Date().toISOString()
+        };
+        
+        // Issue #4941: エラーコンテキスト情報を追加
+        if (result[0].message && result[0].message.includes('null/undefined')) {
+          commandFailureDetail.possibleCause = 'connection_timeout_or_lost';
+        } else if (result[0].message && result[0].message.includes('Invalid response')) {
+          commandFailureDetail.possibleCause = 'invalid_server_response';
+        } else if (result[0].message && result[0].message.includes('timeout')) {
+          commandFailureDetail.possibleCause = 'operation_timeout';
+        } else {
+          commandFailureDetail.possibleCause = 'unknown';
+        }
+        
+        failedCommandDetails.push(commandFailureDetail);
+        
+        logger.error(`[Redis Transaction] コマンド失敗: ${commandName} - ${errorMessage}`);
+        logger.error(`[Redis Transaction] エラー詳細 [${i}]: ${JSON.stringify(commandFailureDetail)}`);
         
         // Issue #4910: Invalid response (empty/dash) エラーの特別な検出
-        if (result[0].message && result[0].message.includes('Invalid response (empty/dash)')) {
+        if (errorMessage.includes('Invalid response (empty/dash)')) {
           invalidResponseCount++;
         }
       }
@@ -665,7 +762,31 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4949: 失敗したコマンドがある場合はエラーを投げる
     if (failedCommands.length > 0) {
       updateCircuitBreakerOnFailure();
-      throw new Error(`Redis Commit失敗: ${failedCommands.length}個のコマンドが失敗しました - ${failedCommands.join(', ')}`);
+      
+      // Issue #4941: より詳細なエラー情報を含める
+      const detailedErrorInfo = {
+        failedCount: failedCommands.length,
+        totalCommands: commandCount,
+        tradeId: trade.tradeId,
+        connectionState: {
+          clientReady: client.isReady,
+          clientOpen: client.isOpen,
+          clientStatus: client.status
+        },
+        failedCommandDetails: failedCommandDetails.map(detail => ({
+          index: detail.index,
+          command: detail.command,
+          errorMessage: detail.errorMessage,
+          possibleCause: detail.possibleCause
+        })),
+        timestamp: new Date().toISOString()
+      };
+      
+      logger.error(`[Redis Transaction] 詳細失敗情報: ${JSON.stringify(detailedErrorInfo)}`);
+      
+      const error = new Error(`Redis Commit失敗: ${failedCommands.length}個のコマンドが失敗しました - ${failedCommands.join(', ')}`);
+      error.details = detailedErrorInfo; // 詳細情報をエラーオブジェクトに追加
+      throw error;
     }
     
     // Issue #4920: 過度のnull結果を検出した場合の警告
@@ -692,11 +813,39 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   } catch (error) {
     updateCircuitBreakerOnFailure();
     
+    // Issue #4941: キャッチ時の詳細な診断情報収集
+    const client = redisTransaction.client;
+    const errorDiagnostics = {
+      errorMessage: error.message,
+      errorType: error.constructor.name,
+      tradeId: trade.tradeId,
+      commandCount: commandCount,
+      adaptiveTimeout: adaptiveTimeout,
+      connectionState: {
+        clientExists: !!client,
+        clientReady: client?.isReady,
+        clientOpen: client?.isOpen,
+        clientStatus: client?.status,
+        serverInfo: client?.serverInfo ? 'available' : 'unavailable'
+      },
+      circuitBreakerState: require('./redisClient').getCircuitBreakerState(),
+      timestamp: new Date().toISOString(),
+      stackTrace: error.stack
+    };
+    
+    logger.error(`[Redis Transaction] 例外キャッチ - 診断情報: ${JSON.stringify(errorDiagnostics)}`);
+    
     if (error.message.includes('timeout')) {
       logger.error(`[Redis Transaction] タイムアウト: ${trade.tradeId} - ${adaptiveTimeout}ms経過`);
-      throw new Error(`Redis Commit失敗: トランザクションタイムアウト (${adaptiveTimeout}ms, ${commandCount}コマンド)`);
+      const timeoutError = new Error(`Redis Commit失敗: トランザクションタイムアウト (${adaptiveTimeout}ms, ${commandCount}コマンド)`);
+      timeoutError.diagnostics = errorDiagnostics;
+      throw timeoutError;
     } else {
       logger.error(`[Redis Transaction] 実行エラー: ${trade.tradeId} - ${error.message}`);
+      // 元のエラーに診断情報を追加
+      if (!error.diagnostics) {
+        error.diagnostics = errorDiagnostics;
+      }
       throw error;
     }
   }
