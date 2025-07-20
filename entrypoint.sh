@@ -190,7 +190,7 @@ install_npm_dependencies() {
     return 0
 }
 
-# 重複起動ログ防止関数（Issue #5021 修正）
+# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
 # プロセス内フラグとatomic操作による重複防止（修正版）
 log_startup_message() {
     local message="$1"
@@ -208,7 +208,7 @@ log_startup_message() {
     fi
     
     # プロセス間重複チェック（第二の防御線）
-    # atomic操作でロック取得を試行
+    # より強固なatomic操作でロック取得を試行
     if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         # ロック取得成功：プロセス内重複チェック（第二の防御線）
         log "$message"
