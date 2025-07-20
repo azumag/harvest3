@@ -952,7 +952,7 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
     throw error;
   } finally {
     // 分散ロックを必ず解放
-    if (distributedLock && distributedLock.acquired) {
+    if (distributedLock && distributedLock.acquired && distributedLock.lockKey && distributedLock.lockValue) {
       try {
         const { releaseDistributedLock } = require('../../database/manager');
         await releaseDistributedLock(distributedLock);
@@ -960,6 +960,8 @@ async function executeStopLoss(exchange, symbol, strategyKey, position, marketPa
       } catch (releaseError) {
         logger.error(` Failed to release distributed lock: ${releaseError.message}`);
       }
+    } else if (distributedLock && distributedLock.acquired && (!distributedLock.lockKey || !distributedLock.lockValue)) {
+      logger.warn(` Skipping lock release due to incomplete lock info - lockKey: ${distributedLock.lockKey}, lockValue: ${distributedLock.lockValue}`);
     }
   }
 }
