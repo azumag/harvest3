@@ -10,7 +10,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 describe('Issue #5061: Simple Fix Verification', () => {
-  const messageLockDir = '/tmp/startup_messages';
+  const messageLockDir = '/tmp/startup_messages_5061';
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   
   beforeEach(() => {
@@ -63,7 +63,7 @@ describe('Issue #5061: Simple Fix Verification', () => {
     const testLogic = `#!/bin/bash
 set -e
 
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_5061"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 get_message_hash() {
@@ -178,7 +178,7 @@ echo "=== Test Completed ==="
     const specificTest = `#!/bin/bash
 set -e
 
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_5061"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 get_message_hash() {
