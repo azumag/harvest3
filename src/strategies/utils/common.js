@@ -1696,7 +1696,7 @@ function recordOrderExecutionFeedback(testId, orderData, urgencyData, executionR
 /**
  * オブジェクトから数値型のプロパティキーを抽出する
  * @param {Object|null|undefined} config - 設定オブジェクト
- * @returns {Array} 数値型のプロパティキーの配列
+ * @returns {string[]} 数値型のプロパティキーの配列
  */
 function extractNumericParameterKeys(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {

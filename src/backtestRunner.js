@@ -19,7 +19,7 @@ const { backtestCreateLimitSellOrder,
 const { postErrorToDiscord, postResultToDiscord, discordBacktestURL } = require('./common/notifications');
 const { OHLCVTimeFrames } = require('./common/const');
 const { timeframeToMs } = require('./common/utils');
-const { clearPositionMarket } = require('./strategies/utils/common');
+const { clearPositionMarket, extractNumericParameterKeys } = require('./strategies/utils/common');
 const { disableStrategy } = require('./config/strategyManager');
 const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
@@ -927,17 +927,6 @@ function evaluateParameterCombination(
   }
 }
 
-/**
- * オブジェクトから数値型のプロパティキーを抽出する
- * @param {Object|null|undefined} config - 設定オブジェクト
- * @returns {Array} 数値型のプロパティキーの配列
- */
-function extractNumericParameterKeys(config) {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    return [];
-  }
-  return Object.keys(config).filter(key => typeof config[key] === 'number');
-}
 
 /**
  * パラメータの全ての組み合わせを生成する
