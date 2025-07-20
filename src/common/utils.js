@@ -286,7 +286,7 @@ function validateLockParameters(lockKey, lockValue, context = 'lock') {
   // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロンのみ許可
   const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
   // lockValue: JSON文字も許可（database/managerでJSONデータを格納する場合があるため）
-  const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+  const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}\",]+$/;
   
   if (!validCharRegex.test(lockKey)) {
     return {

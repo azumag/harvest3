@@ -2327,7 +2327,7 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   // lockKey: 英数字、アンダースコア、コロン、ハイフン、ドットのみ許可
   // lockValue: JSON文字列のため波括弧、引用符、カンマ、数字、英字、ハイフンなど許可
   const lockKeyRegex = /^[a-zA-Z0-9_:\-\.]+$/;
-  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}"",]+$/;
+  const lockValueRegex = /^[a-zA-Z0-9_:\-\.{}\",]+$/;
   
   if (!lockKeyRegex.test(finalLockKey)) {
     logger.warn(`分散ロック解放スキップ: 不正な文字を含むlockKey (lockKey: '${finalLockKey}')`);
