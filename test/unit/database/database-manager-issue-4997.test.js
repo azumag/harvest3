@@ -25,6 +25,7 @@ describe('Issue #4997: Database Manager Redis Lua script 引数検証エラー�
     // Initialize mocks
     mockRedisClient = {
       isReady: true,
+      isOpen: true,
       eval: jest.fn(),
       set: jest.fn(),
       get: jest.fn()
