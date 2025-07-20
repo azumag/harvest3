@@ -57,7 +57,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // レースコンディション防止のコメント
-      expect(entrypointContent).toContain('レースコンディション防止：即座にプロセス内フラグを設定');
+      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
       
       // プロセス内チェック直後にフラグ設定
       const lines = entrypointContent.split('\n');
@@ -166,7 +166,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // 関数内の重要なロジックが存在することを確認
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
       expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
-      expect(entrypointContent).toContain('レースコンディション防止：即座にプロセス内フラグを設定');
+      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
       
       // 構文の基本的な正当性：returnステートメントの存在
       const functionBody = entrypointContent.substring(
