@@ -191,7 +191,7 @@ install_npm_dependencies() {
 }
 
 # 重複起動ログ防止関数（強化版 - Issue #3942 修正）
-# プロセス内フラグとシンプルなatomic操作による重複防止
+# 環境変数チェックの前に、まずロックファイルによる排他制御を実施
 log_startup_message() {
     local message="$1"
     
@@ -200,6 +200,7 @@ log_startup_message() {
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
+    # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
     # プロセス内重複チェック（最初の防御線） - Issue #5061 修正
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
@@ -209,15 +210,15 @@ log_startup_message() {
     
     # プロセス内フラグを即座に設定（レースコンディション防止）
     # Issue #5061 修正: フラグ設定をロック取得前に移動
-    # レースコンディション防止：即座にプロセス内フラグを設定
     export "$var_name"=1
     
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
     if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
-        # ロック取得成功：プロセス内重複チェック（第二の防御線）
+        # ロック取得成功：メッセージ出力
         log "$message"
         
+        # 処理完了後にプロセス内フラグを設定（重複防止）
         # ロックファイルのクリーンアップ（30秒後）
         # 30秒後に自動削除
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
@@ -225,7 +226,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグは既に設定済みなので、このプロセスでは今後同じメッセージは出力されない
+        # プロセス内フラグは既に設定済みなので何もしない
         # 重複メッセージとして処理終了
         return 0
     fi
