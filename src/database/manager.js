@@ -3375,7 +3375,7 @@ async function getSymbolsByExchange(config) {
       // 除外シンボル
       const symbols = Object.keys(markets).filter(symbol =>
         symbol.endsWith('/JPY')
-          && !config.global.excludeSymbols.some(excludePattern => symbol.startsWith(excludePattern))
+          && !(config.global?.excludeSymbols || []).some(excludePattern => symbol.startsWith(excludePattern))
       );
 
       symbolsByExchange[exchange] = symbols;
