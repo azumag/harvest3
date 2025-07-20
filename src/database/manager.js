@@ -2361,6 +2361,16 @@ async function acquireDistributedLock(exchange, symbol, tradeId, ttl = 30000) {
 
 /**
  * 分散ロック解放
+ * 
+ * Issue #4927修正: Redis Luaスクリプト引数の型安全性を強化
+ * - Luaスクリプト内での引数型チェック追加
+ * - "ERR Lua redis lib command arguments must be strings or integers" エラーを防止
+ * - 多層防御アプローチによる堅牢な引数検証
+ * 
+ * @param {Object} lockInfo - ロック情報オブジェクト
+ * @param {string|number} lockInfo.lockKey - ロックキー
+ * @param {string|number} lockInfo.lockValue - ロック値
+ * @returns {Promise<boolean>} - 解放成功時はtrue、失敗時はfalse
  */
 async function releaseDistributedLock(lockInfo) {
   try {
