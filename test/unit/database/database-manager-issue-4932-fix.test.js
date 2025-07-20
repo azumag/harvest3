@@ -16,6 +16,9 @@ describe('Issue #4932: Redis 2PC接続障害修正', () => {
     // Jest のモックキャッシュをクリア
     jest.resetModules();
     
+    // モックのデータストレージ
+    const mockDataStore = new Map();
+    
     // モックの初期化
     mockRedisClient = {
       multi: jest.fn(),
@@ -24,28 +27,85 @@ describe('Issue #4932: Redis 2PC接続障害修正', () => {
       status: 'ready',
       serverInfo: { version: '6.2.0' },
       ping: jest.fn().mockResolvedValue('PONG'),
-      set: jest.fn().mockResolvedValue('OK'),
-      get: jest.fn().mockResolvedValue('test_value'),
-      del: jest.fn().mockResolvedValue(1),
+      set: jest.fn().mockImplementation((key, value) => {
+        mockDataStore.set(key, value);
+        return Promise.resolve('OK');
+      }),
+      get: jest.fn().mockImplementation((key) => {
+        return Promise.resolve(mockDataStore.get(key));
+      }),
+      del: jest.fn().mockImplementation((key) => {
+        const existed = mockDataStore.has(key);
+        mockDataStore.delete(key);
+        return Promise.resolve(existed ? 1 : 0);
+      }),
       hSet: jest.fn().mockResolvedValue(1),
       hIncrByFloat: jest.fn().mockResolvedValue('1.5'),
       hGet: jest.fn().mockResolvedValue('test_value'),
       hDel: jest.fn().mockResolvedValue(1)
     };
 
+    // トランザクション用のデータストレージとオペレーション追跡
+    const transactionDataStore = new Map();
+    const transactionOperations = [];
+    
     const mockTransaction = {
-      hSet: jest.fn().mockReturnThis(),
-      hIncrByFloat: jest.fn().mockReturnThis(),
-      hGet: jest.fn().mockReturnThis(),
-      hDel: jest.fn().mockReturnThis(),
-      del: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([
-        [null, 1],       // hSet success
-        [null, '1.5'],   // hIncrByFloat success
-        [null, 'test_value'], // hGet success
-        [null, 1],       // hDel success
-        [null, 1]        // del success
-      ])
+      hSet: jest.fn().mockImplementation((key, field, value) => {
+        if (!transactionDataStore.has(key)) {
+          transactionDataStore.set(key, new Map());
+        }
+        transactionDataStore.get(key).set(field, value);
+        transactionOperations.push({ type: 'hSet', key, field, value });
+        return mockTransaction;
+      }),
+      hIncrByFloat: jest.fn().mockImplementation((key, field, increment) => {
+        if (!transactionDataStore.has(key)) {
+          transactionDataStore.set(key, new Map());
+        }
+        const currentValue = transactionDataStore.get(key).get(field) || 0;
+        const newValue = parseFloat(currentValue) + parseFloat(increment);
+        transactionDataStore.get(key).set(field, newValue.toString());
+        transactionOperations.push({ type: 'hIncrByFloat', key, field, increment, result: newValue.toString() });
+        return mockTransaction;
+      }),
+      hGet: jest.fn().mockImplementation((key, field) => {
+        transactionOperations.push({ type: 'hGet', key, field });
+        return mockTransaction;
+      }),
+      hDel: jest.fn().mockImplementation((key, ...fields) => {
+        transactionOperations.push({ type: 'hDel', key, fields });
+        return mockTransaction;
+      }),
+      del: jest.fn().mockImplementation((key) => {
+        transactionOperations.push({ type: 'del', key });
+        return mockTransaction;
+      }),
+      exec: jest.fn().mockImplementation(() => {
+        // 実際の操作結果を生成
+        const results = [];
+        
+        for (const op of transactionOperations) {
+          if (op.type === 'hSet') {
+            results.push([null, 1]);
+          } else if (op.type === 'hIncrByFloat') {
+            results.push([null, op.result]);
+          } else if (op.type === 'hGet') {
+            const hash = transactionDataStore.get(op.key);
+            const value = hash ? hash.get(op.field) : null;
+            results.push([null, value]);
+          } else if (op.type === 'hDel') {
+            results.push([null, op.fields.length]);
+          } else if (op.type === 'del') {
+            results.push([null, 1]);
+          }
+        }
+        
+        // 次回のテスト用にリセット
+        transactionDataStore.clear();
+        transactionOperations.length = 0;
+        
+        return Promise.resolve(results);
+      })
     };
 
     mockRedisClient.multi.mockReturnValue(mockTransaction);

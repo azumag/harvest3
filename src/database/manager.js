@@ -349,6 +349,9 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     pingError: null,
     operationTestSuccess: false,
     operationTestError: null,
+    // Issue #4932: 2PCテスト関連フィールドを初期化
+    transaction2PCTestSuccess: false,
+    transaction2PCTestError: null,
     // Issue #4920: Circuit Breaker情報を追加
     circuitBreaker: {
       state: circuitState.state,
