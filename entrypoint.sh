@@ -190,7 +190,7 @@ install_npm_dependencies() {
     return 0
 }
 
-# 重複起動ログ防止関数（強化版 - Issue #3942 修正）
+# 重複起動ログ防止関数（Issue #5021 修正）
 # プロセス内フラグとシンプルなatomic操作による重複防止
 log_startup_message() {
     local message="$1"
@@ -213,7 +213,7 @@ log_startup_message() {
         # ロック取得成功：メッセージ出力
         log "$message"
         
-        # レースコンディション防止：即座にプロセス内フラグを設定
+        # ロック取得成功後にプロセス内フラグを設定（重複防止）
         export "$var_name"=1
         
         # ロックファイルのクリーンアップ（30秒後）
