@@ -2331,11 +2331,7 @@ async function executeDistributedTransaction(trade, isBacktest) {
           const retryTransaction = emergencyRecoveredClient.multi();
           
           // 元のRedis操作を再度準備
-          const retryRedisOperations = prepareRedisOperations(trade, isBacktest);
-          retryRedisOperations.forEach(operation => {
-            const { command, args } = operation;
-            retryTransaction[command](...args);
-          });
+          const retryCommandNames = await prepareRedisOperations(retryTransaction, trade);
           
           // 最終接続確認
           const retryHealthCheck = await checkRedisConnectionHealth(emergencyRecoveredClient, logger, true, true);

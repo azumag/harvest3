@@ -3,41 +3,43 @@
  * 実際のコードベースの動作確認に焦点を当てたテスト
  */
 
+// DRY原則に従って共通のヘルパー関数を定義
+function testShouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
+  if (!redisResults || !Array.isArray(redisResults)) {
+    return true; // 結果がnull/undefinedまたは配列でない場合は回復が必要
+  }
+  
+  let nullUndefinedCount = 0;
+  const totalCommands = redisResults.length;
+  
+  for (let i = 0; i < totalCommands; i++) {
+    const result = redisResults[i];
+    
+    // Redis の multi/exec 結果は [error, value] の形式
+    if (Array.isArray(result) && result.length === 2) {
+      const [error, value] = result;
+      
+      // エラーがnull/undefinedで値もnull/undefinedの場合
+      if ((error === null || error === undefined) && 
+          (value === null || value === undefined)) {
+        nullUndefinedCount++;
+      }
+    } else {
+      // 結果の形式が予期しない場合
+      nullUndefinedCount++;
+    }
+  }
+  
+  // 50%以上のコマンドでnull/undefined問題が発生した場合は接続回復
+  const errorRate = nullUndefinedCount / totalCommands;
+  return errorRate >= 0.5;
+}
+
 describe('Database Manager Issue #4937: null/undefined エラー即座再試行 (簡易版)', () => {
   
   describe('基本的な null/undefined エラーパターン検出ロジック', () => {
     it('should correctly identify null/undefined error patterns', () => {
       // Issue #4937の実際のエラーパターンをシミュレート
-      function testShouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
-        if (!redisResults || !Array.isArray(redisResults)) {
-          return true; // 結果がnull/undefinedまたは配列でない場合は回復が必要
-        }
-        
-        let nullUndefinedCount = 0;
-        const totalCommands = redisResults.length;
-        
-        for (let i = 0; i < totalCommands; i++) {
-          const result = redisResults[i];
-          
-          // Redis の multi/exec 結果は [error, value] の形式
-          if (Array.isArray(result) && result.length === 2) {
-            const [error, value] = result;
-            
-            // エラーがnull/undefinedで値もnull/undefinedの場合
-            if ((error === null || error === undefined) && 
-                (value === null || value === undefined)) {
-              nullUndefinedCount++;
-            }
-          } else {
-            // 結果の形式が予期しない場合
-            nullUndefinedCount++;
-          }
-        }
-        
-        // 50%以上のコマンドでnull/undefined問題が発生した場合は接続回復
-        const errorRate = nullUndefinedCount / totalCommands;
-        return errorRate >= 0.5;
-      }
       
       // Issue #4937の実際のエラーパターンをテスト
       const failedResults = [
@@ -61,32 +63,6 @@ describe('Database Manager Issue #4937: null/undefined エラー即座再試行 
     });
 
     it('should not trigger recovery for partial failures', () => {
-      function testShouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
-        if (!redisResults || !Array.isArray(redisResults)) {
-          return true;
-        }
-        
-        let nullUndefinedCount = 0;
-        const totalCommands = redisResults.length;
-        
-        for (let i = 0; i < totalCommands; i++) {
-          const result = redisResults[i];
-          
-          if (Array.isArray(result) && result.length === 2) {
-            const [error, value] = result;
-            
-            if ((error === null || error === undefined) && 
-                (value === null || value === undefined)) {
-              nullUndefinedCount++;
-            }
-          } else {
-            nullUndefinedCount++;
-          }
-        }
-        
-        const errorRate = nullUndefinedCount / totalCommands;
-        return errorRate >= 0.5;
-      }
       
       // 部分的な失敗（50%未満）では回復しない
       const partialFailureResults = [
@@ -104,32 +80,6 @@ describe('Database Manager Issue #4937: null/undefined エラー即座再試行 
     });
 
     it('should handle edge cases appropriately', () => {
-      function testShouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
-        if (!redisResults || !Array.isArray(redisResults)) {
-          return true;
-        }
-        
-        let nullUndefinedCount = 0;
-        const totalCommands = redisResults.length;
-        
-        for (let i = 0; i < totalCommands; i++) {
-          const result = redisResults[i];
-          
-          if (Array.isArray(result) && result.length === 2) {
-            const [error, value] = result;
-            
-            if ((error === null || error === undefined) && 
-                (value === null || value === undefined)) {
-              nullUndefinedCount++;
-            }
-          } else {
-            nullUndefinedCount++;
-          }
-        }
-        
-        const errorRate = nullUndefinedCount / totalCommands;
-        return errorRate >= 0.5;
-      }
       
       // エッジケース: null/undefined結果配列
       expect(testShouldRecoverFromNullUndefinedErrors(null, [])).toBe(true);
@@ -207,32 +157,6 @@ describe('Database Manager Issue #4937: null/undefined エラー即座再試行 
         [null, 'OK']
       ];
       
-      function testShouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
-        if (!redisResults || !Array.isArray(redisResults)) {
-          return true;
-        }
-        
-        let nullUndefinedCount = 0;
-        const totalCommands = redisResults.length;
-        
-        for (let i = 0; i < totalCommands; i++) {
-          const result = redisResults[i];
-          
-          if (Array.isArray(result) && result.length === 2) {
-            const [error, value] = result;
-            
-            if ((error === null || error === undefined) && 
-                (value === null || value === undefined)) {
-              nullUndefinedCount++;
-            }
-          } else {
-            nullUndefinedCount++;
-          }
-        }
-        
-        const errorRate = nullUndefinedCount / totalCommands;
-        return errorRate >= 0.5;
-      }
       
       // 正常なケースでは回復処理が不要
       const shouldRecover = testShouldRecoverFromNullUndefinedErrors(normalResults, ['cmd1', 'cmd2', 'cmd3']);
