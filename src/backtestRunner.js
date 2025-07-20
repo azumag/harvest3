@@ -425,6 +425,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       const uniqueCombinationsMap = new Map();
 
       parameterCombinations.forEach(combo => {
+        // null/undefinedチェックを追加してTypeErrorを防ぐ
+        if (!combo || typeof combo !== 'object') {
+          console.warn('無効なパラメータ組み合わせをスキップ:', combo);
+          return;
+        }
         const keys = Object.keys(combo).sort();
         const sortedCombo = {};
         keys.forEach(key => sortedCombo[key] = combo[key]);
@@ -447,6 +452,12 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
     // 各パラメータ組み合わせでバックテスト実行
     for (const paramCombination of parameterCombinations) {
+      // null/undefinedチェックを追加してエラーを防ぐ
+      if (!paramCombination || typeof paramCombination !== 'object') {
+        console.warn('無効なパラメータ組み合わせをスキップ:', paramCombination);
+        continue;
+      }
+
       const strategyConfig = {
         ..._strategyConfig,
         hlcvInterval: timeframe,
