@@ -2310,10 +2310,10 @@ async function executeDistributedTransaction(trade, isBacktest) {
       return acc;
     }, { failed: [], successful: [] });
     
-    // Issue #4932: null/undefined エラーパターンの検出と即座の接続回復
+    // Issue #4932,#4937: null/undefined エラーパターンの検出と即座の接続回復・再試行
     if (shouldRecoverFromNullUndefinedErrors(redisResults, redisCommandNames)) {
       if (!isBacktest) {
-        logger.warn(`[2PC] null/undefined エラーパターンを検出 - 即座の接続回復を実行`);
+        logger.warn(`[2PC] null/undefined エラーパターンを検出 - 即座の接続回復と再試行を実行`);
       }
       
       // 即座に接続回復を試行
@@ -2322,9 +2322,72 @@ async function executeDistributedTransaction(trade, isBacktest) {
       
       if (emergencyRecoveredClient) {
         if (!isBacktest) {
-          logger.info(`[2PC] 緊急接続回復成功 - 次回のトランザクションで使用されます`);
+          logger.info(`[2PC] 緊急接続回復成功 - 現在のトランザクションを新しいクライアントで再実行`);
         }
-        // 次回のトランザクションで新しいクライアントが使用される
+        
+        // Issue #4937: 現在のトランザクションを新しいクライアントで即座に再実行
+        try {
+          // 新しいクライアントでトランザクションを再作成
+          const retryTransaction = emergencyRecoveredClient.multi();
+          
+          // 元のRedis操作を再度準備
+          const retryCommandNames = await prepareRedisOperations(retryTransaction, trade);
+          
+          // 最終接続確認
+          const retryHealthCheck = await checkRedisConnectionHealth(emergencyRecoveredClient, logger, true, true);
+          if (!retryHealthCheck.isHealthy) {
+            throw new Error(`再試行用クライアントの接続確認失敗: ${JSON.stringify(retryHealthCheck.details)}`);
+          }
+          
+          // 再実行
+          if (!isBacktest) {
+            logger.info(`[2PC] null/undefined エラー復旧: トランザクション再実行開始`);
+          }
+          
+          const retryResults = await executeRedisTransactionWithTimeout(retryTransaction, redisCommandNames, trade, logger);
+          
+          // 再実行結果の検証
+          const retryAnalysis = retryResults.reduce((acc, result, index) => {
+            if (result[0] !== null) {
+              const commandName = redisCommandNames[index] || `コマンド${index}`;
+              const errorMessage = getRedisErrorMessage(result[0], index, {
+                tradeId: trade.tradeId,
+                exchange: trade.exchange,
+                symbol: trade.symbol,
+                strategy: trade.strategy,
+                commandIndex: index,
+                totalCommands: redisCommandNames.length
+              }, commandName);
+              
+              acc.failed.push({ index, command: commandName, errorMessage, error: result[0] });
+            } else {
+              acc.successful.push({ index, command: redisCommandNames[index], result: result[1] });
+            }
+            return acc;
+          }, { failed: [], successful: [] });
+          
+          if (retryAnalysis.failed.length === 0) {
+            // 再実行成功 - 成功結果を使用
+            if (!isBacktest) {
+              logger.info(`[2PC] null/undefined エラー復旧成功: ${retryAnalysis.successful.length}個のコマンドが成功`);
+            }
+            
+            // 成功した場合は元の処理を続行（エラーを投げない）
+            // currentRedisClientを更新して今後のトランザクションでも使用
+            currentRedisClient = emergencyRecoveredClient;
+            return; // 成功時は例外を投げずに処理を続行
+          } else {
+            if (!isBacktest) {
+              logger.warn(`[2PC] 再実行でも失敗: ${retryAnalysis.failed.length}個のコマンドが失敗 - 元のエラー処理を継続`);
+            }
+            // 再実行も失敗した場合は元のエラー処理を継続
+          }
+        } catch (retryError) {
+          if (!isBacktest) {
+            logger.error(`[2PC] トランザクション再実行エラー: ${retryError.message} - 元のエラー処理を継続`);
+          }
+          // 再実行でエラーが発生した場合は元のエラー処理を継続
+        }
       } else {
         if (!isBacktest) {
           logger.error(`[2PC] 緊急接続回復失敗 - システム管理者による確認が必要`);
