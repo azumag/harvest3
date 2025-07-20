@@ -11,7 +11,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 describe('Issue #2549: strategy-runner レースコンディション修正', () => {
-  const messageLockDir = '/tmp/startup_messages';
+  const messageLockDir = '/tmp/startup_messages_2549';
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   
   // 各テスト前のクリーンアップ

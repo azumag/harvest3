@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () => {
-  const messageLockDir = '/tmp/startup_messages';
+  const messageLockDir = '/tmp/startup_messages_3942';
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   
   // 各テスト前のクリーンアップ
