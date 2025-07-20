@@ -2455,7 +2455,17 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   const redisClient = redisDatabase.getClient();
 
   // Lua script for atomic lock release
+  // Issue #4927: Redis引数の型安全性を強化
   const script = `
+    -- 引数の型チェック
+    if type(KEYS[1]) ~= 'string' or type(ARGV[1]) ~= 'string' then
+      return 0
+    end
+    -- 空文字列チェック
+    if KEYS[1] == '' or ARGV[1] == '' then
+      return 0
+    end
+    -- 通常の比較処理
     if redis.call("get", KEYS[1]) == ARGV[1] then
       return redis.call("del", KEYS[1])
     else
