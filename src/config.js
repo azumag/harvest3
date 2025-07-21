@@ -48,6 +48,11 @@ function isTestEnvironment() {
     return true;
   }
   
+  // Issue #5095: バックテストモードの場合はテスト環境扱い
+  if (process.env.BACKTEST_MODE === 'true') {
+    return true;
+  }
+  
   // API認証情報が未設定の場合はテスト環境扱い (CI環境でも同様)
   // Issue #824: CI環境でAPI認証情報が未設定の場合もテスト環境として扱う
   if (!process.env.BB_API_KEY || !process.env.BB_API_SECRET) {
