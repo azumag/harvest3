@@ -66,40 +66,63 @@ describe('webhookUtils', () => {
       process.env.BACKTEST_MODE = 'false';
       logWebhookNotSet();
       
-      expect(console.error).toHaveBeenCalledWith('Discord Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
       expect(console.warn).not.toHaveBeenCalled();
+      
+      // Logger統合により、タイムスタンプと[WebhookUtils]コンテキストが追加される
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
     });
 
     it('should log warning when in backtest mode', () => {
       process.env.BACKTEST_MODE = 'true';
       logWebhookNotSet();
       
-      expect(console.warn).toHaveBeenCalledWith('Discord Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
       expect(console.error).not.toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
 
     it('should log error with context when not in backtest mode', () => {
       process.env.BACKTEST_MODE = 'false';
       logWebhookNotSet('Order');
       
-      expect(console.error).toHaveBeenCalledWith('Discord Order Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
       expect(console.warn).not.toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Order Webhook URLが設定されていません');
     });
 
     it('should log warning with context when in backtest mode', () => {
       process.env.BACKTEST_MODE = 'true';
       logWebhookNotSet('Result');
       
-      expect(console.warn).toHaveBeenCalledWith('Discord Result Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
       expect(console.error).not.toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Result Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
 
     it('should handle undefined BACKTEST_MODE as non-backtest', () => {
       delete process.env.BACKTEST_MODE;
       logWebhookNotSet('Test');
       
-      expect(console.error).toHaveBeenCalledWith('Discord Test Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
       expect(console.warn).not.toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Test Webhook URLが設定されていません');
     });
   });
 
@@ -116,8 +139,12 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl(null);
       
       expect(result).toBe(false);
-      expect(console.error).toHaveBeenCalledWith('Discord Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
       expect(console.warn).not.toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
     });
 
     it('should return false and log warning when webhook URL is null and in backtest mode', () => {
@@ -125,8 +152,13 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl(null);
       
       expect(result).toBe(false);
-      expect(console.warn).toHaveBeenCalledWith('Discord Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
       expect(console.error).not.toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
 
     it('should return false and log error when webhook URL is undefined and not in backtest mode', () => {
@@ -134,7 +166,11 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl(undefined);
       
       expect(result).toBe(false);
-      expect(console.error).toHaveBeenCalledWith('Discord Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
     });
 
     it('should return false and log warning when webhook URL is undefined and in backtest mode', () => {
@@ -142,7 +178,12 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl(undefined);
       
       expect(result).toBe(false);
-      expect(console.warn).toHaveBeenCalledWith('Discord Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
 
     it('should return false and log error when webhook URL is empty string and not in backtest mode', () => {
@@ -150,7 +191,11 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl('');
       
       expect(result).toBe(false);
-      expect(console.error).toHaveBeenCalledWith('Discord Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
     });
 
     it('should return false and log warning when webhook URL is empty string and in backtest mode', () => {
@@ -158,21 +203,35 @@ describe('webhookUtils', () => {
       const result = checkWebhookUrl('');
       
       expect(result).toBe(false);
-      expect(console.warn).toHaveBeenCalledWith('Discord Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
 
     it('should handle context parameter correctly when not in backtest mode', () => {
       process.env.BACKTEST_MODE = 'false';
       checkWebhookUrl(null, 'Order');
       
-      expect(console.error).toHaveBeenCalledWith('Discord Order Webhook URLが設定されていません');
+      expect(console.error).toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Order Webhook URLが設定されていません');
     });
 
     it('should handle context parameter correctly when in backtest mode', () => {
       process.env.BACKTEST_MODE = 'true';
       checkWebhookUrl(null, 'Result');
       
-      expect(console.warn).toHaveBeenCalledWith('Discord Result Webhook URLが設定されていません (バックテストモードのため通知をスキップ)');
+      expect(console.warn).toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Result Webhook URLが設定されていません');
+      expect(callArgs).toContain('バックテストモードのため通知をスキップ');
     });
   });
 

@@ -3,6 +3,9 @@
  * バックテストモードでのWebhook URLチェックとログ出力の共通処理
  */
 
+const Logger = require('../hft/utils/Logger');
+const logger = new Logger('WebhookUtils');
+
 /**
  * ウェブフック未設定時のメッセージを生成
  * @param {string} context - コンテキスト（'', 'Order', 'Result'など）
@@ -21,10 +24,19 @@ function getWebhookNotSetMessage(context = '') {
  */
 function logWebhookNotSet(context = '') {
   const message = getWebhookNotSetMessage(context);
-  if (process.env.BACKTEST_MODE === 'true') {
-    console.warn(message);
-  } else {
-    console.error(message);
+  try {
+    if (process.env.BACKTEST_MODE === 'true') {
+      logger.warn(message);
+    } else {
+      logger.error(message);
+    }
+  } catch (loggerError) {
+    // Loggerが利用できない場合のフォールバック（初期化中等）
+    if (process.env.BACKTEST_MODE === 'true') {
+      console.warn(`[WebhookUtils] ${message}`);
+    } else {
+      console.error(`[WebhookUtils] ${message}`);
+    }
   }
 }
 
