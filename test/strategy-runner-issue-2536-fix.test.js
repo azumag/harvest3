@@ -230,11 +230,15 @@ fs.unlinkSync(testPath);
       expect(entrypointContent).toContain('log_startup_message()');
     });
 
-    test('stdout フラッシュ機能が保持されている', () => {
+    test('重複ログ原因だったexec 1>&1が削除されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // stdout フラッシュ機能が保持されていることを確認
-      expect(entrypointContent).toContain('exec 1>&1');
+      // Issue #5049修正: 重複ログの原因だったexec 1>&1が削除されていることを確認
+      expect(entrypointContent).not.toContain('exec 1>&1');
+      
+      // log関数がシンプルになっていることを確認
+      expect(entrypointContent).toContain('log() {');
+      expect(entrypointContent).toContain('echo "[$(date \'+%Y-%m-%d %H:%M:%S\')] [ENTRYPOINT] $1"');
     });
 
     test('既存の起動ロック機能が保持されている', () => {

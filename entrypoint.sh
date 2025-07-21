@@ -32,8 +32,6 @@ get_message_hash() {
 # ログ関数
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
-    # stdout の即座フラッシュを保証
-    exec 1>&1
 }
 
 # 既存依存関係チェック関数 (Issue #4202)
