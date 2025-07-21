@@ -19,6 +19,10 @@ const discordBacktestURL = process.env.DISCORD_BACKTEST_WEBHOOK_URL; // Discord 
  * @param {String} mongoUrl - MongoDB接続URL
  */
 async function postMongoConnectionErrorToDiscord(errorMessage, mongoUrl) {
+  if (!checkWebhookUrl(discordErrorWebhookUrl)) {
+    return;
+  }
+
   const message = `🚨 **MongoDB接続エラー**\n\`\`\`\nエラー: ${errorMessage}\n接続先: ${mongoUrl}\n時刻: ${new Date().toISOString()}\n\`\`\``;
 
   // 重複防止のためのキーを生成
