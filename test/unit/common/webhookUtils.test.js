@@ -259,5 +259,66 @@ describe('webhookUtils', () => {
       const result = getWebhookNotSetMessage();
       expect(result).toBe('Discord Webhook URLが設定されていません');
     });
+
+    it('should handle non-string context parameters', () => {
+      process.env.BACKTEST_MODE = 'false';
+      logWebhookNotSet(123); // number
+      expect(console.error).toHaveBeenCalled();
+      
+      jest.clearAllMocks();
+      
+      logWebhookNotSet(null); // null
+      expect(console.error).toHaveBeenCalled();
+      
+      jest.clearAllMocks();
+      
+      logWebhookNotSet(undefined); // undefined (should use default)
+      expect(console.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('Issue #5044 - Logger Integration Verification', () => {
+    it('should resolve the original issue: add timestamps and context to log messages', () => {
+      // 元の問題：「Discord Webhook URLが設定されていません」がタイムスタンプなしで出力
+      // 修正後：Logger統合により適切なフォーマットで出力される
+      process.env.BACKTEST_MODE = 'true';
+
+      logWebhookNotSet();
+
+      // Logger統合により、console.warnが呼ばれる（タイムスタンプ付き）
+      expect(console.warn).toHaveBeenCalled();
+      
+      const callArgs = console.warn.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      // タイムスタンプ形式を確認（HH:MM:SS）
+      expect(callArgs).toMatch(/\d{2}:\d{2}:\d{2}/);
+    });
+
+    it('should maintain message content while improving format', () => {
+      // メッセージ内容は変更せず、出力フォーマットのみ改善
+      process.env.BACKTEST_MODE = 'false';
+
+      logWebhookNotSet('Test');
+
+      expect(console.error).toHaveBeenCalled();
+      
+      const callArgs = console.error.mock.calls[0][0];
+      expect(callArgs).toContain('[WebhookUtils]');
+      expect(callArgs).toContain('Discord Test Webhook URLが設定されていません');
+    });
+
+    it('should work consistently in backtest and non-backtest modes', () => {
+      // バックテストモード
+      process.env.BACKTEST_MODE = 'true';
+      logWebhookNotSet();
+      expect(console.warn).toHaveBeenCalled();
+
+      jest.clearAllMocks();
+
+      // 通常モード
+      process.env.BACKTEST_MODE = 'false';
+      logWebhookNotSet();
+      expect(console.error).toHaveBeenCalled();
+    });
   });
 });
