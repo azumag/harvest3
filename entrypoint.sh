@@ -207,6 +207,8 @@ log_startup_message() {
         return 0
     fi
     
+    # プロセス内フラグを即座に設定（レースコンディション防止）
+    
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
     local lock_acquired=false
