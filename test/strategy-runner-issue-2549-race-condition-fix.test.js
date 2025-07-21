@@ -53,43 +53,31 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       expect(entrypointContent).not.toContain('$(get_message_hash "$message" | cut -c1-8)');
     });
 
-    test('プロセス内フラグが即座に設定される', () => {
+    test('プロセス内フラグが適切に設定される（Issue #5088統合版）', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // レースコンディション防止のコメント
-      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
+      // Issue #5088修正のコメント
+      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
       
-      // プロセス内チェック直後にフラグ設定
-      const lines = entrypointContent.split('\n');
-      let checkIndex = -1;
-      let setIndex = -1;
+      // ロック取得成功ブロック内でフラグが設定されることを確認
+      const lockSuccessBlock = entrypointContent.match(/if \[ "\$lock_acquired" = true \]; then[\s\S]*?return 0/)[0];
+      expect(lockSuccessBlock).toContain('export "$var_name"=1');
       
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('プロセス内重複チェック（最初の防御線）')) {
-          checkIndex = i;
-        }
-        if (lines[i].includes('export "$var_name"=1')) {
-          setIndex = i;
-          break;
-        }
-      }
-      
-      // フラグ設定がチェック直後に来ることを確認
-      expect(setIndex).toBeGreaterThan(checkIndex);
-      expect(setIndex - checkIndex).toBeLessThan(10); // 10行以内
+      // プロセス内チェックは最初に行われることを確認
+      expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
     });
 
-    test('ファイルロック取得後のフラグ設定が削除されている', () => {
+    test('ファイルロック取得後のフラグ設定が適切に実装されている（Issue #5088統合版）', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // ロック取得成功時のコメントが更新されている
+      // ロック取得成功時のコメントが適切に設定されている
       expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       
-      // 古いロック後フラグ設定が削除されている
-      expect(entrypointContent).not.toContain('ロック取得成功：プロセス内フラグを設定してメッセージ出力');
+      // Issue #5088修正：フラグ設定がロック取得成功後に適切に配置されている
+      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
       
-      // ロック取得失敗時のコメントが更新されている
-      expect(entrypointContent).toContain('プロセス内フラグは既に設定済みなので何もしない');
+      // ロック取得失敗時の適切な処理
+      expect(entrypointContent).toContain('フラグは設定しない（他のプロセスがメッセージ出力を担当）');
     });
 
     test('atomic操作の改善が実装されている', () => {
@@ -157,7 +145,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       await expect(execAsync(`bash -n ${entrypointPath}`)).resolves.not.toThrow();
     });
 
-    test('修正後の関数が正しく定義されている', () => {
+    test('修正後の関数が正しく定義されている（Issue #5088統合版）', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 関数の存在確認
@@ -166,7 +154,7 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // 関数内の重要なロジックが存在することを確認
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
       expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
-      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
+      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
       
       // 構文の基本的な正当性：returnステートメントの存在
       const functionBody = entrypointContent.substring(
