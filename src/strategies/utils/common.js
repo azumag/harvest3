@@ -1111,6 +1111,12 @@ async function disableStrategy(exchange, symbol, strategyKey, config, options = 
 async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) {
 
   try {
+    // Issue #5063: exchangeオブジェクトの存在確認
+    if (!exchange) {
+      logger.warn(`警告: exchangeオブジェクトが定義されていません。処理をスキップします。`);
+      return { success: false, reason: 'exchange object is null or undefined' };
+    }
+
     // 取引所がシンボルをサポートしているか確認
     if (!exchange.markets) {
       await exchange.loadMarkets();
@@ -1125,7 +1131,14 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
     // 戦略キーが一致するオーダーのみキャンセル
     let openOrders;
     try {
-      openOrders = await exchange.fetchOpenOrders(symbol);
+      // Issue #5063: バックテスト環境でfetchOpenOrdersメソッドが存在しない場合の防御的処理
+      if (typeof exchange.fetchOpenOrders !== 'function') {
+        // バックテスト環境またはモックオブジェクトでfetchOpenOrdersが定義されていない場合
+        logger.info(`警告: ${exchange.id}でfetchOpenOrdersメソッドが利用できません（バックテスト環境）。空の配列を返します。`);
+        openOrders = [];
+      } else {
+        openOrders = await exchange.fetchOpenOrders(symbol);
+      }
     } catch (fetchError) {
       // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
       if (fetchError.name === 'AuthenticationError' ||
@@ -1146,14 +1159,14 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
       } catch (error) {
         logger.error(`オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}`);
         if (postErrorToDiscord) {
-          await postErrorToDiscord(`[${exchange.id}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+          await postErrorToDiscord(`[${exchange?.id || 'unknown'}] オーダーキャンセルに失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
         }
       }
     }));
   } catch (error) {
     logger.error(`オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}`);
     if (postErrorToDiscord) {
-      await postErrorToDiscord(`[${exchange.id}] オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
+      await postErrorToDiscord(`[${exchange?.id || 'unknown'}] オープンオーダーの取得に失敗: ${symbol} - エラー: ${error.message}\nスタックトレース: ${error.stack}`);
     }
     return { success: false, error };
   }
