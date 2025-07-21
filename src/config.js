@@ -229,6 +229,8 @@ if (isTestEnvironment()) {
     },
     // Issue #946: fetchOHLCVメソッドの実装（モックデータを返す）
     fetchOHLCV: generateMockOHLCV,
+    // Issue #5082: fetchOpenOrdersメソッドの実装（バックテスト環境では空の配列を返す）
+    fetchOpenOrders: () => Promise.resolve([]),
     markets: null,
     enableRateLimit: true,
     rateLimit: EXCHANGE_SETTINGS.RATE_LIMIT,
@@ -332,6 +334,8 @@ if (isTestEnvironment()) {
     },
     // Issue #926: fetchOHLCVメソッドの実装（モックデータを返す）
     fetchOHLCV: generateMockOHLCV,
+    // Issue #5082: fetchOpenOrdersメソッドの実装（バックテスト環境では空の配列を返す）
+    fetchOpenOrders: () => Promise.resolve([]),
     markets: null,
     enableRateLimit: true,
     rateLimit: SETTINGS.EXCHANGE.BITFLYER_RATE_LIMIT
