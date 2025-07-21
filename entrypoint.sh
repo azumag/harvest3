@@ -200,7 +200,7 @@ log_startup_message() {
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
     # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
-    # プロセス内重複チェック（最初の防御線） - Issue #5061 修正
+    # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
         # 一度出力されたメッセージは二度と出力しない（確実な重複防止）
@@ -208,8 +208,6 @@ log_startup_message() {
     fi
     
     # プロセス内フラグを即座に設定（レースコンディション防止）
-    # Issue #5061 修正: フラグ設定をロック取得前に移動
-    export "$var_name"=1
     
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
@@ -219,6 +217,9 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
+        # Issue #5088 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
+        export "$var_name"=1
+        
         # ロック取得成功：メッセージ出力
         log "$message"
         
@@ -230,7 +231,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # プロセス内フラグは既に設定済みなので何もしない
+        # Issue #5088 修正: フラグは設定しない（他のプロセスがメッセージ出力を担当）
         return 0
     fi
 }

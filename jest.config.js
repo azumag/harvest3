@@ -5,7 +5,7 @@ module.exports = {
   coverageDirectory: 'coverage',
   verbose: true,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testTimeout: process.env.CI ? 30000 : 60000, // CI環境では30秒に短縮してハング問題を解決
+  testTimeout: process.env.CI ? 15000 : 60000, // CI環境では15秒に短縮してハング問題を解決
   // キャッシュディレクトリを.tmpに設定してキャッシュ問題を回避
   cacheDirectory: '.tmp/jest_cache',
   // CI環境での安定性向上 - ハンドルクリーンアップの問題に対応

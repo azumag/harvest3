@@ -38,12 +38,11 @@ describe('Issue #5061: Simple Fix Verification', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5061の修正コメントが含まれていることを確認
-    expect(entrypointContent).toContain('Issue #5061 修正');
+    // Issue #5088の修正コメントが含まれていることを確認（Issue #5061は#5088により統合された）
+    expect(entrypointContent).toContain('Issue #5088 修正');
     
     // 修正されたロジックの要素を確認
-    expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
-    expect(entrypointContent).toContain('フラグ設定をロック取得前に移動');
+    expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
     expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない（確実な重複防止）');
     
     // 修正された構造を確認：プロセス内フラグのチェックが最初にあることを確認
@@ -52,10 +51,9 @@ describe('Issue #5061: Simple Fix Verification', () => {
     // プロセス内重複チェックが最初にあることを確認
     expect(logStartupMessageFunction).toContain('プロセス内重複チェック（最初の防御線）');
     
-    // フラグ設定がロック取得前にあることを確認
-    const exportLine = logStartupMessageFunction.indexOf('export "$var_name"=1');
-    const lockLine = logStartupMessageFunction.indexOf('set -C; echo');
-    expect(exportLine).toBeLessThan(lockLine);
+    // フラグ設定がロック取得後にあることを確認（Issue #5088修正）
+    const lockSuccessBlock = entrypointContent.match(/if \[ "\$lock_acquired" = true \]; then[\s\S]*?return 0/)[0];
+    expect(lockSuccessBlock).toContain('export "$var_name"=1');
   });
 
   test('修正されたlog_startup_message関数の論理構造が正しい', async () => {
@@ -168,9 +166,9 @@ echo "=== Test Completed ==="
     expect(entrypointContent).not.toContain('ロックファイルを削除してから終了');
     expect(entrypointContent).not.toContain('レースコンディション防止：即座にプロセス内フラグを設定');
     
-    // 修正後のロジックが含まれていることを確認
+    // 修正後のロジックが含まれていることを確認（Issue #5088統合版）
     expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない');
-    expect(entrypointContent).toContain('フラグ設定をロック取得前に移動');
+    expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
   });
 
   test('Issue #5061で報告された具体的なメッセージをテスト', async () => {
