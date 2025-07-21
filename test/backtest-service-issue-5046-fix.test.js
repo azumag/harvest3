@@ -10,27 +10,29 @@ describe('Issue #5046: backtest service TypeError fix', () => {
   let getStrategyParametersRedis;
 
   beforeEach(() => {
+    // 既存のモジュールキャッシュをクリア
+    jest.resetModules();
+
     // Redis clientをmock
     mockRedisClient = {
       isReady: true,
       hGetAll: jest.fn()
     };
 
-    // テスト用のモジュールを動的にロード - clientをオブジェクトとしてエクスポートする形に修正
+    // redisClientモジュールをモック
     jest.doMock('../src/database/redisClient', () => ({
       client: mockRedisClient,
       getClient: () => mockRedisClient,
       initRedisClient: jest.fn().mockResolvedValue(mockRedisClient)
-    }), { virtual: true });
+    }));
     
-    // redisDatabase.jsから関数をインポート
+    // モック後にredisDatabase.jsから関数をインポート
     const redisDatabase = require('../src/database/redisDatabase');
     getStrategyParametersRedis = redisDatabase.getStrategyParametersRedis;
   });
 
   afterEach(() => {
     jest.clearAllMocks();
-    jest.resetModules();
   });
 
   describe('getStrategyParametersRedis', () => {
