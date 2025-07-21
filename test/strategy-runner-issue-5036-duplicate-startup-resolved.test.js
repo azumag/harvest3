@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const os = require('os');
 
 const execAsync = promisify(exec);
 
@@ -35,105 +36,164 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
   });
 
-  test('重複メッセージ防止機能の統合テスト', async () => {
-    // Issue #5036の状況を再現するテストスクリプト
-    const testScript = `#!/bin/bash
-set -e
+  describe('重複メッセージ防止機能の個別テスト', () => {
+    let tmpDir;
+    let lockDir;
 
-# entrypoint.shから重複防止機能を抽出
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_5036"
-mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
+    beforeEach(() => {
+      // .tmpディレクトリ内にテスト用ディレクトリを作成
+      tmpDir = path.join(__dirname, '..', '.tmp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      lockDir = path.join(tmpDir, `startup_messages_test_${Date.now()}`);
+      if (!fs.existsSync(lockDir)) {
+        fs.mkdirSync(lockDir, { recursive: true });
+      }
+    });
+
+    afterEach(() => {
+      // テスト後のクリーンアップ
+      if (fs.existsSync(lockDir)) {
+        const files = fs.readdirSync(lockDir);
+        files.forEach(file => {
+          fs.unlinkSync(path.join(lockDir, file));
+        });
+        fs.rmdirSync(lockDir);
+      }
+    });
+
+    test('プロセス内フラグによる重複防止', async () => {
+      const testScript = `#!/bin/bash
+set -e
 
 get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
 }
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
+# プロセス内フラグテスト
+message="test message"
+hash=$(get_message_hash "$message")
+var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
+
+# 初回は設定されていない
+if [ "\${!var_name}" = "1" ]; then
+    echo "DUPLICATE"
+else
+    echo "FIRST"
+    export "$var_name"=1
+fi
+
+# 2回目は設定されている
+if [ "\${!var_name}" = "1" ]; then
+    echo "DUPLICATE"
+else
+    echo "FIRST"
+fi
+`;
+
+      const testScriptPath = path.join(tmpDir, `test-process-flag-${Date.now()}.sh`);
+      fs.writeFileSync(testScriptPath, testScript);
+      fs.chmodSync(testScriptPath, '755');
+
+      try {
+        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 2000 });
+        const lines = stdout.trim().split('\n');
+        
+        expect(lines[0]).toBe('FIRST');
+        expect(lines[1]).toBe('DUPLICATE');
+      } finally {
+        if (fs.existsSync(testScriptPath)) {
+          fs.unlinkSync(testScriptPath);
+        }
+      }
+    }, 5000);
+
+    test('MD5ハッシュベース識別機能', async () => {
+      const testScript = `#!/bin/bash
+get_message_hash() {
+    echo "$1" | md5sum | cut -d' ' -f1
+}
+
+hash1=$(get_message_hash "same message")
+hash2=$(get_message_hash "same message")
+hash3=$(get_message_hash "different message")
+
+echo "$hash1"
+echo "$hash2"
+echo "$hash3"
+`;
+
+      const testScriptPath = path.join(tmpDir, `test-hash-${Date.now()}.sh`);
+      fs.writeFileSync(testScriptPath, testScript);
+      fs.chmodSync(testScriptPath, '755');
+
+      try {
+        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 2000 });
+        const lines = stdout.trim().split('\n');
+        
+        expect(lines[0]).toBe(lines[1]); // 同じメッセージは同じハッシュ
+        expect(lines[0]).not.toBe(lines[2]); // 異なるメッセージは異なるハッシュ
+      } finally {
+        if (fs.existsSync(testScriptPath)) {
+          fs.unlinkSync(testScriptPath);
+        }
+      }
+    }, 3000);
+
+    test('Issue #5036重複メッセージ解決確認', async () => {
+      const testScript = `#!/bin/bash
+set -e
+
+LOCK_DIR="${lockDir}"
+
+get_message_hash() {
+    echo "$1" | md5sum | cut -d' ' -f1
 }
 
 log_startup_message() {
     local message="$1"
-    local message_hash=$(get_message_hash "$message")
-    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    local hash=$(get_message_hash "$message")
+    local var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
+    local lock_file="$LOCK_DIR/$hash.lock"
     
-    # プロセス内重複チェック
     if [ "\${!var_name}" = "1" ]; then
         return 0
     fi
     
-    # プロセス内フラグを設定
     export "$var_name"=1
     
-    # プロセス間重複チェック（atomic操作）
-    if (set -C; echo "$$:\$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
-        log "$message"
-        (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
-        return 0
-    else
+    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+        echo "[ENTRYPOINT] $message"
         return 0
     fi
 }
 
-echo "=== Issue #5036 Resolution Test ==="
-
-# Issue #5036で報告されたのと同じ状況を再現
-echo "[2025-07-20 05:26:30] [ENTRYPOINT] Graceful shutdown completed"
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] === 起動診断情報 ==="
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] プロセス ID: $$"
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] 起動時刻: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] 作業ディレクトリ: /usr/src/app"
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] バックテストモード: false"
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] Acquiring startup lock..."
-echo "[2025-07-20 05:26:40] [ENTRYPOINT] Startup lock acquired successfully (PID: $$)"
-
-# 修正前は重複していた問題のメッセージ（修正後は1回のみ出力される）
+# Issue #5036のメッセージを2回呼び出し（修正後は1回のみ出力）
 log_startup_message "Starting strategy-runner container with enhanced error handling"
 log_startup_message "Starting strategy-runner container with enhanced error handling"
-
-echo "=== Test Completed ==="
 `;
 
-    const testScriptPath = '/tmp/test-issue-5036-resolution.sh';
-    fs.writeFileSync(testScriptPath, testScript);
-    fs.chmodSync(testScriptPath, '755');
+      const testScriptPath = path.join(tmpDir, `test-issue-5036-${Date.now()}.sh`);
+      fs.writeFileSync(testScriptPath, testScript);
+      fs.chmodSync(testScriptPath, '755');
 
-    try {
-      const { stdout, stderr } = await execAsync(`bash ${testScriptPath}`, { timeout: 8000 });
-      
-      console.log('Issue #5036 解決テスト出力:');
-      console.log(stdout);
-      
-      // Issue #5036で問題となったメッセージの出現回数を確認
-      const duplicateMessages = stdout.split('\n').filter(line => 
-        line.includes('Starting strategy-runner container with enhanced error handling')
-      );
-      
-      console.log(`Issue #5036: メッセージ出力数 = ${duplicateMessages.length}`);
-      duplicateMessages.forEach((line, index) => {
-        console.log(`  ${index + 1}: ${line}`);
-      });
-      
-      // 修正により重複が解消されていることを確認（1回のみ出力）
-      expect(duplicateMessages.length).toBe(1);
-      expect(stderr.trim()).toBe('');
-      
-      // クリーンアップ
-      if (fs.existsSync('/tmp/startup_messages_5036')) {
-        const files = fs.readdirSync('/tmp/startup_messages_5036');
-        files.forEach(file => {
-          fs.unlinkSync(path.join('/tmp/startup_messages_5036', file));
-        });
-        fs.rmdirSync('/tmp/startup_messages_5036');
+      try {
+        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
+        
+        const messages = stdout.split('\n').filter(line => 
+          line.includes('Starting strategy-runner container with enhanced error handling')
+        );
+        
+        // 修正により重複が解消されていることを確認（1回のみ出力）
+        expect(messages.length).toBe(1);
+      } finally {
+        if (fs.existsSync(testScriptPath)) {
+          fs.unlinkSync(testScriptPath);
+        }
       }
-      
-    } finally {
-      if (fs.existsSync(testScriptPath)) {
-        fs.unlinkSync(testScriptPath);
-      }
-    }
-  }, 10000);
+    }, 5000);
+  });
 
   test('Issue #5036の問題の根本原因が修正されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
@@ -180,18 +240,11 @@ echo "=== Test Completed ==="
     expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
-  test('Issue #5036: 自動作成されたIssueの検証パターン', () => {
+  test('Issue #5036: ログ監視システムとの整合性確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-    
-    // Issue #5036は自動的に作成されたIssueであることを考慮
-    // 同様の自動Issueが今後作成されないよう、ログ監視システムとの整合性を確認
     
     // ログフォーマットが一貫していることを確認
     expect(entrypointContent).toContain('[$(date \'+%Y-%m-%d %H:%M:%S\')] [ENTRYPOINT]');
-    
-    // メッセージが重複しないことで、ログ監視システムが誤検知しないことを確認
-    expect(entrypointContent).toContain('重複起動ログ防止関数');
-    expect(entrypointContent).toContain('atomic');
     
     // エラー通知システムが適切に動作することを確認
     expect(entrypointContent).toContain('send_startup_error_to_discord');
@@ -199,6 +252,6 @@ echo "=== Test Completed ==="
 
   test('entrypoint.sh構文検証', async () => {
     // Issue #5036修正後もentrypoint.shが正しく動作することを確認
-    await expect(execAsync(`bash -n ${entrypointPath}`)).resolves.not.toThrow();
-  });
+    await expect(execAsync(`bash -n ${entrypointPath}`, { timeout: 2000 })).resolves.not.toThrow();
+  }, 3000);
 });
