@@ -78,18 +78,18 @@ describe('BalanceChecker Issue #2689: Redis eval引数の明示的文字列変�
 
   describe('releaseDistributedLock - Redis eval引数の文字列変換', () => {
     it('String()による明示的文字列変換が実装されていることを確認', async () => {
-      // 実装確認: String()がeval呼び出しに使用されているかを検証
+      // 実装確認: String()変換とvalidatedパラメータがeval呼び出しに使用されているかを検証
       const { readFileSync } = require('fs');
       const { resolve } = require('path');
       
       const balanceCheckerPath = resolve(__dirname, '../../../src/common/balanceChecker.js');
       const balanceCheckerSource = readFileSync(balanceCheckerPath, 'utf-8');
       
-      // String()による明示的変換がeval呼び出しで使用されていることを確認
-      expect(balanceCheckerSource).toMatch(/String\s*\(\s*stringLockKey\s*\)/);
-      expect(balanceCheckerSource).toMatch(/String\s*\(\s*stringLockId\s*\)/);
-      expect(balanceCheckerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*stringLockKey\s*\)/);
-      expect(balanceCheckerSource).toMatch(/redisClient\.eval\s*\(.*String\s*\(\s*stringLockId\s*\)/);
+      // String()による明示的変換が事前に実装されていることを確認 (Issue #4963対応)
+      expect(balanceCheckerSource).toMatch(/finalLockKey\s*=\s*String\s*\(\s*stringLockKey\s*\)/);
+      expect(balanceCheckerSource).toMatch(/finalLockId\s*=\s*String\s*\(\s*stringLockId\s*\)/);
+      // validatedされたfinalLockKey, finalLockIdがredisClient.evalに渡されることを確認
+      expect(balanceCheckerSource).toMatch(/redisClient\.eval\s*\(.*,\s*finalLockKey\s*,\s*finalLockId\s*\)/);
     });
 
     it('関数が正常にエクスポートされていることを確認', () => {
