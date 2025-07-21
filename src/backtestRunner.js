@@ -82,7 +82,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
         allExchangeSymbolPairs.push({
           exchangeId,
           symbol,
-          marketParameters: marketParametersByExchange[exchangeId][symbol]
+          marketParameters: marketParametersByExchange?.[exchangeId]?.[symbol] || null
         });
       }
     }
@@ -295,7 +295,14 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
  * @returns {Object} バックテスト結果と再試行フラグ
  */
 async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, marketParametersByExchange, autoUpdate, gridSearch, startDate, endDate, retryCount, allExchangeSymbolPairs) {
-  const marketParametersBySymbol = marketParametersByExchange[exchange.id][symbol];
+  const marketParametersBySymbol = marketParametersByExchange?.[exchange.id]?.[symbol];
+  
+  // marketParametersが取得できない場合のエラーハンドリング
+  if (!marketParametersBySymbol || marketParametersBySymbol.error) {
+    const errorMsg = marketParametersBySymbol?.errorMessage || 'Market parameters not available';
+    console.error(`❌ ${symbol} - ${strategyKey}: ${errorMsg}`);
+    return { shouldRetry: false, error: errorMsg };
+  }
 
   console.log(`バックテスト開始: ${symbol} - ${strategyKey}`);
 
