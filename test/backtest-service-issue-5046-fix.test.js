@@ -16,8 +16,12 @@ describe('Issue #5046: backtest service TypeError fix', () => {
       hGetAll: jest.fn()
     };
 
-    // テスト用のモジュールを動的にロード
-    jest.doMock('../src/database/redisClient', () => mockRedisClient, { virtual: true });
+    // テスト用のモジュールを動的にロード - clientをオブジェクトとしてエクスポートする形に修正
+    jest.doMock('../src/database/redisClient', () => ({
+      client: mockRedisClient,
+      getClient: () => mockRedisClient,
+      initRedisClient: jest.fn().mockResolvedValue(mockRedisClient)
+    }), { virtual: true });
     
     // redisDatabase.jsから関数をインポート
     const redisDatabase = require('../src/database/redisDatabase');
