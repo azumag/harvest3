@@ -14,7 +14,7 @@ const os = require('os');
 const execAsync = promisify(exec);
 
 describe('Issue #5088: strategy-runnerサービスレースコンディション修正', () => {
-  const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
+  const entrypointPath = path.join(__dirname, '..', '..', '..', 'entrypoint.sh');
   
   test('Issue #5088で報告されたレースコンディション問題が修正されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
@@ -44,7 +44,7 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
 
     beforeEach(() => {
       // .tmpディレクトリ内にテスト用ディレクトリを作成
-      tmpDir = path.join(__dirname, '..', '.tmp');
+      tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
       }
@@ -57,155 +57,56 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
     afterEach(() => {
       // テスト後のクリーンアップ
       if (fs.existsSync(lockDir)) {
-        const files = fs.readdirSync(lockDir);
-        files.forEach(file => {
-          fs.unlinkSync(path.join(lockDir, file));
-        });
-        fs.rmdirSync(lockDir);
+        try {
+          const files = fs.readdirSync(lockDir);
+          files.forEach(file => {
+            const filePath = path.join(lockDir, file);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          });
+          fs.rmdirSync(lockDir);
+        } catch (e) {
+          // ignore cleanup errors
+        }
       }
     });
 
-    test.skip('修正後：プロセス内フラグがロック取得後にのみ設定される', async () => {
-      const testScript = `#!/bin/bash
-set -e
+    test('修正後：ロック取得のアトミック性が保証されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // Issue #5088修正後の正しい実装パターンを確認
+      const logStartupFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
+      
+      // 修正の核心：ロック取得後にフラグ設定
+      expect(logStartupFunction).toContain('if [ "$lock_acquired" = true ]; then');
+      expect(logStartupFunction).toContain('export "$var_name"=1');
+      
+      // ロック取得前にフラグ設定されていないことを確認
+      const beforeLockSection = entrypointContent.substring(
+        entrypointContent.indexOf('log_startup_message() {'),
+        entrypointContent.indexOf('if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then')
+      );
+      expect(beforeLockSection).not.toMatch(/export "\$var_name"=1/);
+      
+      // ロック取得失敗時にフラグが設定されないことを確認
+      expect(logStartupFunction).toContain('フラグは設定しない（他のプロセスがメッセージ出力を担当）');
+    });
 
-LOCK_DIR="${lockDir}"
-
-get_message_hash() {
-    echo "$1" | md5sum | cut -d' ' -f1
-}
-
-# Issue #5088修正後のlog_startup_message実装をテスト
-log_startup_message_fixed() {
-    local message="$1"
-    local hash=$(get_message_hash "$message")
-    local var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
-    local lock_file="$LOCK_DIR/$hash.lock"
-    
-    # プロセス内重複チェック（最初の防御線）
-    if [ "\${!var_name}" = "1" ]; then
-        echo "ALREADY_SET"
-        return 0
-    fi
-    
-    # ファイルロック取得試行（プロセス内フラグ設定前）
-    local lock_acquired=false
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        lock_acquired=true
-    fi
-    
-    if [ "$lock_acquired" = true ]; then
-        # Issue #5088修正：ロック取得成功後にフラグ設定
-        export "$var_name"=1
-        echo "LOCK_SUCCESS_MESSAGE_SENT"
-        return 0
-    else
-        # ロック取得失敗：フラグは設定しない
-        echo "LOCK_FAILED"
-        return 0
-    fi
-}
-
-# テスト：単一プロセス内での動作を確認
-message="test message for issue 5088"
-
-# 最初の呼び出し
-result1=$(log_startup_message_fixed "$message")
-echo "FIRST_CALL:$result1"
-
-# 同じプロセス内での2回目の呼び出し
-result2=$(log_startup_message_fixed "$message")
-echo "SECOND_CALL:$result2"
-
-# フラグの値を直接確認
-hash=$(get_message_hash "$message")
-var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
-echo "FLAG_VALUE:\${!var_name}"
-`;
-
-      const testScriptPath = path.join(tmpDir, `test-issue-5088-fix-${Date.now()}.sh`);
-      fs.writeFileSync(testScriptPath, testScript);
-      fs.chmodSync(testScriptPath, '755');
-
-      try {
-        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
-        
-        expect(stdout).toContain('FIRST_CALL:LOCK_SUCCESS_MESSAGE_SENT');
-        expect(stdout).toContain('SECOND_CALL:ALREADY_SET');
-        expect(stdout).toContain('FLAG_VALUE:1');
-      } finally {
-        if (fs.existsSync(testScriptPath)) {
-          fs.unlinkSync(testScriptPath);
-        }
-      }
-    }, 5000);
-
-    test('修正前の問題：フラグがロック取得前に設定される場合のレースコンディション再現', async () => {
-      const testScript = `#!/bin/bash
-set -e
-
-LOCK_DIR="${lockDir}"
-
-get_message_hash() {
-    echo "$1" | md5sum | cut -d' ' -f1
-}
-
-# 修正前の問題のある実装をシミュレート
-log_startup_message_problematic() {
-    local message="$1"
-    local hash=$(get_message_hash "$message")
-    local var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
-    local lock_file="$LOCK_DIR/$hash.lock"
-    
-    # プロセス内重複チェック
-    if [ "\${!var_name}" = "1" ]; then
-        echo "ALREADY_SET"
-        return 0
-    fi
-    
-    # 問題のある実装：ロック取得前にフラグ設定
-    export "$var_name"=1
-    
-    # ファイルロック取得試行
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
-        echo "LOCK_SUCCESS_MESSAGE_SENT"
-        return 0
-    else
-        echo "LOCK_FAILED_BUT_FLAG_SET"
-        return 0
-    fi
-}
-
-# レースコンディションのシミュレート
-message="test race condition"
-
-# 最初のロックファイルを作成（別のプロセスがロック取得済みをシミュレート）
-hash=$(get_message_hash "$message")
-lock_file="$LOCK_DIR/$hash.lock"
-echo "other_process" > "$lock_file"
-
-# この状態でlog_startup_message_problematicを呼び出すと
-# フラグは設定されるがメッセージは出力されない（問題のある状態）
-result=$(log_startup_message_problematic "$message")
-echo "$result"
-`;
-
-      const testScriptPath = path.join(tmpDir, `test-race-condition-problem-${Date.now()}.sh`);
-      fs.writeFileSync(testScriptPath, testScript);
-      fs.chmodSync(testScriptPath, '755');
-
-      try {
-        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
-        const result = stdout.trim();
-        
-        // 修正前の問題：ロック取得に失敗してもフラグが設定される
-        expect(result).toBe('LOCK_FAILED_BUT_FLAG_SET');
-      } finally {
-        if (fs.existsSync(testScriptPath)) {
-          fs.unlinkSync(testScriptPath);
-        }
-      }
-    }, 5000);
+    test('修正前の問題：レースコンディションが発生する可能性があった構造の確認', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // 修正前の問題のあるパターンが存在しないことを確認
+      const logStartupFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
+      
+      // 修正前の問題：ロック取得前のフラグ設定が存在しないことを確認
+      const flagSettingBeforeLock = /export "\$var_name"=1[\s\S]*?if \(set -C/;
+      expect(logStartupFunction).not.toMatch(flagSettingBeforeLock);
+      
+      // Issue #5088 の修正コメントが存在することを確認
+      expect(logStartupFunction).toContain('Issue #5088 修正');
+      expect(logStartupFunction).toContain('レースコンディション解消のため');
+    });
 
     test('Issue #5088修正確認：エントリーポイントファイルの構造が正しいことを確認', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
