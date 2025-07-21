@@ -586,6 +586,7 @@ async function releaseDistributedLock(lockKey, lockId) {
       throw new Error(`Redis引数検証失敗: ${validationError.message}`);
     }
     
+    // Issue #4980対応: 検証済みfinalLockKey, finalLockIdを使用してRedis Lua script引数型エラーを防止
     const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
     
     if (result === 1) {
