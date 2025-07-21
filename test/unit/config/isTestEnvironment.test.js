@@ -108,6 +108,66 @@ describe('isTestEnvironment', () => {
     expect(config.isTestEnvironment()).toBe(true);
   });
 
+  test('Issue #5095: BACKTEST_MODE=trueの場合はtrueを返す', () => {
+    delete process.env.NODE_ENV;
+    delete process.env.DOCKER_ENV;
+    process.env.BACKTEST_MODE = 'true';
+    process.env.CI = 'false';
+    delete process.env.BB_API_KEY;
+    delete process.env.BB_API_SECRET;
+    
+    // configモジュールを再読み込み
+    delete require.cache[require.resolve('../../../src/config')];
+    const config = require('../../../src/config');
+    
+    expect(config.isTestEnvironment()).toBe(true);
+  });
+
+  test('Issue #5095: BACKTEST_MODE=trueが3番目に優先される', () => {
+    delete process.env.NODE_ENV;
+    delete process.env.DOCKER_ENV;
+    process.env.BACKTEST_MODE = 'true';
+    process.env.CI = 'false';
+    process.env.BB_API_KEY = 'test_key';
+    process.env.BB_API_SECRET = 'test_secret';
+    
+    // configモジュールを再読み込みしてAPIキーを反映
+    delete require.cache[require.resolve('../../../src/config')];
+    const config = require('../../../src/config');
+    
+    expect(config.isTestEnvironment()).toBe(true);
+  });
+
+  test('Issue #5095: NODE_ENVがBACKTEST_MODEより優先される', () => {
+    process.env.NODE_ENV = 'test';
+    delete process.env.DOCKER_ENV;
+    process.env.BACKTEST_MODE = 'true';
+    process.env.CI = 'false';
+    process.env.BB_API_KEY = 'test_key';
+    process.env.BB_API_SECRET = 'test_secret';
+    
+    // configモジュールを再読み込みしてAPIキーを反映
+    delete require.cache[require.resolve('../../../src/config')];
+    const config = require('../../../src/config');
+    
+    expect(config.isTestEnvironment()).toBe(true);
+  });
+
+  test('Issue #5095: DOCKER_ENVがBACKTEST_MODEより優先される', () => {
+    delete process.env.NODE_ENV;
+    process.env.DOCKER_ENV = 'true';
+    process.env.BACKTEST_MODE = 'true';
+    process.env.CI = 'false';
+    process.env.BB_API_KEY = 'test_key';
+    process.env.BB_API_SECRET = 'test_secret';
+    
+    // configモジュールを再読み込みしてAPIキーを反映
+    delete require.cache[require.resolve('../../../src/config')];
+    const config = require('../../../src/config');
+    
+    expect(config.isTestEnvironment()).toBe(true);
+  });
+
   test('API認証情報の片方だけが設定されている場合はtrueを返す', () => {
     delete process.env.NODE_ENV;
     delete process.env.DOCKER_ENV;
