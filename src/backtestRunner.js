@@ -95,7 +95,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     startDate.setDate(endDate.getDate() - days); // n日間前の日付を設定
 
     // 設定された期間で、すべてのシンボルのOHLCVデータを取得して更新
-    for (const exchange of Object.keys(symbolsByExchange)) {
+    for (const exchange of Object.keys(symbolsByExchange || {})) {
       // OHLCVデータを取得
       const exchangeInstance = config.exchanges[exchange].instance;
       const symbols = symbolsByExchange[exchange].sort();
@@ -126,7 +126,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     }
 
     // すべてのシンボルのOHLCVデータをREDISにロード
-    for (const exchange of Object.keys(symbolsByExchange)) {
+    for (const exchange of Object.keys(symbolsByExchange || {})) {
       // OHLCVデータをREDISにロード
       const exchangeInstance = config.exchanges[exchange].instance;
       const symbols = symbolsByExchange[exchange].sort();
@@ -166,7 +166,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     }
 
     // runBacktest関数内の戦略処理部分
-    for (const strategyKey of Object.keys(config.strategies)) {
+    for (const strategyKey of Object.keys(config.strategies || {})) {
       if (strategySpecify && strategySpecify !== strategyKey) {
         continue; // 指定された戦略以外はスキップ
       }
