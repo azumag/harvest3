@@ -589,10 +589,10 @@ async function releaseDistributedLock(lockKey, lockId) {
     const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
     
     if (result === 1) {
-      logger.debug(`分散ロック解放成功: ${stringLockKey} (ID: ${stringLockId})`);
+      logger.debug(`分散ロック解放成功: ${finalLockKey} (ID: ${finalLockId})`);
       return true;
     } else {
-      logger.debug(`分散ロック解放失敗: ${stringLockKey} (ID: ${stringLockId}) - ロックが存在しないか、IDが一致しません`);
+      logger.debug(`分散ロック解放失敗: ${finalLockKey} (ID: ${finalLockId}) - ロックが存在しないか、IDが一致しません`);
       return false;
     }
   } catch (error) {
