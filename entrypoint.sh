@@ -207,9 +207,6 @@ log_startup_message() {
         return 0
     fi
     
-    # Issue #5057 修正: プロセス内フラグを即座に設定（レースコンディション防止）
-    export "$var_name"=1
-    
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
     local lock_acquired=false
@@ -218,6 +215,9 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
+        # Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
+        export "$var_name"=1
+        
         # ロック取得成功：メッセージ出力
         log "$message"
         
@@ -227,8 +227,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # Issue #5057 修正: プロセス内フラグをリセット（他のプロセスがメッセージ出力を担当）
-        unset "$var_name"
+        # フラグは設定しない（他のプロセスがメッセージ出力を担当）
         return 0
     fi
 }

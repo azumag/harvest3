@@ -22,12 +22,12 @@ describe('Issue #5057: strategy-runnerサービス重複メッセージ レー�
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5057で追加されたレースコンディション修正コメントを確認
-    expect(entrypointContent).toContain('Issue #5057 修正: プロセス内フラグを即座に設定（レースコンディション防止）');
-    expect(entrypointContent).toContain('Issue #5057 修正: プロセス内フラグをリセット（他のプロセスがメッセージ出力を担当）');
+    expect(entrypointContent).toContain('Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動');
+    expect(entrypointContent).toContain('フラグは設定しない（他のプロセスがメッセージ出力を担当）');
     
-    // プロセス内フラグが適切なタイミングで設定されることを確認
-    const flagSetPattern = /if \[ "\${!var_name}" = "1" \]; then[\s\S]*?fi[\s\S]*?export "\$var_name"=1/;
-    expect(entrypointContent).toMatch(flagSetPattern);
+    // プロセス内フラグがロック取得後に設定されることを確認
+    const lockSuccessPattern = /if \[ "\$lock_acquired" = true \]; then[\s\S]*?export "\$var_name"=1/;
+    expect(entrypointContent).toMatch(lockSuccessPattern);
     
     // 重複したフラグ設定が削除されていることを確認
     const lines = entrypointContent.split('\n');
@@ -271,7 +271,7 @@ wait
     
     // 具体的な修正内容を確認
     expect(entrypointContent).toContain('export "$var_name"=1');
-    expect(entrypointContent).toContain('unset "$var_name"');
+    expect(entrypointContent).toContain('フラグは設定しない（他のプロセスがメッセージ出力を担当）');
     
     // Issue #5088の古い修正コメントが適切に更新されているか確認
     expect(entrypointContent).not.toContain('Issue #5088 修正: レースコンディション解消のためフラグ設定をロック取得後に移動');
