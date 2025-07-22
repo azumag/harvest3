@@ -49,7 +49,7 @@ describe('Backtest Service Issue #2644 Fix', () => {
       
       // log_startup_message関数のatomic実装が存在することを確認
       expect(entrypointContent).toContain('log_startup_message() {');
-      expect(entrypointContent).toContain('重複起動ログ防止関数（強化版 - Issue #3942 修正）');
+      expect(entrypointContent).toContain('重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）');
     });
 
     test('バックテストモードでの起動メッセージが適切に制御されている', () => {
@@ -117,9 +117,10 @@ describe('Backtest Service Issue #2644 Fix', () => {
     });
 
     test('起動メッセージの重複が発生しない仕組みが実装されている', () => {
-      // atomicなファイル操作による重複防止が実装されていることを確認（強化版：タイムスタンプ付き）
-      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null');
-      expect(entrypointContent).toContain('他のプロセスが処理中または処理済み');
+      // Issue #5121 修正: mkdirベースのアトミックロック機構が実装されていることを確認
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
+      expect(entrypointContent).toContain('lock_acquired=true');
+      expect(entrypointContent).toContain('rm -rf "$lock_file" 2>/dev/null');
     });
 
     test('バックテストコマンドが正しく実行される', () => {

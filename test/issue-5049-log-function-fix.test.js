@@ -111,9 +111,9 @@ log_startup_message() {
     
     export "$var_name"=1
     
-    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+    if mkdir "$lock_file" 2>/dev/null; then
         log "$message"
-        (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
+        (sleep 300 && rm -rf "$lock_file" 2>/dev/null) &
         return 0
     else
         return 0
@@ -161,11 +161,16 @@ echo "=== Test Completed ==="
       expect(duplicateMessages.length).toBe(1);
       expect(stderr.trim()).toBe('');
       
-      // クリーンアップ
+      // クリーンアップ（mkdirベースロック対応）
       if (fs.existsSync('/tmp/startup_messages_5049')) {
         const files = fs.readdirSync('/tmp/startup_messages_5049');
         files.forEach(file => {
-          fs.unlinkSync(path.join('/tmp/startup_messages_5049', file));
+          const filePath = path.join('/tmp/startup_messages_5049', file);
+          if (fs.statSync(filePath).isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(filePath);
+          }
         });
         fs.rmdirSync('/tmp/startup_messages_5049');
       }

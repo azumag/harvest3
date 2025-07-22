@@ -43,19 +43,19 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('log_startup_message関数が強化されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 簡素化されたレースコンディション対策の実装確認
-      expect(entrypointContent).toContain('強化版');
-      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
+      // Issue #5121修正のコメント確認
+      expect(entrypointContent).toContain('Issue #5121 修正: 簡素化・安定化版');
+      expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
       
-      // シンプルなロックファイルの実装確認
-      expect(entrypointContent).toContain('echo "$$" > "$lock_file"');
+      // mkdirベースのatomic操作の実装確認  
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
-      // シンプルな自動クリーンアップ機能
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      // Issue #5121: 自動クリーンアップ機能（5分後）
+      expect(entrypointContent).toContain('クリーンアップ（5分後）');
       
-      // 簡素化された実装ではリトライロジックが削除されている
-      expect(entrypointContent).not.toContain('sleep 0.1');
-      expect(entrypointContent).not.toContain('attempt=$((attempt + 1))');
+      // Issue #5121: リトライ機構の簡素化（3回まで）
+      expect(entrypointContent).toContain('local max_attempts=3');
+      // Issue #5121では複雑なwhileリトライループが削除され、シンプルな実装になった
     });
 
     test('起動ロック取得後のメッセージ出力順序が修正されている', () => {
@@ -121,11 +121,11 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('atomicロック取得の実装が正しい', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // set -C を使ったatomic操作の実装確認
-      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file")');
+      // Issue #5121 修正: mkdirベースのatomic操作の実装確認
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 重複チェック機能の実装確認
-      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('lock_acquired=true');
       
       // エラーハンドリングの実装確認
       expect(entrypointContent).toContain('2>/dev/null');
@@ -134,17 +134,18 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('リトライ機能の実装が正しい', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 簡素化実装ではリトライループが削除されている
-      expect(entrypointContent).not.toContain('while [ $attempt -lt $max_attempts ]; do');
+      // Issue #5121では古いリトライループが削除されている
+      expect(entrypointContent).not.toContain('while [ $attempt -lt 5 ]');
       
       // 短時間待機の実装は削除されている
       expect(entrypointContent).not.toContain('sleep 0.1');
       
-      // 最大試行回数設定は削除されている
+      // 古い最大試行回数設定は削除されている
       expect(entrypointContent).not.toContain('max_attempts=5');
       
-      // 簡素化実装では即座に処理を終了する
-      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
+      // Issue #5121の新しい実装では3回のリトライが使用されるが、複雑なwhileループは簡素化された
+      expect(entrypointContent).toContain('local max_attempts=3');
+      // whileループは簡素化実装では削除されている
     });
   });
 
@@ -158,8 +159,8 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       // レースコンディション対策の簡素化
       expect(entrypointContent).toContain('強化版');
       
-      // シンプルなクリーンアップ機能
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      // シンプルなクリーンアップ機能（5分後）
+      expect(entrypointContent).toContain('クリーンアップ（5分後）');
     });
 
     test('Docker再起動時の競合状態が解決されている', () => {
@@ -171,8 +172,8 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       // 簡素化実装ではタイムスタンプチェックは行わない
       expect(entrypointContent).not.toContain('current_time - lock_time');
       
-      // 簡素化実装では即座に処理を終了する
-      expect(entrypointContent).toContain('プロセス内フラグとシンプルなatomic操作による重複防止');
+      // Issue #5121の簡素化実装
+      expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
     });
 
     test('パフォーマンス向上のための簡素化が実装されている', () => {

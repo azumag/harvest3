@@ -51,7 +51,7 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"');
       
       // 簡素化実装が追加されていることを確認
-      expect(entrypointContent).toContain('重複起動ログ防止関数（強化版 - Issue #3942 修正）');
+      expect(entrypointContent).toContain('重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）');
       expect(entrypointContent).toContain('log_startup_message()');
     });
 
@@ -61,28 +61,30 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       // md5ハッシュ関数の使用によるメッセージ識別（DRY原則適用後）
       expect(entrypointContent).toContain('message_hash=$(get_message_hash "$message")');
       
-      // atomicなロックファイル作成
-      expect(entrypointContent).toContain('set -C');
-      expect(entrypointContent).toContain('echo "$$" > "$lock_file"');
+      // atomicなロックファイル作成（mkdirベース）
+      expect(entrypointContent).toContain('mkdir "$lock_file"');
+      expect(entrypointContent).toContain('lock_acquired=true');
       
-      // 自動クリーンアップ機能
-      expect(entrypointContent).toContain('sleep 30 && rm -f "$lock_file" 2>/dev/null');
+      // 自動クリーンアップ機能（5分後）
+      expect(entrypointContent).toContain('sleep 300 && rm -f "$success_file" 2>/dev/null');
       
-      // 重複メッセージの場合のreturn処理
-      expect(entrypointContent).toContain('他のプロセスが処理中または処理済み');
+      // 完了マーカーファイルのチェック
+      expect(entrypointContent).toContain('success_file=');
       expect(entrypointContent).toContain('return 0');
     });
 
     test('atomicファイル操作が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // set -C（noclobber）オプションの使用
-      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null');
+      // mkdirによるatomic操作
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 条件分岐による排他制御
-      expect(entrypointContent).toContain('if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then');
-      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
-      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
+      expect(entrypointContent).toContain('lock_acquired=true');
+      expect(entrypointContent).toContain('if [ "$lock_acquired" = true ]; then');
+      
+      // 古いロックファイルの自動削除
+      expect(entrypointContent).toContain('if [ $lock_age -gt 60 ]; then');
     });
 
     test('メッセージハッシュ計算が正しく実装されている', () => {
@@ -99,11 +101,11 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
     test('自動クリーンアップ機能が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // バックグラウンドでのクリーンアップ処理
-      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
+      // バックグラウンドでのクリーンアップ処理（5分後）
+      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
       
       // クリーンアップのコメント
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      expect(entrypointContent).toContain('クリーンアップ（5分後）');
     });
   });
 
@@ -201,18 +203,18 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('シンプルな環境変数ベース');
       
       // 新しい簡素化実装が追加されていることを確認
-      expect(entrypointContent).toContain('強化版');
+      expect(entrypointContent).toContain('簡素化・安定化版');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     });
 
     test('レースコンディション対策が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // set -C（noclobber）オプションによるatomic操作
-      expect(entrypointContent).toContain('set -C');
+      // mkdirによるatomic操作
+      expect(entrypointContent).toContain('mkdir "$lock_file"');
       
       // 排他制御による重複防止
-      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('より確実なアトミック操作: mkdirを使用');
       
       // エラーハンドリング
       expect(entrypointContent).toContain('2>/dev/null');
@@ -226,21 +228,21 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // 実際のlog関数呼び出しはatomicロック内で実行される
-      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
+      expect(entrypointContent).toContain('# メッセージ出力');
       expect(entrypointContent).toContain('log "$message"');
     });
 
     test('自動クリーンアップによるリソース管理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 30秒後の自動削除
-      expect(entrypointContent).toContain('sleep 30 && rm -f "$lock_file" 2>/dev/null');
+      // 5分後の自動削除
+      expect(entrypointContent).toContain('sleep 300 && rm -f "$success_file" 2>/dev/null');
       
       // バックグラウンド実行
       expect(entrypointContent).toContain('&');
       
       // クリーンアップのコメント
-      expect(entrypointContent).toContain('30秒後');
+      expect(entrypointContent).toContain('5分後');
     });
   });
 
@@ -294,9 +296,9 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).not.toContain('if [ "$STARTUP_MESSAGE_SENT" != "$message" ]; then');
       expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT="$message"');
       
-      // 修正後の強化実装が追加されている
-      expect(entrypointContent).toContain('強化版');
-      expect(entrypointContent).toContain('set -C');
+      // 修正後の簡素化実装が追加されている
+      expect(entrypointContent).toContain('簡素化・安定化版');
+      expect(entrypointContent).toContain('mkdir "$lock_file"');
       expect(entrypointContent).toContain('message_hash=$(get_message_hash');
       expect(entrypointContent).toContain('get_message_hash() {');
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');

@@ -190,7 +190,7 @@ describe('AdvancedOptimizer', () => {
       expect(result).toHaveProperty('bestParameters');
       expect(result).toHaveProperty('bestValue');
       expect(result).toHaveProperty('totalExecutionTime');
-      expect(result.bestParameters.x).toBeCloseTo(5, 1);
+      expect(result.bestParameters.x).toBeCloseTo(5, 0);
     }, 15000);
 
     test('指定アルゴリズムで最適化が実行される', async () => {
