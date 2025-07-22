@@ -201,34 +201,61 @@ install_npm_dependencies() {
     return 0
 }
 
-# Issue #5127: backtest container専用起動メッセージ関数
-# backtest containerの急速再起動に対応した強化版重複防止機構
+# Issue #5127 & #5058: backtest container専用起動メッセージ関数（改良版）
+# atomicなディレクトリロックによる確実な重複防止機構
 log_backtest_startup_message() {
     local message="$1"
-    
-    # backtest専用の永続ロックファイルをチェック
     local current_time=$(date +%s)
+    local lock_dir="/tmp/backtest-startup-lock.dir"
+    local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     
-    # 既存のロックファイルをチェック
-    if [ -f "$BACKTEST_STARTUP_LOCK_FILE" ]; then
-        local lock_time=$(stat -c %Y "$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || echo 0)
-        local lock_age=$((current_time - lock_time))
+    # 古いロックディレクトリのクリーンアップ（60秒以上古い場合）
+    if [ -d "$lock_dir" ]; then
+        local lock_age=$((current_time - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt 60 ]; then
+            rm -rf "$lock_dir" 2>/dev/null || true
+        fi
+    fi
+    
+    # 既存のタイムスタンプファイルをチェック
+    if [ -f "$timestamp_file" ]; then
+        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
+        local time_diff=$((current_time - last_time))
         
-        # Issue #5127対策: 10秒以内の再起動では重複メッセージをブロック
-        if [ $lock_age -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
-            log "Backtest startup message suppressed (last shown ${lock_age}s ago)"
+        if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
             return 0
         fi
     fi
     
-    # ロックファイルを作成/更新
-    echo "$current_time" > "$BACKTEST_STARTUP_LOCK_FILE"
-    chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"
-    
-    # メッセージを出力
-    log "$message"
-    
-    return 0
+    # atomicなロック取得を試行（mkdirはatomic操作）
+    if mkdir "$lock_dir" 2>/dev/null; then
+        # ロック取得成功 - 二重チェック後にメッセージ出力
+        if [ -f "$timestamp_file" ]; then
+            local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
+            local time_diff=$((current_time - last_time))
+            
+            if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+                # 他のプロセスが先にメッセージを出力していた
+                log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+                rm -rf "$lock_dir" 2>/dev/null || true
+                return 0
+            fi
+        fi
+        
+        # タイムスタンプを更新してメッセージ出力
+        echo "$current_time" > "$timestamp_file"
+        chmod 600 "$timestamp_file"
+        log "$message"
+        
+        # ロック解放
+        rm -rf "$lock_dir" 2>/dev/null || true
+        return 0
+    else
+        # ロック取得失敗 - 他のプロセスが処理中
+        log "Backtest startup message suppressed (another process is logging)"
+        return 0
+    fi
 }
 
 # 重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）
@@ -380,7 +407,7 @@ release_startup_lock() {
     fi
 }
 
-# Issue #5127: backtest専用クリーンアップ関数
+# Issue #5127 & #5058: backtest専用クリーンアップ関数（改良版）
 cleanup_backtest_locks() {
     log "Cleaning up backtest-specific lock files..."
     
@@ -388,6 +415,12 @@ cleanup_backtest_locks() {
     if [ -f "/tmp/backtest-start-time.marker" ]; then
         rm -f "/tmp/backtest-start-time.marker" 2>/dev/null || true
         log "Removed backtest start time marker"
+    fi
+    
+    # Issue #5058: 新しいatomicロックディレクトリのクリーンアップ
+    if [ -d "/tmp/backtest-startup-lock.dir" ]; then
+        rm -rf "/tmp/backtest-startup-lock.dir" 2>/dev/null || true
+        log "Removed backtest startup lock directory"
     fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
