@@ -1,23 +1,23 @@
 /**
- * Issue #5088: strategy-runnerサービスで例外が発生 - レースコンディション修正テスト
+ * Issue #5057: strategy-runnerサービスで例外が発生 - レースコンディション修正テスト
  * 
- * このテストはIssue #5088で報告された重複メッセージ問題のレースコンディションが
+ * このテストはIssue #5057で報告された重複メッセージ問題のレースコンディションが
  * 修正されていることを確認する
  */
 
 const fs = require('fs');
 const path = require('path');
 
-describe('Issue #5088: strategy-runnerサービスレースコンディション修正', () => {
+describe('Issue #5057: strategy-runnerサービスレースコンディション修正', () => {
   const entrypointPath = path.join(__dirname, '..', '..', '..', 'entrypoint.sh');
   
-  test('Issue #5088で報告されたレースコンディション問題が修正されていることを確認', () => {
+  test('Issue #5057で報告されたレースコンディション問題が修正されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5088の修正が適用されていることを確認
-    expect(entrypointContent).toContain('Issue #5088 修正');
+    // Issue #5057の修正が適用されていることを確認
+    expect(entrypointContent).toContain('Issue #5057 修正');
     expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
     
     // プロセス内フラグがファイルロック取得後に設定されていることを確認
@@ -70,7 +70,7 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
     test('修正後：ロック取得のアトミック性が保証されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Issue #5088修正後の正しい実装パターンを確認
+      // Issue #5057修正後の正しい実装パターンを確認
       const logStartupFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
       
       // 修正の核心：ロック取得後にフラグ設定
@@ -98,19 +98,19 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
       const flagSettingBeforeLock = /export "\$var_name"=1[\s\S]*?if \(set -C/;
       expect(logStartupFunction).not.toMatch(flagSettingBeforeLock);
       
-      // Issue #5088 の修正コメントが存在することを確認
-      expect(logStartupFunction).toContain('Issue #5088 修正');
+      // Issue #5057 の修正コメントが存在することを確認
+      expect(logStartupFunction).toContain('Issue #5057 修正');
       expect(logStartupFunction).toContain('レースコンディション解消のため');
     });
 
-    test('Issue #5088修正確認：エントリーポイントファイルの構造が正しいことを確認', () => {
+    test('Issue #5057修正確認：エントリーポイントファイルの構造が正しいことを確認', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // log_startup_message関数の修正内容を確認
       const logStartupFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
       
-      // Issue #5088修正の存在確認
-      expect(logStartupFunction).toContain('Issue #5088 修正');
+      // Issue #5057修正の存在確認
+      expect(logStartupFunction).toContain('Issue #5057 修正');
       
       // 修正後の正しい構造：ロック取得後にフラグ設定
       const lockSuccessBlock = entrypointContent.match(/if \[ "\$lock_acquired" = true \]; then[\s\S]*?return 0/)[0];
@@ -129,7 +129,7 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
     });
   });
 
-  test('Issue #5088修正後のコード品質確認', () => {
+  test('Issue #5057修正後のコード品質確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // log_startup_message関数の構造確認
@@ -157,7 +157,7 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
   });
 
   test('entrypoint.sh構文検証（修正後）', () => {
-    // Issue #5088修正後もentrypoint.shが正しく動作することを確認
+    // Issue #5057修正後もentrypoint.shが正しく動作することを確認
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 基本的なbash構文チェック
@@ -172,7 +172,7 @@ describe('Issue #5088: strategy-runnerサービスレースコンディション
     expect(functionClosures.length).toBeGreaterThanOrEqual(functionMatches.length);
   });
 
-  test('Issue #5088解決による他機能への影響がないことを確認', () => {
+  test('Issue #5057解決による他機能への影響がないことを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 重要な機能が正しく維持されていることを確認

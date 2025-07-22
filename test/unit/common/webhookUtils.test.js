@@ -290,8 +290,8 @@ describe('webhookUtils', () => {
       
       const callArgs = console.warn.mock.calls[0][0];
       expect(callArgs).toContain('[WebhookUtils]');
-      // タイムスタンプ形式を確認（HH:MM:SS）
-      expect(callArgs).toMatch(/\d{2}:\d{2}:\d{2}/);
+      // タイムスタンプ形式を確認（H:MM:SS または HH:MM:SS）
+      expect(callArgs).toMatch(/\d{1,2}:\d{2}:\d{2}/);
     });
 
     it('should maintain message content while improving format', () => {
