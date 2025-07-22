@@ -20,6 +20,10 @@ DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通�
 LOCK_CLEANUP_TIMEOUT=${LOCK_CLEANUP_TIMEOUT:-60}  # 古いロックファイル削除タイムアウト（秒）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカーファイル削除遅延（秒）
 
+# Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
+BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
+BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-10}  # backtest起動ロックタイムアウト（秒）
+
 # セキュリティ注記: /tmp使用について
 # ・Dockerコンテナ内での一時的なプロセス間同期に使用
 # ・ファイル権限600でアクセス制御、プロセスID検証実装済み
@@ -197,10 +201,46 @@ install_npm_dependencies() {
     return 0
 }
 
+# Issue #5127: backtest container専用起動メッセージ関数
+# backtest containerの急速再起動に対応した強化版重複防止機構
+log_backtest_startup_message() {
+    local message="$1"
+    
+    # backtest専用の永続ロックファイルをチェック
+    local current_time=$(date +%s)
+    
+    # 既存のロックファイルをチェック
+    if [ -f "$BACKTEST_STARTUP_LOCK_FILE" ]; then
+        local lock_time=$(stat -c %Y "$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || echo 0)
+        local lock_age=$((current_time - lock_time))
+        
+        # Issue #5127対策: 10秒以内の再起動では重複メッセージをブロック
+        if [ $lock_age -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+            log "Backtest startup message suppressed (last shown ${lock_age}s ago)"
+            return 0
+        fi
+    fi
+    
+    # ロックファイルを作成/更新
+    echo "$current_time" > "$BACKTEST_STARTUP_LOCK_FILE"
+    chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"
+    
+    # メッセージを出力
+    log "$message"
+    
+    return 0
+}
+
 # 重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）
 # シンプルなファイルベースロック機構による重複防止
 log_startup_message() {
     local message="$1"
+    
+    # Issue #5127: backtest containerの場合は専用関数を使用
+    if [ "$BACKTEST_MODE" = "true" ]; then
+        log_backtest_startup_message "$message"
+        return $?
+    fi
     
     # メッセージハッシュを一度だけ計算（一貫性確保）
     local message_hash=$(get_message_hash "$message")
@@ -338,6 +378,24 @@ release_startup_lock() {
             log "WARNING: Cannot release lock owned by PID: $lock_pid (current: $$)"
         fi
     fi
+}
+
+# Issue #5127: backtest専用クリーンアップ関数
+cleanup_backtest_locks() {
+    log "Cleaning up backtest-specific lock files..."
+    
+    # backtest開始時刻マーカーのクリーンアップ
+    if [ -f "/tmp/backtest-start-time.marker" ]; then
+        rm -f "/tmp/backtest-start-time.marker" 2>/dev/null || true
+        log "Removed backtest start time marker"
+    fi
+    
+    # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
+    # ただし、正常終了時のみ削除する場合は以下のコメントアウトを解除
+    # if [ -f "$BACKTEST_STARTUP_LOCK_FILE" ]; then
+    #     rm -f "$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || true
+    #     log "Removed backtest startup lock file"
+    # fi
 }
 
 # Discord通知関数
@@ -813,6 +871,11 @@ cleanup() {
     # 起動ロックの解放
     release_startup_lock
     
+    # Issue #5127: backtest関連のクリーンアップ
+    if [ "$BACKTEST_MODE" = "true" ]; then
+        cleanup_backtest_locks
+    fi
+    
     log "Graceful shutdown completed"
     exit 0
 }
@@ -922,8 +985,47 @@ main() {
         pre_startup_checks
         check_database_connections
         
-        # backtestの場合は、引数で渡されたコマンドを実行
-        log "Pre-startup checks completed for backtest mode, executing command: $*"
+        # Issue #5127: backtest実行前の追加診断
+        log "Pre-startup checks completed for backtest mode"
+        log "Backtest command arguments: $*"
+        
+        # backtest実行可能性チェック
+        if [ $# -eq 0 ]; then
+            log "ERROR: No command arguments provided for backtest execution"
+            send_startup_error_to_discord "Backtest container: No command arguments provided" "Command line: $0 (no args)"
+            exit 1
+        fi
+        
+        # Issue #5127: npm run backtestコマンドの検証
+        if [ "$1" = "npm" ] && [ "$2" = "run" ] && [ "$3" = "backtest" ]; then
+            log "Validating npm run backtest command..."
+            
+            # package.jsonのbacktestスクリプト存在確認
+            if [ -f "package.json" ]; then
+                if grep -q '"backtest"' package.json; then
+                    log "Backtest script found in package.json"
+                else
+                    log "WARNING: Backtest script not found in package.json"
+                fi
+            else
+                log "WARNING: package.json not found"
+            fi
+            
+            # backtestRunner.jsファイル存在確認
+            if [ -f "src/backtestRunner.js" ]; then
+                log "Backtest runner found: src/backtestRunner.js"
+            else
+                log "WARNING: Backtest runner not found: src/backtestRunner.js"
+            fi
+        fi
+        
+        # Issue #5127対策: exec実行前のファイナルチェックとエラーハンドリング強化
+        log "Executing backtest command with enhanced error handling..."
+        
+        # backtest開始時刻を記録（問題追跡用）
+        echo "$(date +%s)" > /tmp/backtest-start-time.marker
+        
+        # execコマンドの実行
         exec "$@"
     else
         # 起動ロック取得後に安全にメッセージを出力
