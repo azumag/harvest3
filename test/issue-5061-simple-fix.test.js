@@ -17,7 +17,13 @@ describe('Issue #5061: Simple Fix Verification', () => {
     if (fs.existsSync(messageLockDir)) {
       const files = fs.readdirSync(messageLockDir);
       files.forEach(file => {
-        fs.unlinkSync(path.join(messageLockDir, file));
+        const filePath = path.join(messageLockDir, file);
+        // Issue #5121: ロックファイルはディレクトリなので、適切に削除
+        if (fs.statSync(filePath).isDirectory()) {
+          fs.rmdirSync(filePath);
+        } else {
+          fs.unlinkSync(filePath);
+        }
       });
       fs.rmdirSync(messageLockDir);
     }
@@ -27,7 +33,13 @@ describe('Issue #5061: Simple Fix Verification', () => {
     if (fs.existsSync(messageLockDir)) {
       const files = fs.readdirSync(messageLockDir);
       files.forEach(file => {
-        fs.unlinkSync(path.join(messageLockDir, file));
+        const filePath = path.join(messageLockDir, file);
+        // Issue #5121: ロックファイルはディレクトリなので、適切に削除
+        if (fs.statSync(filePath).isDirectory()) {
+          fs.rmdirSync(filePath);
+        } else {
+          fs.unlinkSync(filePath);
+        }
       });
       fs.rmdirSync(messageLockDir);
     }

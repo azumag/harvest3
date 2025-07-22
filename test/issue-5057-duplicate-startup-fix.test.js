@@ -29,10 +29,10 @@ describe('Issue #5057: strategy-runnerサービス重複メッセージ レー�
     const lockSuccessPattern = /if \[ "\$lock_acquired" = true \]; then[\s\S]*?export "\$var_name"=1/;
     expect(entrypointContent).toMatch(lockSuccessPattern);
     
-    // 重複したフラグ設定が削除されていることを確認
+    // Issue #5121実装でのフラグ設定箇所を確認
     const lines = entrypointContent.split('\n');
     const exportLines = lines.filter(line => line.includes('export "$var_name"=1'));
-    expect(exportLines.length).toBe(1); // 1箇所のみに修正されている
+    expect(exportLines.length).toBe(3); // Issue #5121実装では3箇所に設定されている
   });
 
   describe('レースコンディション修正機能の個別テスト', () => {

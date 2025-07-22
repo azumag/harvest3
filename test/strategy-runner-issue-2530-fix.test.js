@@ -73,8 +73,8 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       
       // 古い複雑な実装が削除されていることを確認
       expect(entrypointContent).not.toContain('max_attempts=5');
-      expect(entrypointContent).not.toContain('while [ $attempt -lt $max_attempts ]');
-      expect(entrypointContent).not.toContain('attempt=$((attempt + 1))');
+      // Issue #5121では3回のリトライは残っているが、古い実装とは異なる
+      expect(entrypointContent).toContain('local max_attempts=3');
       expect(entrypointContent).not.toContain('sleep 0.1');
       
       // 複雑なロックファイル検証が削除されていることを確認
