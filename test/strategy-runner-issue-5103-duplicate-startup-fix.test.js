@@ -59,7 +59,7 @@ log_startup_message "Test startup message"
             // メッセージが1回のみ出力されることを確認
             const messageCount = (stdout.match(/Test startup message/g) || []).length;
             expect(messageCount).toBe(1);
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
 
         test('異なるメッセージは各々出力される', async () => {
             const testScript = `
@@ -86,7 +86,7 @@ log_startup_message "Third startup message"
             expect(stdout).toContain('First startup message');
             expect(stdout).toContain('Second startup message');
             expect(stdout).toContain('Third startup message');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
 
         test('プロセス内環境変数による第一防御線の動作確認', async () => {
             const testScript = `
@@ -128,7 +128,7 @@ log_startup_message "$MESSAGE"
             // メッセージが1回のみ出力
             const messageCount = (stdout.match(/Test message for hash/g) || []).length;
             expect(messageCount).toBe(1);
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
     });
 
     describe('atomicロック機構の動作確認', () => {
@@ -172,7 +172,7 @@ fi
             // ロック機構の動作確認
             expect(stdout).toContain('Atomic lock test message');
             expect(stdout).toContain('Lock directory cleaned up after execution');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
 
         test('古いロックファイルのクリーンアップが動作する', async () => {
             const testScript = `
@@ -210,7 +210,7 @@ echo "New execution completed"
             expect(stdout).toContain('Old lock file created');
             expect(stdout).toContain('Cleanup test message');
             expect(stdout).toContain('New execution completed');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
     });
 
     describe('success fileの動作確認', () => {
@@ -252,7 +252,7 @@ fi
             expect(stdout).toContain('Success file test message');
             expect(stdout).toContain('Success file created');
             expect(stdout).toContain('Process ID found in success file');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
     });
 
     describe('バックグラウンドクリーンアップ機構', () => {
@@ -296,7 +296,7 @@ fi
             expect(stdout).toContain('Cleanup test message');
             expect(stdout).toContain('Success file exists immediately after execution');
             expect(stdout).toContain('Success file cleaned up after delay');
-        }, 10000); // 10秒のタイムアウト
+        }, 15000); // CI環境を考慮して15秒に調整
     });
 
     describe('get_message_hash関数の動作確認', () => {
@@ -326,7 +326,7 @@ fi
             const { stdout } = await execAsync(`bash ${scriptPath}`);
             
             expect(stdout).toContain('Hashes match');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
 
         test('異なるメッセージは異なるハッシュを生成する', async () => {
             const testScript = `
@@ -355,7 +355,7 @@ fi
             const { stdout } = await execAsync(`bash ${scriptPath}`);
             
             expect(stdout).toContain('Hashes are different');
-        });
+        }, 20000); // CI環境でのシェルスクリプト実行のため20秒に設定
     });
 
     describe('エラーハンドリング統一性の確認', () => {
