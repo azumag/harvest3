@@ -147,7 +147,7 @@ describe('Issue #5121: backtestサービス重複ログ問題修正確認', () =
       'lock_age=', // 古いロック検出
       'stat -c %Y', // タイムスタンプ取得
       'touch "$success_file"', // 完了マーカー作成
-      'sleep 300', // 長期間のクリーンアップ
+      'sleep "$SUCCESS_FILE_CLEANUP_DELAY"', // 環境変数化されたクリーンアップ遅延
     ];
     
     improvements.forEach(improvement => {

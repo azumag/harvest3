@@ -15,6 +15,15 @@ API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}  # APIチェック間隔（秒）
 PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒）
 DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
 DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
+
+# Issue #5121 専用設定: 重複ログ防止ロック機構
+LOCK_CLEANUP_TIMEOUT=${LOCK_CLEANUP_TIMEOUT:-60}  # 古いロックファイル削除タイムアウト（秒）
+SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカーファイル削除遅延（秒）
+
+# セキュリティ注記: /tmp使用について
+# ・Dockerコンテナ内での一時的なプロセス間同期に使用
+# ・ファイル権限600でアクセス制御、プロセスID検証実装済み
+# ・コンテナ再起動時に自動クリーンアップされるため永続化の懸念なし
 STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
@@ -214,10 +223,10 @@ log_startup_message() {
     local lock_acquired=false
     local max_attempts=3
     
-    # 既存ロックが古い場合（60秒以上）は削除
+    # 既存ロックが古い場合は削除（環境変数で設定可能）
     if [ -d "$lock_file" ]; then
         local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt 60 ]; then
+        if [ $lock_age -gt "$LOCK_CLEANUP_TIMEOUT" ]; then
             rm -rf "$lock_file" 2>/dev/null
         fi
     fi
@@ -243,8 +252,8 @@ log_startup_message() {
         # ロック解放
         rm -rf "$lock_file" 2>/dev/null
         
-        # クリーンアップ（5分後）
-        (sleep 300 && rm -f "$success_file" 2>/dev/null) &
+        # クリーンアップ（環境変数で設定可能な遅延後）
+        (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
         
         return 0
     else
