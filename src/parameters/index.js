@@ -41,7 +41,7 @@ class IntelligentParameterManager {
     let combinations = [];
 
     // 戦略タイプが認識できない場合は制約を自動生成
-    if (this.strategyType === 'GENERIC' && options.sampleConfig) {
+    if (this.strategyType === 'GENERIC' && options.sampleConfig && typeof options.sampleConfig === 'object') {
       const numericKeys = Object.keys(options.sampleConfig).filter(key => 
         typeof options.sampleConfig[key] === 'number'
       );

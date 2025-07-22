@@ -318,6 +318,12 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     const _strategyConfig = await getStrategyConfig(exchange, symbol, strategyKey, config);
     const dbParams = await getStrategyParameters(exchange.id, symbol, strategyKey);
 
+    // dbParamsがnullの場合のエラーハンドリング
+    if (!dbParams || typeof dbParams !== 'object') {
+      console.warn(`戦略パラメータが取得できませんでした: ${exchange.id} - ${symbol} - ${strategyKey}`);
+      return { shouldRetry: false, error: 'Strategy parameters not available' };
+    }
+
     // 数値パラメータのキーを抽出
     const numericParameterKeys = extractNumericParameterKeys(dbParams);
 
@@ -969,11 +975,24 @@ function generateParameterCombinations(defaultConfig, numericKeys, n = 0.5, step
   if (numericKeys.length === 0) {
     return [{}];
   }
+
+  // null/undefinedチェックを追加
+  if (!defaultConfig || typeof defaultConfig !== 'object') {
+    console.warn('generateParameterCombinations: defaultConfigがnullまたはundefinedです');
+    return [{}];
+  }
+
   const [currentKey, ...remainingKeys] = numericKeys;
   const combinations = [];
 
   // パラメータのデフォルト値
-  const defaultValue = defaultConfig[currentKey];
+  let defaultValue = defaultConfig[currentKey];
+  
+  // デフォルト値が数値でない場合はフォールバック値を使用
+  if (typeof defaultValue !== 'number') {
+    console.warn(`generateParameterCombinations: ${currentKey}の値が数値ではありません:`, defaultValue);
+    defaultValue = 10; // フォールバック値
+  }
 
   // パラメータに応じた範囲を設定
   // パラメータは 元の値の±N*100%程度の範囲で組み合わせを考える
@@ -1035,12 +1054,24 @@ function generateRandomParameterCombinations(defaultConfig, numericKeys, count =
     return [{}];
   }
 
+  // null/undefinedチェックを追加
+  if (!defaultConfig || typeof defaultConfig !== 'object') {
+    console.warn('generateRandomParameterCombinations: defaultConfigがnullまたはundefinedです');
+    return [{}];
+  }
+
   const combinations = [];
 
   // デフォルト設定を最初に追加
   const defaultCombo = {};
   for (const key of numericKeys) {
-    defaultCombo[key] = defaultConfig[key];
+    const defaultValue = defaultConfig[key];
+    if (typeof defaultValue !== 'number') {
+      console.warn(`generateRandomParameterCombinations: ${key}の値が数値ではありません:`, defaultValue);
+      defaultCombo[key] = 10; // フォールバック値
+    } else {
+      defaultCombo[key] = defaultValue;
+    }
   }
   combinations.push(defaultCombo);
 
@@ -1049,10 +1080,16 @@ function generateRandomParameterCombinations(defaultConfig, numericKeys, count =
     const combo = {};
     for (const key of numericKeys) {
       const defaultValue = defaultConfig[key];
+      let baseValue = 10; // フォールバック値
+      
+      if (typeof defaultValue === 'number') {
+        baseValue = defaultValue;
+      }
+      
       // 標準偏差はデフォルト値のn%程度に設定
-      const stdDev = Math.max(1, defaultValue * n);
+      const stdDev = Math.max(1, baseValue * n);
       // 正規分布に従ったランダム値を生成し、整数に丸める
-      let value = Math.round(generateNormalRandom(defaultValue, stdDev));
+      let value = Math.round(generateNormalRandom(baseValue, stdDev));
       // 最小値を1に制限
       value = Math.max(1, value);
 
