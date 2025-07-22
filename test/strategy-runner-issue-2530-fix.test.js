@@ -86,8 +86,8 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
     test('シンプルなcleanup処理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // シンプルなクリーンアップ処理の確認
-      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
+      // シンプルなクリーンアップ処理の確認（環境変数ベース）
+      expect(entrypointContent).toContain('(sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &');
       
       // 複雑なクリーンアップロジックが削除されていることを確認
       expect(entrypointContent).not.toContain('sleep 60');
@@ -250,7 +250,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       
       // log_startup_message関数内でクリーンアップ時間（5分後）が使用されている
       expect(entrypointContent).toContain('# クリーンアップ（5分後）');
-      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
+      expect(entrypointContent).toContain('(sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &');
       
       // 複雑なファイル処理の削除
       expect(entrypointContent).not.toContain('lock_info=$(cat "$lock_file"');

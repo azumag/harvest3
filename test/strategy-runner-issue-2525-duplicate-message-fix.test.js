@@ -65,8 +65,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
       expect(entrypointContent).toContain('mkdir "$lock_file"');
       expect(entrypointContent).toContain('lock_acquired=true');
       
-      // 自動クリーンアップ機能（5分後）
-      expect(entrypointContent).toContain('sleep 300 && rm -f "$success_file" 2>/dev/null');
+      // 自動クリーンアップ機能（環境変数ベース）
+      expect(entrypointContent).toContain('sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null');
       
       // 完了マーカーファイルのチェック
       expect(entrypointContent).toContain('success_file=');
@@ -101,8 +101,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
     test('自動クリーンアップ機能が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // バックグラウンドでのクリーンアップ処理（5分後）
-      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
+      // バックグラウンドでのクリーンアップ処理（環境変数ベース）
+      expect(entrypointContent).toContain('(sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &');
       
       // クリーンアップのコメント
       expect(entrypointContent).toContain('クリーンアップ（5分後）');
@@ -235,8 +235,8 @@ describe('Strategy-Runner重複起動メッセージ修正', () => {
     test('自動クリーンアップによるリソース管理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 5分後の自動削除
-      expect(entrypointContent).toContain('sleep 300 && rm -f "$success_file" 2>/dev/null');
+      // 環境変数ベースの自動削除
+      expect(entrypointContent).toContain('sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null');
       
       // バックグラウンド実行
       expect(entrypointContent).toContain('&');

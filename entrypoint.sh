@@ -226,7 +226,8 @@ log_startup_message() {
     # 既存ロックが古い場合は削除（環境変数で設定可能）
     if [ -d "$lock_file" ]; then
         local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt "$LOCK_CLEANUP_TIMEOUT" ]; then
+        # 60秒以上古いロックファイルを削除
+        if [ $lock_age -gt 60 ]; then
             rm -rf "$lock_file" 2>/dev/null
         fi
     fi
@@ -252,7 +253,7 @@ log_startup_message() {
         # ロック解放
         rm -rf "$lock_file" 2>/dev/null
         
-        # クリーンアップ（環境変数で設定可能な遅延後）
+        # クリーンアップ（5分後）
         (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
         
         return 0
