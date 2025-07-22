@@ -55,18 +55,18 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       // entrypoint.shファイルの内容を読み込み
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 強化版の実装が追加されていることを確認
-      expect(entrypointContent).toContain('重複起動ログ防止関数（強化版 - Issue #3942 修正）');
+      // Issue #5121 修正: 簡素化・安定化版の実装が追加されていることを確認
+      expect(entrypointContent).toContain('重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）');
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
-      expect(entrypointContent).toContain('環境変数チェックの前に、まずロックファイルによる排他制御を実施');
+      expect(entrypointContent).toContain('アトミックなロック取得を試行（改良版）');
     });
 
     test('強化されたatomic操作が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // より強固なatomic操作
-      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
-      expect(entrypointContent).toContain('echo "$$:$(date +%s.%N)" > "$lock_file"');
+      // Issue #5121簡素化版: mkdirベースのアトミック操作
+      expect(entrypointContent).toContain('# より確実なアトミック操作: mkdirを使用');
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       expect(entrypointContent).toContain('local lock_acquired=false');
       
       // 条件分岐による処理制御
@@ -76,25 +76,25 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
     test('レースコンディション対策が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 排他制御の順序変更
+      // Issue #5121版: プロセス内フラグとファイルベースの二重チェック
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
-      expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
+      expect(entrypointContent).toContain('既にメッセージが出力済みかチェック');
       
-      // 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
-      expect(entrypointContent).toContain('簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック');
-      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
+      // リトライ機構の実装確認
+      expect(entrypointContent).toContain('local max_attempts=3');
+      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
     });
 
     test('エラーハンドリングが強化されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // プロセス内重複検出時の処理
-      expect(entrypointContent).toContain('既に同じメッセージを出力済み（プロセス内重複）');
-      expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない（確実な重複防止）');
-      expect(entrypointContent).toContain('rm -f "$lock_file" 2>/dev/null');
+      // Issue #5121版: シンプルなエラーハンドリング
+      expect(entrypointContent).toContain('# 二重チェック: 出力中に他のプロセスが完了していないか確認');
+      expect(entrypointContent).toContain('# 完了マーカー作成');
+      expect(entrypointContent).toContain('rm -rf "$lock_file" 2>/dev/null');
       
-      // 処理完了後の適切なフラグ設定
-      expect(entrypointContent).toContain('処理完了後にプロセス内フラグを設定（重複防止）');
+      // フラグ設定の確認
+      expect(entrypointContent).toContain('export "$var_name"=1');
     });
   });
 
@@ -134,10 +134,10 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       fs.writeFileSync(lockFile, `${process.pid}:${Date.now()}.000000`);
       expect(fs.existsSync(lockFile)).toBe(true);
       
-      // 簡素化実装の確認（待機ロジックは削除されている）
+      // Issue #5121版: シンプルな実装の確認
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      expect(entrypointContent).toContain('簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック');
-      expect(entrypointContent).toContain('プロセス内フラグを即座に設定（レースコンディション防止）');
+      expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 同期的なクリーンアップ
       if (fs.existsSync(lockFile)) {
@@ -159,7 +159,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(entrypointContent).toContain('log_startup_message');
       
       // 自動クリーンアップ機能の保持
-      expect(entrypointContent).toContain('sleep 30 && rm -f "$lock_file" 2>/dev/null');
+      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
     });
 
     test('entrypoint.shファイルの構文が正しい', () => {
@@ -186,35 +186,34 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
     test('レースコンディションが修正されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 修正前の問題（環境変数チェックが先）が解決されている
-      expect(entrypointContent).toContain('環境変数チェックの前に、まずロックファイルによる排他制御を実施');
-      
-      // 修正後の実装（ロックファイルチェックが先）が実装されている
+      // Issue #5121版: プロセス内フラグとファイルベースの二重チェックが実装されている
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
+      
+      // Issue #5121版: 修正後の実装確認
       expect(entrypointContent).toContain('local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
+      expect(entrypointContent).toContain('local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"');
     });
 
     test('強化されたatomic操作により重複が防止される', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // より強固なatomic操作の実装
-      expect(entrypointContent).toContain('echo "$$:$(date +%s.%N)" > "$lock_file"');
+      // Issue #5121版: mkdirベースのアトミック操作の実装
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
-      // 適切なエラーハンドリング
+      // Issue #5121版: 適切なエラーハンドリング
       expect(entrypointContent).toContain('if [ "$lock_acquired" = true ]; then');
       expect(entrypointContent).toContain('else');
-      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
+      expect(entrypointContent).toContain('# ロック取得失敗時もフラグは設定（他のプロセスが出力済みと想定）');
     });
 
     test('メッセージの出力が確実に一意になる', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // メッセージ出力はロック取得成功時のみ
-      expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
+      // Issue #5121版: メッセージ出力はロック取得成功時のみ
+      expect(entrypointContent).toContain('# メッセージ出力');
       expect(entrypointContent).toContain('log "$message"');
       
-      // 重複時の処理が適切
-      expect(entrypointContent).toContain('ロック取得失敗：他のプロセスが処理中または処理済み');
+      // Issue #5121版: 重複時の処理が適切
       expect(entrypointContent).toContain('return 0');
     });
   });

@@ -56,8 +56,8 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
     test('プロセス内フラグが適切に設定される（Issue #5088統合版）', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Issue #5088修正のコメント
-      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
+      // Issue #5121修正のコメント
+      expect(entrypointContent).toContain('Issue #5121 修正: 簡素化・安定化版');
       
       // ロック取得成功ブロック内でフラグが設定されることを確認
       const lockSuccessBlock = entrypointContent.match(/if \[ "\$lock_acquired" = true \]; then[\s\S]*?return 0/)[0];
@@ -73,11 +73,11 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // ロック取得成功時のコメントが適切に設定されている
       expect(entrypointContent).toContain('ロック取得成功：メッセージ出力');
       
-      // Issue #5088修正：フラグ設定がロック取得成功後に適切に配置されている
-      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
+      // Issue #5121修正：フラグ設定がロック取得成功後に適切に配置されている
+      expect(entrypointContent).toContain('プロセス内フラグを設定');
       
-      // ロック取得失敗時の適切な処理
-      expect(entrypointContent).toContain('フラグは設定しない（他のプロセスがメッセージ出力を担当）');
+      // Issue #5121: ロック取得失敗時の適切な処理
+      expect(entrypointContent).toContain('# ロック取得失敗時もフラグは設定（他のプロセスが出力済みと想定）');
     });
 
     test('atomic操作の改善が実装されている', () => {
@@ -86,11 +86,11 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // 一貫性確保のコメント
       expect(entrypointContent).toContain('メッセージハッシュを一度だけ計算（一貫性確保）');
       
-      // atomic操作は変わらず維持
-      expect(entrypointContent).toContain('(if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null');
+      // Issue #5121: mkdirベースのatomic操作
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
-      // クリーンアップ機能は維持
-      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
+      // Issue #5121: クリーンアップ機能は維持（5分後）
+      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
     });
   });
 
@@ -118,11 +118,11 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // プロセス内重複チェック機能
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
       
-      // プロセス間重複チェック機能
-      expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
+      // Issue #5121: 出力済みチェック機能
+      expect(entrypointContent).toContain('既にメッセージが出力済みかチェック');
       
-      // 自動クリーンアップ機能
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      // Issue #5121: 自動クリーンアップ機能（5分後）
+      expect(entrypointContent).toContain('クリーンアップ（5分後）');
       
       // get_message_hash関数
       expect(entrypointContent).toContain('get_message_hash() {');
@@ -151,10 +151,10 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // 関数の存在確認
       expect(entrypointContent).toContain('log_startup_message() {');
       
-      // 関数内の重要なロジックが存在することを確認
+      // Issue #5121: 関数内の重要なロジックが存在することを確認
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
-      expect(entrypointContent).toContain('プロセス間重複チェック（第二の防御線）');
-      expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
+      expect(entrypointContent).toContain('既にメッセージが出力済みかチェック');
+      expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
       
       // 構文の基本的な正当性：returnステートメントの存在
       const functionBody = entrypointContent.substring(
@@ -185,13 +185,13 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
     test('Issue #2525の修正は維持されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Issue #2525で追加されたatomic実装は維持
-      expect(entrypointContent).toContain('set -C');
+      // Issue #5121: mkdirベースのatomic実装
+      expect(entrypointContent).toContain('mkdir "$lock_file" 2>/dev/null');
       expect(entrypointContent).toContain('2>/dev/null');
       
-      // 古いシンプルな実装は削除されたまま
+      // Issue #5121: 古い実装は削除されたまま
+      expect(entrypointContent).not.toContain('set -C');
       expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT=""');
-      expect(entrypointContent).not.toContain('シンプルな環境変数ベース');
     });
 
     test('ロックディレクトリとファイル管理は継続', () => {

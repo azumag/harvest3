@@ -51,17 +51,17 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 新しい簡素化された実装が含まれていることを確認
-      expect(entrypointContent).toContain('# 重複起動ログ防止関数（強化版 - Issue #3942 修正）');
-      expect(entrypointContent).toContain('# プロセス内フラグとシンプルなatomic操作による重複防止');
+      // Issue #5121 修正: 簡素化・安定化版の実装が含まれていることを確認
+      expect(entrypointContent).toContain('# 重複起動ログ防止関数（Issue #5121 修正: 簡素化・安定化版）');
+      expect(entrypointContent).toContain('# シンプルなファイルベースロック機構による重複防止');
       
       // プロセス内重複チェック機能の確認
       expect(entrypointContent).toContain('# プロセス内重複チェック（最初の防御線）');
       expect(entrypointContent).toContain('local var_name="STARTUP_MSG_');
       expect(entrypointContent).toContain('if [ "${!var_name}" = "1" ]; then');
       
-      // プロセス間重複チェック機能の確認
-      expect(entrypointContent).toContain('# プロセス間重複チェック（第二の防御線）');
+      // アトミックなロック取得機能の確認
+      expect(entrypointContent).toContain('# アトミックなロック取得を試行（改良版）');
       expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 環境変数のexportによるフラグ設定の確認
@@ -87,7 +87,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // シンプルなクリーンアップ処理の確認
-      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
+      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
       
       // 複雑なクリーンアップロジックが削除されていることを確認
       expect(entrypointContent).not.toContain('sleep 60');
@@ -236,9 +236,9 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
     test('レースコンディション対策の改善', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // 2層防御の実装確認
+      // プロセス内フラグと出力済みチェックの実装確認
       expect(entrypointContent).toContain('# プロセス内重複チェック（最初の防御線）');
-      expect(entrypointContent).toContain('# プロセス間重複チェック（第二の防御線）');
+      expect(entrypointContent).toContain('# 既にメッセージが出力済みかチェック');
       
       // プロセス内フラグによる即座の重複検出
       expect(entrypointContent).toContain('if [ "${!var_name}" = "1" ]; then');
@@ -248,9 +248,9 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
     test('リソース使用量の最適化', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // log_startup_message関数内で短いクリーンアップ時間（30秒）が使用されている
-      expect(entrypointContent).toContain('# ロックファイルのクリーンアップ（30秒後）');
-      expect(entrypointContent).toContain('(sleep 30 && rm -f "$lock_file" 2>/dev/null) &');
+      // log_startup_message関数内でクリーンアップ時間（5分後）が使用されている
+      expect(entrypointContent).toContain('# クリーンアップ（5分後）');
+      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
       
       // 複雑なファイル処理の削除
       expect(entrypointContent).not.toContain('lock_info=$(cat "$lock_file"');

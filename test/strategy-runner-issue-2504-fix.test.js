@@ -50,12 +50,12 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       // シンプルなロックファイルの実装確認
       expect(entrypointContent).toContain('echo "$$" > "$lock_file"');
       
-      // シンプルな自動クリーンアップ機能
-      expect(entrypointContent).toContain('ロックファイルのクリーンアップ（30秒後）');
+      // Issue #5121: 自動クリーンアップ機能（5分後）
+      expect(entrypointContent).toContain('クリーンアップ（5分後）');
       
-      // 簡素化された実装ではリトライロジックが削除されている
-      expect(entrypointContent).not.toContain('sleep 0.1');
-      expect(entrypointContent).not.toContain('attempt=$((attempt + 1))');
+      // Issue #5121: リトライ機構の簡素化（3回まで）
+      expect(entrypointContent).toContain('local max_attempts=3');
+      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
     });
 
     test('起動ロック取得後のメッセージ出力順序が修正されている', () => {

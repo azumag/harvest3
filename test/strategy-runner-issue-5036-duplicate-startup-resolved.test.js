@@ -57,7 +57,12 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
       if (fs.existsSync(lockDir)) {
         const files = fs.readdirSync(lockDir);
         files.forEach(file => {
-          fs.unlinkSync(path.join(lockDir, file));
+          const filePath = path.join(lockDir, file);
+          if (fs.statSync(filePath).isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(filePath);
+          }
         });
         fs.rmdirSync(lockDir);
       }

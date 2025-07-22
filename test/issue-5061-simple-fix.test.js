@@ -38,12 +38,12 @@ describe('Issue #5061: Simple Fix Verification', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5057の修正コメントが含まれていることを確認（Issue #5061は#5057により統合された）
-    expect(entrypointContent).toContain('Issue #5057 修正');
+    // Issue #5121の修正コメントが含まれていることを確認
+    expect(entrypointContent).toContain('Issue #5121 修正: 簡素化・安定化版');
     
-    // 修正されたロジックの要素を確認
-    expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
-    expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない（確実な重複防止）');
+    // Issue #5121修正されたロジックの要素を確認
+    expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
+    expect(entrypointContent).toContain('# プロセス内フラグを設定');
     
     // 修正された構造を確認：プロセス内フラグのチェックが最初にあることを確認
     const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
@@ -51,7 +51,7 @@ describe('Issue #5061: Simple Fix Verification', () => {
     // プロセス内重複チェックが最初にあることを確認
     expect(logStartupMessageFunction).toContain('プロセス内重複チェック（最初の防御線）');
     
-    // フラグ設定がロック取得後にあることを確認（Issue #5057修正）
+    // Issue #5121修正: フラグ設定がロック取得後にあることを確認
     const lockSuccessBlock = entrypointContent.match(/if \[ "\$lock_acquired" = true \]; then[\s\S]*?return 0/)[0];
     expect(lockSuccessBlock).toContain('export "$var_name"=1');
   });
@@ -81,30 +81,29 @@ log_startup_message() {
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
-    # プロセス内重複チェック（最初の防御線） - Issue #5061 修正
+    # プロセス内重複チェック（最初の防御線） - Issue #5121 修正
     if [ "\${!var_name}" = "1" ]; then
-        # 既に同じメッセージを出力済み（プロセス内重複）
-        # 一度出力されたメッセージは二度と出力しない（確実な重複防止）
         return 0
     fi
     
-    # プロセス内フラグを即座に設定（レースコンディション防止）
-    # Issue #5061 修正: フラグ設定をロック取得前に移動
-    export "$var_name"=1
+    # 既にメッセージが出力済みかチェック
+    if [ -f "$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done" ]; then
+        export "$var_name"=1
+        return 0
+    fi
     
-    # プロセス間重複チェック（第二の防御線）
-    # より強固なatomic操作でロック取得を試行
-    if (if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null; then
-        # ロック取得成功：メッセージ出力
+    # アトミックなロック取得を試行（改良版） - Issue #5121
+    if mkdir "$lock_file" 2>/dev/null; then
+        # メッセージ出力
         log "$message"
         
-        # ロックファイルのクリーンアップ（30秒後）
-        (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
+        # クリーンアップ（5分後）
+        (sleep 300 && rm -f "$success_file" 2>/dev/null) &
         
         return 0
     else
-        # ロック取得失敗：lock_acquired=true
-        # プロセス内フラグは既に設定済みなので、このプロセスでは今後同じメッセージは出力されない
+        # ロック取得失敗時もフラグは設定（他のプロセスが出力済みと想定）
+        export "$var_name"=1
         return 0
     fi
 }
@@ -166,9 +165,9 @@ echo "=== Test Completed ==="
     expect(entrypointContent).not.toContain('ロックファイルを削除してから終了');
     expect(entrypointContent).not.toContain('レースコンディション防止：即座にプロセス内フラグを設定');
     
-    // 修正後のロジックが含まれていることを確認（Issue #5057統合版）
-    expect(entrypointContent).toContain('一度出力されたメッセージは二度と出力しない');
-    expect(entrypointContent).toContain('レースコンディション解消のためフラグ設定をロック取得後に移動');
+    // Issue #5121修正後のロジックが含まれていることを確認
+    expect(entrypointContent).toContain('# プロセス内フラグを設定');
+    expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
   });
 
   test('Issue #5061で報告された具体的なメッセージをテスト', async () => {
@@ -200,9 +199,9 @@ log_startup_message() {
     
     export "$var_name"=1
     
-    if (if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null; then
+    if mkdir "$lock_file" 2>/dev/null; then
         log "$message"
-        (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
+        (sleep 300 && rm -rf "$lock_file" 2>/dev/null) &
         return 0
     else
         return 0
