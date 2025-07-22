@@ -146,7 +146,6 @@ describe('Issue #5121: backtestサービス重複ログ問題修正確認', () =
       'max_attempts=3', // リトライ機構
       'lock_age=', // 古いロック検出
       'stat -c %Y', // タイムスタンプ取得
-      'sleep 0.1', // 短い待機時間
       'touch "$success_file"', // 完了マーカー作成
       'sleep 300', // 長期間のクリーンアップ
     ];
