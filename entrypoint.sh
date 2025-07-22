@@ -241,6 +241,7 @@ log_startup_message() {
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
+        # フラグは設定しない（他のプロセスがメッセージ出力を担当）
         return 0
     fi
 }
