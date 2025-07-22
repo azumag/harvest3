@@ -551,14 +551,14 @@ async function releaseDistributedLock(lockKey, lockId) {
       end
       
       -- Redis GET commandを安全に実行
-      local lockValue = redis.call('GET', lockKey)
+      local lockValue = redis.call('GET', KEYS[1])
       if lockValue and type(lockValue) == 'string' and lockValue ~= '' then
         local success, lockData = pcall(cjson.decode, lockValue)
         if success and lockData and type(lockData) == 'table' and lockData.lockId then
           local lockIdStr = tostring(lockData.lockId)
-          if lockIdStr == lockIdToCheck then
+          if lockIdStr == ARGV[1] then
             -- DEL commandを安全に実行
-            redis.call('DEL', lockKey)
+            redis.call('DEL', KEYS[1])
             return 1
           end
         end
