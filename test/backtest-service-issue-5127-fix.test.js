@@ -307,7 +307,7 @@ log_startup_message "Starting container with enhanced error handling"
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // ファイル権限の適切な設定
-    expect(entrypointContent).toContain('chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"');
+    expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
     
     // /tmpディレクトリ使用のセキュリティ注記が維持されている
     expect(entrypointContent).toContain('セキュリティ注記: /tmp使用について');

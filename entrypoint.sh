@@ -245,7 +245,7 @@ log_backtest_startup_message() {
         
         # タイムスタンプを更新してメッセージ出力
         echo "$current_time" > "$timestamp_file"
-        chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"
+        chmod 600 "$timestamp_file"
         log "$message"
         
         # ロック解放
