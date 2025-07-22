@@ -20,6 +20,9 @@ DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通�
 LOCK_CLEANUP_TIMEOUT=${LOCK_CLEANUP_TIMEOUT:-60}  # 古いロックファイル削除タイムアウト（秒）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカーファイル削除遅延（秒）
 
+# バックグラウンドプロセス追跡
+BACKGROUND_CLEANUP_PIDS=""
+
 # Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-10}  # backtest起動ロックタイムアウト（秒）
@@ -306,21 +309,23 @@ log_startup_message() {
             # プロセス内フラグを先に設定（重複実行の完全防止）
             export "$var_name"=1
             
-            # success file作成
-            echo "${current_time}:$$" > "$success_file" 2>/dev/null
-            
-            # メッセージ出力（フラグ設定後）
-            log "$message"
+            # success file作成とメッセージ出力をatomicに近い形で実行
+            if echo "${current_time}:$$" > "$success_file" 2>/dev/null; then
+                # success file作成成功時のみメッセージ出力
+                log "$message"
+            fi
             
             # Issue #5103: バックグラウンドクリーンアップ（300秒後）
             (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
+            local cleanup_pid=$!
+            BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
         else
             # 他のプロセスが既に完了済み
             export "$var_name"=1
         fi
         
         # ロック解放
-        rmdir "$lock_file" 2>/dev/null || true
+        rm -rf "$lock_file" 2>/dev/null || true
         return 0
     else
         # ロック取得失敗 - 他のプロセスが処理中または完了済み
@@ -399,6 +404,20 @@ release_startup_lock() {
         else
             log "WARNING: Cannot release lock owned by PID: $lock_pid (current: $$)"
         fi
+    fi
+}
+
+# バックグラウンドプロセス管理・クリーンアップ関数
+cleanup_background_processes() {
+    if [ -n "$BACKGROUND_CLEANUP_PIDS" ]; then
+        log "Cleaning up background cleanup processes..."
+        for pid in $BACKGROUND_CLEANUP_PIDS; do
+            if kill -0 "$pid" 2>/dev/null; then
+                log "Terminating background cleanup process (PID: $pid)"
+                kill -TERM "$pid" 2>/dev/null || true
+            fi
+        done
+        BACKGROUND_CLEANUP_PIDS=""
     fi
 }
 
@@ -895,6 +914,9 @@ cleanup() {
             kill -KILL $app_pid 2>/dev/null
         fi
     fi
+    
+    # バックグラウンドプロセスのクリーンアップ
+    cleanup_background_processes
     
     # 起動ロックの解放
     release_startup_lock
