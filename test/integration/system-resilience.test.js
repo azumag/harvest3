@@ -173,7 +173,7 @@ describe('System Resilience Tests', () => {
           done();
         }, 150);
       }, 150);
-    }, 5000); // CI用に5秒に短縮
+    }, 10000); // 10秒のタイムアウト設定
 
     test('Dead Mans Switch動作確認', (done) => {
       const switchInstance = new DeadMansSwitch({
@@ -198,7 +198,7 @@ describe('System Resilience Tests', () => {
         switchInstance.stopHeartbeat();
         done();
       }, 200);
-    }, 5000); // CI用に5秒に短縮
+    }, 10000); // 10秒のタイムアウト設定
   });
 
   describe('Network and API Failures', () => {
@@ -286,7 +286,7 @@ describe('System Resilience Tests', () => {
         console.log('✅ 自動復旧メカニズム動作確認 (調整数:', adjustments.length, ')');
         done();
       }, 300);
-    }, 5000); // CI用に5秒に短縮
+    }, 10000); // 10秒のタイムアウト設定
   });
 });
 

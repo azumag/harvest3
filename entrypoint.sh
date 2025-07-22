@@ -272,8 +272,40 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5103: プロセス内での確実な重複防止（第一防御線）
+    # Issue #5130: Redis-based duplicate prevention across container restarts (第一防御線)
     local message_hash=$(get_message_hash "$message")
+    local redis_key="startup_msg:$message_hash"
+    local container_id=$(hostname)
+    local current_time=$(date +%s)
+    
+    # Redisが利用可能な場合はRedisベースの重複防止を実行
+    if command -v node >/dev/null 2>&1 && [ -n "$REDIS_URL" ]; then
+        # Redis check and set with 300 second TTL
+        local redis_check_result=$(node -e "
+            const redis = require('redis');
+            const client = redis.createClient({url: process.env.REDIS_URL});
+            client.on('error', () => process.exit(1));
+            client.connect().then(async () => {
+                const key = '$redis_key';
+                const value = '$container_id:$current_time';
+                const existing = await client.get(key);
+                if (existing) {
+                    console.log('duplicate');
+                    process.exit(0);
+                }
+                await client.setEx(key, 300, value);
+                console.log('new');
+                process.exit(0);
+            }).catch(() => process.exit(1));
+        " 2>/dev/null || echo "error")
+        
+        # Redis check succeeded and message is duplicate
+        if [ "$redis_check_result" = "duplicate" ]; then
+            return 0
+        fi
+    fi
+    
+    # Issue #5103: プロセス内での確実な重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
     # 同一プロセス内で既に出力済みの場合は即座に終了
@@ -1079,7 +1111,7 @@ main() {
         exec "$@"
     else
         # 起動ロック取得後に安全にメッセージを出力
-        log_startup_message "Starting strategy-runner container with enhanced error handling"
+        log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
         
         # 初期診断の実行
         run_diagnostics

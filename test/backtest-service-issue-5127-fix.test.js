@@ -292,7 +292,7 @@ log_startup_message "Starting container with enhanced error handling"
     });
     
     // 既存のstrategy-runner用メッセージも正しく処理されることを確認
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // backtest用メッセージが正しく処理されることを確認
     expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
