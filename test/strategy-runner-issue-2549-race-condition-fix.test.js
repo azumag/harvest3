@@ -89,8 +89,8 @@ describe('Issue #2549: strategy-runner レースコンディション修正', ()
       // Issue #5121: mkdirベースのatomic操作
       expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
-      // Issue #5121: クリーンアップ機能は維持（5分後）
-      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
+      // Issue #5121: クリーンアップ機能は維持（環境変数ベース）
+      expect(entrypointContent).toContain('(sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &');
     });
   });
 

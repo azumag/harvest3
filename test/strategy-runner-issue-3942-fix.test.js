@@ -158,8 +158,8 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
       expect(entrypointContent).toContain('log_startup_message');
       
-      // 自動クリーンアップ機能の保持
-      expect(entrypointContent).toContain('(sleep 300 && rm -f "$success_file" 2>/dev/null) &');
+      // 自動クリーンアップ機能の保持（環境変数ベース）
+      expect(entrypointContent).toContain('(sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &');
     });
 
     test('entrypoint.shファイルの構文が正しい', () => {
