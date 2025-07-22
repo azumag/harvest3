@@ -122,8 +122,8 @@ log_startup_message "$MESSAGE"
             const { stdout } = await execAsync(`bash ${scriptPath}`);
             
             // 環境変数の設定確認
-            expect(stdout).toContain('Before: = ');  // 初期は未設定
-            expect(stdout).toContain('After: = 1');   // 実行後は設定済み
+            expect(stdout).toContain('Before:  = ');  // 初期は未設定（変数展開で2つのスペース）
+            expect(stdout).toContain('After: 1 = 1');   // 実行後は設定済み
             
             // メッセージが1回のみ出力
             const messageCount = (stdout.match(/Test message for hash/g) || []).length;
