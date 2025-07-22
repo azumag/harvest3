@@ -240,14 +240,18 @@ log_startup_message() {
     if [ "$lock_acquired" = true ]; then
         # 二重チェック: 出力中に他のプロセスが完了していないか確認
         if [ ! -f "$success_file" ]; then
+            # アトミックな完了マーカー作成（メッセージ出力前）
+            # Issue #5094 修正: レースコンディション防止のため順序変更
+            touch "$success_file"
+            
             # プロセス内フラグを設定
             export "$var_name"=1
             
-            # メッセージ出力
+            # メッセージ出力（成功ファイル作成後）
             log "$message"
-            
-            # 完了マーカー作成
-            touch "$success_file"
+        else
+            # 他のプロセスが既に出力済み
+            export "$var_name"=1
         fi
         
         # ロック解放
