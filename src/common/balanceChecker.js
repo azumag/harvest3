@@ -532,20 +532,32 @@ async function releaseDistributedLock(lockKey, lockId) {
     
     // Lua スクリプトを使用してアトミックにロックを解放
     const luaScript = `
+      -- Issue #4979対応: 引数の存在と型の厳密チェック
+      if not KEYS[1] or not ARGV[1] then
+        return 0
+      end
+      
       local lockKey = KEYS[1]
       local lockIdToCheck = ARGV[1]
       
-      -- 引数の型チェック
+      -- 引数の型チェック（厳密）
       if type(lockKey) ~= 'string' or type(lockIdToCheck) ~= 'string' then
         return 0
       end
       
+      -- 空文字列チェック
+      if lockKey == '' or lockIdToCheck == '' then
+        return 0
+      end
+      
+      -- Redis GET commandを安全に実行
       local lockValue = redis.call('GET', KEYS[1])
       if lockValue and type(lockValue) == 'string' and lockValue ~= '' then
         local success, lockData = pcall(cjson.decode, lockValue)
         if success and lockData and type(lockData) == 'table' and lockData.lockId then
           local lockIdStr = tostring(lockData.lockId)
           if lockIdStr == ARGV[1] then
+            -- DEL commandを安全に実行
             redis.call('DEL', KEYS[1])
             return 1
           end
@@ -586,7 +598,16 @@ async function releaseDistributedLock(lockKey, lockId) {
       throw new Error(`Redis引数検証失敗: ${validationError.message}`);
     }
     
-    // Issue #4980対応: 検証済みfinalLockKey, finalLockIdを使用してRedis Lua script引数型エラーを防止
+    // Issue #4980, #4979対応: Redis eval実行直前の最終安全チェック
+    if (!finalLockKey || !finalLockId || 
+        typeof finalLockKey !== 'string' || typeof finalLockId !== 'string' ||
+        finalLockKey === '' || finalLockId === '' ||
+        finalLockKey === 'null' || finalLockKey === 'undefined' ||
+        finalLockId === 'null' || finalLockId === 'undefined') {
+      logger.error(`Redis eval実行直前チェック失敗: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
+      throw new Error(`Redis引数が無効: lockKey='${finalLockKey}', lockId='${finalLockId}'`);
+    }
+    
     const result = await redisClient.eval(luaScript, 1, finalLockKey, finalLockId);
     
     if (result === 1) {
