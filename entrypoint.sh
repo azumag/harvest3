@@ -258,8 +258,8 @@ log_backtest_startup_message() {
     fi
 }
 
-# 重複起動ログ防止関数（Issue #5118 修正: コンテナ再起動対応版）
-# ファイルベース + プロセス内環境変数による多重防御機構
+# 重複起動ログ防止関数（Issue #5103 修正: 簡素化による信頼性向上版）
+# シンプルで確実な重複防止機構
 log_startup_message() {
     local message="$1"
     
@@ -269,81 +269,62 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5118: 同一プロセス内での重複防止（最重要な防御線）
+    # Issue #5103: プロセス内での確実な重複防止（第一防御線）
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    # プロセス内環境変数による重複チェック（コンテナ再起動に耐性あり）
+    # 同一プロセス内で既に出力済みの場合は即座に終了
     if [ "${!var_name}" = "1" ]; then
         return 0
     fi
     
-    # Issue #5118: 同一起動セッション内での時間ベース重複防止
-    local session_var="STARTUP_SESSION_$(echo "$message_hash" | cut -c1-8)"
-    local current_time=$(date +%s)
-    
-    if [ -n "${!session_var}" ]; then
-        local last_time="${!session_var}"
-        local time_diff=$((current_time - last_time))
-        
-        # 5秒以内の重複実行を防止（急速再起動対応）
-        if [ $time_diff -lt 5 ]; then
-            export "$var_name"=1
-            return 0
-        fi
-    fi
-    
-    # ファイルベースのロック機構（従来の機能を維持）
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    # Issue #5103: シンプルなファイルベース重複防止（第二防御線）
     local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
     
-    # 既にメッセージが出力済みかチェック
+    # 既に出力済みファイルが存在する場合は処理終了
     if [ -f "$success_file" ]; then
         export "$var_name"=1
-        export "$session_var"="$current_time"
         return 0
     fi
     
-    # 既存ロックが古い場合は削除
-    if [ -d "$lock_file" ]; then
+    # Issue #5103: atomic file creation with flock-like behavior
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    local current_time=$(date +%s)
+    
+    # 古いロックファイルのクリーンアップ（60秒以上前）
+    if [ -f "$lock_file" ]; then
         local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
         if [ $lock_age -gt 60 ]; then
-            rm -rf "$lock_file" 2>/dev/null
+            rm -f "$lock_file" 2>/dev/null || true
         fi
     fi
     
-    # アトミックなロック取得
+    # Issue #5103: mkdir-based atomic lock (more reliable than set -C subshell)
     if mkdir "$lock_file" 2>/dev/null; then
-        # 二重チェック: 出力中に他のプロセスが完了していないか確認
+        # ロック取得成功 - 最終チェックしてメッセージ出力
         if [ ! -f "$success_file" ]; then
-            # Issue #5118: セッションタイムスタンプを先に記録
-            export "$session_var"="$current_time"
-            
-            # 完了マーカー作成
-            touch "$success_file"
-            
-            # プロセス内フラグを設定
+            # プロセス内フラグを先に設定（重複実行の完全防止）
             export "$var_name"=1
             
-            # メッセージ出力（タイムスタンプ記録後）
+            # success file作成
+            echo "${current_time}:$$" > "$success_file" 2>/dev/null
+            
+            # メッセージ出力（フラグ設定後）
             log "$message"
+            
+            # Issue #5103: バックグラウンドクリーンアップ（300秒後）
+            (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
         else
-            # 他のプロセスが既に出力済み
+            # 他のプロセスが既に完了済み
             export "$var_name"=1
-            export "$session_var"="$current_time"
         fi
         
         # ロック解放
-        rm -rf "$lock_file" 2>/dev/null
-        
-        # クリーンアップ（5分後）
-        (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
-        
+        rmdir "$lock_file" 2>/dev/null || true
         return 0
     else
-        # ロック取得失敗時もフラグとタイムスタンプを設定
+        # ロック取得失敗 - 他のプロセスが処理中または完了済み
         export "$var_name"=1
-        export "$session_var"="$current_time"
         return 0
     fi
 }
