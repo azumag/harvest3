@@ -215,7 +215,6 @@ log_startup_message() {
     
     # 既にメッセージが出力済みかチェック
     if [ -f "$success_file" ]; then
-        export "$var_name"=1
         return 0
     fi
     
@@ -240,7 +239,7 @@ log_startup_message() {
     if [ "$lock_acquired" = true ]; then
         # 二重チェック: 出力中に他のプロセスが完了していないか確認
         if [ ! -f "$success_file" ]; then
-            # アトミックな完了マーカー作成（メッセージ出力前）
+            # 完了マーカー作成
             # Issue #5094 修正: レースコンディション防止のため順序変更
             touch "$success_file"
             
