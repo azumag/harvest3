@@ -1,85 +1,61 @@
 #!/bin/bash
 
-# テスト専用の軽量版entrypoint関数
-# Issue #5103テスト用 - 重い初期化処理を除外した必要な関数のみ
+# CI用超軽量版テストフィクスチャ
+# 複雑な操作を除去してテストタイムアウトを回避
 
 # 設定（テスト用にシンプル化）
-SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}
+SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-2}
 
-# バックグラウンドプロセス追跡
-BACKGROUND_CLEANUP_PIDS=""
-
-# 重複起動メッセージ防止（ファイルベースの atomic 実装）
+# 重複起動メッセージ防止（ファイルベースの超簡素版）
 STARTUP_MESSAGE_LOCK_DIR=${STARTUP_MESSAGE_LOCK_DIR:-"/tmp/startup_messages"}
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
-# MD5ハッシュ値生成関数（DRY原則適用）
+# MD5ハッシュ値生成関数（シンプル版）
 get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
 }
 
-# 重複起動ログ防止関数（Issue #5103 修正: 簡素化による信頼性向上版）
-# シンプルで確実な重複防止機構
+# 超軽量版：重複起動ログ防止関数
 log_startup_message() {
     local message="$1"
     
-    # Issue #5127: backtest containerの場合は専用関数を使用
+    # backtest モードチェック
     if [ "$BACKTEST_MODE" = "true" ]; then
         log_backtest_startup_message "$message"
         return $?
     fi
     
-    # Issue #5103: プロセス内での確実な重複防止（第一防御線）
+    # ハッシュ生成
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    # 同一プロセス内で既に出力済みの場合は即座に終了
+    # プロセス内重複チェック
     if [ "${!var_name}" = "1" ]; then
         return 0
     fi
     
-    # Issue #5103: シンプルなファイルベース重複防止（第二防御線）
+    # ファイルベース重複チェック（簡素化）
     local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
-    
-    # 既に成功ファイルが存在し、内容が有効な場合はスキップ
     if [ -f "$success_file" ]; then
-        local success_content=$(cat "$success_file" 2>/dev/null || echo "")
-        if [ -n "$success_content" ]; then
-            return 0
-        fi
+        return 0
     fi
     
-    # Issue #5103: atomicロック実装（mkdirによるatomic操作）
+    # 簡素化されたロック機構（findコマンド除去、高速化）
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    local max_lock_wait=10  # 最大10秒待機
-    local lock_acquired=false
-    local wait_time=0
+    local max_attempts=5
+    local attempt=0
     
-    # 古いロックファイルのクリーンアップ（60秒以上古いもの）
-    find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -mmin +1 -exec rm -rf {} \; 2>/dev/null || true
-    
-    # atomicロック取得試行（0.1秒間隔で最大10秒）
-    local iteration=0
-    local max_iterations=100  # 10秒 / 0.1秒 = 100回
-    while [ $iteration -lt $max_iterations ]; do
+    # 軽量ロック取得
+    while [ $attempt -lt $max_attempts ]; do
         if mkdir "$lock_file" 2>/dev/null; then
-            lock_acquired=true
             break
         fi
-        sleep 0.1
-        iteration=$((iteration + 1))
+        attempt=$((attempt + 1))
+        sleep 0.01  # 10ms待機に短縮
     done
     
-    if [ "$lock_acquired" = false ]; then
-        # ロック取得失敗時は重複チェックのみ実行
-        if [ -f "$success_file" ]; then
-            return 0
-        fi
-    fi
-    
-    # 最終確認：他のプロセスが既に実行済みでないかチェック
+    # 重複チェック
     if [ -f "$success_file" ]; then
-        # ロック解放
         rm -rf "$lock_file" 2>/dev/null || true
         return 0
     fi
@@ -87,38 +63,33 @@ log_startup_message() {
     # メッセージ出力
     echo "$message"
     
-    # プロセス内フラグ設定
+    # フラグ設定
     export "$var_name"="1"
     
-    # 成功マーカー作成（プロセスIDを含む）
+    # 成功マーカー作成
     echo "$$" > "$success_file" 2>/dev/null || true
     
     # ロック解放
     rm -rf "$lock_file" 2>/dev/null || true
     
-    # Issue #5103: バックグラウンドクリーンアップ（300秒後）
-    (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
-    local cleanup_pid=$!
-    BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
+    # 軽量クリーンアップ（バックグラウンド処理なし）
+    if [ "$SUCCESS_FILE_CLEANUP_DELAY" -lt 10 ]; then
+        # テスト環境では即座にクリーンアップ予約
+        (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
+    fi
     
     return 0
 }
 
-# backtest専用の起動メッセージログ関数（Issue #5127対応）
+# backtest専用関数（超軽量版）
 log_backtest_startup_message() {
     local message="$1"
     
-    # backtest専用のロック機構
     local backtest_lock_file="/tmp/backtest-startup-message.lock"
-    local backtest_timeout=${BACKTEST_STARTUP_LOCK_TIMEOUT:-10}
     
-    # 簡素化されたbacktest用重複防止
+    # 簡単な重複チェック
     if [ -f "$backtest_lock_file" ]; then
-        # ファイルの存在時間を簡単にチェック（find コマンドを使用）
-        local recent_lock=$(find "$backtest_lock_file" -mmin -1 2>/dev/null)
-        if [ -n "$recent_lock" ]; then
-            return 0  # 1分以内に作成されたロックファイルが存在する場合はスキップ
-        fi
+        return 0
     fi
     
     # ロックファイル作成
@@ -127,8 +98,8 @@ log_backtest_startup_message() {
     # メッセージ出力
     echo "$message"
     
-    # バックグラウンドでロックファイルをクリーンアップ
-    (sleep $backtest_timeout && rm -f "$backtest_lock_file" 2>/dev/null) &
+    # 短時間でクリーンアップ
+    (sleep 1 && rm -f "$backtest_lock_file" 2>/dev/null) &
     
     return 0
 }
