@@ -58,14 +58,16 @@ log_startup_message() {
     # 古いロックファイルのクリーンアップ（60秒以上古いもの）
     find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -mmin +1 -exec rm -rf {} \; 2>/dev/null || true
     
-    # atomicロック取得試行
-    while [ $wait_time -lt $max_lock_wait ]; do
+    # atomicロック取得試行（0.1秒間隔で最大10秒）
+    local iteration=0
+    local max_iterations=100  # 10秒 / 0.1秒 = 100回
+    while [ $iteration -lt $max_iterations ]; do
         if mkdir "$lock_file" 2>/dev/null; then
             lock_acquired=true
             break
         fi
         sleep 0.1
-        wait_time=$(echo "$wait_time + 0.1" | bc 2>/dev/null || echo $((wait_time + 1)))
+        iteration=$((iteration + 1))
     done
     
     if [ "$lock_acquired" = false ]; then
@@ -112,9 +114,10 @@ log_backtest_startup_message() {
     
     # 簡素化されたbacktest用重複防止
     if [ -f "$backtest_lock_file" ]; then
-        local lock_age=$(($(date +%s) - $(stat -f %m "$backtest_lock_file" 2>/dev/null || stat -c %Y "$backtest_lock_file" 2>/dev/null || echo "0")))
-        if [ $lock_age -lt $backtest_timeout ]; then
-            return 0  # 最近作成されたロックファイルが存在する場合はスキップ
+        # ファイルの存在時間を簡単にチェック（find コマンドを使用）
+        local recent_lock=$(find "$backtest_lock_file" -mmin -1 2>/dev/null)
+        if [ -n "$recent_lock" ]; then
+            return 0  # 1分以内に作成されたロックファイルが存在する場合はスキップ
         fi
     fi
     
