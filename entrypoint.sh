@@ -207,6 +207,7 @@ log_startup_message() {
         return 0
     fi
     
+    # プロセス内フラグを即座に設定（レースコンディション防止）
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
     local lock_acquired=false
@@ -215,12 +216,13 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
-        # Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
+        # Issue #5088 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
         export "$var_name"=1
         
         # ロック取得成功：メッセージ出力
         log "$message"
         
+        # 処理完了後にプロセス内フラグを設定（重複防止）
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         
