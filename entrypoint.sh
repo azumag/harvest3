@@ -253,7 +253,7 @@ log_startup_message() {
         rm -rf "$lock_file" 2>/dev/null
         
         # クリーンアップ（5分後）
-        (sleep 300 && rm -f "$success_file" 2>/dev/null) &
+        (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
         
         return 0
     else
