@@ -14,7 +14,7 @@ const os = require('os');
 const execAsync = promisify(exec);
 
 describe('Issue #5121: backtestサービス重複ログ問題修正確認', () => {
-  const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
+  const entrypointPath = path.join(__dirname, '..', '..', '..', 'entrypoint.sh');
   
   test('Issue #5121の修正が適用されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
@@ -41,7 +41,7 @@ describe('Issue #5121: backtestサービス重複ログ問題修正確認', () =
 
     beforeEach(() => {
       // .tmpディレクトリ内にテスト用ディレクトリを作成
-      tmpDir = path.join(__dirname, '..', '.tmp');
+      tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
       }
