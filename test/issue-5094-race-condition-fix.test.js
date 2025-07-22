@@ -194,7 +194,7 @@ log_startup_message "${testMessage}"
         
         // 検証: 少なくとも1つのプロセスが実行されている
         expect(allOutput).toContain('PARALLEL-');
-    }, 15000);
+    }, 10000);
 
     /**
      * テスト3: ロック機構の安定性確認
@@ -419,5 +419,5 @@ log_startup_message "${testMessage}"  # 2回目の呼び出し（重複チェッ
         expect(result.stdout).toMatch(/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \[ENTRYPOINT\] Starting strategy-runner container with enhanced error handling/);
         
         console.log('統合テスト結果:', result.stdout);
-    }, 15000);
+    }, 10000);
 });
