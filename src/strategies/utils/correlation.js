@@ -297,7 +297,7 @@ class StatisticalPairTrading {
    * @returns {Array} 取引ペア配列
    */
   async findTradingPairs(symbolsData) {
-    const symbols = Object.keys(symbolsData);
+    const symbols = Object.keys(symbolsData || {});
     const pairs = [];
 
     for (let i = 0; i < symbols.length; i++) {

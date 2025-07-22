@@ -81,7 +81,7 @@ async function mutualInformationStrategy(exchange, symbol, strategyKey, config, 
     });
   }
 
-  let { referenceSymbols = ['BTC/USDT'] } = config;
+  let { referenceSymbols = ['BTC/USDT'] } = config || {};
 
   // 動的ペア選択の使用
   if (strategy_mode === 'enhanced' && options.referenceSymbols) {
