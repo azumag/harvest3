@@ -55,7 +55,7 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       
       // Issue #5121: リトライ機構の簡素化（3回まで）
       expect(entrypointContent).toContain('local max_attempts=3');
-      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
+      // Issue #5121では複雑なwhileリトライループが削除され、シンプルな実装になった
     });
 
     test('起動ロック取得後のメッセージ出力順序が修正されている', () => {
@@ -143,9 +143,9 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       // 古い最大試行回数設定は削除されている
       expect(entrypointContent).not.toContain('max_attempts=5');
       
-      // Issue #5121の新しい実装では3回のリトライが使用される
+      // Issue #5121の新しい実装では3回のリトライが使用されるが、複雑なwhileループは簡素化された
       expect(entrypointContent).toContain('local max_attempts=3');
-      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
+      // whileループは簡素化実装では削除されている
     });
   });
 

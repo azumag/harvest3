@@ -56,9 +56,23 @@ describe('Issue #5057: strategy-runnerサービス重複メッセージ レー�
       if (fs.existsSync(lockDir)) {
         const files = fs.readdirSync(lockDir);
         files.forEach(file => {
-          fs.unlinkSync(path.join(lockDir, file));
+          const filePath = path.join(lockDir, file);
+          try {
+            // Issue #5121: ロックファイルがディレクトリの場合を考慮
+            if (fs.statSync(filePath).isDirectory()) {
+              fs.rmdirSync(filePath);
+            } else {
+              fs.unlinkSync(filePath);
+            }
+          } catch (error) {
+            // ファイル/ディレクトリが既に削除されている場合は無視
+          }
         });
-        fs.rmdirSync(lockDir);
+        try {
+          fs.rmdirSync(lockDir);
+        } catch (error) {
+          // ディレクトリが既に削除されている場合は無視
+        }
       }
     });
 

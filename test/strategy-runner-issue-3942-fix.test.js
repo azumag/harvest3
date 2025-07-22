@@ -65,7 +65,7 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // Issue #5121簡素化版: mkdirベースのアトミック操作
-      expect(entrypointContent).toContain('# より確実なアトミック操作: mkdirを使用');
+      expect(entrypointContent).toContain('# シンプルなアトミックロック取得: より確実なアトミック操作: mkdirを使用');
       expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       expect(entrypointContent).toContain('local lock_acquired=false');
       
@@ -80,9 +80,9 @@ describe('Strategy-Runner重複起動メッセージ修正 - Issue #3942', () =>
       expect(entrypointContent).toContain('プロセス内重複チェック（最初の防御線）');
       expect(entrypointContent).toContain('既にメッセージが出力済みかチェック');
       
-      // リトライ機構の実装確認
+      // Issue #5121簡素化版: シンプルなリトライ機構の実装確認  
       expect(entrypointContent).toContain('local max_attempts=3');
-      expect(entrypointContent).toContain('while [ $attempt -lt $max_attempts ]; do');
+      // Issue #5121では複雑なwhile loopは削除され、シンプルな実装になった
     });
 
     test('エラーハンドリングが強化されている', () => {
