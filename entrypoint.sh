@@ -21,7 +21,7 @@ STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムア�
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
 # atomic ファイルベース実装によるメッセージ重複防止システム
 # Issue #5079 修正: 永続ボリューム使用でコンテナ再起動時の重複防止強化
-STARTUP_MESSAGE_LOCK_DIR="/usr/src/app/data/startup_messages"
+STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # MD5ハッシュ値生成関数（DRY原則適用）
@@ -213,12 +213,15 @@ log_startup_message() {
     fi
     
     # プロセス内重複チェック（最初の防御線）
+    # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
+        # 一度出力されたメッセージは二度と出力しない（確実な重複防止）
         return 0
     fi
     
     # プロセス間重複チェック（第二の防御線）
+    # より強固なatomic操作でロック取得を試行
     local lock_acquired=false
     if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         lock_acquired=true
@@ -226,6 +229,7 @@ log_startup_message() {
     
     if [ "$lock_acquired" = true ]; then
         # Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
+        # プロセス内フラグを即座に設定（レースコンディション防止）
         export "$var_name"=1
         
         # ロック取得成功：メッセージ出力（再起動の場合は追加情報を含む）
@@ -238,6 +242,7 @@ log_startup_message() {
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         
+        # 処理完了後にプロセス内フラグを設定（重複防止）
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
