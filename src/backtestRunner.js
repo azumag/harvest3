@@ -432,8 +432,8 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       const uniqueCombinationsMap = new Map();
 
       parameterCombinations.forEach(combo => {
-        // null/undefinedチェックを追加してTypeErrorを防ぐ
-        if (!combo || typeof combo !== 'object') {
+        // 共通バリデーション関数を使用してTypeErrorを防ぐ
+        if (!isValidParameterCombination(combo)) {
           console.warn('無効なパラメータ組み合わせをスキップ:', combo);
           return;
         }
@@ -459,8 +459,8 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
     // 各パラメータ組み合わせでバックテスト実行
     for (const paramCombination of parameterCombinations) {
-      // null/undefinedチェックを追加してエラーを防ぐ
-      if (!paramCombination || typeof paramCombination !== 'object') {
+      // 共通バリデーション関数を使用してエラーを防ぐ
+      if (!isValidParameterCombination(paramCombination)) {
         console.warn('無効なパラメータ組み合わせをスキップ:', paramCombination);
         continue;
       }
@@ -946,12 +946,24 @@ function evaluateParameterCombination(
 }
 
 /**
+ * パラメータ組み合わせが有効かどうかを検証する
+ * @param {any} combo - 検証対象のパラメータ組み合わせ
+ * @returns {boolean} 有効な場合はtrue
+ */
+function isValidParameterCombination(combo) {
+  return combo && 
+         combo !== null && 
+         typeof combo === 'object' && 
+         !Array.isArray(combo);
+}
+
+/**
  * オブジェクトから数値型のプロパティキーを抽出する
  * @param {Object|null|undefined} config - 設定オブジェクト
  * @returns {Array} 数値型のプロパティキーの配列
  */
 function extractNumericParameterKeys(config) {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+  if (!isValidParameterCombination(config)) {
     return [];
   }
   return Object.keys(config).filter(key => typeof config[key] === 'number');
