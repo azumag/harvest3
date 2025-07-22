@@ -20,7 +20,8 @@ STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムア�
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
 # atomic ファイルベース実装によるメッセージ重複防止システム
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+# Issue #5079 修正: 永続ボリューム使用でコンテナ再起動時の重複防止強化
+STARTUP_MESSAGE_LOCK_DIR="/usr/src/app/data/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # MD5ハッシュ値生成関数（DRY原則適用）
@@ -199,17 +200,25 @@ log_startup_message() {
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
-    # 簡素化実装：待機ロジックを削除し、即座にプロセス内フラグをチェック
+    # Issue #5079 修正: コンテナ再起動検出機能追加
+    local restart_detected=false
+    if [ -f "$lock_file" ]; then
+        local old_pid_info=$(cat "$lock_file" 2>/dev/null || echo "")
+        if [ -n "$old_pid_info" ]; then
+            restart_detected=true
+            log "Container restart detected (previous execution: $old_pid_info, current PID: $$)"
+            # 古いロックファイルをクリーンアップ
+            rm -f "$lock_file" 2>/dev/null
+        fi
+    fi
+    
     # プロセス内重複チェック（最初の防御線）
     if [ "${!var_name}" = "1" ]; then
         # 既に同じメッセージを出力済み（プロセス内重複）
-        # 一度出力されたメッセージは二度と出力しない（確実な重複防止）
         return 0
     fi
     
-    # プロセス内フラグを即座に設定（レースコンディション防止）
     # プロセス間重複チェック（第二の防御線）
-    # より強固なatomic操作でロック取得を試行
     local lock_acquired=false
     if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
         lock_acquired=true
@@ -219,17 +228,19 @@ log_startup_message() {
         # Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
         export "$var_name"=1
         
-        # ロック取得成功：メッセージ出力
-        log "$message"
+        # ロック取得成功：メッセージ出力（再起動の場合は追加情報を含む）
+        if [ "$restart_detected" = true ]; then
+            log "$message (container restarted)"
+        else
+            log "$message"
+        fi
         
-        # 処理完了後にプロセス内フラグを設定（重複防止）
         # ロックファイルのクリーンアップ（30秒後）
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         
         return 0
     else
         # ロック取得失敗：他のプロセスが処理中または処理済み
-        # フラグは設定しない（他のプロセスがメッセージ出力を担当）
         return 0
     fi
 }
