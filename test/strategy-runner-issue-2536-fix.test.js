@@ -223,7 +223,7 @@ fs.unlinkSync(testPath);
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 重複防止対象のメッセージが適切に処理されることを確認
-      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
+      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
       expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
       
       // シンプルな実装が使用されていることを確認
