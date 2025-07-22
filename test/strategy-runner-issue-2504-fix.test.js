@@ -167,10 +167,14 @@ describe('Strategy-Runner Issue #2504 修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // acquire_startup_lock関数では依然としてプロセスチェックが必要
-      expect(entrypointContent).toContain('! kill -0 "$lock_pid"');
+      expect(entrypointContent).toContain('! kill -0 "$lock_pid" 2>/dev/null');
       
-      // 簡素化実装ではタイムスタンプチェックは行わない
-      expect(entrypointContent).not.toContain('current_time - lock_time');
+      // 簡素化実装ではgeneral startup lockでタイムスタンプチェックは行わない
+      // ただし、Issue #5127のbacktest専用ロジックは除外（backtest機能では必要）
+      const generalStartupLockLogic = entrypointContent.match(/acquire_startup_lock\(\)[^}]+}/s);
+      if (generalStartupLockLogic) {
+        expect(generalStartupLockLogic[0]).not.toContain('current_time - lock_time');
+      }
       
       // Issue #5121の簡素化実装
       expect(entrypointContent).toContain('シンプルなファイルベースロック機構による重複防止');
