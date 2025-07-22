@@ -213,26 +213,19 @@ log_startup_message() {
     # アトミックなロック取得を試行（改良版）
     local lock_acquired=false
     local max_attempts=3
-    local attempt=0
     
-    while [ $attempt -lt $max_attempts ]; do
-        # より確実なアトミック操作: mkdirを使用
-        if mkdir "$lock_file" 2>/dev/null; then
-            lock_acquired=true
-            break
+    # 既存ロックが古い場合（60秒以上）は削除
+    if [ -d "$lock_file" ]; then
+        local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt 60 ]; then
+            rm -rf "$lock_file" 2>/dev/null
         fi
-        
-        # 既存ロックが古い場合（60秒以上）は削除
-        if [ -d "$lock_file" ]; then
-            local lock_age=$(($(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-            if [ $lock_age -gt 60 ]; then
-                rm -rf "$lock_file" 2>/dev/null
-            fi
-        fi
-        
-        attempt=$((attempt + 1))
-        sleep 0.1
-    done
+    fi
+    
+    # シンプルなアトミックロック取得: より確実なアトミック操作: mkdirを使用
+    if mkdir "$lock_file" 2>/dev/null; then
+        lock_acquired=true
+    fi
     
     if [ "$lock_acquired" = true ]; then
         # 二重チェック: 出力中に他のプロセスが完了していないか確認
