@@ -289,7 +289,7 @@ class BalanceMonitor {
 
     // 取引停止の検討
     const majorDiscrepancies = discrepancies.filter(d =>
-      d.discrepancies.max >= this.config.tradingHalt.majorDiscrepancyThreshold
+      d.discrepancyPercent >= this.config.tradingHalt.majorDiscrepancyThreshold
     );
 
     if (majorDiscrepancies.length > 0) {
@@ -380,7 +380,6 @@ class BalanceMonitor {
 
     for (const discrepancy of discrepancies) {
       message += `**${discrepancy.currency}**\n`;
-      message += `- 最大乖離: ${discrepancy.discrepancies.max}\n`;
       message += `- 乖離率: ${discrepancy.discrepancyPercent.toFixed(2)}%\n\n`;
     }
 
