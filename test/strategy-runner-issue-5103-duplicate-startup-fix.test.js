@@ -16,7 +16,7 @@ const execAsync = promisify(exec);
 
 // テスト用の一時ディレクトリ
 const TEST_TMP_DIR = '/tmp/test-issue-5103';
-const ENTRYPOINT_PATH = path.join(__dirname, '..', 'entrypoint.sh');
+const ENTRYPOINT_PATH = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
 
 describe('Issue #5103: Strategy-runner重複ログメッセージ修正', () => {
     beforeEach(() => {
