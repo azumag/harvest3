@@ -433,7 +433,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
 
       parameterCombinations.forEach(combo => {
         // null/undefinedチェックを追加してTypeErrorを防ぐ
-        if (!combo || typeof combo !== 'object') {
+        if (!combo || combo === null || Array.isArray(combo) || typeof combo !== 'object') {
           console.warn('無効なパラメータ組み合わせをスキップ:', combo);
           return;
         }

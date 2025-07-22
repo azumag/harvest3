@@ -558,7 +558,7 @@ async function getStrategyParametersRedis(exchangeId, symbol, strategyKey) {
 
     const params = await client.hGetAll(key);
 
-    if (params && typeof params === 'object' && Object.keys(params).length > 0) {
+    if (params && params !== null && typeof params === 'object' && !Array.isArray(params) && Object.keys(params).length > 0) {
       const parsedParams = {};
       for (const [paramKey, value] of Object.entries(params)) {
         parsedParams[paramKey] = parseParamValue(value);
@@ -592,7 +592,7 @@ async function getAllStrategyParametersRedis() {
 
     for (const key of keys) {
       const params = await client.hGetAll(key);
-      if (params && typeof params === 'object' && Object.keys(params).length > 0) {
+      if (params && params !== null && typeof params === 'object' && !Array.isArray(params) && Object.keys(params).length > 0) {
         const parsedParams = {};
         for (const [paramKey, value] of Object.entries(params)) {
           parsedParams[paramKey] = parseParamValue(value);
