@@ -135,7 +135,7 @@ log_startup_message() {
     export "$var_name"=1
     
     # ロック取得試行
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    if mkdir "$lock_file" 2>/dev/null; then
         echo "[ENTRYPOINT] $message"
         return 0
     else
@@ -194,7 +194,7 @@ log_startup_message() {
     # Issue #5057修正: フラグを即座に設定
     export "$var_name"=1
     
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    if mkdir "$lock_file" 2>/dev/null; then
         echo "[ENTRYPOINT] $message"
         return 0
     else

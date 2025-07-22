@@ -62,7 +62,7 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       
       // プロセス間重複チェック機能の確認
       expect(entrypointContent).toContain('# プロセス間重複チェック（第二の防御線）');
-      expect(entrypointContent).toContain('set -C; echo "$$:$(date +%s.%N)" > "$lock_file"');
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 環境変数のexportによるフラグ設定の確認
       expect(entrypointContent).toContain('export "$var_name"=1');
@@ -229,8 +229,8 @@ describe('Strategy-Runner Issue #2530 修正: 重複起動メッセージ問題'
       expect(entrypointContent).not.toContain('max_attempts=5');
       expect(entrypointContent).not.toContain('while [ $attempt -lt $max_attempts ]');
       
-      // シンプルなatomic操作のみ使用
-      expect(entrypointContent).toContain('set -C; echo "$$:$(date +%s.%N)" > "$lock_file"');
+      // Issue #5121 修正: mkdirベースのシンプルなatomic操作のみ使用
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
     });
 
     test('レースコンディション対策の改善', () => {

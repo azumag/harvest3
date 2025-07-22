@@ -121,11 +121,11 @@ describe('Strategy-Runner Issue #2504 修正', () => {
     test('atomicロック取得の実装が正しい', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // set -C を使ったatomic操作の実装確認
-      expect(entrypointContent).toContain('(set -C; echo "$$:$(date +%s.%N)" > "$lock_file")');
+      // Issue #5121 修正: mkdirベースのatomic操作の実装確認
+      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
       
       // 重複チェック機能の実装確認
-      expect(entrypointContent).toContain('より強固なatomic操作でロック取得を試行');
+      expect(entrypointContent).toContain('lock_acquired=true');
       
       // エラーハンドリングの実装確認
       expect(entrypointContent).toContain('2>/dev/null');

@@ -94,7 +94,7 @@ log_startup_message() {
     
     # プロセス間重複チェック（第二の防御線）
     # より強固なatomic操作でロック取得を試行
-    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+    if (if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null; then
         # ロック取得成功：メッセージ出力
         log "$message"
         
@@ -103,7 +103,7 @@ log_startup_message() {
         
         return 0
     else
-        # ロック取得失敗：他のプロセスが処理中または処理済み
+        # ロック取得失敗：lock_acquired=true
         # プロセス内フラグは既に設定済みなので、このプロセスでは今後同じメッセージは出力されない
         return 0
     fi
@@ -200,7 +200,7 @@ log_startup_message() {
     
     export "$var_name"=1
     
-    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+    if (if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null; then
         log "$message"
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         return 0

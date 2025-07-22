@@ -111,7 +111,7 @@ log_startup_message() {
     
     export "$var_name"=1
     
-    if (set -C; echo "$$:$(date +%s.%N)" > "$lock_file") 2>/dev/null; then
+    if (if mkdir "$lock_file" 2>/dev/null; then) 2>/dev/null; then
         log "$message"
         (sleep 30 && rm -f "$lock_file" 2>/dev/null) &
         return 0

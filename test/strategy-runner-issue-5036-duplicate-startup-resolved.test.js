@@ -25,7 +25,7 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     expect(entrypointContent).toContain('log_startup_message()');
     expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
     expect(entrypointContent).toContain('get_message_hash');
-    expect(entrypointContent).toContain('set -C');
+    expect(entrypointContent).toContain('mkdir \"$lock_file\"');
     
     // Issue #5049の修正が適用されていることを確認
     expect(entrypointContent).toContain('log() {');
@@ -163,7 +163,7 @@ log_startup_message() {
     
     export "$var_name"=1
     
-    if (set -C; echo "$$" > "$lock_file") 2>/dev/null; then
+    if mkdir "$lock_file" 2>/dev/null; then
         echo "[ENTRYPOINT] $message"
         return 0
     fi
