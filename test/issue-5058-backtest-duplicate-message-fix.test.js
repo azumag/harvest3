@@ -262,7 +262,7 @@ wait
     });
     
     // 既存のメッセージ呼び出しが正しく保持されている
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
