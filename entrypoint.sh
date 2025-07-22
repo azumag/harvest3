@@ -216,7 +216,7 @@ log_startup_message() {
     fi
     
     if [ "$lock_acquired" = true ]; then
-        # Issue #5088 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
+        # Issue #5057 修正: レースコンディション解消のためフラグ設定をロック取得後に移動
         export "$var_name"=1
         
         # ロック取得成功：メッセージ出力
