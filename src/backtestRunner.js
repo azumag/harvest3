@@ -275,7 +275,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
     }
   } finally {
     // バックテスト終了後の処理
-    process.exit(0);
+    // 長時間実行モードでない場合のみプロセスを終了
+    if (process.env.TEST_MODE !== 'true' && !process.env.BACKTEST_LONG_RUNNING_MODE) {
+      process.exit(0);
+    }
   }
 }
 
