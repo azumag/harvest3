@@ -1202,7 +1202,7 @@ main() {
             fi
         fi
         
-        # Issue #5127対策: exec実行前のファイナルチェックとエラーハンドリング強化
+        # Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止
         log_backtest_startup_message "Executing backtest command with enhanced error handling..."
         
         # backtest開始時刻を記録（問題追跡用）
