@@ -20,6 +20,12 @@ DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通�
 LOCK_CLEANUP_TIMEOUT=${LOCK_CLEANUP_TIMEOUT:-60}  # 古いロックファイル削除タイムアウト（秒）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカーファイル削除遅延（秒）
 
+# Issue #5195: マジックナンバー定数化（KISS/DRY原則適用）
+SAME_CONTAINER_DUPLICATE_THRESHOLD=${SAME_CONTAINER_DUPLICATE_THRESHOLD:-30}  # 同一コンテナ重複検出閾値（秒）
+SUCCESS_FILE_MAX_AGE=${SUCCESS_FILE_MAX_AGE:-300}  # success file最大寿命（秒）
+MAX_LOCK_ATTEMPTS=${MAX_LOCK_ATTEMPTS:-3}  # ロック取得最大試行回数
+LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-1}  # ロックリトライ待機時間（秒）
+
 # バックグラウンドプロセス追跡
 BACKGROUND_CLEANUP_PIDS=""
 
@@ -291,7 +297,85 @@ log_backtest_startup_message() {
     fi
 }
 
-# 重複起動ログ防止関数（Issue #5103 修正: 簡素化による信頼性向上版）
+# Issue #5195: success file検証ヘルパー関数（DRY原則適用）
+validate_success_file() {
+    local success_file="$1"
+    local container_id="$2" 
+    local current_time="$3"
+    
+    if [ ! -f "$success_file" ]; then
+        return 1  # ファイルが存在しない = 重複なし
+    fi
+    
+    local file_content=$(cat "$success_file" 2>/dev/null || echo "")
+    local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
+    local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
+    
+    # 同一コンテナかつ最近の場合は重複
+    if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
+        return 0  # 重複検出
+    fi
+    
+    # 異なるコンテナまたは古いエントリの場合はクリーンアップ
+    if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt $SUCCESS_FILE_MAX_AGE ]; then
+        rm -f "$success_file" 2>/dev/null || true
+    fi
+    
+    return 1  # 重複なし
+}
+
+# Issue #5195: atomicロック取得ヘルパー関数（KISS原則適用）
+acquire_message_lock() {
+    local lock_file="$1"
+    local process_info="$2"
+    local current_time="$3"
+    
+    # 古いロックファイルのクリーンアップ
+    if [ -f "$lock_file" ]; then
+        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
+            rm -f "$lock_file" 2>/dev/null || true
+        fi
+    fi
+    
+    # リトライ付きロック取得
+    local lock_attempts=0
+    while [ $lock_attempts -lt $MAX_LOCK_ATTEMPTS ]; do
+        if mkdir "$lock_file" 2>/dev/null; then
+            # プロセス情報を記録
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            return 0  # ロック取得成功
+        else
+            lock_attempts=$((lock_attempts + 1))
+            if [ $lock_attempts -lt $MAX_LOCK_ATTEMPTS ]; then
+                sleep $LOCK_RETRY_DELAY
+            fi
+        fi
+    done
+    
+    return 1  # ロック取得失敗
+}
+
+# Issue #5195: success file atomicクリエーションヘルパー関数（KISS原則適用）
+create_success_file() {
+    local success_file="$1"
+    local process_info="$2"
+    local message="$3"
+    
+    local temp_success_file="${success_file}.tmp.$$"
+    if echo "$process_info" > "$temp_success_file" 2>/dev/null; then
+        if mv "$temp_success_file" "$success_file" 2>/dev/null; then
+            log "$message"
+            return 0  # 成功
+        else
+            rm -f "$temp_success_file" 2>/dev/null || true
+        fi
+    fi
+    
+    return 1  # 失敗
+}
+
+# 重複起動ログ防止関数（Issue #5195 修正: KISS/DRY原則適用によるリファクタリング版）
 # シンプルで確実な重複防止機構
 log_startup_message() {
     local message="$1"
@@ -310,7 +394,6 @@ log_startup_message() {
     
     # Redisが利用可能な場合はRedisベースの重複防止を実行
     if command -v node >/dev/null 2>&1 && [ -n "$REDIS_URL" ]; then
-        # Redis check and set with 300 second TTL
         local redis_check_result=$(node -e "
             const redis = require('redis');
             const client = redis.createClient({url: process.env.REDIS_URL});
@@ -323,13 +406,12 @@ log_startup_message() {
                     console.log('duplicate');
                     process.exit(0);
                 }
-                await client.setEx(key, 300, value);
+                await client.setEx(key, $SUCCESS_FILE_MAX_AGE, value);
                 console.log('new');
                 process.exit(0);
             }).catch(() => process.exit(1));
         " 2>/dev/null || echo "error")
         
-        # Redis check succeeded and message is duplicate
         if [ "$redis_check_result" = "duplicate" ]; then
             return 0
         fi
@@ -337,63 +419,45 @@ log_startup_message() {
     
     # Issue #5103: プロセス内での確実な重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
-    
-    # 同一プロセス内で既に出力済みの場合は即座に終了
     if [ "${!var_name}" = "1" ]; then
         return 0
     fi
     
-    # Issue #5103: シンプルなファイルベース重複防止（第二防御線）
+    # success file とロック file の準備
     local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    local process_info="${current_time}:$$:${container_id}"
     
-    # 既に出力済みファイルが存在する場合は処理終了
-    if [ -f "$success_file" ]; then
+    # Issue #5195: 最初にsuccess fileをチェック（DRY原則適用）
+    if validate_success_file "$success_file" "$container_id" "$current_time"; then
         export "$var_name"=1
         return 0
     fi
     
-    # Issue #5103: atomic file creation with flock-like behavior
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    local current_time=$(date +%s)
-    
-    # 古いロックファイルのクリーンアップ（60秒以上前）
-    if [ -f "$lock_file" ]; then
-        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt 60 ]; then
-            rm -f "$lock_file" 2>/dev/null || true
-        fi
-    fi
-    
-    # Issue #5103: mkdir-based atomic lock (more reliable than set -C subshell)
-    if mkdir "$lock_file" 2>/dev/null; then
-        # ロック取得成功 - 最終チェックしてメッセージ出力
+    # Issue #5195: atomicロック取得（KISS原則適用）
+    if acquire_message_lock "$lock_file" "$process_info" "$current_time"; then
+        # 最終的なsuccess_fileチェック（二重実行防止）
         if [ ! -f "$success_file" ]; then
-            # プロセス内フラグを先に設定（重複実行の完全防止）
             export "$var_name"=1
             
-            # success file作成とメッセージ出力をatomicに近い形で実行
-            if echo "${current_time}:$$" > "$success_file" 2>/dev/null; then
-                # success file作成成功時のみメッセージ出力
-                log "$message"
-            fi
+            # Issue #5195: success file作成とメッセージ出力（KISS原則適用）
+            create_success_file "$success_file" "$process_info" "$message"
             
-            # Issue #5103: バックグラウンドクリーンアップ（300秒後）
+            # バックグラウンドクリーンアップ
             (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
             local cleanup_pid=$!
             BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
         else
-            # 他のプロセスが既に完了済み
             export "$var_name"=1
         fi
         
         # ロック解放
         rm -rf "$lock_file" 2>/dev/null || true
-        return 0
     else
-        # ロック取得失敗 - 他のプロセスが処理中または完了済み
         export "$var_name"=1
-        return 0
     fi
+    
+    return 0
 }
 
 # 起動ロック関数
