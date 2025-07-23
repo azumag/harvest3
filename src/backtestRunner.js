@@ -1532,6 +1532,22 @@ async function main() {
 }
 
 // バックテストを開始（テストモード以外の場合のみ）
+// Issue #5191 修正: async main関数の適切なエラーハンドリング
 if (process.env.TEST_MODE !== 'true') {
-  main();
+  main().catch(error => {
+    console.error('バックテストメイン関数で致命的エラーが発生しました:', error);
+    console.error('エラースタック:', error.stack);
+    
+    // Discord通知（利用可能な場合）
+    if (typeof postErrorToDiscord === 'function') {
+      postErrorToDiscord(`バックテストメイン関数エラー: ${error.message}`).catch(console.error);
+    }
+    
+    // 不安定な状態で再起動ループを避けるため、エラー時は長時間待機後に終了
+    console.log('エラー発生のため30秒待機後にプロセスを終了します（再起動ループ防止）');
+    setTimeout(() => {
+      console.log('プロセスを終了します');
+      process.exit(1);
+    }, 30000);
+  });
 }
