@@ -50,8 +50,9 @@ HASH=$(get_message_hash "$MESSAGE")
 SUCCESS_FILE="$STARTUP_MESSAGE_LOCK_DIR/$HASH.done"
 
 # 異なるコンテナIDでsuccess fileを作成
+# eslint-disable-next-line no-undef
 CURRENT_TIME=$(date +%s)
-echo "${CURRENT_TIME}:12345:different-container" > "$SUCCESS_FILE"
+echo "\${CURRENT_TIME}:12345:different-container" > "$SUCCESS_FILE"
 
 # 現在のコンテナIDで実行（different-containerとは異なるため出力される）
 log_startup_message "$MESSAGE"
@@ -84,9 +85,11 @@ HASH=$(get_message_hash "$MESSAGE")
 SUCCESS_FILE="$STARTUP_MESSAGE_LOCK_DIR/$HASH.done"
 
 # 現在のコンテナIDとタイムスタンプでsuccess fileを作成（最近の実行として）
+# eslint-disable-next-line no-undef
 CURRENT_TIME=$(date +%s)
+# eslint-disable-next-line no-undef
 CONTAINER_ID=$(hostname)
-echo "${CURRENT_TIME}:12345:${CONTAINER_ID}" > "$SUCCESS_FILE"
+echo "\${CURRENT_TIME}:12345:\${CONTAINER_ID}" > "$SUCCESS_FILE"
 
 # 同一コンテナで再実行（30秒以内なので出力されない）
 log_startup_message "$MESSAGE"
@@ -125,9 +128,11 @@ HASH=$(get_message_hash "$MESSAGE")
 SUCCESS_FILE="$STARTUP_MESSAGE_LOCK_DIR/$HASH.done"
 
 # 5分以上前のタイムスタンプでsuccess fileを作成
+# eslint-disable-next-line no-undef
 OLD_TIME=$(($(date +%s) - 301))
+# eslint-disable-next-line no-undef
 CONTAINER_ID=$(hostname)
-echo "${OLD_TIME}:12345:${CONTAINER_ID}" > "$SUCCESS_FILE"
+echo "\${OLD_TIME}:12345:\${CONTAINER_ID}" > "$SUCCESS_FILE"
 
 echo "Old success file created"
 
@@ -266,7 +271,8 @@ if [ -f "$SUCCESS_FILE" ]; then
 fi
 
 # 一時ファイルが残っていないことを確認
-TEMP_FILES=$(ls ${SUCCESS_FILE}.tmp.* 2>/dev/null | wc -l)
+# eslint-disable-next-line no-undef
+TEMP_FILES=$(ls \${SUCCESS_FILE}.tmp.* 2>/dev/null | wc -l)
 if [ "$TEMP_FILES" -eq 0 ]; then
     echo "No temporary files left behind"
 fi
