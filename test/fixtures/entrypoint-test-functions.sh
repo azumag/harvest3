@@ -6,11 +6,15 @@
 # 設定（テスト用にシンプル化）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-2}
 
-# Issue #5195: マジックナンバー定数化（メイン実装と統一）
+# Issue #5172: マジックナンバー定数化（メイン実装と統一・リファクタリング版）
 SAME_CONTAINER_DUPLICATE_THRESHOLD=${SAME_CONTAINER_DUPLICATE_THRESHOLD:-30}
 SUCCESS_FILE_MAX_AGE=${SUCCESS_FILE_MAX_AGE:-300}
 MAX_LOCK_ATTEMPTS=${MAX_LOCK_ATTEMPTS:-5}  # テスト用により多くの試行
 LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-0.01}  # テスト用により高速化
+
+# Issue #5172: リファクタリング後の設定
+REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}
+DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-file_only}  # テスト用はfile_only
 
 # 重複起動メッセージ防止（ファイルベースの超簡素版）
 STARTUP_MESSAGE_LOCK_DIR=${STARTUP_MESSAGE_LOCK_DIR:-"/tmp/startup_messages"}
@@ -21,7 +25,86 @@ get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
 }
 
-# 超軽量版：重複起動ログ防止関数
+# Issue #5172: 共通クリーンアップ関数（テスト用簡易版）
+cleanup_old_lock_file() {
+    local lock_file="$1"
+    local max_age="$2"
+    local current_time="$3"
+    
+    if [ -f "$lock_file" ] || [ -d "$lock_file" ]; then
+        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt $max_age ]; then
+            rm -rf "$lock_file" 2>/dev/null || true
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Issue #5172: ファイルベースフォールバック関数（テスト用簡易版）
+fallback_to_file_based_prevention() {
+    local message="$1"
+    local message_hash="$2"
+    local container_id=$(hostname)
+    local current_time=$(date +%s)
+    
+    # プロセス内重複防止
+    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
+    if [ "${!var_name}" = "1" ]; then
+        return 0
+    fi
+    
+    # ファイルベース重複防止
+    local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # success_fileチェック
+    if [ -f "$success_file" ]; then
+        local file_content=$(cat "$success_file" 2>/dev/null || echo "")
+        local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
+        local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
+        
+        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
+            export "$var_name"=1
+            return 0
+        fi
+        
+        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt $SUCCESS_FILE_MAX_AGE ]; then
+            rm -f "$success_file" 2>/dev/null || true
+        fi
+    fi
+    
+    # ロッククリーンアップ
+    cleanup_old_lock_file "$lock_file" "$SAME_CONTAINER_DUPLICATE_THRESHOLD" "$current_time"
+    
+    # ロック取得とメッセージ出力
+    local process_info="${container_id}:$$:${current_time}"
+    local attempt=0
+    while [ $attempt -lt $MAX_LOCK_ATTEMPTS ]; do
+        if mkdir "$lock_file" 2>/dev/null; then
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            sleep 0.01
+            break
+        fi
+        attempt=$((attempt + 1))
+        sleep $LOCK_RETRY_DELAY
+    done
+    
+    if [ ! -f "$success_file" ]; then
+        echo "$message"
+        export "$var_name"="1"
+        echo "${current_time}:$$:${container_id}" > "$success_file" 2>/dev/null || true
+        
+        if [ "$SUCCESS_FILE_CLEANUP_DELAY" -lt 10 ]; then
+            (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
+        fi
+    fi
+    
+    rm -rf "$lock_file" 2>/dev/null || true
+    return 0
+}
+
+# Issue #5172: メイン重複防止関数（テスト用簡易版）
 log_startup_message() {
     local message="$1"
     
@@ -31,89 +114,10 @@ log_startup_message() {
         return $?
     fi
     
-    # ハッシュ生成
     local message_hash=$(get_message_hash "$message")
-    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    # プロセス内重複チェック
-    if [ "${!var_name}" = "1" ]; then
-        return 0
-    fi
-    
-    # Issue #5195: success_fileの二重チェック（コンテナ再起動時のレースコンディション防止）
-    local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
-    local current_time=$(date +%s)
-    local container_id=$(hostname)
-    
-    if [ -f "$success_file" ]; then
-        local file_content=$(cat "$success_file" 2>/dev/null || echo "")
-        local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
-        local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
-        
-        # 同一コンテナかつ最近の場合はスキップ
-        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
-            export "$var_name"=1
-            return 0
-        fi
-        
-        # 異なるコンテナまたは古いエントリの場合はクリーンアップ
-        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt $SUCCESS_FILE_MAX_AGE ]; then
-            rm -f "$success_file" 2>/dev/null || true
-        fi
-    fi
-    
-    # Issue #5195: 簡素化されたロック機構（findコマンド除去、高速化）
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    
-    # Issue #5195: 古いロックファイルのより厳格なクリーンアップ
-    if [ -f "$lock_file" ]; then
-        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
-            rm -f "$lock_file" 2>/dev/null || true
-        fi
-    fi
-    
-    local max_attempts=$MAX_LOCK_ATTEMPTS
-    local attempt=0
-    
-    # 軽量ロック取得
-    local process_info="${container_id}:$$:${current_time}"
-    while [ $attempt -lt $max_attempts ]; do
-        if mkdir "$lock_file" 2>/dev/null; then
-            # Issue #5195: ロック取得成功 - プロセス情報を記録
-            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
-            # テスト用に少し待機してロックファイルが確認できるようにする（CI高速化のため短縮）
-            sleep 0.01
-            break
-        fi
-        attempt=$((attempt + 1))
-        sleep $LOCK_RETRY_DELAY
-    done
-    
-    # 重複チェック
-    if [ -f "$success_file" ]; then
-        rm -rf "$lock_file" 2>/dev/null || true
-        return 0
-    fi
-    
-    # メッセージ出力
-    echo "$message"
-    
-    # フラグ設定
-    export "$var_name"="1"
-    
-    # Issue #5195: 成功マーカー作成（timestamp:pid:container_id形式）
-    local process_info="${current_time}:$$:${container_id}"
-    echo "$process_info" > "$success_file" 2>/dev/null || true
-    
-    # ロック解放
-    rm -rf "$lock_file" 2>/dev/null || true
-    
-    # 軽量クリーンアップ（バックグラウンド処理なし）
-    if [ "$SUCCESS_FILE_CLEANUP_DELAY" -lt 10 ]; then
-        # テスト環境では即座にクリーンアップ予約
-        (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
-    fi
+    # テスト環境では常にfile_onlyを使用
+    fallback_to_file_based_prevention "$message" "$message_hash"
     
     return 0
 }
