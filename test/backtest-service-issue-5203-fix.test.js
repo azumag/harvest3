@@ -303,7 +303,7 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
   // atomicロック動作の実動作テスト
   describe('atomicロック動作の実動作テスト', () => {
     test('並行プロセスでのatomicロック競合テスト', async () => {
-      const testLockDir = '/tmp/test-atomic-lock.dir';
+      const testLockDir = path.join(tmpDir, 'test-atomic-lock.dir');
       
       // クリーンアップ
       if (fs.existsSync(testLockDir)) {
