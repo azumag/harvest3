@@ -23,7 +23,7 @@ SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカ
 # バックグラウンドプロセス追跡
 BACKGROUND_CLEANUP_PIDS=""
 
-# Issue #5127 & #5175 専用設定: backtest container重複起動メッセージ防止強化
+# Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
