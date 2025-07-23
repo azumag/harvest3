@@ -352,48 +352,91 @@ log_startup_message() {
         return 0
     fi
     
-    # Issue #5103: atomic file creation with flock-like behavior
+    # Issue #5195: Enhanced atomic file creation with race condition prevention
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     local current_time=$(date +%s)
+    local container_id=$(hostname)
+    local process_info="${container_id}:$$:${current_time}"
     
-    # 古いロックファイルのクリーンアップ（60秒以上前）
+    # Issue #5195: 古いロックファイルのより厳格なクリーンアップ（30秒以上前）
     if [ -f "$lock_file" ]; then
         local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt 60 ]; then
+        if [ $lock_age -gt 30 ]; then
             rm -f "$lock_file" 2>/dev/null || true
         fi
     fi
     
-    # Issue #5103: mkdir-based atomic lock (more reliable than set -C subshell)
-    if mkdir "$lock_file" 2>/dev/null; then
-        # ロック取得成功 - 最終チェックしてメッセージ出力
-        if [ ! -f "$success_file" ]; then
-            # プロセス内フラグを先に設定（重複実行の完全防止）
+    # Issue #5195: success_fileの二重チェック（コンテナ再起動時のレースコンディション防止）
+    if [ -f "$success_file" ]; then
+        local file_content=$(cat "$success_file" 2>/dev/null || echo "")
+        local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
+        local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
+        
+        # 同一コンテナかつ最近（30秒以内）の場合はスキップ
+        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt 30 ]; then
             export "$var_name"=1
-            
-            # success file作成とメッセージ出力をatomicに近い形で実行
-            if echo "${current_time}:$$" > "$success_file" 2>/dev/null; then
-                # success file作成成功時のみメッセージ出力
-                log "$message"
-            fi
-            
-            # Issue #5103: バックグラウンドクリーンアップ（300秒後）
-            (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
-            local cleanup_pid=$!
-            BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
-        else
-            # 他のプロセスが既に完了済み
-            export "$var_name"=1
+            return 0
         fi
         
-        # ロック解放
-        rm -rf "$lock_file" 2>/dev/null || true
-        return 0
-    else
-        # ロック取得失敗 - 他のプロセスが処理中または完了済み
-        export "$var_name"=1
-        return 0
+        # 異なるコンテナまたは古いエントリの場合はクリーンアップ
+        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt 300 ]; then
+            rm -f "$success_file" 2>/dev/null || true
+        fi
     fi
+    
+    # Issue #5195: 強化されたmkdir-based atomic lock with retry mechanism
+    local lock_attempts=0
+    local max_lock_attempts=3
+    local lock_acquired=false
+    
+    while [ $lock_attempts -lt $max_lock_attempts ] && [ "$lock_acquired" = false ]; do
+        if mkdir "$lock_file" 2>/dev/null; then
+            # ロック取得成功 - プロセス情報を記録
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            lock_acquired=true
+            
+            # 最終的なsuccess_fileチェック（二重実行防止）
+            if [ ! -f "$success_file" ]; then
+                # プロセス内フラグを先に設定（重複実行の完全防止）
+                export "$var_name"=1
+                
+                # Issue #5195: success file作成とメッセージ出力をatomicに実行
+                local temp_success_file="${success_file}.tmp.$$"
+                if echo "${current_time}:$$:${container_id}" > "$temp_success_file" 2>/dev/null; then
+                    # atomic move operation
+                    if mv "$temp_success_file" "$success_file" 2>/dev/null; then
+                        # success file作成成功時のみメッセージ出力
+                        log "$message"
+                    else
+                        # move失敗時はクリーンアップ
+                        rm -f "$temp_success_file" 2>/dev/null || true
+                    fi
+                fi
+                
+                # Issue #5195: バックグラウンドクリーンアップ（300秒後）
+                (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
+                local cleanup_pid=$!
+                BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
+            else
+                # 他のプロセスが既に完了済み
+                export "$var_name"=1
+            fi
+            
+            # ロック解放
+            rm -rf "$lock_file" 2>/dev/null || true
+            return 0
+        else
+            # ロック取得失敗 - 短時間待機してリトライ
+            lock_attempts=$((lock_attempts + 1))
+            if [ $lock_attempts -lt $max_lock_attempts ]; then
+                sleep 1
+            fi
+        fi
+    done
+    
+    # 全てのロック取得試行が失敗した場合
+    export "$var_name"=1
+    return 0
 }
 
 # 起動ロック関数
