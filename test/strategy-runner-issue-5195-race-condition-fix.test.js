@@ -200,7 +200,8 @@ echo "Retry test completed"
         }, 15000);
 
         test('プロセス情報がロックディレクトリに記録される', async () => {
-            // entrypointテストフィクスチャから必要な実装を検証するシンプルなテスト
+            // KISS原則に従い、複雑な動的テストから静的コード検証に変更
+            // この変更により、テストの保守性と実行速度が向上
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
             // process_infoファイルを作成するロジックが存在することを確認

@@ -30,8 +30,8 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
     const entrypointPath = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
     const testScript = `#!/bin/bash
 source "${entrypointPath}"
-log_startup_message "test message"
-log_startup_message "test message"
+log_startup_message "Issue #5133: duplicate prevention test message"
+log_startup_message "Issue #5133: duplicate prevention test message"
 `;
 
     const testScriptPath = path.join(tmpDir, `test-issue-5133-${Date.now()}.sh`);
@@ -45,12 +45,12 @@ log_startup_message "test message"
       });
       
       const messages = output.split('\n').filter(line => 
-        line.includes('test message')
+        line.includes('Issue #5133: duplicate prevention test message')
       );
       
       // Issue #5133修正により重複が解消されていることを確認（1回のみ出力）
       expect(messages.length).toBe(1);
-      expect(messages[0]).toContain('test message');
+      expect(messages[0]).toContain('Issue #5133: duplicate prevention test message');
     } finally {
       if (fs.existsSync(testScriptPath)) {
         fs.unlinkSync(testScriptPath);
