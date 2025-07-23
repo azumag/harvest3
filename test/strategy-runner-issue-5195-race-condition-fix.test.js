@@ -342,13 +342,13 @@ echo "Lock cleanup test completed"
             expect(entrypointContent).toContain('Issue #5195');
             
             // 強化されたatomicロック機構が含まれていることを確認
-            expect(entrypointContent).toContain('Enhanced atomic file creation with race condition prevention');
+            expect(entrypointContent).toContain('KISS/DRY原則適用によるリファクタリング版');
             
             // コンテナIDによる検証が含まれていることを確認
             expect(entrypointContent).toContain('local container_id=$(hostname)');
             
             // リトライ機構が含まれていることを確認
-            expect(entrypointContent).toContain('max_lock_attempts=3');
+            expect(entrypointContent).toContain('MAX_LOCK_ATTEMPTS=');
             
             // atomic move操作が含まれていることを確認
             expect(entrypointContent).toContain('mv "$temp_success_file" "$success_file"');
@@ -358,9 +358,9 @@ echo "Lock cleanup test completed"
             const actualEntrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
             const entrypointContent = fs.readFileSync(actualEntrypointPath, 'utf8');
             
-            // より厳格な30秒クリーンアップタイムアウトが設定されていることを確認
-            expect(entrypointContent).toContain('if [ $lock_age -gt 30 ]');
-            expect(entrypointContent).toContain('$((current_time - file_time)) -lt 30');
+            // より厳格なクリーンアップタイムアウトが設定されていることを確認
+            expect(entrypointContent).toContain('SAME_CONTAINER_DUPLICATE_THRESHOLD');
+            expect(entrypointContent).toContain('$SAME_CONTAINER_DUPLICATE_THRESHOLD');
         });
     });
 });

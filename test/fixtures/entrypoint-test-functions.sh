@@ -6,6 +6,12 @@
 # 設定（テスト用にシンプル化）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-2}
 
+# Issue #5195: マジックナンバー定数化（メイン実装と統一）
+SAME_CONTAINER_DUPLICATE_THRESHOLD=${SAME_CONTAINER_DUPLICATE_THRESHOLD:-30}
+SUCCESS_FILE_MAX_AGE=${SUCCESS_FILE_MAX_AGE:-300}
+MAX_LOCK_ATTEMPTS=${MAX_LOCK_ATTEMPTS:-5}  # テスト用により多くの試行
+LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-0.01}  # テスト用により高速化
+
 # 重複起動メッセージ防止（ファイルベースの超簡素版）
 STARTUP_MESSAGE_LOCK_DIR=${STARTUP_MESSAGE_LOCK_DIR:-"/tmp/startup_messages"}
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
@@ -44,14 +50,14 @@ log_startup_message() {
         local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
         local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
         
-        # 同一コンテナかつ最近（30秒以内）の場合はスキップ
-        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt 30 ]; then
+        # 同一コンテナかつ最近の場合はスキップ
+        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
             export "$var_name"=1
             return 0
         fi
         
         # 異なるコンテナまたは古いエントリの場合はクリーンアップ
-        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt 300 ]; then
+        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt $SUCCESS_FILE_MAX_AGE ]; then
             rm -f "$success_file" 2>/dev/null || true
         fi
     fi
@@ -59,15 +65,15 @@ log_startup_message() {
     # Issue #5195: 簡素化されたロック機構（findコマンド除去、高速化）
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
-    # Issue #5195: 古いロックファイルのより厳格なクリーンアップ（30秒以上前）
+    # Issue #5195: 古いロックファイルのより厳格なクリーンアップ
     if [ -f "$lock_file" ]; then
         local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
-        if [ $lock_age -gt 30 ]; then
+        if [ $lock_age -gt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
             rm -f "$lock_file" 2>/dev/null || true
         fi
     fi
     
-    local max_attempts=5
+    local max_attempts=$MAX_LOCK_ATTEMPTS
     local attempt=0
     
     # 軽量ロック取得
@@ -81,7 +87,7 @@ log_startup_message() {
             break
         fi
         attempt=$((attempt + 1))
-        sleep 0.01  # 10ms待機に短縮
+        sleep $LOCK_RETRY_DELAY
     done
     
     # 重複チェック
