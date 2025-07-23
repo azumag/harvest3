@@ -154,6 +154,23 @@ class ParameterConstraintEngine {
   }
 
   /**
+   * パラメータ定義の妥当性をチェックするヘルパーメソッド
+   * @param {*} paramDefs パラメータ定義
+   * @param {string} methodName 呼び出し元メソッド名
+   * @param {*} defaultValue デフォルト値
+   * @returns {Object} {isValid: boolean, defaultValue: any}
+   */
+  validateParameterDefinitions(paramDefs, methodName, defaultValue = 0) {
+    if (!paramDefs || typeof paramDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`${methodName}: paramDefs が null または無効です`);
+      }
+      return { isValid: false, defaultValue };
+    }
+    return { isValid: true };
+  }
+
+  /**
    * 戦略の制約定義を取得
    * @param {string} strategyType 戦略タイプ
    * @returns {Object|null} 制約定義
@@ -570,6 +587,21 @@ class ParameterConstraintEngine {
       };
     }
 
+    // constraint.parameters のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      constraint.parameters, 
+      `calculateParameterQuality (戦略: ${strategyType})`,
+      {
+        validity: 0,
+        diversity: 0,
+        coverage: 0,
+        efficiency: 0
+      }
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
+    }
+
     // 妥当性: 制約を満たすパラメータの割合
     const validCount = parameterSet.filter(params => 
       this.validateCombination(params, strategyType)
@@ -603,6 +635,16 @@ class ParameterConstraintEngine {
     if (parameterSet.length === 0) {return 0;}
     if (parameterSet.length === 1) {return 0.1;} // 単一パラメータの場合は最小値
 
+    // parameterDefs のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      parameterDefs, 
+      'calculateParameterDiversity',
+      0
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
+    }
+
     const paramNames = Object.keys(parameterDefs);
     if (paramNames.length === 0) {return 0;}
 
@@ -616,7 +658,7 @@ class ParameterConstraintEngine {
       totalDiversityScore += diversityScore;
     }
 
-    return Math.min(1, totalDiversityScore / paramNames.length);
+    return paramNames.length > 0 ? Math.min(1, totalDiversityScore / paramNames.length) : 0;
   }
 
   /**
@@ -698,7 +740,23 @@ class ParameterConstraintEngine {
   assessParameterSpaceCoverage(parameterSet, parameterDefs) {
     if (parameterSet.length === 0) {return 0;}
 
+    // parameterDefs のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      parameterDefs, 
+      'assessParameterSpaceCoverage',
+      0
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
+    }
+
     const paramNames = Object.keys(parameterDefs);
+    
+    // paramNames が空の場合、division by zero を防ぐ
+    if (paramNames.length === 0) {
+      return 0;
+    }
+    
     let totalCoverage = 0;
 
     for (const paramName of paramNames) {
@@ -713,7 +771,7 @@ class ParameterConstraintEngine {
       totalCoverage += Math.min(1, coverage);
     }
 
-    return totalCoverage / paramNames.length;
+    return paramNames.length > 0 ? totalCoverage / paramNames.length : 0;
   }
 }
 

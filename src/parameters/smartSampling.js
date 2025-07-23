@@ -35,6 +35,23 @@ class SmartSamplingEngine {
   }
 
   /**
+   * パラメータ定義の妥当性をチェックするヘルパーメソッド
+   * @param {*} paramDefs パラメータ定義
+   * @param {string} methodName 呼び出し元メソッド名
+   * @param {*} defaultValue デフォルト値
+   * @returns {Object} {isValid: boolean, defaultValue: any}
+   */
+  validateParameterDefinitions(paramDefs, methodName, defaultValue = 0) {
+    if (!paramDefs || typeof paramDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`${methodName}: paramDefs が null または無効です`);
+      }
+      return { isValid: false, defaultValue };
+    }
+    return { isValid: true };
+  }
+
+  /**
    * ラテン超方体サンプリング（Latin Hypercube Sampling）
    * @param {string} strategyType 戦略タイプ
    * @param {number} count サンプル数
@@ -311,6 +328,16 @@ class SmartSamplingEngine {
    * @returns {number} 正規化距離
    */
   calculateNormalizedDistance(sample1, sample2, paramDefs) {
+    // paramDefs のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      paramDefs, 
+      'calculateNormalizedDistance',
+      0 // デフォルト値として距離0を返す
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
+    }
+
     let sumSquaredDiff = 0;
     let dimensionCount = 0;
 
@@ -545,6 +572,21 @@ class SmartSamplingEngine {
       };
     }
 
+    // constraint.parameters のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      constraint.parameters, 
+      `evaluateSamplingQuality (戦略: ${strategyType})`,
+      {
+        coverage: 0,
+        diversity: 0,
+        uniformity: 0,
+        validity: 0
+      }
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
+    }
+
     const quality = this.constraintEngine.calculateParameterQuality(samples, strategyType);
     const uniformity = this.calculateUniformity(samples, constraint.parameters);
 
@@ -563,6 +605,16 @@ class SmartSamplingEngine {
   calculateUniformity(samples, paramDefs) {
     if (samples.length < 2) {
       return 1;
+    }
+
+    // paramDefs のnullチェックを追加
+    const paramValidation = this.validateParameterDefinitions(
+      paramDefs, 
+      'calculateUniformity',
+      1 // デフォルト値として均一とみなす
+    );
+    if (!paramValidation.isValid) {
+      return paramValidation.defaultValue;
     }
 
     const distances = [];
