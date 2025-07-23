@@ -276,7 +276,10 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
   } finally {
     // バックテスト終了後の処理
     // 長時間実行モードでない場合のみプロセスを終了
-    if (process.env.TEST_MODE !== 'true' && !process.env.BACKTEST_LONG_RUNNING_MODE) {
+    const isTestMode = process.env.TEST_MODE === 'true';
+    const isLongRunningMode = process.env.BACKTEST_LONG_RUNNING_MODE === 'true';
+    
+    if (!isTestMode && !isLongRunningMode) {
       process.exit(0);
     }
   }
@@ -1390,9 +1393,10 @@ function startHealthCheckServer() {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        ...healthStatus,
+        status: healthStatus.status,
         uptime: process.uptime(),
-        memoryUsage: process.memoryUsage()
+        lastRun: healthStatus.lastRun,
+        errorCount: healthStatus.errorCount > 0 ? '有' : '無'
       }));
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
