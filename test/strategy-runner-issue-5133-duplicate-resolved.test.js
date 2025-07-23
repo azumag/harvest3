@@ -64,7 +64,7 @@ log_startup_message "Issue #5133: duplicate prevention test message"
     
     // BACKTEST_MODEとnormalモードの分岐が正常に実装されていることを確認
     expect(entrypointContent).toMatch(/if \[ "\$BACKTEST_MODE" = "true" \]; then/);
-    expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // main関数が1回のみ実行されることを確認

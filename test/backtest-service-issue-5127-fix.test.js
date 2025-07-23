@@ -295,7 +295,7 @@ log_startup_message "Starting container with enhanced error handling"
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // backtest用メッセージが正しく処理されることを確認
-    expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
   });
 
   test('entrypoint.sh構文検証（Issue #5127修正後）', async () => {

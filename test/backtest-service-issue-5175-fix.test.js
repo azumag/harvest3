@@ -304,7 +304,7 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
     });
     
     // 既存のメッセージ呼び出しが正しく保持されている
-    expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
   });
 
   test('セキュリティ面での改良確認', () => {
