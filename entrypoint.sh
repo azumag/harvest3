@@ -1262,7 +1262,7 @@ main() {
     
     if [ "$BACKTEST_MODE" = "true" ]; then
         # 起動ロック取得後に安全にメッセージを出力
-        log_startup_message "Starting backtest container with enhanced error handling"
+        log_backtest_startup_message "Starting backtest container with enhanced error handling"
         
         # backtest用の段階的起動プロセス
         pre_startup_checks
