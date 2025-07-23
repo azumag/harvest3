@@ -118,8 +118,10 @@ if (process.env.CI) {
   const originalConsoleLog = console.log;
 
   console.error = jest.fn().mockImplementation((...args) => {
-    // Always preserve error-level output for debugging
-    originalConsoleError.apply(console, args);
+    // Only preserve error-level output for debugging if explicitly requested
+    if (process.env.DEBUG_CI_ERRORS) {
+      originalConsoleError.apply(console, args);
+    }
   });
 
   console.warn = jest.fn().mockImplementation((...args) => {

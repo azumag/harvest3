@@ -406,7 +406,7 @@ log_startup_message() {
                     console.log('duplicate');
                     process.exit(0);
                 }
-                await client.setEx(key, $SUCCESS_FILE_MAX_AGE, value);
+                await client.setEx(key, 300, value);
                 console.log('new');
                 process.exit(0);
             }).catch(() => process.exit(1));
@@ -424,6 +424,7 @@ log_startup_message() {
     fi
     
     # success file とロック file の準備
+    # シンプルなファイルベース重複防止
     local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     local process_info="${current_time}:$$:${container_id}"
