@@ -24,7 +24,7 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     
     // Issue #5191修正の確認
     expect(backtestRunnerContent).toContain('Issue #5191 修正: async main関数の適切なエラーハンドリング');
-    expect(backtestRunnerContent).toContain('main().catch(error =>');
+    expect(backtestRunnerContent).toContain('main().catch(async error =>');
     expect(backtestRunnerContent).toContain('バックテストメイン関数で致命的エラーが発生しました');
     expect(backtestRunnerContent).toContain('再起動ループ防止');
   });
@@ -33,19 +33,20 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     const backtestRunnerContent = fs.readFileSync(backtestRunnerPath, 'utf8');
     
     // 適切なcatch処理の確認
-    expect(backtestRunnerContent).toContain('main().catch(error => {');
-    expect(backtestRunnerContent).toContain('console.error(\'バックテストメイン関数で致命的エラーが発生しました:\', error);');
-    expect(backtestRunnerContent).toContain('console.error(\'エラースタック:\', error.stack);');
+    expect(backtestRunnerContent).toContain('main().catch(async error => {');
+    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'バックテストメイン関数で致命的エラーが発生しました:\', error);');
+    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
     // Discord通知の確認
     expect(backtestRunnerContent).toContain('if (typeof postErrorToDiscord === \'function\') {');
-    expect(backtestRunnerContent).toContain('postErrorToDiscord(`バックテストメイン関数エラー: ${error.message}`)');
+    expect(backtestRunnerContent).toContain('await postErrorToDiscord(`バックテストメイン関数エラー: ${error.message}`)');
     
-    // 再起動ループ防止の確認
-    expect(backtestRunnerContent).toContain('エラー発生のため30秒待機後にプロセスを終了します（再起動ループ防止）');
+    // 再起動ループ防止の確認（環境変数対応）
+    expect(backtestRunnerContent).toContain('const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || \'30000\');');
+    expect(backtestRunnerContent).toContain('エラー発生のため${ERROR_WAIT_TIME / 1000}秒待機後にプロセスを終了します');
     expect(backtestRunnerContent).toContain('setTimeout(() => {');
     expect(backtestRunnerContent).toContain('process.exit(1);');
-    expect(backtestRunnerContent).toContain('}, 30000);');
+    expect(backtestRunnerContent).toContain('}, ERROR_WAIT_TIME);');
   });
 
   test('TEST_MODE分岐の確認', () => {
@@ -103,7 +104,7 @@ testMain().catch(error => {
       fs.writeFileSync(testScriptPath, testScript);
 
       try {
-        const { stdout, stderr } = await execAsync(`node ${testScriptPath}`, { timeout: 5000 });
+        const { stdout, stderr } = await execAsync(`node ${testScriptPath}`, { timeout: 10000 });
         
         // エラーハンドリングが正しく動作していることを確認
         expect(stdout).toContain('Starting test...');
@@ -155,11 +156,12 @@ testMain().catch(error => {
     const backtestRunnerContent = fs.readFileSync(backtestRunnerPath, 'utf8');
     
     // エラーログが適切に処理されている
-    expect(backtestRunnerContent).toContain('console.error(\'エラースタック:\', error.stack);');
+    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
     // 適切なタイムアウト処理
     expect(backtestRunnerContent).toContain('setTimeout(() => {');
-    expect(backtestRunnerContent).toContain('}, 30000);');
+    expect(backtestRunnerContent).toContain('const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || \'30000\');');
+    expect(backtestRunnerContent).toContain('}, ERROR_WAIT_TIME);');
     
     // プロセス終了の適切な処理
     expect(backtestRunnerContent).toContain('process.exit(1);');
