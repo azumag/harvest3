@@ -1,5 +1,5 @@
 /**
- * @fileoverview Issue #5063 - backtestサービスでのfetchOpenOrders例外修正のテスト
+ * @fileoverview Issue #5081 - backtestサービスでのfetchOpenOrders例外修正のテスト
  * "exchange.fetchOpenOrders is not a function" エラーの防御的処理修正確認
  * 
  * 根本原因: バックテスト環境で特定の条件下においてexchangeオブジェクトに
@@ -10,7 +10,7 @@
 
 const { clearPositionMarket } = require('../src/strategies/utils/common');
 
-describe('Backtest Service Issue #5063 Fix', () => {
+describe('Backtest Service Issue #5081 Fix', () => {
   describe('fetchOpenOrders defensive programming', () => {
     test('should handle exchange objects without fetchOpenOrders method', async () => {
       // fetchOpenOrdersメソッドが存在しないexchangeオブジェクトをシミュレート
@@ -112,6 +112,56 @@ describe('Backtest Service Issue #5063 Fix', () => {
       expect(async () => {
         await clearPositionMarket(problematicExchange, 'BTC/JPY', 'TEST_STRATEGY');
       }).not.toThrow();
+    });
+
+    // Issue #5081: fetchOpenOrdersが関数として認識されるが実際には呼び出しでエラーになる場合の対策
+    test('should handle fetchOpenOrders "is not a function" runtime error', async () => {
+      const mockExchangeWithDefectiveFetchOpenOrders = {
+        id: 'bitbank',
+        markets: {
+          'ETH/JPY': {
+            id: 'eth_jpy',
+            symbol: 'ETH/JPY',
+            base: 'ETH',
+            quote: 'JPY',
+            active: true
+          }
+        },
+        // fetchOpenOrdersプロパティは存在するが関数ではない（実際のエラーを再現）
+        fetchOpenOrders: 'not a function'
+      };
+
+      // "is not a function"エラーが適切にキャッチされ、空の配列で処理が継続されることを確認
+      const result = await clearPositionMarket(mockExchangeWithDefectiveFetchOpenOrders, 'ETH/JPY', 'MUTUAL_INFO');
+      
+      expect(result).toBeDefined();
+      // 関数がexceptionを投げずに正常に完了することを確認
+    });
+
+    test('should handle fetchOpenOrders method that throws "is not a function" error', async () => {
+      const mockExchangeWithThrowingFetchOpenOrders = {
+        id: 'bitbank',
+        markets: {
+          'ETH/JPY': {
+            id: 'eth_jpy',
+            symbol: 'ETH/JPY',
+            base: 'ETH',
+            quote: 'JPY',
+            active: true
+          }
+        },
+        // fetchOpenOrdersメソッドは存在するが、呼び出し時に"is not a function"エラーをスローする
+        fetchOpenOrders: jest.fn().mockImplementation(() => {
+          const error = new Error('exchange.fetchOpenOrders is not a function');
+          throw error;
+        })
+      };
+
+      // この場合でもエラーが適切にキャッチされることを確認
+      const result = await clearPositionMarket(mockExchangeWithThrowingFetchOpenOrders, 'ETH/JPY', 'MUTUAL_INFO');
+      
+      expect(result).toBeDefined();
+      expect(mockExchangeWithThrowingFetchOpenOrders.fetchOpenOrders).toHaveBeenCalledWith('ETH/JPY');
     });
   });
 
