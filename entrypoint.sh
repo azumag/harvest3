@@ -204,50 +204,73 @@ install_npm_dependencies() {
     return 0
 }
 
-# Issue #5127 & #5058: backtest container専用起動メッセージ関数（改良版）
-# atomicなディレクトリロックによる確実な重複防止機構
+# Issue #5084, #5127 & #5058: backtest container専用起動メッセージ関数（強化版）
+# nanosecond精度とプロセス内メモリベース防御を追加した確実な重複防止機構
 log_backtest_startup_message() {
     local message="$1"
-    local current_time=$(date +%s)
+    local current_time_ns=$(date +%s%N)  # nanosecond precision
+    local current_time_s=${current_time_ns%*********}  # extract seconds
     local lock_dir="/tmp/backtest-startup-lock.dir"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
+    local memory_marker_var="BACKTEST_MSG_SHOWN_$$"
+    
+    # Issue #5084: プロセス内メモリベース防御（第一防御線）
+    # 同一プロセス内での重複実行を確実に防止
+    if [ "${!memory_marker_var}" = "1" ]; then
+        log "Backtest startup message suppressed (already shown in process $$)"
+        return 0
+    fi
     
     # 古いロックディレクトリのクリーンアップ（60秒以上古い場合）
     if [ -d "$lock_dir" ]; then
-        local lock_age=$((current_time - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)))
+        local lock_age=$((current_time_s - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)))
         if [ $lock_age -gt 60 ]; then
             rm -rf "$lock_dir" 2>/dev/null || true
         fi
     fi
     
-    # 既存のタイムスタンプファイルをチェック
+    # Issue #5084: nanosecond精度での既存タイムスタンプチェック（第二防御線）
     if [ -f "$timestamp_file" ]; then
-        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-        local time_diff=$((current_time - last_time))
+        local last_time_ns=$(cat "$timestamp_file" 2>/dev/null || echo 0)
+        local last_time_s=${last_time_ns%*********}
+        local time_diff_s=$((current_time_s - last_time_s))
+        local time_diff_ns=$((current_time_ns - last_time_ns))
         
-        if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
-            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+        # 秒レベルでチェック（従来の動作を維持）
+        if [ $time_diff_s -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+            log "Backtest startup message suppressed (last shown ${time_diff_s}s ago)"
+            return 0
+        fi
+        
+        # Issue #5084: nanosecondレベルでの同一実行防止（同一時刻での重複防止）
+        if [ $time_diff_ns -lt 100000000 ]; then  # 100ms以内の重複を防止
+            log "Backtest startup message suppressed (duplicate within 100ms)"
             return 0
         fi
     fi
     
-    # atomicなロック取得を試行（mkdirはatomic操作）
+    # Issue #5084: atomicなロック取得を試行（第三防御線）
     if mkdir "$lock_dir" 2>/dev/null; then
-        # ロック取得成功 - 二重チェック後にメッセージ出力
+        # ロック取得成功 - より厳密な二重チェック
         if [ -f "$timestamp_file" ]; then
-            local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-            local time_diff=$((current_time - last_time))
+            local last_time_ns=$(cat "$timestamp_file" 2>/dev/null || echo 0)
+            local last_time_s=${last_time_ns%*********}
+            local time_diff_s=$((current_time_s - last_time_s))
+            local time_diff_ns=$((current_time_ns - last_time_ns))
             
-            if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
-                # 他のプロセスが先にメッセージを出力していた
-                log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+            # 秒レベルとnanosecondレベルの両方でチェック
+            if [ $time_diff_s -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ] || [ $time_diff_ns -lt 100000000 ]; then
+                log "Backtest startup message suppressed (double-check: last shown ${time_diff_s}s ago)"
                 rm -rf "$lock_dir" 2>/dev/null || true
                 return 0
             fi
         fi
         
-        # タイムスタンプを更新してメッセージ出力
-        echo "$current_time" > "$timestamp_file"
+        # プロセス内メモリマーカーを先に設定
+        export "$memory_marker_var"=1
+        
+        # タイムスタンプを高精度で更新してメッセージ出力
+        echo "$current_time_ns" > "$timestamp_file"
         chmod 600 "$timestamp_file"
         log "$message"
         

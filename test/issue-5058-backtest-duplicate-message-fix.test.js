@@ -30,9 +30,9 @@ describe('Issue #5058: backtestサービス重複メッセージ修正', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058修正の確認
-    expect(entrypointContent).toContain('Issue #5127 & #5058: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('atomicなディレクトリロックによる確実な重複防止機構');
+    // Issue #5058修正の確認（Issue #5084での強化も含む）
+    expect(entrypointContent).toContain('Issue #5084, #5127 & #5058: backtest container専用起動メッセージ関数（強化版）');
+    expect(entrypointContent).toContain('nanosecond精度とプロセス内メモリベース防御を追加した確実な重複防止機構');
     
     // atomicロック機構の確認
     expect(entrypointContent).toContain('mkdir "$lock_dir"');
