@@ -35,7 +35,7 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     
     // 改良されたリトライロジックの確認
     expect(backtestRunnerContent).toContain('startBacktestWithRetry().catch(error => {');
-    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'バックテストメイン関数でエラーが発生しました');
+    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', `バックテストメイン関数でエラーが発生しました (連続失敗回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error');
     expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
     // Discord通知の確認
@@ -44,7 +44,7 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     
     // 改良された再起動ループ防止の確認（指数バックオフ）
     expect(backtestRunnerContent).toContain('const MAX_CONSECUTIVE_FAILURES = 3;');
-    expect(backtestRunnerContent).toContain('const BASE_RETRY_DELAY = 5000;');
+    expect(backtestRunnerContent).toContain('const BASE_RETRY_DELAY = 10000;');
     expect(backtestRunnerContent).toContain('指数バックオフによる待機時間の計算');
     expect(backtestRunnerContent).toContain('Math.pow(2, consecutiveFailures - 1)');
     expect(backtestRunnerContent).toContain('process.exit(1);');
@@ -159,10 +159,10 @@ testMain().catch(error => {
     // エラーログが適切に処理されている
     expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
-    // 適切なタイムアウト処理
-    expect(backtestRunnerContent).toContain('setTimeout(() => {');
-    expect(backtestRunnerContent).toContain('const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || \'30000\');');
-    expect(backtestRunnerContent).toContain('}, ERROR_WAIT_TIME);');
+    // 適切なタイムアウト処理（指数バックオフ）
+    expect(backtestRunnerContent).toContain('await new Promise(resolve => setTimeout(resolve, retryDelay));');
+    expect(backtestRunnerContent).toContain('const BASE_RETRY_DELAY = 10000;');
+    expect(backtestRunnerContent).toContain('const retryDelay = BASE_RETRY_DELAY * Math.pow(2, consecutiveFailures - 1);');
     
     // プロセス終了の適切な処理
     expect(backtestRunnerContent).toContain('process.exit(1);');
