@@ -406,7 +406,7 @@ log_startup_message() {
                     console.log('duplicate');
                     process.exit(0);
                 }
-                await client.setEx(key, 300, value);
+                await client.setEx(key, ${SUCCESS_FILE_MAX_AGE:-300}, value);
                 console.log('new');
                 process.exit(0);
             }).catch(() => process.exit(1));
