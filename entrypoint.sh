@@ -25,7 +25,8 @@ BACKGROUND_CLEANUP_PIDS=""
 
 # Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
-BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-10}  # backtest起動ロックタイムアウト（秒）
+BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
+BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
 
 # セキュリティ注記: /tmp使用について
 # ・Dockerコンテナ内での一時的なプロセス間同期に使用
@@ -204,19 +205,37 @@ install_npm_dependencies() {
     return 0
 }
 
-# Issue #5127 & #5058: backtest container専用起動メッセージ関数（改良版）
-# atomicなディレクトリロックによる確実な重複防止機構
+# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）
+# コンテナ再起動検出を含む強化版重複防止機構
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local lock_dir="/tmp/backtest-startup-lock.dir"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
+    local restart_detection_file="$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
+    
+    # Issue #5175: コンテナ再起動検出とトラッキング
+    local container_boot_time=$(stat -c %Y /proc/1 2>/dev/null || echo "$current_time")
+    local instance_id="${container_boot_time}_$$"
     
     # 古いロックディレクトリのクリーンアップ（60秒以上古い場合）
     if [ -d "$lock_dir" ]; then
         local lock_age=$((current_time - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)))
         if [ $lock_age -gt 60 ]; then
             rm -rf "$lock_dir" 2>/dev/null || true
+        fi
+    fi
+    
+    # Issue #5175: コンテナ再起動検出による追加重複防止
+    if [ -f "$restart_detection_file" ]; then
+        local last_restart_info=$(cat "$restart_detection_file" 2>/dev/null || echo "")
+        local last_instance_id=$(echo "$last_restart_info" | cut -d':' -f1 2>/dev/null || echo "")
+        local last_message_time=$(echo "$last_restart_info" | cut -d':' -f2 2>/dev/null || echo "0")
+        
+        # 同じインスタンスIDまたは最近のメッセージ時刻をチェック
+        if [ "$last_instance_id" = "$instance_id" ] || [ $((current_time - last_message_time)) -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+            log "Backtest startup message suppressed (container restart detection: last shown $((current_time - last_message_time))s ago)"
+            return 0
         fi
     fi
     
@@ -227,6 +246,9 @@ log_backtest_startup_message() {
         
         if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+            # Issue #5175: 再起動検出情報も更新
+            echo "${instance_id}:${last_time}" > "$restart_detection_file"
+            chmod 600 "$restart_detection_file"
             return 0
         fi
     fi
@@ -242,6 +264,9 @@ log_backtest_startup_message() {
                 # 他のプロセスが先にメッセージを出力していた
                 log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 rm -rf "$lock_dir" 2>/dev/null || true
+                # Issue #5175: 再起動検出情報も更新
+                echo "${instance_id}:${last_time}" > "$restart_detection_file"
+                chmod 600 "$restart_detection_file"
                 return 0
             fi
         fi
@@ -249,6 +274,11 @@ log_backtest_startup_message() {
         # タイムスタンプを更新してメッセージ出力
         echo "$current_time" > "$timestamp_file"
         chmod 600 "$timestamp_file"
+        
+        # Issue #5175: 再起動検出情報を記録
+        echo "${instance_id}:${current_time}" > "$restart_detection_file"
+        chmod 600 "$restart_detection_file"
+        
         log "$message"
         
         # ロック解放
@@ -453,7 +483,7 @@ cleanup_background_processes() {
     fi
 }
 
-# Issue #5127 & #5058: backtest専用クリーンアップ関数（改良版）
+# Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）
 cleanup_backtest_locks() {
     log "Cleaning up backtest-specific lock files..."
     
@@ -467,6 +497,12 @@ cleanup_backtest_locks() {
     if [ -d "/tmp/backtest-startup-lock.dir" ]; then
         rm -rf "/tmp/backtest-startup-lock.dir" 2>/dev/null || true
         log "Removed backtest startup lock directory"
+    fi
+    
+    # Issue #5175: コンテナ再起動検出ファイルのクリーンアップ
+    if [ -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" ]; then
+        rm -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" 2>/dev/null || true
+        log "Removed backtest container restart detection file"
     fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
