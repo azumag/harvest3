@@ -45,8 +45,8 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
   test('修正により重複メッセージが防止されることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5173の修正内容を確認
-    expect(entrypointContent).toContain('Issue #5127対策: exec実行前のファイナルチェックとエラーハンドリング強化');
+    // Issue #5173の修正内容を確認 - 更新されたコメントを検証
+    expect(entrypointContent).toContain('Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止');
     
     // 修正された行を確認
     const lines = entrypointContent.split('\n');
@@ -58,6 +58,6 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
     
     // 前後の行も確認して文脈が正しいことを検証
     const previousLine = lines[targetLineIndex - 1];
-    expect(previousLine).toContain('Issue #5127対策: exec実行前のファイナルチェックとエラーハンドリング強化');
+    expect(previousLine).toContain('Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止');
   });
 });
