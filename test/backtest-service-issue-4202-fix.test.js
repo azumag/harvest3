@@ -17,7 +17,7 @@ describe('Backtest Service Issue #4202 Fix', () => {
     });
 
     test('should include container restart counter', () => {
-      expect(entrypointContent).toContain('restart_counter_file="/tmp/.npm_restart_counter"');
+      expect(entrypointContent).toContain('restart_counter_file=$(mktemp /tmp/.npm_restart_counter.XXXXXX)');
       expect(entrypointContent).toContain('Container restart count:');
       expect(entrypointContent).toContain('max_container_restarts=3');
     });
