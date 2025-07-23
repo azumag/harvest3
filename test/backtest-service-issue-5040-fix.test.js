@@ -112,7 +112,7 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       const entrypointContent = readConfigFile(entrypointPath);
       
       // 問題となったメッセージの呼び出し箇所を確認
-      expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
+      expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
       
       // 重複抑制メッセージの実装確認
       expect(entrypointContent).toContain('Backtest startup message suppressed');
