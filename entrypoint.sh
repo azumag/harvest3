@@ -50,6 +50,11 @@ STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムア�
 STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
+# Issue #5150: コンテナ再起動時の初期クリーンアップ
+# 前回の実行で残ったロックファイルを削除してクリーンな状態で開始
+find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
+find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
+
 # MD5ハッシュ値生成関数（DRY原則適用）
 get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
@@ -678,6 +683,21 @@ cleanup_backtest_locks() {
     # fi
 }
 
+# Issue #5150: startup message locks のクリーンアップ関数
+cleanup_startup_message_locks() {
+    log "Cleaning up startup message lock files..."
+    
+    # startup message lock ディレクトリのクリーンアップ
+    if [ -d "$STARTUP_MESSAGE_LOCK_DIR" ]; then
+        # .done ファイルと .lock ディレクトリを削除
+        find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
+        find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
+        log "Cleaned up startup message lock files"
+    fi
+    
+    # プロセス内フラグのクリアは環境変数なので、コンテナ再起動時に自動的にクリアされる
+}
+
 # Discord通知関数
 send_startup_error_to_discord() {
     local error_message="$1"
@@ -1158,6 +1178,9 @@ cleanup() {
     if [ "$BACKTEST_MODE" = "true" ]; then
         cleanup_backtest_locks
     fi
+    
+    # Issue #5150: startup message lock のクリーンアップ
+    cleanup_startup_message_locks
     
     log "Graceful shutdown completed"
     exit 0
