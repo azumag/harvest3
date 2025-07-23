@@ -83,8 +83,12 @@ retry_npm_install_with_backoff() {
     local max_npm_attempts=3
     local npm_install_attempts=0
     local npm_install_success=false
-    local restart_counter_file="/tmp/.npm_restart_counter"
+    # Issue #5219: セキュリティ修正 - mktempを使用した安全な一時ファイル作成
+    local restart_counter_file=$(mktemp /tmp/.npm_restart_counter.XXXXXX)
     local max_container_restarts=3
+    
+    # ファイル権限を明示的に設定（セキュリティ強化）
+    chmod 600 "$restart_counter_file"
     
     # コンテナ再起動回数をチェック（無限ループ防止）
     local restart_count=0
@@ -109,13 +113,19 @@ retry_npm_install_with_backoff() {
         
         log "Attempting npm install (attempt $npm_install_attempts/$max_npm_attempts, timeout: ${timeout_seconds}s)..."
         
-        # Issue #5219: 各試行で異なるオプションを使用
+        # Issue #5219: 各試行で異なるオプションを使用（セキュリティ強化：シェルインジェクション対策）
         local npm_options="--no-audit --no-fund"
         case $npm_install_attempts in
             1) npm_options="$npm_options --prefer-offline" ;;
             2) npm_options="$npm_options --legacy-peer-deps" ;;
             3) npm_options="$npm_options --force" ;;
         esac
+        
+        # セキュリティ: npmオプションの検証（許可された文字のみ）
+        if ! echo "$npm_options" | grep -E '^[a-zA-Z0-9 \-]+$' >/dev/null; then
+            log "ERROR: Invalid npm options detected, using safe defaults"
+            npm_options="--no-audit --no-fund"
+        fi
         
         log "  Using npm options: $npm_options"
         if timeout $timeout_seconds npm install $npm_options 2>"$attempt_log"; then
