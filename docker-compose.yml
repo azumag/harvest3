@@ -170,6 +170,7 @@ services:
     environment:
       # Core backtest configuration
       - BACKTEST_MODE=true
+      - BACKTEST_LONG_RUNNING_MODE=true
       - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://mongodb:27017/harvest3
       - MONGODB_URL=mongodb://mongodb:27017
