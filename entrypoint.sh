@@ -83,8 +83,12 @@ retry_npm_install_with_backoff() {
     local max_npm_attempts=3
     local npm_install_attempts=0
     local npm_install_success=false
-    local restart_counter_file="/tmp/.npm_restart_counter"
+    # Issue #5219: セキュリティ修正 - mktempを使用した安全な一時ファイル作成
+    local restart_counter_file=$(mktemp /tmp/.npm_restart_counter.XXXXXX)
     local max_container_restarts=3
+    
+    # ファイル権限を明示的に設定（セキュリティ強化）
+    chmod 600 "$restart_counter_file"
     
     # コンテナ再起動回数をチェック（無限ループ防止）
     local restart_count=0
@@ -109,7 +113,22 @@ retry_npm_install_with_backoff() {
         
         log "Attempting npm install (attempt $npm_install_attempts/$max_npm_attempts, timeout: ${timeout_seconds}s)..."
         
-        if timeout $timeout_seconds npm install 2>"$attempt_log"; then
+        # Issue #5219: 各試行で異なるオプションを使用（セキュリティ強化：シェルインジェクション対策）
+        local npm_options="--no-audit --no-fund"
+        case $npm_install_attempts in
+            1) npm_options="$npm_options --prefer-offline" ;;
+            2) npm_options="$npm_options --legacy-peer-deps" ;;
+            3) npm_options="$npm_options --force" ;;
+        esac
+        
+        # セキュリティ: npmオプションの検証（許可された文字のみ）
+        if ! echo "$npm_options" | grep -E '^[a-zA-Z0-9 \-]+$' >/dev/null; then
+            log "ERROR: Invalid npm options detected, using safe defaults"
+            npm_options="--no-audit --no-fund"
+        fi
+        
+        log "  Using npm options: $npm_options"
+        if timeout $timeout_seconds npm install $npm_options 2>"$attempt_log"; then
             log "npm install completed successfully on attempt $npm_install_attempts"
             npm_install_success=true
             # 成功時はカウンタをリセット
@@ -166,23 +185,44 @@ install_npm_dependencies() {
     local dep_check_error="/tmp/dep-check.log"
     local npm_ls_error="/tmp/npm-ls-error.log"
     
-    # 事前診断情報の収集
+    # Issue #5219: 事前診断情報の収集（強化版）
     log "Pre-install diagnostics:"
     log "  Working directory: $(pwd)"
     log "  Node.js version: $(node --version 2>/dev/null || echo 'Node.js not found')"
     log "  npm version: $(npm --version 2>/dev/null || echo 'npm not found')"
     log "  Disk space: $(df -h . | tail -1 | awk '{print $4}' || echo 'unknown')"
+    log "  Memory available: $(free -h | grep '^Mem:' | awk '{print $7}' || echo 'unknown')"
     log "  package.json exists: $([ -f package.json ] && echo 'yes' || echo 'no')"
     log "  node_modules exists: $([ -d node_modules ] && echo 'yes' || echo 'no')"
+    log "  npm cache size: $(du -sh ~/.npm 2>/dev/null | cut -f1 || echo 'unknown')"
+    
+    # Issue #5219: ネットワーク接続性テスト
+    log "Network connectivity test:"
+    if timeout 10 npm ping >/dev/null 2>&1; then
+        log "  npm registry connectivity: OK"
+    else
+        log "  npm registry connectivity: FAILED - will try alternative approaches"
+    fi
     
     # 既存の依存関係チェック
     if check_existing_dependencies; then
         return 0  # 依存関係が既に満たされている
     fi
     
+    # Issue #5219: npmキャッシュクリーンアップ（予防的対策）
+    log "Cleaning npm cache to prevent stale cache issues..."
+    npm cache clean --force 2>/dev/null || log "  npm cache clean failed (non-critical)"
+    
+    # Issue #5219: npmレジストリ設定の最適化
+    log "Optimizing npm configuration for stability..."
+    npm config set fetch-retry-mintimeout 20000 2>/dev/null || true
+    npm config set fetch-retry-maxtimeout 120000 2>/dev/null || true
+    npm config set fetch-retries 5 2>/dev/null || true
+    npm config set network-timeout 300000 2>/dev/null || true
+    
     # Issue #2559 下位互換性: 最初は固定タイムアウト（300秒）で実行
     log "Attempting initial npm install with fixed timeout (Issue #2559 compatibility)..."
-    if timeout 300 npm install 2>"$npm_error_log"; then
+    if timeout 300 npm install --no-audit --no-fund --prefer-offline 2>"$npm_error_log"; then
         log "npm install completed successfully with fixed timeout"
         return 0
     else
@@ -196,9 +236,23 @@ install_npm_dependencies() {
         fi
     fi
     
-    # 拡張リトライロジックを実行
+    # Issue #5219: 拡張リトライロジックを実行（改良版）
     if ! retry_npm_install_with_backoff; then
-        return 1
+        # Issue #5219: 最終的なフォールバック戦略
+        log "All npm install attempts failed. Attempting final fallback strategy..."
+        
+        # 練習モードで重要な依存関係のみインストールを試行
+        local critical_deps="ccxt express mongodb redis axios moment"
+        log "Attempting to install critical dependencies only: $critical_deps"
+        
+        if timeout 180 npm install $critical_deps --no-audit --no-fund --prefer-offline 2>/dev/null; then
+            log "Critical dependencies installed successfully - continuing with limited functionality"
+            log "Warning: Some features may not work due to incomplete dependency installation"
+            return 0
+        else
+            log "Even critical dependency installation failed - container will restart"
+            return 1
+        fi
     fi
     
     # クリーンアップ (Issue #2559 下位互換性維持)
