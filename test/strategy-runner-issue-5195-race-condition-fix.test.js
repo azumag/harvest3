@@ -314,10 +314,10 @@ echo "Lock cleanup test completed"
             // Issue #5195のコメントが含まれていることを確認
             expect(entrypointContent).toContain('Issue #5195');
             
-            // 強化されたatomicロック機構が含まれていることを確認
-            expect(entrypointContent).toContain('KISS/DRY原則適用によるリファクタリング版');
+            // Issue #5172リファクタリングのコメントが含まれていることを確認
+            expect(entrypointContent).toContain('Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）');
             
-            // コンテナIDによる検証が含まれていることを確認
+            // コンテナIDによる検証が含まれていることを確認（リファクタリング後のパターン）
             expect(entrypointContent).toContain('local container_id=$(hostname)');
             
             // リトライ機構が含まれていることを確認
