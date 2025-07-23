@@ -18,8 +18,8 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('Redis-basedコードが追加されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Redis-based duplicate prevention のコメントが追加されているかチェック
-            expect(entrypointContent).toContain('Issue #5130: Redis-based duplicate prevention across container restarts');
+            // Redis-based duplicate prevention の実装がコメント付きで追加されているかチェック（リファクタリング後）
+            expect(entrypointContent).toContain('Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）');
             
             // Redis関連の処理が追加されているかチェック
             expect(entrypointContent).toContain('redis_key="startup_msg:$message_hash"');
@@ -42,8 +42,8 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('RedisのTTL設定が適切に実装されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // 300秒のTTLが設定されているかチェック
-            expect(entrypointContent).toContain('await client.setEx(key, 300, value);');
+            // 設定可能なTTLが設定されているかチェック（リファクタリング後）
+            expect(entrypointContent).toContain('await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);');
         });
     });
 
@@ -89,16 +89,16 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('プロセス内環境変数による重複防止機構が保持されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // 既存の第二防御線が保持されているかチェック
-            expect(entrypointContent).toContain('Issue #5103: プロセス内での確実な重複防止（第二防御線）');
+            // 既存の第二防御線が保持されているかチェック（リファクタリング後）
+            expect(entrypointContent).toContain('プロセス内重複防止（第二防御線）');
             expect(entrypointContent).toContain('if [ "${!var_name}" = "1" ]; then');
         });
 
         test('ファイルベース重複防止機構が保持されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // 既存のファイルベース機構が保持されているかチェック
-            expect(entrypointContent).toContain('シンプルなファイルベース重複防止');
+            // 既存のファイルベース機構が保持されているかチェック（リファクタリング後）
+            expect(entrypointContent).toContain('fallback_to_file_based_prevention');
             expect(entrypointContent).toContain('success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"');
         });
     });
@@ -107,38 +107,28 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('Redis-based防止が第一防御線として位置している', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/);
-            expect(logStartupMessageFunction).toBeTruthy();
+            // リファクタリング後は戦略パターンで実装
+            expect(entrypointContent).toContain('try_redis_duplicate_prevention');
+            expect(entrypointContent).toContain('fallback_to_file_based_prevention');
             
-            const functionBody = logStartupMessageFunction[0];
-            
-            // Redis-based prevention が backtest check の後、プロセス内防止の前にあることを確認
-            const redisPosition = functionBody.indexOf('Issue #5130: Redis-based duplicate prevention');
-            const processPosition = functionBody.indexOf('Issue #5103: プロセス内での確実な重複防止（第二防御線）');
-            
-            expect(redisPosition).toBeGreaterThan(-1);
-            expect(processPosition).toBeGreaterThan(-1);
-            expect(redisPosition).toBeLessThan(processPosition);
+            // 戦略選択の実装を確認
+            expect(entrypointContent).toContain('case "$DUPLICATE_PREVENTION_STRATEGY" in');
+            expect(entrypointContent).toContain('"redis_first"');
         });
 
         test('Redis処理の流れが適切に実装されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Redis処理の流れが適切に実装されているかチェック
-            const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/);
-            expect(logStartupMessageFunction).toBeTruthy();
+            // リファクタリング後はtry_redis_duplicate_prevention関数内で処理
+            const redisFunction = entrypointContent.match(/try_redis_duplicate_prevention\(\) \{[\s\S]*?\n\}/);
+            expect(redisFunction).toBeTruthy();
             
-            const functionBody = logStartupMessageFunction[0];
+            const functionBody = redisFunction[0];
             
-            // Redis処理の各ステップが正しい順序で配置されているかチェック
-            const hashGenPosition = functionBody.indexOf('message_hash=$(get_message_hash "$message")');
-            const redisKeyPosition = functionBody.indexOf('redis_key="startup_msg:$message_hash"');
-            const containerIdPosition = functionBody.indexOf('container_id=$(hostname)');
-            const redisCheckPosition = functionBody.indexOf('redis_check_result=$(node -e');
-            
-            expect(hashGenPosition).toBeLessThan(redisKeyPosition);
-            expect(redisKeyPosition).toBeLessThan(containerIdPosition);
-            expect(containerIdPosition).toBeLessThan(redisCheckPosition);
+            // Redis処理の各ステップが存在することを確認
+            expect(functionBody).toContain('redis_key="startup_msg:$message_hash"');
+            expect(functionBody).toContain('container_id=$(hostname)');
+            expect(functionBody).toContain('redis_check_result=$(node -e');
         });
     });
 
@@ -146,17 +136,17 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('Redis接続失敗時のフォールバック処理が実装されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Redis処理後も既存の処理が続行されることを確認
-            const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/);
-            expect(logStartupMessageFunction).toBeTruthy();
+            // リファクタリング後はtry_redis_duplicate_prevention関数でエラーハンドリング
+            const redisFunction = entrypointContent.match(/try_redis_duplicate_prevention\(\) \{[\s\S]*?\n\}/);
+            expect(redisFunction).toBeTruthy();
             
-            const functionBody = logStartupMessageFunction[0];
+            const functionBody = redisFunction[0];
             
-            // Redis処理の後に既存の第二防御線が残っているかチェック
-            const redisEndPosition = functionBody.indexOf('fi');
-            const secondDefensePosition = functionBody.indexOf('Issue #5103: プロセス内での確実な重複防止（第二防御線）');
+            // Redis エラーハンドリングとフォールバックの実装を確認
+            expect(functionBody).toContain('return 1  # Redis不可またはエラー、フォールバックが必要');
             
-            expect(redisEndPosition).toBeLessThan(secondDefensePosition);
+            // メイン関数でフォールバック処理を確認
+            expect(entrypointContent).toContain('fallback_to_file_based_prevention');
         });
     });
 
@@ -164,9 +154,10 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('Docker restart policyによる重複実行への対応が実装されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Issue #5130のコメントと対応が明記されているかチェック
-            expect(entrypointContent).toContain('Issue #5130');
-            expect(entrypointContent).toContain('Redis-based duplicate prevention across container restarts');
+            // Issue #5130の機能が実装されていることをチェック（リファクタリング後は#5172に統合）
+            // expect(entrypointContent).toContain('Issue #5130');  // リファクタリング後は統合されたため削除
+            // リファクタリング後は Redis 重複防止機能は Issue #5172 の関数に統合
+            expect(entrypointContent).toContain('try_redis_duplicate_prevention');
         });
 
         test('コンテナ識別情報によるデバッグ性向上が実装されている', () => {
