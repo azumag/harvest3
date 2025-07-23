@@ -1532,27 +1532,61 @@ async function main() {
 }
 
 // バックテストを開始（テストモード以外の場合のみ）
-// Issue #5191 修正: async main関数の適切なエラーハンドリング
+// Issue #5204 修正: 再起動ループを防ぐ改良されたエラーハンドリング
 if (process.env.TEST_MODE !== 'true') {
-  main().catch(async error => {
-    logWithLevel('error', 'バックテストメイン関数で致命的エラーが発生しました:', error);
-    logWithLevel('error', 'エラースタック:', error.stack);
-    
-    // Discord通知（利用可能な場合）
-    if (typeof postErrorToDiscord === 'function') {
+  let consecutiveFailures = 0;
+  const MAX_CONSECUTIVE_FAILURES = 3;
+  const BASE_RETRY_DELAY = 10000; // 10秒
+  
+  async function startBacktestWithRetry() {
+    while (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
       try {
-        await postErrorToDiscord(`バックテストメイン関数エラー: ${error.message}`);
-      } catch (discordError) {
-        logWithLevel('error', 'Discord通知エラー:', discordError);
+        await main();
+        // main()が正常に完了した場合（グレースフルシャットダウン）
+        logWithLevel('info', 'バックテストサービスが正常に終了しました');
+        consecutiveFailures = 0;
+        break;
+      } catch (error) {
+        consecutiveFailures++;
+        logWithLevel('error', `バックテストメイン関数でエラーが発生しました (連続失敗回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error);
+        logWithLevel('error', 'エラースタック:', error.stack);
+        
+        // Discord通知（利用可能な場合）
+        if (typeof postErrorToDiscord === 'function') {
+          try {
+            await postErrorToDiscord(`バックテスト実行エラー (${consecutiveFailures}回目): ${error.message}`);
+          } catch (discordError) {
+            logWithLevel('error', 'Discord通知エラー:', discordError);
+          }
+        }
+        
+        if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
+          // 指数バックオフによる待機時間の計算
+          const retryDelay = BASE_RETRY_DELAY * Math.pow(2, consecutiveFailures - 1);
+          logWithLevel('info', `${retryDelay / 1000}秒後に再試行します (試行回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+          
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          logWithLevel('error', `最大連続失敗回数(${MAX_CONSECUTIVE_FAILURES})に達しました。致命的なエラーと判断し、コンテナを終了します。`);
+          
+          // 最終的なDiscord通知
+          if (typeof postErrorToDiscord === 'function') {
+            try {
+              await postErrorToDiscord(`バックテスト致命的エラー: ${MAX_CONSECUTIVE_FAILURES}回連続で失敗しました。手動での確認が必要です。`);
+            } catch (discordError) {
+              logWithLevel('error', 'Discord通知エラー:', discordError);
+            }
+          }
+          
+          // 致命的エラーの場合のみprocess.exit(1)を実行
+          process.exit(1);
+        }
       }
     }
-    
-    // 不安定な状態で再起動ループを避けるため、エラー時は長時間待機後に終了
-    const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || '30000');
-    console.log(`エラー発生のため${ERROR_WAIT_TIME / 1000}秒待機後にプロセスを終了します（再起動ループ防止）`);
-    setTimeout(() => {
-      console.log('プロセスを終了します');
-      process.exit(1);
-    }, ERROR_WAIT_TIME);
+  }
+  
+  startBacktestWithRetry().catch(error => {
+    logWithLevel('error', '予期しないエラーが発生しました:', error);
+    process.exit(1);
   });
 }
