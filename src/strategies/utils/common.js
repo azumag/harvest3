@@ -1140,8 +1140,13 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
         openOrders = await exchange.fetchOpenOrders(symbol);
       }
     } catch (fetchError) {
+      // Issue #5081: fetchOpenOrdersメソッドが関数ではない場合の追加処理
+      if (fetchError.message && fetchError.message.includes('is not a function')) {
+        logger.info(`警告: ${exchange.id}でfetchOpenOrdersメソッドが正しく定義されていません（バックテスト環境）。空の配列を返します。`);
+        openOrders = [];
+      }
       // 認証エラーや無効なシンボルエラーの場合、サポートされていないシンボルとして扱う
-      if (fetchError.name === 'AuthenticationError' ||
+      else if (fetchError.name === 'AuthenticationError' ||
           fetchError.message.includes('authentication') ||
           fetchError.message.includes('Invalid symbol') ||
           isBitbankError(fetchError, BITBANK_ERRORS.SYSTEM_ERROR)) {  // bitbankのシステムエラー（堅牢な判定）
@@ -1149,7 +1154,9 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
         return { success: false, reason: 'unsupported symbol for private API' };
       }
       // その他のエラーは再スロー
-      throw fetchError;
+      else {
+        throw fetchError;
+      }
     }
 
     await Promise.all(openOrders.map(async (order) => {
