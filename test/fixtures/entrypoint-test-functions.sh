@@ -82,8 +82,8 @@ log_startup_message() {
         if mkdir "$lock_file" 2>/dev/null; then
             # Issue #5195: ロック取得成功 - プロセス情報を記録
             echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
-            # テスト用に少し待機してロックファイルが確認できるようにする
-            sleep 0.3
+            # テスト用に少し待機してロックファイルが確認できるようにする（CI高速化のため短縮）
+            sleep 0.01
             break
         fi
         attempt=$((attempt + 1))
