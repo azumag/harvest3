@@ -570,6 +570,19 @@ class ParameterConstraintEngine {
       };
     }
 
+    // constraint.parameters のnullチェックを追加
+    if (!constraint.parameters || typeof constraint.parameters !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`calculateParameterQuality: constraint.parameters が null または無効です (戦略: ${strategyType})`);
+      }
+      return {
+        validity: 0,
+        diversity: 0,
+        coverage: 0,
+        efficiency: 0
+      };
+    }
+
     // 妥当性: 制約を満たすパラメータの割合
     const validCount = parameterSet.filter(params => 
       this.validateCombination(params, strategyType)
@@ -602,6 +615,14 @@ class ParameterConstraintEngine {
   calculateParameterDiversity(parameterSet, parameterDefs) {
     if (parameterSet.length === 0) {return 0;}
     if (parameterSet.length === 1) {return 0.1;} // 単一パラメータの場合は最小値
+
+    // parameterDefs のnullチェックを追加
+    if (!parameterDefs || typeof parameterDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('calculateParameterDiversity: parameterDefs が null または無効です');
+      }
+      return 0;
+    }
 
     const paramNames = Object.keys(parameterDefs);
     if (paramNames.length === 0) {return 0;}
@@ -698,7 +719,21 @@ class ParameterConstraintEngine {
   assessParameterSpaceCoverage(parameterSet, parameterDefs) {
     if (parameterSet.length === 0) {return 0;}
 
+    // parameterDefs のnullチェックを追加
+    if (!parameterDefs || typeof parameterDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('assessParameterSpaceCoverage: parameterDefs が null または無効です');
+      }
+      return 0;
+    }
+
     const paramNames = Object.keys(parameterDefs);
+    
+    // paramNames が空の場合、division by zero を防ぐ
+    if (paramNames.length === 0) {
+      return 0;
+    }
+    
     let totalCoverage = 0;
 
     for (const paramName of paramNames) {

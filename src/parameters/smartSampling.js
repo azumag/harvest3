@@ -311,6 +311,14 @@ class SmartSamplingEngine {
    * @returns {number} 正規化距離
    */
   calculateNormalizedDistance(sample1, sample2, paramDefs) {
+    // paramDefs のnullチェックを追加
+    if (!paramDefs || typeof paramDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('calculateNormalizedDistance: paramDefs が null または無効です');
+      }
+      return 0; // デフォルト値として距離0を返す
+    }
+
     let sumSquaredDiff = 0;
     let dimensionCount = 0;
 
@@ -545,6 +553,19 @@ class SmartSamplingEngine {
       };
     }
 
+    // constraint.parameters のnullチェックを追加
+    if (!constraint.parameters || typeof constraint.parameters !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`evaluateSamplingQuality: constraint.parameters が null または無効です (戦略: ${strategyType})`);
+      }
+      return {
+        coverage: 0,
+        diversity: 0,
+        uniformity: 0,
+        validity: 0
+      };
+    }
+
     const quality = this.constraintEngine.calculateParameterQuality(samples, strategyType);
     const uniformity = this.calculateUniformity(samples, constraint.parameters);
 
@@ -563,6 +584,14 @@ class SmartSamplingEngine {
   calculateUniformity(samples, paramDefs) {
     if (samples.length < 2) {
       return 1;
+    }
+
+    // paramDefs のnullチェックを追加
+    if (!paramDefs || typeof paramDefs !== 'object') {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('calculateUniformity: paramDefs が null または無効です');
+      }
+      return 1; // デフォルト値として均一とみなす
     }
 
     const distances = [];
