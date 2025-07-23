@@ -1,5 +1,5 @@
 /**
- * @fileoverview Issue #5063 - backtestサービスでのfetchOpenOrders例外修正のテスト
+ * @fileoverview Issue #5081 - backtestサービスでのfetchOpenOrders例外修正のテスト
  * "exchange.fetchOpenOrders is not a function" エラーの防御的処理修正確認
  * 
  * 根本原因: バックテスト環境で特定の条件下においてexchangeオブジェクトに
@@ -10,7 +10,7 @@
 
 const { clearPositionMarket } = require('../src/strategies/utils/common');
 
-describe('Backtest Service Issue #5063 Fix', () => {
+describe('Backtest Service Issue #5081 Fix', () => {
   describe('fetchOpenOrders defensive programming', () => {
     test('should handle exchange objects without fetchOpenOrders method', async () => {
       // fetchOpenOrdersメソッドが存在しないexchangeオブジェクトをシミュレート
