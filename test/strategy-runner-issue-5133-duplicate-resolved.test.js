@@ -26,35 +26,34 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
   });
 
   test('log_startup_message関数の重複防止機構が正常に動作することを確認', async () => {
-    // テスト用スクリプトを作成
+    // 実際のentrypoint.shから必要な関数を抽出してテスト
     const testScript = `#!/bin/bash
 set -e
 
-# テスト用環境変数
-export STARTUP_MESSAGE_LOCK_DIR="/tmp/test-issue-5133-$$"
-export SUCCESS_FILE_CLEANUP_DELAY=1
+# 実際のentrypoint.shと同じ環境設定
+export STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
 export NODE_ENV=test
 export BACKTEST_MODE=false
 
-mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"
+mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
-# log関数のモック
-log() {
-    echo "[ENTRYPOINT] $1"
-}
-
-# 必要な関数を定義
+# 実際のentrypoint.shからコピーした関数
 get_message_hash() {
-    echo "$1" | sha256sum | cut -d' ' -f1
+    echo "$1" | md5sum | cut -d' ' -f1
 }
 
-# 簡略版log_startup_message（重複防止ロジックをテスト）
-test_log_startup_message() {
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
+}
+
+# 実際のentrypoint.shからコピーしたlog_startup_message関数（簡略版）
+simple_log_startup_message() {
     local message="$1"
     local message_hash=$(get_message_hash "$message")
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
-    if [ "\\${!var_name}" = "1" ]; then
+    # Issue #5103: プロセス内での確実な重複防止（第二防御線）
+    if [ "\${!var_name}" = "1" ]; then
         return 0
     fi
     
@@ -63,9 +62,9 @@ test_log_startup_message() {
     return 0
 }
 
-# Issue #5133のメッセージを2回呼び出し（修正前は2回出力、修正後は1回のみ出力）
-test_log_startup_message "Starting strategy-runner container with enhanced error handling"
-test_log_startup_message "Starting strategy-runner container with enhanced error handling"
+# テスト実行: 同じメッセージを2回呼び出し
+simple_log_startup_message "Starting strategy-runner container with enhanced error handling"
+simple_log_startup_message "Starting strategy-runner container with enhanced error handling"
 
 # クリーンアップ
 rm -rf "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
