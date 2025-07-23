@@ -17,13 +17,13 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5173修正の確認: log_backtest_startup_message関数の使用
-    expect(entrypointContent).toContain('log_backtest_startup_message "Executing backtest command with enhanced error handling..."');
+    // Issue #5173修正の確認: log_backtest_startup_message関数の使用 (Issue #5132で重複メッセージは削除済み)
+    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
     
     // 修正前の問題のあるコード（直接log呼び出し）が残っていないことを確認
     const lines = entrypointContent.split('\n');
     const problematicLines = lines.filter(line => 
-      line.includes('log "Executing backtest command with enhanced error handling..."') &&
+      line.includes('log "Starting backtest container with enhanced error handling"') &&
       !line.includes('log_backtest_startup_message')
     );
     
@@ -45,19 +45,22 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
   test('修正により重複メッセージが防止されることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5173の修正内容を確認 - 更新されたコメントを検証
+    // Issue #5173の修正内容を確認 - Issue #5132で重複メッセージは削除、コメントで対策完了を示す
     expect(entrypointContent).toContain('Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止');
+    expect(entrypointContent).toContain('Issue #5132修正: 重複する起動メッセージを防止するため、exec実行前の追加メッセージを削除');
     
-    // 修正された行を確認
+    // 主要なbacktestメッセージが適切に関数を使用していることを確認
     const lines = entrypointContent.split('\n');
     const targetLineIndex = lines.findIndex(line => 
-      line.includes('log_backtest_startup_message "Executing backtest command with enhanced error handling..."')
+      line.includes('log_backtest_startup_message "Starting backtest container with enhanced error handling"')
     );
     
     expect(targetLineIndex).toBeGreaterThan(-1);
     
-    // 前後の行も確認して文脈が正しいことを検証
-    const previousLine = lines[targetLineIndex - 1];
-    expect(previousLine).toContain('Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止');
+    // Issue #5132により重複メッセージが削除されていることを確認
+    const duplicateMessageLines = lines.filter(line => 
+      line.includes('log_backtest_startup_message "Executing backtest command with enhanced error handling..."')
+    );
+    expect(duplicateMessageLines).toHaveLength(0);
   });
 });
