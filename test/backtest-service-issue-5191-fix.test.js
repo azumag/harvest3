@@ -2,9 +2,10 @@
  * Issue #5191: [自動] backtestサービスで例外が発生 - 修正確認テスト
  * 
  * backtestサービスで発生していた重複起動メッセージ問題の修正を確認するテスト
- * - async main関数の適切なエラーハンドリング
- * - 再起動ループ防止機構の確認
- * - エラー時の待機時間による急速再起動防止
+ * Issue #5204の改良されたエラーハンドリング（リトライロジック付き）を検証
+ * - 指数バックオフによるリトライ機構
+ * - 最大連続失敗回数による再起動ループ防止
+ * - 改良されたエラーハンドリングとDiscord通知
  */
 
 const fs = require('fs');
@@ -22,31 +23,31 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     
     const backtestRunnerContent = fs.readFileSync(backtestRunnerPath, 'utf8');
     
-    // Issue #5191修正の確認
-    expect(backtestRunnerContent).toContain('Issue #5191 修正: async main関数の適切なエラーハンドリング');
-    expect(backtestRunnerContent).toContain('main().catch(async error =>');
-    expect(backtestRunnerContent).toContain('バックテストメイン関数で致命的エラーが発生しました');
-    expect(backtestRunnerContent).toContain('再起動ループ防止');
+    // Issue #5204が#5191の問題も解決していることを確認
+    expect(backtestRunnerContent).toContain('Issue #5204 修正: 再起動ループを防ぐ改良されたエラーハンドリング');
+    expect(backtestRunnerContent).toContain('startBacktestWithRetry().catch');
+    expect(backtestRunnerContent).toContain('バックテストメイン関数でエラーが発生しました');
+    expect(backtestRunnerContent).toContain('連続失敗回数');
   });
 
   test('async main関数のエラーハンドリング確認', () => {
     const backtestRunnerContent = fs.readFileSync(backtestRunnerPath, 'utf8');
     
-    // 適切なcatch処理の確認
-    expect(backtestRunnerContent).toContain('main().catch(async error => {');
-    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'バックテストメイン関数で致命的エラーが発生しました:\', error);');
+    // 改良されたリトライロジックの確認
+    expect(backtestRunnerContent).toContain('startBacktestWithRetry().catch(error => {');
+    expect(backtestRunnerContent).toContain('logWithLevel(\'error\', `バックテストメイン関数でエラーが発生しました (連続失敗回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error');
     expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
     // Discord通知の確認
     expect(backtestRunnerContent).toContain('if (typeof postErrorToDiscord === \'function\') {');
-    expect(backtestRunnerContent).toContain('await postErrorToDiscord(`バックテストメイン関数エラー: ${error.message}`)');
+    expect(backtestRunnerContent).toContain('await postErrorToDiscord(`バックテスト実行エラー');
     
-    // 再起動ループ防止の確認（環境変数対応）
-    expect(backtestRunnerContent).toContain('const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || \'30000\');');
-    expect(backtestRunnerContent).toContain('エラー発生のため${ERROR_WAIT_TIME / 1000}秒待機後にプロセスを終了します');
-    expect(backtestRunnerContent).toContain('setTimeout(() => {');
+    // 改良された再起動ループ防止の確認（指数バックオフ）
+    expect(backtestRunnerContent).toContain('const MAX_CONSECUTIVE_FAILURES = 3;');
+    expect(backtestRunnerContent).toContain('const BASE_RETRY_DELAY = 10000;');
+    expect(backtestRunnerContent).toContain('指数バックオフによる待機時間の計算');
+    expect(backtestRunnerContent).toContain('Math.pow(2, consecutiveFailures - 1)');
     expect(backtestRunnerContent).toContain('process.exit(1);');
-    expect(backtestRunnerContent).toContain('}, ERROR_WAIT_TIME);');
   });
 
   test('TEST_MODE分岐の確認', () => {
@@ -54,7 +55,7 @@ describe('Issue #5191: backtestサービス例外対応および再起動ルー�
     
     // TEST_MODE分岐が正しく保持されている
     expect(backtestRunnerContent).toContain('if (process.env.TEST_MODE !== \'true\') {');
-    expect(backtestRunnerContent).toContain('main().catch');
+    expect(backtestRunnerContent).toContain('startBacktestWithRetry().catch');
   });
 
   describe('エラーハンドリング動作テスト', () => {
@@ -158,10 +159,10 @@ testMain().catch(error => {
     // エラーログが適切に処理されている
     expect(backtestRunnerContent).toContain('logWithLevel(\'error\', \'エラースタック:\', error.stack);');
     
-    // 適切なタイムアウト処理
-    expect(backtestRunnerContent).toContain('setTimeout(() => {');
-    expect(backtestRunnerContent).toContain('const ERROR_WAIT_TIME = parseInt(process.env.ERROR_WAIT_TIME || \'30000\');');
-    expect(backtestRunnerContent).toContain('}, ERROR_WAIT_TIME);');
+    // 適切なタイムアウト処理（指数バックオフ）
+    expect(backtestRunnerContent).toContain('await new Promise(resolve => setTimeout(resolve, retryDelay));');
+    expect(backtestRunnerContent).toContain('const BASE_RETRY_DELAY = 10000;');
+    expect(backtestRunnerContent).toContain('const retryDelay = BASE_RETRY_DELAY * Math.pow(2, consecutiveFailures - 1);');
     
     // プロセス終了の適切な処理
     expect(backtestRunnerContent).toContain('process.exit(1);');
