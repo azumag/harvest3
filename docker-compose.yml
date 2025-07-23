@@ -168,11 +168,19 @@ services:
     command: npm run backtest
     # 長時間実行モードに変更: バックテストランナー内部でループを制御
     environment:
+      # Core backtest configuration
       - BACKTEST_MODE=true
       - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://mongodb:27017/harvest3
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB_NAME=harvest3
+      
+      # Discord webhook URLs (minimal necessary variables)
+      - DISCORD_ERROR_WEBHOOK_URL=${DISCORD_ERROR_WEBHOOK_URL}
+      - DISCORD_BACKTEST_WEBHOOK_URL=${DISCORD_BACKTEST_WEBHOOK_URL}
+      - DISCORD_WARNING_WEBHOOK_URL=${DISCORD_WARNING_WEBHOOK_URL}
+      
+      # Strategy configurations
       - STRATEGY_BOLLINGER_BANDS_ENABLED=true
       - STRATEGY_MARKET_MAKING_ENABLED=true
       - STRATEGY_MA_ENABLED=true
