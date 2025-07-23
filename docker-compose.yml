@@ -160,6 +160,8 @@ services:
     image: harvest3-bot-image
     container_name: backtest
     restart: on-failure:5
+    env_file:
+      - .env
     volumes:
       - ./src:/usr/src/app/src:cached
       - ./data:/usr/src/app/data:cached
