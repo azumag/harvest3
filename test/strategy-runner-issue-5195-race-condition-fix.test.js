@@ -335,7 +335,8 @@ echo "Lock cleanup test completed"
 
     describe('修正内容のコードレビュー', () => {
         test('Issue #5195の修正がentrypoint.shに含まれている', () => {
-            const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
+            const actualEntrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
+            const entrypointContent = fs.readFileSync(actualEntrypointPath, 'utf8');
             
             // Issue #5195のコメントが含まれていることを確認
             expect(entrypointContent).toContain('Issue #5195');
@@ -354,11 +355,12 @@ echo "Lock cleanup test completed"
         });
 
         test('30秒のクリーンアップタイムアウトが設定されている', () => {
-            const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
+            const actualEntrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
+            const entrypointContent = fs.readFileSync(actualEntrypointPath, 'utf8');
             
             // より厳格な30秒クリーンアップタイムアウトが設定されていることを確認
             expect(entrypointContent).toContain('if [ $lock_age -gt 30 ]');
-            expect(entrypointContent).toContain('if [ $((current_time - file_time)) -lt 30 ]');
+            expect(entrypointContent).toContain('$((current_time - file_time)) -lt 30');
         });
     });
 });

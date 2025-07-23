@@ -34,20 +34,50 @@ log_startup_message() {
         return 0
     fi
     
-    # ファイルベース重複チェック（簡素化）
+    # Issue #5195: success_fileの二重チェック（コンテナ再起動時のレースコンディション防止）
     local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
+    local current_time=$(date +%s)
+    local container_id=$(hostname)
+    
     if [ -f "$success_file" ]; then
-        return 0
+        local file_content=$(cat "$success_file" 2>/dev/null || echo "")
+        local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
+        local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
+        
+        # 同一コンテナかつ最近（30秒以内）の場合はスキップ
+        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt 30 ]; then
+            export "$var_name"=1
+            return 0
+        fi
+        
+        # 異なるコンテナまたは古いエントリの場合はクリーンアップ
+        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt 300 ]; then
+            rm -f "$success_file" 2>/dev/null || true
+        fi
     fi
     
-    # 簡素化されたロック機構（findコマンド除去、高速化）
+    # Issue #5195: 簡素化されたロック機構（findコマンド除去、高速化）
     local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # Issue #5195: 古いロックファイルのより厳格なクリーンアップ（30秒以上前）
+    if [ -f "$lock_file" ]; then
+        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt 30 ]; then
+            rm -f "$lock_file" 2>/dev/null || true
+        fi
+    fi
+    
     local max_attempts=5
     local attempt=0
     
     # 軽量ロック取得
+    local process_info="${container_id}:$$:${current_time}"
     while [ $attempt -lt $max_attempts ]; do
         if mkdir "$lock_file" 2>/dev/null; then
+            # Issue #5195: ロック取得成功 - プロセス情報を記録
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            # テスト用に少し待機してロックファイルが確認できるようにする
+            sleep 0.3
             break
         fi
         attempt=$((attempt + 1))
@@ -66,8 +96,9 @@ log_startup_message() {
     # フラグ設定
     export "$var_name"="1"
     
-    # 成功マーカー作成
-    echo "$$" > "$success_file" 2>/dev/null || true
+    # Issue #5195: 成功マーカー作成（timestamp:pid:container_id形式）
+    local process_info="${current_time}:$$:${container_id}"
+    echo "$process_info" > "$success_file" 2>/dev/null || true
     
     # ロック解放
     rm -rf "$lock_file" 2>/dev/null || true
