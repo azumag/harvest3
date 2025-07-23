@@ -72,7 +72,7 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     
     // 問題となったメッセージが処理対象になっていることを確認
     const problemMessage = 'Starting backtest container with enhanced error handling';
-    expect(entrypointContent).toContain(`log_startup_message "${problemMessage}"`);
+    expect(entrypointContent).toContain(`log_backtest_startup_message "${problemMessage}"`);
   });
 
   describe('重複メッセージ防止機能のテスト', () => {
@@ -237,7 +237,7 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     expect(entrypointContent).toContain('log_backtest_startup_message "$message"');
     
     // 問題となったメッセージの処理経路確認
-    const messagePattern = /log_startup_message.*Starting backtest container with enhanced error handling/;
+    const messagePattern = /log_backtest_startup_message.*Starting backtest container with enhanced error handling/;
     expect(entrypointContent).toMatch(messagePattern);
   });
 
