@@ -53,7 +53,7 @@ simple_log_startup_message() {
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     
     # Issue #5103: プロセス内での確実な重複防止（第二防御線）
-    if [ "\${!var_name}" = "1" ]; then
+    if [ "\${\!var_name}" = "1" ]; then
         return 0
     fi
     
