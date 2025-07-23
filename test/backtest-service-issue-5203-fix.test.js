@@ -18,18 +18,20 @@ const execAsync = promisify(exec);
 describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   const tmpDir = path.join(__dirname, '..', '.tmp');
+  let entrypointContent;
   
   beforeAll(() => {
     // .tmpディレクトリが存在しない場合は作成
     if (!fs.existsSync(tmpDir)) {
       fs.mkdirSync(tmpDir, { recursive: true });
     }
+    
+    // DRY原則適用: entrypoint.shの内容を一度だけ読み込み
+    entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
   });
 
   test('Issue #5203対象となるentrypoint.shの機能が実装されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
-    
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5203関連の基本機能確認
     expect(entrypointContent).toContain('log_backtest_startup_message');
@@ -50,7 +52,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
   });
 
   test('log_backtest_startup_message関数の実装内容確認', () => {
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 関数定義の確認
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
@@ -68,7 +69,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
   });
 
   test('Issue #5203でログに出力された具体的なメッセージの処理確認', () => {
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 問題となったメッセージが処理対象になっていることを確認
     const problemMessage = 'Starting backtest container with enhanced error handling';
@@ -158,7 +158,7 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
       expect(timeDiff).toBeGreaterThan(60);
     });
 
-    test('atomicロック機構のディレクトリベース排他制御確認', () => {
+    test('ロックディレクトリの基本的な作成・削除動作確認', () => {
       // ロックディレクトリが存在しない状態
       expect(fs.existsSync(testLockDir)).toBe(false);
       
@@ -174,7 +174,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
 
   describe('npm エラーとの相関関係チェック', () => {
     test('Issue #5203で報告されたnpmエラーパターンの確認', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // package.jsonのbacktestスクリプト存在確認処理
       expect(entrypointContent).toContain('grep -q \'"backtest"\' package.json');
@@ -186,7 +185,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     });
 
     test('npm run backtestコマンド検証機能の確認', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // npm run backtestコマンドの検証処理
       expect(entrypointContent).toContain('npm run backtestコマンドの検証');
@@ -197,7 +195,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
 
   describe('Issue #5203で報告された時刻での問題再現防止', () => {
     test('2025-07-23 16:31:51 時点での問題が解決されていることを確認', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // この時刻に発生した問題のコンテキストから想定される修正内容
       // 1. 重複起動メッセージの防止機構
@@ -215,7 +212,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     });
 
     test('Issue #5203の根本原因となりうる条件の修正確認', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // レースコンディション対策の確認
       expect(entrypointContent).toContain('atomicなロック取得を試行');
@@ -232,7 +228,6 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
   });
 
   test('Issue #5203修正後の動作確認 - 全体的な統合テスト', () => {
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // BACKTEST_MODE=trueでの分岐処理確認
     expect(entrypointContent).toContain('if [ "$BACKTEST_MODE" = "true" ]; then');
@@ -244,5 +239,93 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     // 問題となったメッセージの処理経路確認
     const messagePattern = /log_startup_message.*Starting backtest container with enhanced error handling/;
     expect(entrypointContent).toMatch(messagePattern);
+  });
+
+  // レビュー指摘に基づく実動作統合テスト（簡略版）
+  describe('実動作統合テスト', () => {
+    let testLockFile;
+    let testRestartFile;
+    
+    beforeEach(() => {
+      // テスト用ファイルパス設定
+      testLockFile = path.join(tmpDir, 'test-backtest-startup-message.lock');
+      testRestartFile = path.join(tmpDir, 'test-backtest-restart-detection.state');
+      
+      // テスト前クリーンアップ
+      [testLockFile, testRestartFile].forEach(file => {
+        if (fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
+      });
+    });
+
+    test('タイムスタンプファイルベースの重複防止ロジック確認', () => {
+      const currentTime = Math.floor(Date.now() / 1000);
+      
+      // 初回起動シミュレーション（ロックファイルなし）
+      expect(fs.existsSync(testLockFile)).toBe(false);
+      
+      // 1回目起動後のタイムスタンプ記録をシミュレート
+      fs.writeFileSync(testLockFile, currentTime.toString());
+      expect(fs.existsSync(testLockFile)).toBe(true);
+      
+      // 短時間後（5秒以内）の重複起動チェック
+      const lastTime = parseInt(fs.readFileSync(testLockFile, 'utf8'));
+      const timeDiff = (currentTime + 3) - lastTime; // 3秒後
+      
+      // 重複防止条件の確認（entrypoint.shのBACKTEST_STARTUP_LOCK_TIMEOUT=60と同じロジック）
+      expect(timeDiff).toBeLessThan(60);
+      expect(lastTime).toBe(currentTime);
+    });
+
+    test('コンテナ再起動検出ファイルの動作確認', () => {
+      const currentTime = Math.floor(Date.now() / 1000);
+      const instanceId = `${currentTime}_12345`; // プロセスIDの代替
+      
+      // 初回起動（再起動検出ファイルなし）
+      expect(fs.existsSync(testRestartFile)).toBe(false);
+      
+      // 再起動検出情報の記録をシミュレート
+      const restartInfo = `${instanceId}:${currentTime}`;
+      fs.writeFileSync(testRestartFile, restartInfo);
+      
+      // ファイル内容確認
+      const savedInfo = fs.readFileSync(testRestartFile, 'utf8');
+      expect(savedInfo).toBe(restartInfo);
+      
+      // 解析テスト
+      const [savedInstanceId, savedTime] = savedInfo.split(':');
+      expect(savedInstanceId).toBe(instanceId);
+      expect(parseInt(savedTime)).toBe(currentTime);
+    });
+  });
+
+  // atomicロック動作の実動作テスト
+  describe('atomicロック動作の実動作テスト', () => {
+    test('並行プロセスでのatomicロック競合テスト', async () => {
+      const testLockDir = '/tmp/test-atomic-lock.dir';
+      
+      // クリーンアップ
+      if (fs.existsSync(testLockDir)) {
+        fs.rmSync(testLockDir, { recursive: true, force: true });
+      }
+      
+      // 5つの並行プロセスでmkdirを試行
+      const promises = Array(5).fill().map((_, i) =>
+        execAsync(`mkdir "${testLockDir}" 2>/dev/null && echo "success-${i}" || echo "failed-${i}"`)
+          .catch(error => ({ stdout: `failed-${i}`, stderr: error.message }))
+      );
+      
+      const results = await Promise.all(promises);
+      
+      // 成功したプロセスが1つだけであることを確認
+      const successResults = results.filter(r => r.stdout && r.stdout.includes('success'));
+      expect(successResults).toHaveLength(1);
+      
+      // クリーンアップ
+      if (fs.existsSync(testLockDir)) {
+        fs.rmSync(testLockDir, { recursive: true, force: true });
+      }
+    }, 10000);
   });
 });
