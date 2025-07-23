@@ -1203,7 +1203,7 @@ main() {
         fi
         
         # Issue #5127対策: exec実行前のファイナルチェックとエラーハンドリング強化
-        log "Executing backtest command with enhanced error handling..."
+        log_backtest_startup_message "Executing backtest command with enhanced error handling..."
         
         # backtest開始時刻を記録（問題追跡用）
         echo "$(date +%s)" > /tmp/backtest-start-time.marker
