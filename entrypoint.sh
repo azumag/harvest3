@@ -1325,11 +1325,13 @@ main() {
             fi
         fi
         
+        # Issue #5127/#5173対策: exec実行前のファイナルチェックと重複メッセージ防止  
         # Issue #5132修正: 重複する起動メッセージを防止するため、exec実行前の追加メッセージを削除
         # バックテスト実行開始はline 1288で既に通知済み
         
         # backtest開始時刻を記録（問題追跡用）
         echo "$(date +%s)" > /tmp/backtest-start-time.marker
+        
         
         # execコマンドの実行
         exec "$@"
