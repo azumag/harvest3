@@ -36,6 +36,7 @@ BACKGROUND_CLEANUP_PIDS=""
 # Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
+BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-5}  # flock最大待機時間（秒）
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
 
 # セキュリティ注記: /tmp使用について
@@ -302,6 +303,20 @@ install_npm_dependencies() {
     return 0
 }
 
+# ロッククリーンアップヘルパー関数
+cleanup_backtest_lock() {
+    # flock利用時のファイルディスクリプタクリーンアップ
+    if command -v flock >/dev/null 2>&1; then
+        exec 200>&- 2>/dev/null || true
+        trap - EXIT INT TERM 2>/dev/null || true
+    else
+        # フォールバック時のディレクトリクリーンアップ
+        local fallback_lock_dir="/tmp/backtest-startup-message.lock.fallback"
+        rmdir "$fallback_lock_dir" 2>/dev/null || true
+        trap - EXIT INT TERM 2>/dev/null || true
+    fi
+}
+
 # Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）
 # Issue #5159: シンプルで確実なatomic lock実装による重複防止機構
 log_backtest_startup_message() {
@@ -309,17 +324,44 @@ log_backtest_startup_message() {
     local current_time=$(date +%s)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
-    local max_wait_time=5  # 最大待機時間（秒）
+    local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"  # 設定変数化
     
-    # Issue #5159: flockによる確実なatomic lock実装
+    # Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
     # 複数プロセス間でのrace conditionを完全に防止
-    exec 200>"$lock_file"
-    
-    # タイムアウト付きでexclusiveロックを取得
-    if ! flock -x -w "$max_wait_time" 200; then
-        log "Backtest startup message suppressed (lock acquisition timeout)"
-        exec 200>&-
-        return 0
+    if command -v flock >/dev/null 2>&1; then
+        # flock利用可能な場合の実装
+        exec 200>"$lock_file"
+        
+        # 異常終了時のFDクリーンアップ用trap
+        trap 'exec 200>&- 2>/dev/null || true' EXIT INT TERM
+        
+        # タイムアウト付きでexclusiveロックを取得
+        if ! flock -x -w "$max_wait_time" 200; then
+            log "Backtest startup message suppressed (lock acquisition timeout)"
+            exec 200>&-
+            trap - EXIT INT TERM
+            return 0
+        fi
+    else
+        # flockが利用不可の場合のフォールバック（mkdir-based）
+        local fallback_lock_dir="${lock_file}.fallback"
+        local attempt=0
+        local max_attempts=3
+        
+        while [ $attempt -lt $max_attempts ]; do
+            if mkdir "$fallback_lock_dir" 2>/dev/null; then
+                # ロック取得成功、クリーンアップ用trap設定
+                trap 'rmdir "$fallback_lock_dir" 2>/dev/null || true' EXIT INT TERM
+                break
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+        done
+        
+        if [ $attempt -eq $max_attempts ]; then
+            log "Backtest startup message suppressed (fallback lock acquisition failed)"
+            return 0
+        fi
     fi
     
     # ロック取得後、タイムスタンプをチェック
@@ -329,7 +371,7 @@ log_backtest_startup_message() {
         
         if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
-            exec 200>&-
+            cleanup_backtest_lock
             return 0
         fi
     fi
@@ -343,7 +385,7 @@ log_backtest_startup_message() {
         # NPMエラー後30秒以内はメッセージを抑制
         if [ $npm_error_age -lt 30 ]; then
             log "Backtest startup message suppressed (NPM error recovery: ${npm_error_age}s ago)"
-            exec 200>&-
+            cleanup_backtest_lock
             return 0
         fi
     fi
@@ -353,8 +395,8 @@ log_backtest_startup_message() {
     echo "$current_time" > "$timestamp_file"
     chmod 600 "$timestamp_file"
     
-    # ファイルディスクリプタを閉じてロック解放
-    exec 200>&-
+    # ロック解放
+    cleanup_backtest_lock
     return 0
 }
 
