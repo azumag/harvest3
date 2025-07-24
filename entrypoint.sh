@@ -675,13 +675,15 @@ log_startup_message() {
     fi
     
     # Issue #5220/#5248/#5267: 起動メッセージの重複防止（アトミックファイルロック強化版）
+    # Issue #5267修正: アトミックファイルロックによる確実な重複防止
     # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5267修正: アトミックファイルロックによる確実な重複防止
+            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
             local startup_msg_lock_file="/tmp/main-startup-message.lock"
             local startup_msg_done_file="/tmp/main-startup-message.done"
+            local atomic_processing_success=false
             
             # 既に完了マーカーが存在する場合は重複防止
             if [ -f "$startup_msg_done_file" ]; then
@@ -705,6 +707,7 @@ log_startup_message() {
                 # フラグ設定とメッセージ出力
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
                 log "$message"
+                atomic_processing_success=true
                 
                 # 完了マーカー作成（他のプロセス用）
                 echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
@@ -713,7 +716,10 @@ log_startup_message() {
                 # ロック解放
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
                 
-                return 0  # 処理完了、以降のRedis/ファイル処理をスキップ
+                # Issue #5295修正: 明示的な成功フラグをチェックしてreturn
+                if [ "$atomic_processing_success" = true ]; then
+                    return 0  # 処理完了、以降のRedis/ファイル処理を確実にスキップ
+                fi
             else
                 # ロック取得失敗 - 他のプロセスが処理中
                 # 短時間待機してから完了マーカーをチェック
@@ -727,6 +733,10 @@ log_startup_message() {
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
                 return 0  # 他のプロセスがログ出力したため、重複防止
             fi
+            
+            # Issue #5295修正: fallthroughが発生した場合の緊急停止
+            # このコードに到達した場合は予期しない状況なので、安全のためreturn
+            return 0
             ;;
     esac
     
