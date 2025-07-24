@@ -30,7 +30,7 @@ describe('Issue #5159: backtestサービス例外修正', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5159修正が適用されている
-    expect(entrypointContent).toContain('Issue #5159: シンプルで確実なatomic lock実装');
+    expect(entrypointContent).toContain('Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）');
     expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // backtest専用の起動メッセージ関数が存在する

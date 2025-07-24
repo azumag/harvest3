@@ -222,7 +222,7 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
       
       // NPMエラー時の重複防止機構の確認
       expect(entrypointContent).toContain('NPMエラー状態をチェック（Issue #5159）');
-      expect(entrypointContent).toContain('NPMエラー後60秒以内はメッセージを抑制');
+      expect(entrypointContent).toContain('NPM error recovery within');
     });
   });
 
