@@ -663,6 +663,95 @@ describe('DiscordRateLimiter', () => {
     });
   });
 
+  describe('enhanced error logging', () => {
+    const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
+    const message = 'Test message';
+    let consoleSpy;
+
+    beforeEach(() => {
+      mockedAxios.post.mockClear();
+      consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+    });
+
+    test('logs detailed network error information', async () => {
+      const networkError = new Error('Network timeout');
+      networkError.code = 'ECONNABORTED';
+      networkError.name = 'NetworkError';
+      
+      mockedAxios.post.mockRejectedValue(networkError);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('ECONNABORTED');
+
+      // Verify enhanced logging output
+      expect(consoleSpy).toHaveBeenCalledWith('[DISCORD_RATE_LIMITER] Network/Other error:');
+      expect(consoleSpy).toHaveBeenCalledWith('  Message:', 'Network timeout');
+      expect(consoleSpy).toHaveBeenCalledWith('  Code:', 'ECONNABORTED');
+      expect(consoleSpy).toHaveBeenCalledWith('  Name:', 'NetworkError');
+      expect(consoleSpy).toHaveBeenCalledWith('  URL:', expect.stringContaining('***'));
+      expect(consoleSpy).toHaveBeenCalledWith('  Full Error:', expect.stringContaining('Network timeout'));
+    });
+
+    test('logs detailed HTTP error information', async () => {
+      const httpError = new Error('Internal Server Error');
+      httpError.response = {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: { error: 'Database connection failed' }
+      };
+      
+      mockedAxios.post.mockRejectedValue(httpError);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('http_500');
+
+      // Verify enhanced HTTP error logging
+      expect(consoleSpy).toHaveBeenCalledWith('[DISCORD_RATE_LIMITER] HTTP error:');
+      expect(consoleSpy).toHaveBeenCalledWith('  Status:', 500);
+      expect(consoleSpy).toHaveBeenCalledWith('  Status Text:', 'Internal Server Error');
+      expect(consoleSpy).toHaveBeenCalledWith('  Response Data:', expect.stringContaining('Database connection failed'));
+      expect(consoleSpy).toHaveBeenCalledWith('  URL:', expect.stringContaining('***'));
+    });
+
+    test('handles network error with missing properties gracefully', async () => {
+      const incompleteError = new Error(); // No message, code, or name
+      
+      mockedAxios.post.mockRejectedValue(incompleteError);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+
+      // Verify logging with default values (checking just the main parts we care about)
+      expect(consoleSpy).toHaveBeenCalledWith('[DISCORD_RATE_LIMITER] Network/Other error:');
+      expect(consoleSpy).toHaveBeenCalledWith('  Message:', 'Unknown error');
+      expect(consoleSpy).toHaveBeenCalledWith('  Code:', 'NO_CODE');
+      // The Name, URL and Full Error calls may vary, let's check they exist
+      expect(consoleSpy.mock.calls.some(call => call[0] === '  Name:')).toBe(true);
+      expect(consoleSpy.mock.calls.some(call => call[0] === '  URL:')).toBe(true);
+    });
+
+    test('masks webhook URL properly in error logs', async () => {
+      const networkError = new Error('Connection failed');
+      networkError.code = 'ECONNREFUSED';
+      
+      mockedAxios.post.mockRejectedValue(networkError);
+
+      await rateLimiter.sendToDiscord(validUrl, message);
+
+      // Verify URL is masked in logs
+      expect(consoleSpy).toHaveBeenCalledWith('  URL:', 'https://discord.com/api/webhooks/123456789/***');
+    });
+  });
+
   describe('rate limit buffer configuration', () => {
     const validUrl = 'https://discord.com/api/webhooks/123456789/abcdefghijk';
     const message = 'Test message';

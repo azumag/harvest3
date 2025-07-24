@@ -426,12 +426,18 @@ class DiscordRateLimiter {
 
       // その他のHTTPエラーの詳細ログ
       if (error.response) {
-        console.error('[DISCORD_RATE_LIMITER] HTTP error:', {
+        const httpErrorDetails = {
           status: error.response.status,
           statusText: error.response.statusText,
           data: error.response.data,
           url: this.maskWebhookUrl(webhookUrl)
-        });
+        };
+        
+        console.error('[DISCORD_RATE_LIMITER] HTTP error:');
+        console.error('  Status:', httpErrorDetails.status);
+        console.error('  Status Text:', httpErrorDetails.statusText);
+        console.error('  Response Data:', JSON.stringify(httpErrorDetails.data, null, 2));
+        console.error('  URL:', httpErrorDetails.url);
         return { 
           success: false, 
           error: `http_${error.response.status}`,
@@ -444,11 +450,19 @@ class DiscordRateLimiter {
       }
 
       // ネットワークエラーなどの詳細ログ
-      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', {
-        message: error.message,
-        code: error.code,
+      const errorDetails = {
+        message: error.message || 'Unknown error',
+        code: error.code || 'NO_CODE',
+        name: error.name || 'UnknownError',
         url: this.maskWebhookUrl(webhookUrl)
-      });
+      };
+      
+      console.error('[DISCORD_RATE_LIMITER] Network/Other error:');
+      console.error('  Message:', errorDetails.message);
+      console.error('  Code:', errorDetails.code);
+      console.error('  Name:', errorDetails.name);
+      console.error('  URL:', errorDetails.url);
+      console.error('  Full Error:', JSON.stringify(errorDetails, null, 2));
       return { 
         success: false, 
         error: error.code || error.message,
