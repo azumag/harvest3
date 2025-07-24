@@ -69,9 +69,9 @@ describe('Issue #5159: backtestサービス例外修正', () => {
     expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
     expect(entrypointContent).toContain('exec 200>&-');
     
-    // タイムスタンプベースの重複防止が実装されている
-    expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
-    expect(entrypointContent).toContain('if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]');
+    // タイムスタンプベースの重複防止が実装されている（Issue #5319: bc使用の浮動小数点計算）
+    expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
+    expect(entrypointContent).toContain('command -v bc');
     
     console.log('Issue #5159: flock-based duplicate prevention mechanism is properly implemented');
     
