@@ -179,10 +179,10 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       expect(backtestServiceConfig).toContain('DISCORD_ERROR_WEBHOOK_URL=${DISCORD_ERROR_WEBHOOK_URL}');
       expect(backtestServiceConfig).not.toContain('env_file:');
       
-      // 2. 重複メッセージ防止機構の確認
+      // 2. 重複メッセージ防止機構の確認（Issue #5159: flock方式に更新）
       const entrypointContent = readConfigFile(entrypointPath);
       expect(entrypointContent).toContain('log_backtest_startup_message()');
-      expect(entrypointContent).toContain('atomicなロック取得を試行');
+      expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
       
       // 3. エラーハンドリングの改善確認
       expect(entrypointContent).toContain('enhanced error handling');

@@ -32,41 +32,37 @@ describe('Issue #5175: backtestサービス重複メッセージ修正', () => {
     
     // Issue #5175修正の確認
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    // Issue #5159: flock方式による確実な重複防止機構への更新
+    expect(entrypointContent).toContain('Issue #5159: シンプルで確実なatomic lock実装による重複防止機構');
     
     // タイムアウト延長の確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT:-60');
     expect(entrypointContent).toContain('Issue #5175: 60秒に延長');
     
-    // コンテナ再起動検出機能の確認
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('container_boot_time');
-    expect(entrypointContent).toContain('instance_id');
+    // Issue #5159: flock方式の実装確認
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(entrypointContent).toContain('exec 200>&-');
   });
 
   describe('コンテナ再起動検出機構テスト', () => {
-    let testRestartDetectionFile;
     let testTimestampFile;
     let testLockDir;
 
     beforeEach(() => {
       // テスト用の一意なファイル名を生成
       const testId = Date.now() + Math.random().toString(36).substr(2, 9);
-      testRestartDetectionFile = path.join(tmpDir, `backtest-restart-detection-test-${testId}.state`);
       testTimestampFile = path.join(tmpDir, `backtest-startup-timestamp-test-${testId}.lock`);
-      testLockDir = path.join(tmpDir, `backtest-startup-lock-test-${testId}.dir`);
+      testLockDir = path.join(tmpDir, `backtest-startup-lock-test-${testId}`);
     });
 
     afterEach(() => {
       // テスト後のクリーンアップ
-      [testRestartDetectionFile, testTimestampFile].forEach(file => {
-        if (fs.existsSync(file)) {
-          fs.unlinkSync(file);
-        }
-      });
-      if (fs.existsSync(testLockDir)) {
-        fs.rmSync(testLockDir, { recursive: true, force: true });
+      if (fs.existsSync(testTimestampFile)) {
+        fs.unlinkSync(testTimestampFile);
+      }
+      if (fs.existsSync(`${testLockDir}.lock`)) {
+        fs.unlinkSync(`${testLockDir}.lock`);
       }
     });
 
@@ -75,69 +71,66 @@ describe('Issue #5175: backtestサービス重複メッセージ修正', () => {
 set -e
 
 BACKTEST_STARTUP_LOCK_TIMEOUT=60
-BACKTEST_CONTAINER_RESTART_DETECTION_FILE="${testRestartDetectionFile}"
-lock_dir="${testLockDir}"
 timestamp_file="${testTimestampFile}"
+testLockDir="${testLockDir}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# Issue #5175修正版のlog_backtest_startup_message関数（簡略版）
+# Issue #5159: flock方式による改良版のlog_backtest_startup_message関数（簡略版）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
-    local restart_detection_file="$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
+    local lock_file="${testLockDir}.lock"
+    local timestamp_file="$timestamp_file"
+    local max_wait_time=5  # 最大待機時間（秒）
     
-    # コンテナ再起動検出とトラッキング
-    local container_boot_time=$(stat -c %Y /proc/1 2>/dev/null || echo "$current_time")
-    local instance_id="\${container_boot_time}_$$"
+    # Issue #5159: flockによる確実なatomic lock実装
+    # 複数プロセス間でのrace conditionを完全に防止
+    exec 200>"$lock_file"
     
-    # コンテナ再起動検出による追加重複防止
-    if [ -f "$restart_detection_file" ]; then
-        local last_restart_info=$(cat "$restart_detection_file" 2>/dev/null || echo "")
-        local last_instance_id=$(echo "$last_restart_info" | cut -d':' -f1 2>/dev/null || echo "")
-        local last_message_time=$(echo "$last_restart_info" | cut -d':' -f2 2>/dev/null || echo "0")
-        
-        # 同じインスタンスIDまたは最近のメッセージ時刻をチェック
-        if [ "$last_instance_id" = "$instance_id" ] || [ $((current_time - last_message_time)) -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
-            log "Backtest startup message suppressed (container restart detection: last shown $((current_time - last_message_time))s ago)"
-            return 0
-        fi
+    # タイムアウト付きでexclusiveロックを取得
+    if ! flock -x -w "$max_wait_time" 200; then
+        log "Backtest startup message suppressed (lock acquisition timeout)"
+        exec 200>&-
+        return 0
     fi
     
-    # 既存のタイムスタンプファイルをチェック
+    # ロック取得後、タイムスタンプをチェック
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
         local time_diff=$((current_time - last_time))
         
         if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown \${time_diff}s ago)"
-            echo "\${instance_id}:\${last_time}" > "$restart_detection_file"
-            chmod 600 "$restart_detection_file"
+            exec 200>&-
             return 0
         fi
     fi
     
-    # atomicなロック取得を試行（mkdirはatomic操作）
-    if mkdir "$lock_dir" 2>/dev/null; then
-        # タイムスタンプを更新してメッセージ出力
-        echo "$current_time" > "$timestamp_file"
-        chmod 600 "$timestamp_file"
+    # NPMエラー状態をチェック（Issue #5159）
+    local npm_error_marker="/tmp/backtest-npm-error-detection.state"
+    if [ -f "$npm_error_marker" ]; then
+        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
+        local npm_error_age=$((current_time - last_npm_error))
         
-        # 再起動検出情報を記録
-        echo "\${instance_id}:\${current_time}" > "$restart_detection_file"
-        chmod 600 "$restart_detection_file"
-        
-        log "$message"
-        
-        # ロック解放
-        rm -rf "$lock_dir" 2>/dev/null || true
-        return 0
-    else
-        log "Backtest startup message suppressed (another process is logging)"
-        return 0
+        # NPMエラー後30秒以内はメッセージを抑制
+        if [ $npm_error_age -lt 30 ]; then
+            log "Backtest startup message suppressed (NPM error recovery: \${npm_error_age}s ago)"
+            exec 200>&-
+            return 0
+        fi
     fi
+    
+    # メッセージ出力とタイムスタンプ更新
+    log "$message"
+    echo "$current_time" > "$timestamp_file"
+    chmod 600 "$timestamp_file"
+    
+    # ファイルディスクリプタを閉じてロック解放
+    exec 200>&-
+    return 0
 }
 
 # テスト実行：連続した3回の呼び出し（短時間で実行）
@@ -168,12 +161,12 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
         );
         expect(suppressMessages.length).toBe(2);
         
-        // 再起動検出ファイルが作成されている
-        expect(fs.existsSync(testRestartDetectionFile)).toBe(true);
+        // タイムスタンプファイルが作成されている
+        expect(fs.existsSync(testTimestampFile)).toBe(true);
         
-        // 再起動検出ファイルの内容確認
-        const restartInfo = fs.readFileSync(testRestartDetectionFile, 'utf8').trim();
-        expect(restartInfo).toMatch(/^\d+_\d+:\d+$/);
+        // タイムスタンプファイルの内容確認
+        const timestampContent = fs.readFileSync(testTimestampFile, 'utf8').trim();
+        expect(timestampContent).toMatch(/^\d+$/);
         
       } finally {
         if (fs.existsSync(testScriptPath)) {
@@ -189,7 +182,6 @@ set -e
 
 BACKTEST_STARTUP_LOCK_TIMEOUT=60
 timestamp_file="${testTimestampFile}"
-restart_detection_file="${testRestartDetectionFile}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
@@ -198,7 +190,6 @@ log() {
 # 現在時刻から61秒前のタイムスタンプを設定（タイムアウトを超える）
 old_time=$(($(date +%s) - 61))
 echo "$old_time" > "$timestamp_file"
-echo "old_instance_id:$old_time" > "$restart_detection_file"
 
 log "Set old timestamp: $old_time"
 `;
@@ -215,7 +206,6 @@ log "Set old timestamp: $old_time"
 set -e
 
 BACKTEST_STARTUP_LOCK_TIMEOUT=60
-BACKTEST_CONTAINER_RESTART_DETECTION_FILE="${testRestartDetectionFile}"
 lock_dir="${testLockDir}"
 timestamp_file="${testTimestampFile}"
 
@@ -223,11 +213,21 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# 簡略版のlog_backtest_startup_message関数
+# Issue #5159: flock方式による簡略版のlog_backtest_startup_message関数
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
-    local restart_detection_file="$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
+    local lock_file="${testLockDir}.lock"
+    local max_wait_time=5
+    
+    # flock方式によるロック取得
+    exec 200>"$lock_file"
+    
+    if ! flock -x -w "$max_wait_time" 200; then
+        log "Backtest startup message suppressed (lock acquisition timeout)"
+        exec 200>&-
+        return 0
+    fi
     
     # 既存のタイムスタンプファイルをチェック
     if [ -f "$timestamp_file" ]; then
@@ -236,6 +236,7 @@ log_backtest_startup_message() {
         
         if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown \${time_diff}s ago)"
+            exec 200>&-
             return 0
         fi
     fi
@@ -243,6 +244,9 @@ log_backtest_startup_message() {
     # タイムアウトを超えているのでメッセージ出力
     echo "$current_time" > "$timestamp_file"
     log "$message"
+    
+    # ロック解放
+    exec 200>&-
 }
 
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
@@ -276,8 +280,9 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
     
     // Issue #5175対応のクリーンアップ機能の確認
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）');
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('Removed backtest container restart detection file');
+    // Issue #5159: flock方式ではNPMエラー検出ファイルのクリーンアップを確認
+    expect(entrypointContent).toContain('backtest-npm-error-detection.state');
+    expect(entrypointContent).toContain('Removed backtest NPM error detection file');
   });
 
   test('entrypoint.sh構文検証（Issue #5175修正後）', async () => {
@@ -310,14 +315,14 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
   test('セキュリティ面での改良確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // ファイル権限の適切な設定
-    expect(entrypointContent).toContain('chmod 600 "$restart_detection_file"');
+    // ファイル権限の適切な設定（Issue #5159: flock方式）
     expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
+    expect(entrypointContent).toContain('chmod 600 "$npm_error_marker"');
     
     // エラーハンドリングの確認
     expect(entrypointContent).toContain('2>/dev/null || true');
     
-    // セキュアなクリーンアップ処理
-    expect(entrypointContent).toContain('rm -rf "$lock_dir" 2>/dev/null || true');
+    // Issue #5159: flock方式でのロック解放確認
+    expect(entrypointContent).toContain('exec 200>&-');
   });
 });

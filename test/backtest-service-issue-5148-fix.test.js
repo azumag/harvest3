@@ -61,12 +61,13 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     expect(entrypointContent).toContain('Backtest startup message suppressed');
     
     // コンテナ再起動検出機能
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('container_boot_time');
-    expect(entrypointContent).toContain('instance_id');
+    // Issue #5159: flock方式のロック機構への更新
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(entrypointContent).toContain('exec 200>&-');
     
     // atomicロック機構（mkdirにatomic操作）
-    expect(entrypointContent).toContain('mkdir "$lock_dir"');
+    expect(entrypointContent).toContain('backtest-npm-error-detection.state');
     
     log('重複メッセージ防止機能の存在を確認しました');
   });
@@ -94,11 +95,10 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     
     // エラーハンドリングとクリーンアップ処理
     expect(entrypointContent).toContain('2>/dev/null || true');
-    expect(entrypointContent).toContain('rm -rf "$lock_dir"');
+    expect(entrypointContent).toContain('exec 200>&-');
     
-    // 古いロックのクリーンアップ機構
-    expect(entrypointContent).toContain('古いロックディレクトリのクリーンアップ');
-    expect(entrypointContent).toContain('lock_age');
+    // NPMエラー検出ファイルのクリーンアップ機構
+    expect(entrypointContent).toContain('Removed backtest NPM error detection file');
     
     // 適切なエラーメッセージ
     expect(entrypointContent).toContain('another process is logging');

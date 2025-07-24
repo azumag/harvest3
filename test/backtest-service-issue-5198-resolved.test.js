@@ -72,12 +72,11 @@ describe('Issue #5198: backtestサービス例外問題解決確認', () => {
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE');
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('instance_id');
     
-    // atomicなロック機構
-    expect(entrypointContent).toContain('mkdir "$lock_dir"');
-    expect(entrypointContent).toContain('rm -rf "$lock_dir"');
+    // Issue #5159: flockベースの重複防止機構
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(entrypointContent).toContain('exec 200>&-');
     
     // タイムスタンプベースの重複チェック
     expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
@@ -274,7 +273,8 @@ rm -rf /tmp/backtest-startup-lock-test-*.dir 2>/dev/null || true
     
     // Issue #5173の修正内容確認
     expect(issue5173Content).toContain('重複メッセージ "Executing backtest command with enhanced error handling..." の修正テスト');
-    expect(issue5173Content).toContain('container restart detection');
+    // Issue #5159: flock方式への更新後はflockベースの機構がテストされている
+    expect(issue5173Content).toContain('flock -x -w');
   });
 
   afterAll(() => {
