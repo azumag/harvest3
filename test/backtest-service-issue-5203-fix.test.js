@@ -55,10 +55,10 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     // 関数定義の確認
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
     
-    // 重複防止ロジックの確認
-    expect(entrypointContent).toContain('current_time=$(date +%s)');
-    expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
-    expect(entrypointContent).toContain('if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]');
+    // 重複防止ロジックの確認（Issue #5319修正: bc使用の浮動小数点計算）
+    expect(entrypointContent).toContain('current_time=$(date +%s.%N)');
+    expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
+    expect(entrypointContent).toContain('command -v bc >/dev/null 2>&1');
     
     // メッセージ抑制ログの確認
     expect(entrypointContent).toContain('Backtest startup message suppressed');
@@ -316,9 +316,9 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
       expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
       expect(entrypointContent).toContain('exec 200>&-');
       
-      // タイムスタンプベースの重複チェックも維持されていることを確認
-      expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
-      expect(entrypointContent).toContain('if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]');
+      // タイムスタンプベースの重複チェックも維持されていることを確認（Issue #5319修正: bc使用）
+      expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
+      expect(entrypointContent).toContain('echo "$time_diff < $suppress_duration" | bc');
     });
   });
 });
