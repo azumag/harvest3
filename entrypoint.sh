@@ -26,6 +26,11 @@ SUCCESS_FILE_MAX_AGE=${SUCCESS_FILE_MAX_AGE:-300}  # success file最大寿命（
 MAX_LOCK_ATTEMPTS=${MAX_LOCK_ATTEMPTS:-3}  # ロック取得最大試行回数
 LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-1}  # ロックリトライ待機時間（秒）
 
+# Issue #5292レビュー対応: マジックナンバーの統一定数化
+MESSAGE_SUPPRESS_DURATION=${MESSAGE_SUPPRESS_DURATION:-30}  # メッセージ抑制期間（秒）
+NPM_ERROR_SUPPRESS_DURATION=${NPM_ERROR_SUPPRESS_DURATION:-60}  # NPMエラー後抑制期間（秒）
+PROCESS_MONITOR_INTERVAL=${PROCESS_MONITOR_INTERVAL:-10}  # プロセス監視間隔（秒）
+
 # Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}  # Redis重複防止TTL（秒）
 DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略
@@ -59,6 +64,48 @@ find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev
 # MD5ハッシュ値生成関数（DRY原則適用）
 get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
+}
+
+# Issue #5292レビュー対応: 統一されたタイムスタンプ検証関数（DRY原則）
+check_timestamp_validity() {
+    local marker_file="$1"
+    local suppress_duration="$2"
+    local current_time="$3"
+    
+    if [ -f "$marker_file" ]; then
+        local last_time=$(cat "$marker_file" 2>/dev/null || echo "0")
+        local time_diff=$((current_time - last_time))
+        
+        if [ $time_diff -lt $suppress_duration ]; then
+            return 0  # 抑制すべき（タイムスタンプが新しすぎる）
+        fi
+    fi
+    return 1  # 抑制不要
+}
+
+# Issue #5292レビュー対応: キャッシュクリーンアップの改善
+cleanup_npm_cache() {
+    local cleanup_success=true
+    
+    log "Cleaning npm cache for stability..."
+    
+    if ! npm cache clean --force 2>/dev/null; then
+        log "WARNING: npm cache clean failed"
+        cleanup_success=false
+    fi
+    
+    if ! rm -rf ~/.npm/_cacache 2>/dev/null; then
+        log "WARNING: _cacache removal failed"
+        cleanup_success=false
+    fi
+    
+    if [ "$cleanup_success" = "true" ]; then
+        log "npm cache cleanup completed successfully"
+    else
+        log "npm cache cleanup completed with warnings"
+    fi
+    
+    return $cleanup_success
 }
 
 # Issue #5172: 共通クリーンアップ関数（DRY原則適用）
@@ -105,6 +152,7 @@ check_existing_dependencies() {
 
 # npm install リトライ処理 (Issue #4202)
 # Issue #4202 修正: 指数バックオフによるリトライとコンテナ再起動防止
+# Issue #5292: タイムアウトとエラー処理の強化
 retry_npm_install_with_backoff() {
     local max_npm_attempts=3
     local npm_install_attempts=0
@@ -132,29 +180,73 @@ retry_npm_install_with_backoff() {
         max_npm_attempts=1  # 最小限のリトライに制限
     fi
     
+    # Issue #5292: npm install事前チェック強化
+    log "Pre-install system check:"
+    log "  Disk space available: $(df -h . | tail -1 | awk '{print $4}' || echo 'unknown')"
+    log "  Available memory: $(free -h | grep '^Mem:' | awk '{print $7}' || echo 'unknown')"
+    log "  npm registry ping test..."
+    
+    # npm registry接続テスト（5秒タイムアウト）
+    if ! timeout 5 npm ping >/dev/null 2>&1; then
+        log "WARNING: npm registry ping failed - using offline-first approach"
+    fi
+    
     while [ $npm_install_attempts -lt $max_npm_attempts ] && [ "$npm_install_success" = false ]; do
         npm_install_attempts=$((npm_install_attempts + 1))
         local attempt_log="/tmp/npm-install-error-${npm_install_attempts}.log"
-        local timeout_seconds=$((180 + npm_install_attempts * 60))  # 指数バックオフ: 180s, 240s, 300s
+        # Issue #5292: タイムアウトを短縮して早期検出（120s, 180s, 240s）
+        local timeout_seconds=$((120 + npm_install_attempts * 60))
         
         log "Attempting npm install (attempt $npm_install_attempts/$max_npm_attempts, timeout: ${timeout_seconds}s)..."
         
         # Issue #5219: 各試行で異なるオプションを使用（セキュリティ強化：シェルインジェクション対策）
-        local npm_options="--no-audit --no-fund"
+        local npm_options="--no-audit --no-fund --prefer-offline"
         case $npm_install_attempts in
-            1) npm_options="$npm_options --prefer-offline" ;;
-            2) npm_options="$npm_options --legacy-peer-deps" ;;
-            3) npm_options="$npm_options --force" ;;
+            1) npm_options="$npm_options --no-optional" ;;
+            2) npm_options="$npm_options --legacy-peer-deps --no-optional" ;;
+            3) npm_options="$npm_options --force --no-optional" ;;
         esac
         
         # セキュリティ: npmオプションの検証（許可された文字のみ）
         if ! echo "$npm_options" | grep -E '^[a-zA-Z0-9 \-]+$' >/dev/null; then
             log "ERROR: Invalid npm options detected, using safe defaults"
-            npm_options="--no-audit --no-fund"
+            npm_options="--no-audit --no-fund --prefer-offline --no-optional"
         fi
         
         log "  Using npm options: $npm_options"
-        if timeout $timeout_seconds npm install $npm_options 2>"$attempt_log"; then
+        
+        # Issue #5292: プロセス監視付きでnpm installを実行
+        (
+            # npm installをバックグラウンドで実行
+            npm install $npm_options &
+            local npm_pid=$!
+            local elapsed=0
+            local check_interval=$PROCESS_MONITOR_INTERVAL
+            
+            # 10秒ごとにプロセスの生存確認
+            while [ $elapsed -lt $timeout_seconds ] && kill -0 $npm_pid 2>/dev/null; do
+                sleep $PROCESS_MONITOR_INTERVAL
+                elapsed=$((elapsed + PROCESS_MONITOR_INTERVAL))
+                if [ $((elapsed % 30)) -eq 0 ]; then
+                    log "  npm install progress: ${elapsed}s elapsed (PID: $npm_pid)"
+                fi
+            done
+            
+            # プロセスがまだ生きている場合はタイムアウト
+            if kill -0 $npm_pid 2>/dev/null; then
+                log "  npm install timeout after ${timeout_seconds}s, terminating..."
+                kill -TERM $npm_pid 2>/dev/null || true
+                sleep 5
+                kill -KILL $npm_pid 2>/dev/null || true
+                wait $npm_pid 2>/dev/null || true
+                return 1
+            fi
+            
+            # プロセスの終了コードを確認
+            wait $npm_pid
+        ) 2>"$attempt_log"
+        
+        if [ $? -eq 0 ]; then
             log "npm install completed successfully on attempt $npm_install_attempts"
             npm_install_success=true
             # 成功時はカウンタをリセット
@@ -172,10 +264,13 @@ retry_npm_install_with_backoff() {
             
             # 最後の試行でない場合のみリトライ準備
             if [ $npm_install_attempts -lt $max_npm_attempts ]; then
-                local retry_delay=$((npm_install_attempts * 10))  # 10s, 20s の待機
+                local retry_delay=$((npm_install_attempts * 15))  # Issue #5292レビュー対応: 15s, 30s の待機（延長）
                 log "Cleaning npm cache and retrying..."
                 log "Waiting ${retry_delay}s before retry..."
-                npm cache clean --force 2>/dev/null || true
+                
+                # Issue #5292レビュー対応: 改善されたキャッシュクリーンアップ
+                cleanup_npm_cache || log "Cache cleanup warnings (non-critical)"
+                
                 sleep $retry_delay
             fi
         fi
@@ -317,14 +412,25 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）
-# Issue #5159: シンプルで確実なatomic lock実装による重複防止機構
+# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5292レビュー対応: KISS原則に基づく簡素化された重複防止機構
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"  # 設定変数化
+    
+    # Issue #5292レビュー対応: 簡素化された重複防止（メッセージハッシュベース）
+    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
+    local message_marker="/tmp/backtest-message-${message_hash}.marker"
+    
+    # メッセージ重複チェック（統一関数使用）
+    if check_timestamp_validity "$message_marker" "$MESSAGE_SUPPRESS_DURATION" "$current_time"; then
+        log "Backtest startup message suppressed (identical message within ${MESSAGE_SUPPRESS_DURATION}s)"
+        return 0
+    fi
+    
     
     # Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
     # 複数プロセス間でのrace conditionを完全に防止
@@ -379,22 +485,21 @@ log_backtest_startup_message() {
     
     # NPMエラー状態をチェック（Issue #5159）
     local npm_error_marker="/tmp/backtest-npm-error-detection.state"
-    if [ -f "$npm_error_marker" ]; then
-        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
-        local npm_error_age=$((current_time - last_npm_error))
-        
-        # NPMエラー後30秒以内はメッセージを抑制
-        if [ $npm_error_age -lt 30 ]; then
-            log "Backtest startup message suppressed (NPM error recovery: ${npm_error_age}s ago)"
-            cleanup_backtest_lock
-            return 0
-        fi
+    if check_timestamp_validity "$npm_error_marker" "$NPM_ERROR_SUPPRESS_DURATION" "$current_time"; then
+        log "Backtest startup message suppressed (NPM error recovery within ${NPM_ERROR_SUPPRESS_DURATION}s)"
+        cleanup_backtest_lock
+        return 0
     fi
     
-    # メッセージ出力とタイムスタンプ更新
+    
+    # メッセージ出力とタイムスタンプ更新（簡素化）
     log "$message"
     echo "$current_time" > "$timestamp_file"
     chmod 600 "$timestamp_file"
+    
+    # Issue #5292レビュー対応: メッセージマーカーのみ更新（PIDマーカーは不要）
+    echo "$current_time" > "$message_marker"
+    chmod 600 "$message_marker"
     
     # ロック解放
     cleanup_backtest_lock
@@ -736,6 +841,7 @@ cleanup_background_processes() {
 }
 
 # Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）
+# Issue #5292: 新しいマーカーファイルのクリーンアップ追加
 cleanup_backtest_locks() {
     log "Cleaning up backtest-specific lock files..."
     
@@ -761,6 +867,15 @@ cleanup_backtest_locks() {
     if [ -f "/tmp/backtest-npm-error-detection.state" ]; then
         rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
         log "Removed backtest NPM error detection file (Issue #5254)"
+    fi
+    
+    # Issue #5292レビュー対応: PIDマーカーは不要になったためコメントアウト
+    # PIDマーカーは簡素化により削除されました
+    
+    # Issue #5292レビュー対応: セキュリティ改善 - より制限的なパターン使用
+    if ls /tmp/backtest-message-*.marker 1> /dev/null 2>&1; then
+        rm -f /tmp/backtest-message-*.marker 2>/dev/null || true
+        log "Cleaned up backtest message markers (Issue #5292)"
     fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）

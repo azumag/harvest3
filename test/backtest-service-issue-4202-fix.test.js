@@ -24,8 +24,8 @@ describe('Backtest Service Issue #4202 Fix', () => {
 
     test('should include exponential backoff retry logic', () => {
       expect(entrypointContent).toContain('max_npm_attempts=3');
-      expect(entrypointContent).toContain('timeout_seconds=$((180 + npm_install_attempts * 60))');
-      expect(entrypointContent).toContain('retry_delay=$((npm_install_attempts * 10))');
+      expect(entrypointContent).toContain('timeout_seconds=$((120 + npm_install_attempts * 60))');
+      expect(entrypointContent).toContain('retry_delay=$((npm_install_attempts * 15))');
     });
 
     test('should include infinite loop prevention mechanism', () => {
