@@ -39,7 +39,7 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     expect(entrypointContent).toContain('Starting backtest container with enhanced error handling');
     
     // Issue #5175修正とIssue #5159 flock方式により重複防止機構が強化されていることを確認
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
+    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）');
     expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // npm エラー対処の強化がされていることを確認
