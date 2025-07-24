@@ -426,12 +426,25 @@ class DiscordRateLimiter {
 
       // その他のHTTPエラーの詳細ログ
       if (error.response) {
-        console.error('[DISCORD_RATE_LIMITER] HTTP error:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data,
-          url: this.maskWebhookUrl(webhookUrl)
-        });
+        try {
+          const errorInfo = {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            url: this.maskWebhookUrl(webhookUrl)
+          };
+          console.error('[DISCORD_RATE_LIMITER] HTTP error:', JSON.stringify(errorInfo, null, 2));
+        } catch (stringifyError) {
+          // JSON.stringify が失敗した場合のフォールバック
+          console.error('[DISCORD_RATE_LIMITER] HTTP error (serialization failed):', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            dataType: typeof error.response.data,
+            dataLength: error.response.data ? String(error.response.data).length : 0,
+            url: this.maskWebhookUrl(webhookUrl),
+            serializationError: stringifyError.message
+          });
+        }
         return { 
           success: false, 
           error: `http_${error.response.status}`,
@@ -444,11 +457,22 @@ class DiscordRateLimiter {
       }
 
       // ネットワークエラーなどの詳細ログ
-      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', {
-        message: error.message,
-        code: error.code,
-        url: this.maskWebhookUrl(webhookUrl)
-      });
+      try {
+        const errorInfo = {
+          message: error.message,
+          code: error.code,
+          url: this.maskWebhookUrl(webhookUrl)
+        };
+        console.error('[DISCORD_RATE_LIMITER] Network/Other error:', JSON.stringify(errorInfo, null, 2));
+      } catch (stringifyError) {
+        // JSON.stringify が失敗した場合のフォールバック
+        console.error('[DISCORD_RATE_LIMITER] Network/Other error (serialization failed):', {
+          messageType: typeof error.message,
+          codeType: typeof error.code,
+          url: this.maskWebhookUrl(webhookUrl),
+          serializationError: stringifyError.message
+        });
+      }
       return { 
         success: false, 
         error: error.code || error.message,
