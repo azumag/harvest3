@@ -150,29 +150,38 @@ check_existing_dependencies() {
     fi
 }
 
+# Issue #5186: YAGNI原則適用 - 簡素化されたPIDベース再起動検出
+# シンプルなPIDベース再起動検出関数
+check_container_recently_restarted() {
+    # /proc/uptimeを使用してコンテナの稼働時間をチェック
+    if [ -f /proc/uptime ]; then
+        local uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
+        # 60秒以内の場合は最近再起動したと判定
+        if [ "$uptime_seconds" -lt 60 ]; then
+            return 0  # 最近再起動した
+        fi
+    fi
+    return 1  # 安定稼働中
+}
+
 # npm install リトライ処理 (Issue #4202)
 # Issue #4202 修正: 指数バックオフによるリトライとコンテナ再起動防止
 # Issue #5292: タイムアウトとエラー処理の強化
+# Issue #5186: YAGNI原則適用による簡素化
 retry_npm_install_with_backoff() {
     local max_npm_attempts=3
     local npm_install_attempts=0
     local npm_install_success=false
-    # Issue #5219: セキュリティ修正 - mktempを使用した安全な一時ファイル作成
-    local restart_counter_file=$(mktemp /tmp/.npm_restart_counter.XXXXXX)
     local max_container_restarts=3
     
-    # ファイル権限を明示的に設定（セキュリティ強化）
-    chmod 600 "$restart_counter_file"
-    
-    # コンテナ再起動回数をチェック（無限ループ防止）
-    local restart_count=0
-    if [ -f "$restart_counter_file" ]; then
-        restart_count=$(cat "$restart_counter_file" 2>/dev/null || echo "0")
+    # Issue #5186: 簡素化されたPID基準の再起動検出
+    local restart_count=1  # デフォルトは1回目の試行
+    if check_container_recently_restarted; then
+        restart_count=2  # 最近再起動した場合は2回目とみなす
+        log "Container recently restarted, adjusting retry strategy"
     fi
-    restart_count=$((restart_count + 1))
-    echo "$restart_count" > "$restart_counter_file"
     
-    log "Container restart count: $restart_count/$max_container_restarts"
+    log "Container restart assessment: attempt $restart_count (uptime-based detection)"
     
     # 最大再起動回数に達した場合は依存関係チェックを緩和
     if [ $restart_count -gt $max_container_restarts ]; then
@@ -215,42 +224,17 @@ retry_npm_install_with_backoff() {
         
         log "  Using npm options: $npm_options"
         
-        # Issue #5292: プロセス監視付きでnpm installを実行
-        (
-            # npm installをバックグラウンドで実行
-            npm install $npm_options &
-            local npm_pid=$!
-            local elapsed=0
-            local check_interval=$PROCESS_MONITOR_INTERVAL
-            
-            # 10秒ごとにプロセスの生存確認
-            while [ $elapsed -lt $timeout_seconds ] && kill -0 $npm_pid 2>/dev/null; do
-                sleep $PROCESS_MONITOR_INTERVAL
-                elapsed=$((elapsed + PROCESS_MONITOR_INTERVAL))
-                if [ $((elapsed % 30)) -eq 0 ]; then
-                    log "  npm install progress: ${elapsed}s elapsed (PID: $npm_pid)"
-                fi
-            done
-            
-            # プロセスがまだ生きている場合はタイムアウト
-            if kill -0 $npm_pid 2>/dev/null; then
-                log "  npm install timeout after ${timeout_seconds}s, terminating..."
-                kill -TERM $npm_pid 2>/dev/null || true
-                sleep 5
-                kill -KILL $npm_pid 2>/dev/null || true
-                wait $npm_pid 2>/dev/null || true
-                return 1
-            fi
-            
-            # プロセスの終了コードを確認
-            wait $npm_pid
-        ) 2>"$attempt_log"
+        # Issue #5186: YAGNI原則適用 - 簡素化されたタイムアウト処理
+        # 複雑なプロセス監視を単純なtimeoutコマンドに置き換え
+        log "Starting npm install with ${timeout_seconds}s timeout..."
+        if ! timeout "${timeout_seconds}" npm install $npm_options 2>"$attempt_log"; then
+            return 1
+        fi
         
         if [ $? -eq 0 ]; then
             log "npm install completed successfully on attempt $npm_install_attempts"
             npm_install_success=true
-            # 成功時はカウンタをリセット
-            rm -f "$restart_counter_file"
+            # Issue #5186: 簡素化によりファイルベースカウンタ管理不要
             break
         else
             log "npm install attempt $npm_install_attempts failed, error details:"
@@ -290,8 +274,9 @@ retry_npm_install_with_backoff() {
                 "Container will restart - duplicate message prevention active"
         fi
         
+        # Issue #5186: 簡素化された再起動制限チェック
         if [ $restart_count -le $max_container_restarts ]; then
-            local error_msg="npm install failed after cache clean and $max_npm_attempts attempts (container restart $restart_count/$max_container_restarts)"
+            local error_msg="npm install failed after cache clean and $max_npm_attempts attempts"
             log "ERROR: $error_msg"
             log "npm install failed after cache clean"  # Issue #2644 下位互換性
             send_startup_error_to_discord "$error_msg" "Node.js dependency installation failed - will retry on container restart"
