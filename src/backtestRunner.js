@@ -152,7 +152,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
               }
             }
           } catch (error) {
-            console.error('Dynamic Period計算中にエラーが発生しました:', error);
+            logWithLevel('error', 'Dynamic Period計算中にエラーが発生しました:', error);
             if (typeof postErrorToDiscord === 'function') {
               await postErrorToDiscord(`Dynamic Period計算エラー: ${error.message}`);
             }
@@ -269,7 +269,7 @@ async function runBacktest(targetSymbol, autoUpdate = false) {
 
     // バックテスト完了
   } catch (error) {
-    console.error('バックテスト実行中にエラーが発生しました:', error);
+    logWithLevel('error', 'バックテスト実行中にエラーが発生しました:', error);
     if (typeof postErrorToDiscord === 'function') {
       await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`);
     }
@@ -303,11 +303,11 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
   // marketParametersが取得できない場合のエラーハンドリング
   if (!marketParametersBySymbol || marketParametersBySymbol.error) {
     const errorMsg = marketParametersBySymbol?.errorMessage || 'Market parameters not available';
-    console.error(`❌ ${symbol} - ${strategyKey}: ${errorMsg}`);
+    logWithLevel('error', `❌ ${symbol} - ${strategyKey}: ${errorMsg}`);
     return { shouldRetry: false, error: errorMsg };
   }
 
-  console.log(`バックテスト開始: ${symbol} - ${strategyKey}`);
+  logWithLevel('info', `バックテスト開始: ${symbol} - ${strategyKey}`);
 
   // 全タイムフレームの結果を保存する配列
   let allTimeframeResults = [];
@@ -350,7 +350,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
           }
         );
       } catch (error) {
-        console.log(`高度な最適化でエラー発生、従来手法にフォールバック: ${error.message}`);
+        logWithLevel('warn', `高度な最適化でエラー発生、従来手法にフォールバック: ${error.message}`);
         // フォールバック: 従来のランダムサーチ
         parameterCombinations = generateRandomParameterCombinations(
           dbParams, numericParameterKeys,
@@ -361,7 +361,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     } else {
       // インテリジェントパラメータ管理システムを試行
       try {
-        console.log(`インテリジェントパラメータ管理システムを使用してパラメータを生成中...`);
+        logWithLevel('debug', `インテリジェントパラメータ管理システムを使用してパラメータを生成中...`);
         
         const intelligentManager = createIntelligentParameterManager(
           dbParams, 
@@ -382,7 +382,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
             0.1 + (retryCount*0.1), // パラメータの変動幅
             10 // ステップ数
           );
-          console.log(`インテリジェントグリッドサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
+          logWithLevel('debug', `インテリジェントグリッドサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
         } else {
           // インテリジェントランダムサーチ
           parameterCombinations = intelligentManager.generateRandomParameterCombinations(
@@ -391,24 +391,24 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
             10 + (retryCount*10), // パラメータのパターン数
             0.1 + (retryCount*0.1) // 変動幅
           );
-          console.log(`インテリジェントランダムサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
+          logWithLevel('debug', `インテリジェントランダムサーチで ${parameterCombinations.length} 個のパラメータ組み合わせを生成`);
         }
 
         // 品質レポート生成
         const qualityReport = intelligentManager.generateAnalysisReport(parameterCombinations);
-        console.log(`パラメータ品質: 妥当性=${(qualityReport.quality.validity*100).toFixed(1)}%, ` +
+        logWithLevel('debug', `パラメータ品質: 妥当性=${(qualityReport.quality.validity*100).toFixed(1)}%, ` +
                    `多様性=${(qualityReport.quality.diversity*100).toFixed(1)}%, ` +
                    `カバー率=${(qualityReport.quality.coverage*100).toFixed(1)}%`);
         
         if (qualityReport.recommendations && qualityReport.recommendations.length > 0) {
-          console.log('品質改善の推奨事項:');
+          logWithLevel('debug', '品質改善の推奨事項:');
           qualityReport.recommendations.forEach(rec => {
-            console.log(`  ${rec.type}: ${rec.message}`);
+            logWithLevel('debug', `  ${rec.type}: ${rec.message}`);
           });
         }
 
       } catch (intelligentError) {
-        console.log(`インテリジェントパラメータ生成でエラー、従来手法にフォールバック: ${intelligentError.message}`);
+        logWithLevel('warn', `インテリジェントパラメータ生成でエラー、従来手法にフォールバック: ${intelligentError.message}`);
         
         // フォールバック: 従来の最適化手法
         if (gridSearch) {
@@ -437,7 +437,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
       parameterCombinations.forEach(combo => {
         // 共通バリデーション関数を使用してTypeErrorを防ぐ
         if (!isValidParameterCombination(combo)) {
-          console.warn('無効なパラメータ組み合わせをスキップ:', combo);
+          logWithLevel('warn', '無効なパラメータ組み合わせをスキップ:', combo);
           return;
         }
         const keys = Object.keys(combo).sort();
@@ -464,7 +464,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     for (const paramCombination of parameterCombinations) {
       // 共通バリデーション関数を使用してエラーを防ぐ
       if (!isValidParameterCombination(paramCombination)) {
-        console.warn('無効なパラメータ組み合わせをスキップ:', paramCombination);
+        logWithLevel('warn', '無効なパラメータ組み合わせをスキップ:', paramCombination);
         continue;
       }
 
@@ -475,7 +475,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
         tradePercentage: config.global.tradePercentage
       };
 
-      console.log(`パラメータテスト: ${JSON.stringify(paramCombination)}`);
+      logWithLevel('debug', `パラメータテスト: ${JSON.stringify(paramCombination)}`);
 
       const options = {
         backtest: {
@@ -723,7 +723,7 @@ async function runBacktestForSymbol(exchange, symbol, strategy, strategyKey, mar
     await postResultToDiscord(`設定を自動更新しました: ${strategyKey} の ${symbol} - スコア: ${selectedResult.finalBaseFund.toFixed(2)} ${selectionReason} - タイムフレーム: ${selectedResult.timeframe} - ${JSON.stringify(selectedResult.parameters)}`, discordBacktestURL);
   }
 
-  console.log(`バックテスト完了: ${symbol} - ${strategyKey}`);
+  logWithLevel('info', `バックテスト完了: ${symbol} - ${strategyKey}`);
   return { shouldRetry: false };
 }
 
@@ -759,7 +759,7 @@ async function generateAdvancedParameterCombinations(
     maxEvaluations = 60
   } = options;
 
-  console.log(`🔬 高度な最適化開始: ${algorithm} アルゴリズム (${symbol} - ${strategyKey})`);
+  logWithLevel('info', `🔬 高度な最適化開始: ${algorithm} アルゴリズム (${symbol} - ${strategyKey})`);
 
   // 最適化器の初期化
   const optimizer = new BacktestOptimizer({
@@ -803,7 +803,7 @@ async function generateAdvancedParameterCombinations(
   optimizer.setObjective(objectiveFunction, bounds);
   const result = await optimizer.optimize();
 
-  console.log(`✅ 最適化完了: ${result.algorithmType} - 最良値: ${result.bestValue?.toFixed(2) || 'N/A'}`);
+  logWithLevel('info', `✅ 最適化完了: ${result.algorithmType} - 最良値: ${result.bestValue?.toFixed(2) || 'N/A'}`);
 
   // 結果から複数のパラメータ組み合わせを生成
   const combinations = [];
@@ -1341,30 +1341,30 @@ function calculateLimit(timeframe, days) {
 
 // グローバルエラーハンドラーの設定
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('未処理のPromise拒否が発生しました:', reason);
-  console.error('Promise:', promise);
-  console.error('エラースタック:', reason?.stack || 'スタックトレースなし');
+  logWithLevel('error', '未処理のPromise拒否が発生しました:', reason);
+  logWithLevel('error', 'Promise:', promise);
+  logWithLevel('error', 'エラースタック:', reason?.stack || 'スタックトレースなし');
   
   // Discord通知（利用可能な場合）
   if (typeof postErrorToDiscord === 'function') {
-    postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
+    postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(err => logWithLevel('error', err));
   }
   
   // プロセスを終了せず、エラーログを出力して継続
-  console.log('エラーが発生しましたが、プロセスを継続します...');
+  logWithLevel('warn', 'エラーが発生しましたが、プロセスを継続します...');
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('未捕捉の例外が発生しました:', error);
-  console.error('エラースタック:', error.stack);
+  logWithLevel('error', '未捕捉の例外が発生しました:', error);
+  logWithLevel('error', 'エラースタック:', error.stack);
   
   // Discord通知（利用可能な場合）
   if (typeof postErrorToDiscord === 'function') {
-    postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
+    postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(err => logWithLevel('error', err));
   }
   
   // プロセスを終了せず、エラーログを出力して継続
-  console.log('例外が発生しましたが、プロセスを継続します...');
+  logWithLevel('warn', '例外が発生しましたが、プロセスを継続します...');
 });
 
 // 設定の外部化
@@ -1437,7 +1437,7 @@ function checkMemoryUsage() {
 
 // メイン実行関数（長時間実行型）
 async function main() {
-  console.log('バックテストサービスを開始します（長時間実行モード）');
+  logWithLevel('info', 'バックテストサービスを開始します（長時間実行モード）');
   logWithLevel('info', `実行間隔: ${BACKTEST_INTERVAL / 1000}秒`);
   logWithLevel('info', `ログレベル: ${LOG_LEVEL}`);
   logWithLevel('info', `メモリ閾値: ${Math.round(MEMORY_THRESHOLD / 1024 / 1024)}MB`);
@@ -1452,33 +1452,33 @@ async function main() {
   
   // シグナルハンドラーの設定
   process.on('SIGTERM', () => {
-    console.log('SIGTERM受信: グレースフルシャットダウンを開始します');
+    logWithLevel('info', 'SIGTERM受信: グレースフルシャットダウンを開始します');
     isShuttingDown = true;
   });
   
   process.on('SIGINT', () => {
-    console.log('SIGINT受信: グレースフルシャットダウンを開始します');
+    logWithLevel('info', 'SIGINT受信: グレースフルシャットダウンを開始します');
     isShuttingDown = true;
   });
   
   while (!isShuttingDown) {
     try {
       const startTime = Date.now();
-      console.log(`[${new Date().toISOString()}] バックテスト実行を開始します`);
+      logWithLevel('info', `[${new Date().toISOString()}] バックテスト実行を開始します`);
       
       await runBacktest(targetSymbol, autoUpdate);
       
       const endTime = Date.now();
       const executionTime = Math.round((endTime - startTime) / 1000);
-      console.log(`[${new Date().toISOString()}] バックテスト正常完了 (実行時間: ${executionTime}秒)`);
+      logWithLevel('info', `[${new Date().toISOString()}] バックテスト正常完了 (実行時間: ${executionTime}秒)`);
       
       // ヘルスステータスを更新
       healthStatus.lastRun = new Date().toISOString();
       healthStatus.status = 'running';
       
     } catch (error) {
-      console.error(`[${new Date().toISOString()}] バックテスト実行エラー:`, error);
-      console.error('エラースタック:', error.stack);
+      logWithLevel('error', `[${new Date().toISOString()}] バックテスト実行エラー:`, error);
+      logWithLevel('error', 'エラースタック:', error.stack);
       
       // ヘルスステータスを更新
       healthStatus.errorCount++;
@@ -1486,10 +1486,10 @@ async function main() {
       
       // Discord通知（利用可能な場合）
       if (typeof postErrorToDiscord === 'function') {
-        await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+        await postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(err => logWithLevel('error', err));
       }
       
-      console.log('エラーが発生しましたが、プロセスを継続します...');
+      logWithLevel('warn', 'エラーが発生しましたが、プロセスを継続します...');
       
       // エラー発生時は短い待機時間
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -1516,7 +1516,7 @@ async function main() {
     }
   }
   
-  console.log('バックテストサービスを終了します');
+  logWithLevel('info', 'バックテストサービスを終了します');
   
   // ヘルスチェックサーバーを停止
   healthStatus.status = 'stopping';
