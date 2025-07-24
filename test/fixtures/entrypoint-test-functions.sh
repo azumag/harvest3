@@ -122,6 +122,64 @@ log_startup_message() {
     return 0
 }
 
+# Issue #5172: Redis-based重複防止関数（テスト用簡易版）
+try_redis_duplicate_prevention() {
+    local message="$1"
+    
+    # Node.js存在チェック
+    if ! command -v node >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    # REDIS_URL設定チェック
+    if [ -z "$REDIS_URL" ]; then
+        return 1
+    fi
+    
+    # Redis接続テスト（簡易版）
+    local redis_test_result=$(node -e "
+const url = process.env.REDIS_URL;
+if (!url) process.exit(1);
+console.log('connected');
+" 2>/dev/null || echo "error")
+    
+    if [ "$redis_test_result" = "error" ]; then
+        return 1
+    fi
+    
+    echo "redis-success"
+    return 0
+}
+
+# メッセージロック取得関数（テスト用簡易版）
+acquire_message_lock() {
+    local message="$1"
+    local timeout="${2:-5}"
+    
+    local message_hash=$(get_message_hash "$message")
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    local container_id=$(hostname)
+    local current_time=$(date +%s)
+    
+    local attempt=0
+    while [ $attempt -lt $MAX_LOCK_ATTEMPTS ]; do
+        if mkdir "$lock_file" 2>/dev/null; then
+            local process_info="${container_id}:$$:${current_time}"
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep $LOCK_RETRY_DELAY
+        
+        # タイムアウトチェック
+        if [ $attempt -ge $timeout ]; then
+            break
+        fi
+    done
+    
+    return 1
+}
+
 # backtest専用関数（超軽量版）
 log_backtest_startup_message() {
     local message="$1"
