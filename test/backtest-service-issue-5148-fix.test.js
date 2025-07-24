@@ -79,9 +79,10 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE');
     expect(entrypointContent).toContain('timestamp_file');
     
-    // タイムアウトチェックロジック
+    // タイムアウトチェックロジック (Issue #5319修正: bc使用の浮動小数点計算)
     expect(entrypointContent).toContain('time_diff');
-    expect(entrypointContent).toContain('current_time - last_time');
+    expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
+    expect(entrypointContent).toContain('command -v bc >/dev/null 2>&1');
     expect(entrypointContent).toContain('last shown');
     
     // ファイル権限のセキュリティ設定
