@@ -36,9 +36,9 @@ describe('Issue #5254: backtestサービス例外修正', () => {
     expect(entrypointContent).toContain('retry_npm_install_with_backoff');
     expect(entrypointContent).toContain('max_container_restarts');
     
-    // 重複防止機構が強化されている
+    // Issue #5159: flock方式の重複防止機構が強化されている
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container_boot_time');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
   });
 
   test('Issue #5254: NPMエラー -> 再起動シナリオのテスト', async () => {

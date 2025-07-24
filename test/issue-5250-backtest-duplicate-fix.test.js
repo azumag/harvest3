@@ -37,13 +37,13 @@ describe('Issue #5250: backtestサービス重複メッセージ修正', () => {
     expect(entrypointContent).not.toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
-  test('既存のlog_backtest_startup_message関数が存在することを確認', () => {
+  test('Issue #5159更新: log_backtest_startup_message関数がflock方式で存在することを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058の修正が維持されていることを確認
+    // Issue #5058の修正が維持され、#5159でflock方式に更新されていることを確認
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
-    expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
   });
 
   test('重複メッセージが実際に防止されることを確認', async () => {
@@ -158,9 +158,9 @@ rm -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" 2>/dev/null || true
   test('Issue #5058とIssue #5250の両方の修正が適用されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058の修正が維持されている
+    // Issue #5058の修正が維持され、#5159でflock方式に更新されている
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175');
-    expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // Issue #5250の修正が適用されている  
     expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');

@@ -30,9 +30,9 @@ describe('Issue #5058: backtestサービス重複メッセージ修正', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058修正の確認（#5175で拡張済み）
+    // Issue #5058修正の確認（#5175で拡張済み、#5159でflock方式に更新）
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // Issue #5159: flock方式のロック機構の確認
     expect(entrypointContent).toContain('exec 200>"$lock_file"');
@@ -181,7 +181,7 @@ log() {
 test_atomic_lock() {
     local current_time=$(date +%s)
     local lock_file="${testLockDir}.lock"
-    local max_wait_time=3
+    local max_wait_time=0.1  # 短いタイムアウトで重複防止をテスト
     
     # flock方式によるロック取得
     exec 200>"$lock_file"
@@ -189,7 +189,7 @@ test_atomic_lock() {
     if flock -x -w "$max_wait_time" 200; then
         echo "$current_time" > "$timestamp_file"
         log "Message output by process $$"
-        sleep 1  # メッセージ出力をシミュレート
+        sleep 2  # 他のプロセスがタイムアウトするまで保持
         exec 200>&-
     else
         log "Message suppressed by process $$"

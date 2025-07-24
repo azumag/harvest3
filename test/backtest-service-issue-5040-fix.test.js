@@ -94,15 +94,15 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
     test('既存のatomicロック機構が正しく実装されている', () => {
       const entrypointContent = readConfigFile(entrypointPath);
       
-      // Issue #5040で問題となった重複防止機構の確認
+      // Issue #5040で問題となった重複防止機構の確認（Issue #5159: flock方式に更新）
       expect(entrypointContent).toContain('log_backtest_startup_message()');
-      expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
-      expect(entrypointContent).toContain('mkdir "$lock_dir"');
+      expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
+      expect(entrypointContent).toContain('exec 200>"$lock_file"');
+      expect(entrypointContent).toContain('flock -x');
       
-      // コンテナ再起動検出機構（Issue #5175拡張）
-      expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-      expect(entrypointContent).toContain('container_boot_time');
-      expect(entrypointContent).toContain('instance_id');
+      // NPMエラー検出機構（Issue #5159追加）
+      expect(entrypointContent).toContain('NPMエラー状態をチェック（Issue #5159）');
+      expect(entrypointContent).toContain('npm_error_marker');
       
       // 60秒タイムアウト設定（Issue #5175対応）
       expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT:-60');
@@ -114,23 +114,21 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       // 問題となったメッセージの呼び出し箇所を確認
       expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
       
-      // 重複抑制メッセージの実装確認
+      // 重複抑制メッセージの実装確認（flock方式）
       expect(entrypointContent).toContain('Backtest startup message suppressed');
       expect(entrypointContent).toContain('last shown');
-      expect(entrypointContent).toContain('another process is logging');
+      expect(entrypointContent).toContain('lock acquisition timeout');
     });
 
     test('クリーンアップ機能が正しく実装されている', async () => {
       const entrypointContent = readConfigFile(entrypointPath);
       
-      // backtest専用クリーンアップ関数の存在確認
-      expect(entrypointContent).toContain('cleanup_backtest_locks()');
-      expect(entrypointContent).toContain('Removed backtest startup lock directory');
-      expect(entrypointContent).toContain('Removed backtest container restart detection file');
+      // flock方式のタイムスタンプファイル管理
+      expect(entrypointContent).toContain('timestamp_file');
+      expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
       
-      // セキュアなクリーンアップ処理
-      expect(entrypointContent).toContain('rm -rf "$lock_dir" 2>/dev/null || true');
-      expect(entrypointContent).toContain('chmod 600');
+      // flockによるファイルディスクリプタ管理
+      expect(entrypointContent).toContain('exec 200>&-');
     });
   });
 
