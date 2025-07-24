@@ -26,6 +26,11 @@ SUCCESS_FILE_MAX_AGE=${SUCCESS_FILE_MAX_AGE:-300}  # success file最大寿命（
 MAX_LOCK_ATTEMPTS=${MAX_LOCK_ATTEMPTS:-3}  # ロック取得最大試行回数
 LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-1}  # ロックリトライ待機時間（秒）
 
+# Issue #5292レビュー対応: マジックナンバーの統一定数化
+MESSAGE_SUPPRESS_DURATION=${MESSAGE_SUPPRESS_DURATION:-30}  # メッセージ抑制期間（秒）
+NPM_ERROR_SUPPRESS_DURATION=${NPM_ERROR_SUPPRESS_DURATION:-60}  # NPMエラー後抑制期間（秒）
+PROCESS_MONITOR_INTERVAL=${PROCESS_MONITOR_INTERVAL:-10}  # プロセス監視間隔（秒）
+
 # Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}  # Redis重複防止TTL（秒）
 DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略
@@ -59,6 +64,48 @@ find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev
 # MD5ハッシュ値生成関数（DRY原則適用）
 get_message_hash() {
     echo "$1" | md5sum | cut -d' ' -f1
+}
+
+# Issue #5292レビュー対応: 統一されたタイムスタンプ検証関数（DRY原則）
+check_timestamp_validity() {
+    local marker_file="$1"
+    local suppress_duration="$2"
+    local current_time="$3"
+    
+    if [ -f "$marker_file" ]; then
+        local last_time=$(cat "$marker_file" 2>/dev/null || echo "0")
+        local time_diff=$((current_time - last_time))
+        
+        if [ $time_diff -lt $suppress_duration ]; then
+            return 0  # 抑制すべき（タイムスタンプが新しすぎる）
+        fi
+    fi
+    return 1  # 抑制不要
+}
+
+# Issue #5292レビュー対応: キャッシュクリーンアップの改善
+cleanup_npm_cache() {
+    local cleanup_success=true
+    
+    log "Cleaning npm cache for stability..."
+    
+    if ! npm cache clean --force 2>/dev/null; then
+        log "WARNING: npm cache clean failed"
+        cleanup_success=false
+    fi
+    
+    if ! rm -rf ~/.npm/_cacache 2>/dev/null; then
+        log "WARNING: _cacache removal failed"
+        cleanup_success=false
+    fi
+    
+    if [ "$cleanup_success" = "true" ]; then
+        log "npm cache cleanup completed successfully"
+    else
+        log "npm cache cleanup completed with warnings"
+    fi
+    
+    return $cleanup_success
 }
 
 # Issue #5172: 共通クリーンアップ関数（DRY原則適用）
@@ -174,12 +221,12 @@ retry_npm_install_with_backoff() {
             npm install $npm_options &
             local npm_pid=$!
             local elapsed=0
-            local check_interval=10
+            local check_interval=$PROCESS_MONITOR_INTERVAL
             
             # 10秒ごとにプロセスの生存確認
             while [ $elapsed -lt $timeout_seconds ] && kill -0 $npm_pid 2>/dev/null; do
-                sleep $check_interval
-                elapsed=$((elapsed + check_interval))
+                sleep $PROCESS_MONITOR_INTERVAL
+                elapsed=$((elapsed + PROCESS_MONITOR_INTERVAL))
                 if [ $((elapsed % 30)) -eq 0 ]; then
                     log "  npm install progress: ${elapsed}s elapsed (PID: $npm_pid)"
                 fi
@@ -217,13 +264,12 @@ retry_npm_install_with_backoff() {
             
             # 最後の試行でない場合のみリトライ準備
             if [ $npm_install_attempts -lt $max_npm_attempts ]; then
-                local retry_delay=$((npm_install_attempts * 15))  # Issue #5292: 15s, 30s の待機（延長）
+                local retry_delay=$((npm_install_attempts * 15))  # Issue #5292レビュー対応: 15s, 30s の待機（延長）
                 log "Cleaning npm cache and retrying..."
                 log "Waiting ${retry_delay}s before retry..."
                 
-                # Issue #5292: より積極的なキャッシュクリーンアップ
-                npm cache clean --force 2>/dev/null || true
-                rm -rf ~/.npm/_cacache 2>/dev/null || true
+                # Issue #5292レビュー対応: 改善されたキャッシュクリーンアップ
+                cleanup_npm_cache || log "Cache cleanup warnings (non-critical)"
                 
                 sleep $retry_delay
             fi
@@ -366,30 +412,23 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）
-# Issue #5159: シンプルで確実なatomic lock実装による重複防止機構
-# Issue #5292: 強化された重複防止機構（PIDベース検証追加）
+# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5292レビュー対応: KISS原則に基づく簡素化された重複防止機構
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"  # 設定変数化
-    local pid_marker="/tmp/backtest-startup-pid.marker"
     
-    # Issue #5292: メッセージ内容ベースの重複チェック（第一防御線）
+    # Issue #5292レビュー対応: 簡素化された重複防止（メッセージハッシュベース）
     local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
     local message_marker="/tmp/backtest-message-${message_hash}.marker"
     
-    if [ -f "$message_marker" ]; then
-        local message_timestamp=$(cat "$message_marker" 2>/dev/null || echo "0")
-        local message_age=$((current_time - message_timestamp))
-        
-        # 同一メッセージが30秒以内に出力されていたら抑制
-        if [ $message_age -lt 30 ]; then
-            log "Backtest startup message suppressed (identical message ${message_age}s ago)"
-            return 0
-        fi
+    # メッセージ重複チェック（統一関数使用）
+    if check_timestamp_validity "$message_marker" "$MESSAGE_SUPPRESS_DURATION" "$current_time"; then
+        log "Backtest startup message suppressed (identical message within ${MESSAGE_SUPPRESS_DURATION}s)"
+        return 0
     fi
     
     
@@ -446,27 +485,19 @@ log_backtest_startup_message() {
     
     # NPMエラー状態をチェック（Issue #5159）
     local npm_error_marker="/tmp/backtest-npm-error-detection.state"
-    if [ -f "$npm_error_marker" ]; then
-        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
-        local npm_error_age=$((current_time - last_npm_error))
-        
-        # NPMエラー後60秒以内はメッセージを抑制（Issue #5292: 30s→60sに延長）
-        if [ $npm_error_age -lt 60 ]; then
-            log "Backtest startup message suppressed (NPM error recovery: ${npm_error_age}s ago)"
-            cleanup_backtest_lock
-            return 0
-        fi
+    if check_timestamp_validity "$npm_error_marker" "$NPM_ERROR_SUPPRESS_DURATION" "$current_time"; then
+        log "Backtest startup message suppressed (NPM error recovery within ${NPM_ERROR_SUPPRESS_DURATION}s)"
+        cleanup_backtest_lock
+        return 0
     fi
     
     
-    # メッセージ出力とタイムスタンプ更新
+    # メッセージ出力とタイムスタンプ更新（簡素化）
     log "$message"
     echo "$current_time" > "$timestamp_file"
     chmod 600 "$timestamp_file"
     
-    # Issue #5292: PIDマーカーとメッセージマーカーを更新
-    echo "$$" > "$pid_marker"
-    chmod 600 "$pid_marker"
+    # Issue #5292レビュー対応: メッセージマーカーのみ更新（PIDマーカーは不要）
     echo "$current_time" > "$message_marker"
     chmod 600 "$message_marker"
     
@@ -838,15 +869,14 @@ cleanup_backtest_locks() {
         log "Removed backtest NPM error detection file (Issue #5254)"
     fi
     
-    # Issue #5292: 新しいマーカーファイルのクリーンアップ
-    if [ -f "/tmp/backtest-startup-pid.marker" ]; then
-        rm -f "/tmp/backtest-startup-pid.marker" 2>/dev/null || true
-        log "Removed backtest PID marker (Issue #5292)"
-    fi
+    # Issue #5292レビュー対応: PIDマーカーは不要になったためコメントアウト
+    # PIDマーカーは簡素化により削除されました
     
-    # Issue #5292: メッセージマーカーファイルのクリーンアップ
-    find /tmp -name "backtest-message-*.marker" -type f -delete 2>/dev/null || true
-    log "Cleaned up backtest message markers (Issue #5292)"
+    # Issue #5292レビュー対応: セキュリティ改善 - より制限的なパターン使用
+    if ls /tmp/backtest-message-*.marker 1> /dev/null 2>&1; then
+        rm -f /tmp/backtest-message-*.marker 2>/dev/null || true
+        log "Cleaned up backtest message markers (Issue #5292)"
+    fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
     # ただし、正常終了時のみ削除する場合は以下のコメントアウトを解除
