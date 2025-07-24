@@ -17,8 +17,9 @@ describe('Backtest Service Issue #4202 Fix', () => {
     });
 
     test('should include container restart counter', () => {
-      expect(entrypointContent).toContain('restart_counter_file=$(mktemp /tmp/.npm_restart_counter.XXXXXX)');
-      expect(entrypointContent).toContain('Container restart count:');
+      // Issue #5186: YAGNI原則適用によりPIDベース再起動検出に簡素化
+      expect(entrypointContent).toContain('check_container_recently_restarted()');
+      expect(entrypointContent).toContain('Container restart assessment:');
       expect(entrypointContent).toContain('max_container_restarts=3');
     });
 
@@ -35,8 +36,9 @@ describe('Backtest Service Issue #4202 Fix', () => {
     });
 
     test('should reset counter on successful npm install', () => {
-      expect(entrypointContent).toContain('rm -f "$restart_counter_file"');
+      // Issue #5186: YAGNI簡素化によりファイルベースカウンタ管理不要
       expect(entrypointContent).toContain('npm install completed successfully');
+      expect(entrypointContent).toContain('簡素化によりファイルベースカウンタ管理不要');
     });
   });
 
@@ -101,7 +103,8 @@ describe('Backtest Service Issue #4202 Fix', () => {
     });
 
     test('should include container restart tracking', () => {
-      expect(entrypointContent).toContain('container restart $restart_count/$max_container_restarts');
+      // Issue #5186: YAGNI簡素化後の新しいメッセージ形式
+      expect(entrypointContent).toContain('Container restart assessment: attempt $restart_count (uptime-based detection)');
     });
 
     test('should include graceful degradation', () => {
