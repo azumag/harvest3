@@ -78,9 +78,10 @@ describe('Issue #5198: backtestサービス例外問題解決確認', () => {
     expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
     expect(entrypointContent).toContain('exec 200>&-');
     
-    // タイムスタンプベースの重複チェック
-    expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
-    expect(entrypointContent).toContain('if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]');
+    // タイムスタンプベースの重複チェック (Issue #5319修正: bc使用の浮動小数点計算)
+    expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
+    expect(entrypointContent).toContain('command -v bc');
+    expect(entrypointContent).toContain('bc 2>/dev/null)" = "1"');
   });
 
   test('backtestサービス起動シミュレーション（重複メッセージなし）', async () => {
@@ -96,7 +97,7 @@ BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/test-restart-detection-\${RANDOM
 # 簡略版のlog_backtest_startup_message関数（実際の関数をベース）
 log_backtest_startup_message() {
     local message="$1"
-    local current_time=$(date +%s)
+    local current_time=$(date +%s.%N)  # Issue #5319: ナノ秒精度対応
     local lock_dir="/tmp/backtest-startup-lock-test-\${RANDOM}.dir"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local restart_detection_file="$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
@@ -113,12 +114,13 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # 既存のタイムスタンプファイルをチェック
+    # 既存のタイムスタンプファイルをチェック (Issue #5319修正: bc使用の浮動小数点計算)
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-        local time_diff=$((current_time - last_time))
+        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
         
-        if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+        # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
+        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
             echo "Backtest startup message suppressed (last shown \${time_diff}s ago)"
             echo "\${instance_id}:\${last_time}" > "$restart_detection_file"
             chmod 600 "$restart_detection_file"
