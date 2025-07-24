@@ -74,9 +74,11 @@ check_timestamp_validity() {
     
     if [ -f "$marker_file" ]; then
         local last_time=$(cat "$marker_file" 2>/dev/null || echo "0")
-        local time_diff=$((current_time - last_time))
+        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
+        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
         
-        if [ $time_diff -lt $suppress_duration ]; then
+        # bcが利用不可またはエラーの場合は抑制しない（999 > suppress_duration）
+        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $suppress_duration" | bc 2>/dev/null)" = "1" ]; then
             return 0  # 抑制すべき（タイムスタンプが新しすぎる）
         fi
     fi
@@ -401,7 +403,7 @@ cleanup_backtest_lock() {
 # Issue #5292レビュー対応: KISS原則に基づく簡素化された重複防止機構
 log_backtest_startup_message() {
     local message="$1"
-    local current_time=$(date +%s)
+    local current_time=$(date +%s.%N)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"  # 設定変数化
@@ -459,10 +461,14 @@ log_backtest_startup_message() {
     # ロック取得後、タイムスタンプをチェック
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-        local time_diff=$((current_time - last_time))
+        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
+        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
         
-        if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
-            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+        # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
+        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
+            # 表示用に整数部分のみ抽出
+            local time_diff_int=$(echo "$time_diff" | cut -d'.' -f1)
+            log "Backtest startup message suppressed (last shown ${time_diff_int}s ago)"
             cleanup_backtest_lock
             return 0
         fi
