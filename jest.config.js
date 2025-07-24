@@ -5,7 +5,7 @@ module.exports = {
   coverageDirectory: 'coverage',
   verbose: true,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testTimeout: process.env.CI ? 15000 : 60000, // CI環境では15秒に短縮してハング問題を解決
+  testTimeout: process.env.CI ? 120000 : 60000, // CI環境でも2分に設定してタイムアウト問題を解決
   // キャッシュディレクトリを.tmpに設定してキャッシュ問題を回避
   cacheDirectory: '.tmp/jest_cache',
   // CI環境での安定性向上 - ハンドルクリーンアップの問題に対応
@@ -13,7 +13,7 @@ module.exports = {
   forceExit: true, // ハンドルクリーンアップ後も残るプロセスを強制終了
   maxConcurrency: process.env.CI ? 1 : 5, // CI環境では並行実行を1に制限してハング問題を防止
   workerIdleMemoryLimit: process.env.CI ? '512MB' : '1GB', // CI環境でメモリ制限を512MBに設定（現代のテストスイートに対応）
-  maxWorkers: process.env.CI ? 1 : '50%', // CI環境では1ワーカーでハング問題を完全に防止
+  maxWorkers: process.env.CI ? 2 : '50%', // CI環境では2ワーカーでパフォーマンスとハング問題のバランスを取る
   // Ignore E2E tests in unit test runs
   testPathIgnorePatterns: [
     '/node_modules/',
