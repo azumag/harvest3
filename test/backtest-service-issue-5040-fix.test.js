@@ -99,10 +99,9 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
       expect(entrypointContent).toContain('mkdir "$lock_dir"');
       
-      // コンテナ再起動検出機構（Issue #5175拡張）
-      expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-      expect(entrypointContent).toContain('container_boot_time');
-      expect(entrypointContent).toContain('instance_id');
+      // Issue #5216で簡素化：複雑な再起動検出機構を削除してatomicロックのみに変更
+      expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
+      expect(entrypointContent).toContain('レースコンディション問題を根本的に解決するため、複雑な再起動検出機構を削除し');
       
       // 60秒タイムアウト設定（Issue #5175対応）
       expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT:-60');
@@ -126,7 +125,7 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       // backtest専用クリーンアップ関数の存在確認
       expect(entrypointContent).toContain('cleanup_backtest_locks()');
       expect(entrypointContent).toContain('Removed backtest startup lock directory');
-      expect(entrypointContent).toContain('Removed backtest container restart detection file');
+      expect(entrypointContent).toContain('Removed legacy backtest container restart detection file');
       
       // セキュアなクリーンアップ処理
       expect(entrypointContent).toContain('rm -rf "$lock_dir" 2>/dev/null || true');

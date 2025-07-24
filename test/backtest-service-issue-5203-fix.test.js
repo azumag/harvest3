@@ -217,13 +217,9 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
       expect(entrypointContent).toContain('atomicなロック取得を試行');
       expect(entrypointContent).toContain('mkdirはatomic操作');
       
-      // 二重チェック機構の確認
-      expect(entrypointContent).toContain('ロック取得成功 - 二重チェック後にメッセージ出力');
-      expect(entrypointContent).toContain('他のプロセスが先にメッセージを出力していた');
-      
-      // コンテナ再起動検出による追加防止策
-      expect(entrypointContent).toContain('Issue #5175: コンテナ再起動検出');
-      expect(entrypointContent).toContain('instance_id');
+      // Issue #5216で簡素化された実装の確認
+      expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
+      expect(entrypointContent).toContain('レースコンディション問題を根本的に解決するため、複雑な再起動検出機構を削除し');
     });
   });
 

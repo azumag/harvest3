@@ -30,19 +30,17 @@ describe('Issue #5175: backtestサービス重複メッセージ修正', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5175修正の確認
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    // Issue #5216でIssue #5175が簡素化されて統合された
+    expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
+    expect(entrypointContent).toContain('レースコンディション問題を根本的に解決するため、複雑な再起動検出機構を削除し');
     
     // タイムアウト延長の確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT:-60');
     expect(entrypointContent).toContain('Issue #5175: 60秒に延長');
     
-    // コンテナ再起動検出機能の確認
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('container_boot_time');
-    expect(entrypointContent).toContain('instance_id');
+    // Issue #5216で簡素化：複雑な再起動検出は削除され、atomicロックのみに変更
+    expect(entrypointContent).toContain('atomicロック内でのみタイムスタンプチェックを行う簡素化された実装');
+    expect(entrypointContent).toContain('mkdir "$lock_dir"');
   });
 
   describe('コンテナ再起動検出機構テスト', () => {
@@ -274,10 +272,10 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
   test('クリーンアップ機能の更新確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5175対応のクリーンアップ機能の確認
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）');
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('Removed backtest container restart detection file');
+    // Issue #5216で簡素化されたクリーンアップ機能の確認
+    expect(entrypointContent).toContain('cleanup_backtest_locks');
+    expect(entrypointContent).toContain('Issue #5216: 簡素化により、コンテナ再起動検出ファイルは使用しなくなった');
+    expect(entrypointContent).toContain('Removed legacy backtest container restart detection file');
   });
 
   test('entrypoint.sh構文検証（Issue #5175修正後）', async () => {
@@ -310,8 +308,7 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
   test('セキュリティ面での改良確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // ファイル権限の適切な設定
-    expect(entrypointContent).toContain('chmod 600 "$restart_detection_file"');
+    // Issue #5216の簡素化された実装でのファイル権限設定
     expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
     
     // エラーハンドリングの確認

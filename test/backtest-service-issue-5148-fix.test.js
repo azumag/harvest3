@@ -38,9 +38,9 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     // Issue #5148で報告された起動メッセージが存在することを確認
     expect(entrypointContent).toContain('Starting backtest container with enhanced error handling');
     
-    // Issue #5175修正により重複防止機構が強化されていることを確認
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    // Issue #5148はIssue #5216で簡素化されて統合済み
+    expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
+    expect(entrypointContent).toContain('レースコンディション問題を根本的に解決するため、複雑な再起動検出機構を削除し');
     
     // npm エラー対処の強化がされていることを確認
     expect(entrypointContent).toContain('retry_npm_install_with_backoff');
@@ -52,9 +52,9 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     // entrypoint.shにlog_backtest_startup_message関数が存在することを確認
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5175の修正で強化された重複防止機能が存在することを確認
+    // Issue #5216で簡素化された重複防止機能が存在することを確認
     expect(entrypointContent).toContain('log_backtest_startup_message()');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    expect(entrypointContent).toContain('atomicロック内でのみタイムスタンプチェックを行う簡素化された実装');
     
     // タイムスタンプベースの重複防止ロジック
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');

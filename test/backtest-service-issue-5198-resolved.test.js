@@ -72,8 +72,8 @@ describe('Issue #5198: backtestサービス例外問題解決確認', () => {
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE');
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('instance_id');
+    // Issue #5216で簡素化：複雑な再起動検出機構は削除済み
+    expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
     
     // atomicなロック機構
     expect(entrypointContent).toContain('mkdir "$lock_dir"');

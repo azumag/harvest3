@@ -30,16 +30,16 @@ describe('Issue #5058: backtestサービス重複メッセージ修正', () => {
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058修正の確認（#5175で拡張済み）
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    // Issue #5058はIssue #5216で簡素化されて統合済み
+    expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
+    expect(entrypointContent).toContain('レースコンディション問題を根本的に解決するため、複雑な再起動検出機構を削除し');
     
     // atomicロック機構の確認
     expect(entrypointContent).toContain('mkdir "$lock_dir"');
     expect(entrypointContent).toContain('backtest-startup-lock.dir');
     
-    // クリーンアップ機能の更新確認（#5175で拡張済み）
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）');
+    // クリーンアップ機能の確認（Issue #5216で簡素化済み）
+    expect(entrypointContent).toContain('cleanup_backtest_locks');
     expect(entrypointContent).toContain('Removed backtest startup lock directory');
   });
 

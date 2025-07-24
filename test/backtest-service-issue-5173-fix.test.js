@@ -36,10 +36,9 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
     // log_backtest_startup_message関数の定義が存在することを確認
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
     
-    // 重複防止機構の要素が含まれていることを確認
+    // Issue #5216で簡素化された重複防止機構の要素が含まれていることを確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('instance_id');
+    expect(entrypointContent).toContain('Issue #5216: backtest container専用起動メッセージ関数（簡素化版）');
   });
 
   test('修正により重複メッセージが防止されることを確認', () => {
