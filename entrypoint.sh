@@ -182,6 +182,13 @@ retry_npm_install_with_backoff() {
     
     # リトライ結果の処理
     if [ "$npm_install_success" = false ]; then
+        # Issue #5254: NPMエラー発生時刻を記録（backtest起動メッセージ重複防止用）
+        if [ "$BACKTEST_MODE" = "true" ]; then
+            echo "$(date +%s)" > "/tmp/backtest-npm-error-detection.state"
+            chmod 600 "/tmp/backtest-npm-error-detection.state"
+            log "NPM error timestamp recorded for Issue #5254 duplicate message prevention"
+        fi
+        
         if [ $restart_count -le $max_container_restarts ]; then
             local error_msg="npm install failed after cache clean and $max_npm_attempts attempts (container restart $restart_count/$max_container_restarts)"
             log "ERROR: $error_msg"
@@ -291,13 +298,17 @@ install_npm_dependencies() {
 }
 
 # Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）
-# コンテナ再起動検出を含む強化版重複防止機構
+# コンテナ再起動検出を含む強化版重複防止機構 - Issue #5254対応強化
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local lock_dir="/tmp/backtest-startup-lock.dir"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local restart_detection_file="$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
+    
+    # Issue #5254: NPMエラーによる迅速な再起動に対する追加防御
+    local npm_error_detection_file="/tmp/backtest-npm-error-detection.state"
+    local npm_restart_cooldown=30  # NPMエラー後の最小メッセージ間隔（秒）
     
     # Issue #5175: コンテナ再起動検出とトラッキング
     local container_boot_time=$(stat -c %Y /proc/1 2>/dev/null || echo "$current_time")
@@ -308,6 +319,18 @@ log_backtest_startup_message() {
         local lock_age=$((current_time - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)))
         if [ $lock_age -gt 60 ]; then
             rm -rf "$lock_dir" 2>/dev/null || true
+        fi
+    fi
+    
+    # Issue #5254: NPMエラー後の迅速な再起動検出と防御
+    if [ -f "$npm_error_detection_file" ]; then
+        local last_npm_error_time=$(cat "$npm_error_detection_file" 2>/dev/null || echo "0")
+        local npm_error_age=$((current_time - last_npm_error_time))
+        
+        # NPMエラー後の短時間内は追加の抑制を適用
+        if [ $npm_error_age -lt $npm_restart_cooldown ]; then
+            log "Backtest startup message suppressed (NPM error recovery: last error ${npm_error_age}s ago, Issue #5254 prevention)"
+            return 0
         fi
     fi
     
@@ -690,6 +713,12 @@ cleanup_backtest_locks() {
     if [ -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" ]; then
         rm -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" 2>/dev/null || true
         log "Removed backtest container restart detection file"
+    fi
+    
+    # Issue #5254: NPMエラー検出ファイルのクリーンアップ
+    if [ -f "/tmp/backtest-npm-error-detection.state" ]; then
+        rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
+        log "Removed backtest NPM error detection file (Issue #5254)"
     fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
