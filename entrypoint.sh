@@ -338,6 +338,7 @@ log_backtest_startup_message() {
         # タイムアウト付きでexclusiveロックを取得
         if ! flock -x -w "$max_wait_time" 200; then
             log "Backtest startup message suppressed (lock acquisition timeout)"
+            # ファイルディスクリプタを閉じてロック解放
             exec 200>&-
             trap - EXIT INT TERM
             return 0
