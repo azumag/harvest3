@@ -567,19 +567,59 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5220/#5248: 起動メッセージの重複防止（プロセス固有の簡素化された防御）
-    # 複雑な既存の重複防止機構に加えて、特定の起動メッセージの確実な重複防止
+    # Issue #5220/#5248/#5267: 起動メッセージの重複防止（アトミックファイルロック強化版）
+    # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # 起動メッセージ専用の重複防止フラグをチェック
+            # Issue #5267修正: アトミックファイルロックによる確実な重複防止
+            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_done_file="/tmp/main-startup-message.done"
+            
+            # 既に完了マーカーが存在する場合は重複防止
+            if [ -f "$startup_msg_done_file" ]; then
+                return 0  # 既にログ出力済み、重複防止
+            fi
+            
+            # 環境変数フラグによる高速チェック（第一防御線）
             if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 return 0  # 既にログ出力済み、重複防止
             fi
-            # Issue #5248修正: フラグを設定してメッセージを出力後、即座にreturn
-            export MAIN_STARTUP_MESSAGE_LOGGED=1
-            log "$message"
-            return 0  # 重要: ここで処理を終了し、以降のRedis/ファイル処理をスキップ
+            
+            # アトミックディレクトリロック取得（第二防御線）
+            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
+                # ロック取得成功 - 二重チェック後にメッセージ出力
+                if [ -f "$startup_msg_done_file" ]; then
+                    # 他のプロセスが先にメッセージを出力していた
+                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
+                    return 0
+                fi
+                
+                # フラグ設定とメッセージ出力
+                export MAIN_STARTUP_MESSAGE_LOGGED=1
+                log "$message"
+                
+                # 完了マーカー作成（他のプロセス用）
+                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
+                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                
+                # ロック解放
+                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
+                
+                return 0  # 処理完了、以降のRedis/ファイル処理をスキップ
+            else
+                # ロック取得失敗 - 他のプロセスが処理中
+                # 短時間待機してから完了マーカーをチェック
+                local wait_attempts=0
+                while [ $wait_attempts -lt 10 ] && [ ! -f "$startup_msg_done_file" ]; do
+                    sleep 0.1
+                    wait_attempts=$((wait_attempts + 1))
+                done
+                
+                # 環境変数フラグも設定（一貫性のため）
+                export MAIN_STARTUP_MESSAGE_LOGGED=1
+                return 0  # 他のプロセスがログ出力したため、重複防止
+            fi
             ;;
     esac
     
@@ -739,6 +779,17 @@ cleanup_startup_message_locks() {
         find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
         find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
         log "Cleaned up startup message lock files"
+    fi
+    
+    # Issue #5267: メインの起動メッセージ用ロックファイルのクリーンアップ
+    if [ -f "/tmp/main-startup-message.done" ]; then
+        rm -f "/tmp/main-startup-message.done" 2>/dev/null || true
+        log "Cleaned up main startup message done marker"
+    fi
+    
+    if [ -d "/tmp/main-startup-message.lock" ]; then
+        rm -rf "/tmp/main-startup-message.lock" 2>/dev/null || true
+        log "Cleaned up main startup message lock directory"
     fi
     
     # プロセス内フラグのクリアは環境変数なので、コンテナ再起動時に自動的にクリアされる
