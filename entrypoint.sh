@@ -544,7 +544,7 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5220: 起動メッセージの重複防止（プロセス固有の簡素化された防御）
+    # Issue #5220/#5248: 起動メッセージの重複防止（プロセス固有の簡素化された防御）
     # 複雑な既存の重複防止機構に加えて、特定の起動メッセージの確実な重複防止
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
@@ -553,8 +553,10 @@ log_startup_message() {
             if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 return 0  # 既にログ出力済み、重複防止
             fi
-            # フラグを設定して継続
+            # Issue #5248修正: フラグを設定してメッセージを出力後、即座にreturn
             export MAIN_STARTUP_MESSAGE_LOGGED=1
+            log "$message"
+            return 0  # 重要: ここで処理を終了し、以降のRedis/ファイル処理をスキップ
             ;;
     esac
     
