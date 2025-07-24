@@ -547,14 +547,16 @@ log_startup_message() {
     # Issue #5220: 起動メッセージの重複防止（プロセス固有の簡素化された防御）
     # 複雑な既存の重複防止機構に加えて、特定の起動メッセージの確実な重複防止
     # 注意: バックテストモード以外でのみ適用
-    if echo "$message" | grep -q "Starting strategy-runner container with enhanced error handling"; then
-        # 起動メッセージ専用の重複防止フラグをチェック
-        if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-            return 0  # 既にログ出力済み、重複防止
-        fi
-        # フラグを設定して継続
-        export MAIN_STARTUP_MESSAGE_LOGGED=1
-    fi
+    case "$message" in
+        *"Starting strategy-runner container with enhanced error handling"*)
+            # 起動メッセージ専用の重複防止フラグをチェック
+            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
+                return 0  # 既にログ出力済み、重複防止
+            fi
+            # フラグを設定して継続
+            export MAIN_STARTUP_MESSAGE_LOGGED=1
+            ;;
+    esac
     
     local message_hash=$(get_message_hash "$message")
     
