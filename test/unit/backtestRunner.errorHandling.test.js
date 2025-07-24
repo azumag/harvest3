@@ -3,6 +3,7 @@ describe('BacktestRunner Error Handling', () => {
   let originalConsoleLog;
   let originalProcessExit;
   let mockPostErrorToDiscord;
+  let mockLogWithLevel;
 
   beforeEach(() => {
     // コンソールエラーとログをモック
@@ -19,36 +20,48 @@ describe('BacktestRunner Error Handling', () => {
     mockPostErrorToDiscord = jest.fn().mockResolvedValue();
     global.postErrorToDiscord = mockPostErrorToDiscord;
 
+    // logWithLevel関数をモック（実装と同じロジック）
+    const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+    const shouldLog = (level) => levels[level] <= levels[LOG_LEVEL];
+    
+    mockLogWithLevel = jest.fn((level, ...args) => {
+      if (shouldLog(level)) {
+        console.log(...args);
+      }
+    });
+    global.logWithLevel = mockLogWithLevel;
+
     // 既存のイベントリスナーをクリアしてから新しいハンドラーを登録
     process.removeAllListeners('unhandledRejection');
     process.removeAllListeners('uncaughtException');
 
     // エラーハンドラーを直接登録（backtestRunner.jsと同じロジック）
     process.on('unhandledRejection', (reason, promise) => {
-      console.error('未処理のPromise拒否が発生しました:', reason);
-      console.error('Promise:', promise);
-      console.error('エラースタック:', reason?.stack || 'スタックトレースなし');
+      global.logWithLevel('error', '未処理のPromise拒否が発生しました:', reason);
+      global.logWithLevel('error', 'Promise:', promise);
+      global.logWithLevel('error', 'エラースタック:', reason?.stack || 'スタックトレースなし');
       
       // Discord通知（利用可能な場合）
       if (typeof global.postErrorToDiscord === 'function') {
-        global.postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(console.error);
+        global.postErrorToDiscord(`バックテスト未処理エラー: ${reason?.message || reason}`).catch(err => global.logWithLevel('error', err));
       }
       
       // プロセスを終了せず、エラーログを出力して継続
-      console.log('エラーが発生しましたが、プロセスを継続します...');
+      global.logWithLevel('warn', 'エラーが発生しましたが、プロセスを継続します...');
     });
 
     process.on('uncaughtException', (error) => {
-      console.error('未捕捉の例外が発生しました:', error);
-      console.error('エラースタック:', error.stack);
+      global.logWithLevel('error', '未捕捉の例外が発生しました:', error);
+      global.logWithLevel('error', 'エラースタック:', error.stack);
       
       // Discord通知（利用可能な場合）
       if (typeof global.postErrorToDiscord === 'function') {
-        global.postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(console.error);
+        global.postErrorToDiscord(`バックテスト例外: ${error.message}`).catch(err => global.logWithLevel('error', err));
       }
       
       // プロセスを終了せず、エラーログを出力して継続
-      console.log('例外が発生しましたが、プロセスを継続します...');
+      global.logWithLevel('warn', '例外が発生しましたが、プロセスを継続します...');
     });
   });
 
@@ -58,6 +71,7 @@ describe('BacktestRunner Error Handling', () => {
     console.log = originalConsoleLog;
     process.exit = originalProcessExit;
     delete global.postErrorToDiscord;
+    delete global.logWithLevel;
 
     // 全てのイベントリスナーをクリア
     process.removeAllListeners('unhandledRejection');
@@ -75,10 +89,10 @@ describe('BacktestRunner Error Handling', () => {
       // 少し待ってからアサーション
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
-      expect(console.error).toHaveBeenCalledWith('Promise:', testPromise);
-      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
-      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', '未処理のPromise拒否が発生しました:', testError);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'Promise:', testPromise);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'エラースタック:', testError.stack);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'エラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
 
@@ -92,7 +106,7 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト未処理エラー: Test error for Discord');
-      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'エラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
 
@@ -107,9 +121,9 @@ describe('BacktestRunner Error Handling', () => {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(console.error).toHaveBeenCalledWith('未処理のPromise拒否が発生しました:', testError);
-      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
-      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', '未処理のPromise拒否が発生しました:', testError);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'エラースタック:', testError.stack);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'エラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
   });
@@ -122,9 +136,9 @@ describe('BacktestRunner Error Handling', () => {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(console.error).toHaveBeenCalledWith('未捕捉の例外が発生しました:', testError);
-      expect(console.error).toHaveBeenCalledWith('エラースタック:', testError.stack);
-      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', '未捕捉の例外が発生しました:', testError);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'エラースタック:', testError.stack);
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', '例外が発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
 
@@ -136,7 +150,7 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト例外: Test exception for Discord');
-      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', '例外が発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
   });
@@ -149,16 +163,16 @@ describe('BacktestRunner Error Handling', () => {
       const main = async () => {
         try {
           await mockRunBacktest();
-          console.log('バックテスト正常完了');
+          global.logWithLevel('info', 'バックテスト正常完了');
         } catch (error) {
-          console.error('バックテスト実行エラー:', error);
-          console.error('エラースタック:', error.stack);
+          global.logWithLevel('error', 'バックテスト実行エラー:', error);
+          global.logWithLevel('error', 'エラースタック:', error.stack);
           
           if (typeof global.postErrorToDiscord === 'function') {
-            await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+            await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(err => global.logWithLevel('error', err));
           }
           
-          console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+          global.logWithLevel('warn', 'バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
           
           // エラー発生時は少し待機してからリターン（Docker composeのループで再実行される）
           await new Promise(resolve => setTimeout(resolve, 5000));
@@ -167,10 +181,10 @@ describe('BacktestRunner Error Handling', () => {
 
       await main();
 
-      expect(console.error).toHaveBeenCalledWith('バックテスト実行エラー:', expect.any(Error));
-      expect(console.error).toHaveBeenCalledWith('エラースタック:', expect.any(String));
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'バックテスト実行エラー:', expect.any(Error));
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'エラースタック:', expect.any(String));
       expect(mockPostErrorToDiscord).toHaveBeenCalledWith('バックテスト実行エラー: Backtest execution error');
-      expect(console.log).toHaveBeenCalledWith('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
 
@@ -184,16 +198,16 @@ describe('BacktestRunner Error Handling', () => {
       const main = async () => {
         try {
           await mockRunBacktest();
-          console.log('バックテスト正常完了');
+          global.logWithLevel('info', 'バックテスト正常完了');
         } catch (error) {
-          console.error('バックテスト実行エラー:', error);
-          console.error('エラースタック:', error.stack);
+          global.logWithLevel('error', 'バックテスト実行エラー:', error);
+          global.logWithLevel('error', 'エラースタック:', error.stack);
           
           if (typeof global.postErrorToDiscord === 'function') {
-            await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(console.error);
+            await global.postErrorToDiscord(`バックテスト実行エラー: ${error.message}`).catch(err => global.logWithLevel('error', err));
           }
           
-          console.log('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+          global.logWithLevel('warn', 'バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
           
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
@@ -201,10 +215,10 @@ describe('BacktestRunner Error Handling', () => {
 
       await main();
 
-      expect(console.error).toHaveBeenCalledWith('バックテスト実行エラー:', expect.any(Error));
-      expect(console.error).toHaveBeenCalledWith('エラースタック:', expect.any(String));
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'バックテスト実行エラー:', expect.any(Error));
+      expect(mockLogWithLevel).toHaveBeenCalledWith('error', 'エラースタック:', expect.any(String));
       expect(mockPostErrorToDiscordFailing).toHaveBeenCalled();
-      expect(console.log).toHaveBeenCalledWith('バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'バックテスト実行中にエラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
   });
@@ -215,7 +229,7 @@ describe('BacktestRunner Error Handling', () => {
       
       process.emit('uncaughtException', testError);
       
-      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', '例外が発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
 
@@ -229,8 +243,8 @@ describe('BacktestRunner Error Handling', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // 両方のエラーに対して継続メッセージが出力される
-      expect(console.log).toHaveBeenCalledWith('例外が発生しましたが、プロセスを継続します...');
-      expect(console.log).toHaveBeenCalledWith('エラーが発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', '例外が発生しましたが、プロセスを継続します...');
+      expect(mockLogWithLevel).toHaveBeenCalledWith('warn', 'エラーが発生しましたが、プロセスを継続します...');
       expect(process.exit).not.toHaveBeenCalled();
     });
   });
