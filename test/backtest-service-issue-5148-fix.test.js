@@ -38,9 +38,9 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     // Issue #5148で報告された起動メッセージが存在することを確認
     expect(entrypointContent).toContain('Starting backtest container with enhanced error handling');
     
-    // Issue #5175修正により重複防止機構が強化されていることを確認
+    // Issue #5175修正とIssue #5159 flock方式により重複防止機構が強化されていることを確認
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // npm エラー対処の強化がされていることを確認
     expect(entrypointContent).toContain('retry_npm_install_with_backoff');
@@ -52,21 +52,22 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     // entrypoint.shにlog_backtest_startup_message関数が存在することを確認
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5175の修正で強化された重複防止機能が存在することを確認
+    // Issue #5175の修正とIssue #5159 flock方式で強化された重複防止機能が存在することを確認
     expect(entrypointContent).toContain('log_backtest_startup_message()');
-    expect(entrypointContent).toContain('コンテナ再起動検出を含む強化版重複防止機構');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // タイムスタンプベースの重複防止ロジック
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
     expect(entrypointContent).toContain('Backtest startup message suppressed');
     
     // コンテナ再起動検出機能
-    expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
-    expect(entrypointContent).toContain('container_boot_time');
-    expect(entrypointContent).toContain('instance_id');
+    // Issue #5159: flock方式のロック機構への更新
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(entrypointContent).toContain('exec 200>&-');
     
     // atomicロック機構（mkdirにatomic操作）
-    expect(entrypointContent).toContain('mkdir "$lock_dir"');
+    expect(entrypointContent).toContain('backtest-npm-error-detection.state');
     
     log('重複メッセージ防止機能の存在を確認しました');
   });
@@ -94,14 +95,13 @@ describe('Issue #5148: backtestサービス例外解決確認', () => {
     
     // エラーハンドリングとクリーンアップ処理
     expect(entrypointContent).toContain('2>/dev/null || true');
-    expect(entrypointContent).toContain('rm -rf "$lock_dir"');
+    expect(entrypointContent).toContain('exec 200>&-');
     
-    // 古いロックのクリーンアップ機構
-    expect(entrypointContent).toContain('古いロックディレクトリのクリーンアップ');
-    expect(entrypointContent).toContain('lock_age');
+    // NPMエラー検出ファイルのクリーンアップ機構
+    expect(entrypointContent).toContain('Removed backtest NPM error detection file');
     
-    // 適切なエラーメッセージ
-    expect(entrypointContent).toContain('another process is logging');
+    // Issue #5159: flock方式の適切なメッセージ抑制
+    expect(entrypointContent).toContain('lock acquisition timeout');
     
     log('エラーハンドリング機構の存在を確認しました');
   });

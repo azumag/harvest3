@@ -18,6 +18,7 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5173修正の確認: log_backtest_startup_message関数の使用 (Issue #5132で重複メッセージは削除済み)
+    // Issue #5159: flock方式への更新により、より確実な重複防止機構が実装されている
     expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
     
     // 修正前の問題のあるコード（直接log呼び出し）が残っていないことを確認
@@ -36,10 +37,11 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
     // log_backtest_startup_message関数の定義が存在することを確認
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
     
-    // 重複防止機構の要素が含まれていることを確認
+    // Issue #5159: flock方式の重複防止機構の要素が含まれていることを確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container restart detection');
-    expect(entrypointContent).toContain('instance_id');
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(entrypointContent).toContain('exec 200>&-');
   });
 
   test('修正により重複メッセージが防止されることを確認', () => {

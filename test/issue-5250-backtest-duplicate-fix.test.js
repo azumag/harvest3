@@ -37,13 +37,13 @@ describe('Issue #5250: backtestサービス重複メッセージ修正', () => {
     expect(entrypointContent).not.toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
-  test('既存のlog_backtest_startup_message関数が存在することを確認', () => {
+  test('Issue #5159更新: log_backtest_startup_message関数がflock方式で存在することを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058の修正が維持されていることを確認
+    // Issue #5058の修正が維持され、#5159でflock方式に更新されていることを確認
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（改良版）');
     expect(entrypointContent).toContain('log_backtest_startup_message() {');
-    expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
   });
 
   test('重複メッセージが実際に防止されることを確認', async () => {
@@ -59,38 +59,58 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# entrypoint.shからlog_backtest_startup_message関数を抽出・簡略化
+# Issue #5159: flock方式による改良版log_backtest_startup_message関数（簡略化）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
-    local lock_dir="/tmp/test-backtest-startup-lock-${Date.now()}.dir"
+    local lock_file="/tmp/test-backtest-startup-lock-${Date.now()}.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
+    local max_wait_time=5  # 最大待機時間（秒）
     
-    # 既存のタイムスタンプファイルをチェック
+    # Issue #5159: flockによる確実なatomic lock実装
+    exec 200>"$lock_file"
+    
+    # タイムアウト付きでexclusiveロックを取得
+    if ! flock -x -w "$max_wait_time" 200; then
+        log "Backtest startup message suppressed (lock acquisition timeout)"
+        exec 200>&-
+        return 0
+    fi
+    
+    # ロック取得後、タイムスタンプをチェック
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
         local time_diff=$((current_time - last_time))
         
         if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown \${time_diff}s ago)"
+            exec 200>&-
             return 0
         fi
     fi
     
-    # atomicなロック取得を試行
-    if mkdir "$lock_dir" 2>/dev/null; then
-        # タイムスタンプを更新してメッセージ出力
-        echo "$current_time" > "$timestamp_file"
-        chmod 600 "$timestamp_file"
-        log "$message"
+    # NPMエラー状態をチェック（Issue #5159）
+    local npm_error_marker="/tmp/backtest-npm-error-detection.state"
+    if [ -f "$npm_error_marker" ]; then
+        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
+        local npm_error_age=$((current_time - last_npm_error))
         
-        # ロック解放
-        rm -rf "$lock_dir" 2>/dev/null || true
-        return 0
-    else
-        log "Backtest startup message suppressed (another process is logging)"
-        return 0
+        # NPMエラー後30秒以内はメッセージを抑制
+        if [ $npm_error_age -lt 30 ]; then
+            log "Backtest startup message suppressed (NPM error recovery: \${npm_error_age}s ago)"
+            exec 200>&-
+            return 0
+        fi
     fi
+    
+    # メッセージ出力とタイムスタンプ更新
+    log "$message"
+    echo "$current_time" > "$timestamp_file"
+    chmod 600 "$timestamp_file"
+    
+    # ファイルディスクリプタを閉じてロック解放
+    exec 200>&-
+    return 0
 }
 
 # テスト実行：連続した2回の呼び出し（Issue #5250で発生していた問題をシミュレート）
@@ -138,9 +158,9 @@ rm -f "$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" 2>/dev/null || true
   test('Issue #5058とIssue #5250の両方の修正が適用されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5058の修正が維持されている
+    // Issue #5058の修正が維持され、#5159でflock方式に更新されている
     expect(entrypointContent).toContain('Issue #5127, #5058 & #5175');
-    expect(entrypointContent).toContain('atomicなロック取得を試行（mkdirはatomic操作）');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
     
     // Issue #5250の修正が適用されている  
     expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');

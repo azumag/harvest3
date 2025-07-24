@@ -36,9 +36,9 @@ describe('Issue #5254: backtestサービス例外修正', () => {
     expect(entrypointContent).toContain('retry_npm_install_with_backoff');
     expect(entrypointContent).toContain('max_container_restarts');
     
-    // 重複防止機構が強化されている
+    // Issue #5159: flock方式の重複防止機構が強化されている
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('container_boot_time');
+    expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
   });
 
   test('Issue #5254: NPMエラー -> 再起動シナリオのテスト', async () => {
@@ -55,71 +55,59 @@ log() {
     echo "[\$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] \$1"
 }
 
-# entrypoint.shからlog_backtest_startup_message関数を抽出・強化
+# Issue #5159: flock方式による改良版log_backtest_startup_message関数（Issue #5254対応）
 log_backtest_startup_message() {
     local message="\$1"
     local current_time=\$(date +%s)
-    local lock_dir="/tmp/test-backtest-5254-lock-\${RANDOM}.dir"
+    local lock_file="/tmp/test-backtest-5254-lock-\${RANDOM}.lock"
     local timestamp_file="\$BACKTEST_STARTUP_LOCK_FILE"
-    local restart_detection_file="\$BACKTEST_CONTAINER_RESTART_DETECTION_FILE"
+    local max_wait_time=5  # 最大待機時間（秒）
     
-    # Issue #5254対応: より厳密なコンテナ再起動検出
-    local container_boot_time=\$(stat -c %Y /proc/1 2>/dev/null || echo "\$current_time")
-    local instance_id="\${container_boot_time}_\$\$"
+    # Issue #5159: flockによる確実なatomic lock実装
+    # Issue #5254で発生したNPMエラー -> 再起動シナリオに対応
+    exec 200>"\$lock_file"
     
-    # 古いロックディレクトリのクリーンアップ
-    if [ -d "\$lock_dir" ]; then
-        local lock_age=\$((current_time - \$(stat -c %Y "\$lock_dir" 2>/dev/null || echo 0)))
-        if [ \$lock_age -gt 60 ]; then
-            rm -rf "\$lock_dir" 2>/dev/null || true
-        fi
+    # タイムアウト付きでexclusiveロックを取得
+    if ! flock -x -w "\$max_wait_time" 200; then
+        log "Backtest startup message suppressed (lock acquisition timeout)"
+        exec 200>&-
+        return 0
     fi
     
-    # Issue #5254: 再起動検出による強化された重複防止
-    if [ -f "\$restart_detection_file" ]; then
-        local last_restart_info=\$(cat "\$restart_detection_file" 2>/dev/null || echo "")
-        local last_instance_id=\$(echo "\$last_restart_info" | cut -d':' -f1 2>/dev/null || echo "")
-        local last_message_time=\$(echo "\$last_restart_info" | cut -d':' -f2 2>/dev/null || echo "0")
-        
-        # Issue #5254: より短い間隔でも重複を検出（30秒以内）
-        if [ "\$last_instance_id" = "\$instance_id" ] || [ \$((current_time - last_message_time)) -lt 30 ]; then
-            log "Backtest startup message suppressed (Issue #5254 prevention: last shown \$((current_time - last_message_time))s ago)"
-            return 0
-        fi
-    fi
-    
-    # 既存のタイムスタンプファイルをチェック
+    # ロック取得後、タイムスタンプをチェック
     if [ -f "\$timestamp_file" ]; then
         local last_time=\$(cat "\$timestamp_file" 2>/dev/null || echo 0)
         local time_diff=\$((current_time - last_time))
         
         if [ \$time_diff -lt \$BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
             log "Backtest startup message suppressed (last shown \${time_diff}s ago)"
-            echo "\${instance_id}:\${last_time}" > "\$restart_detection_file"
-            chmod 600 "\$restart_detection_file"
+            exec 200>&-
             return 0
         fi
     fi
     
-    # atomicなロック取得を試行
-    if mkdir "\$lock_dir" 2>/dev/null; then
-        # タイムスタンプを更新してメッセージ出力
-        echo "\$current_time" > "\$timestamp_file"
-        chmod 600 "\$timestamp_file"
+    # Issue #5159/#5254: NPMエラー状態をチェック
+    local npm_error_marker="/tmp/backtest-npm-error-detection.state"
+    if [ -f "\$npm_error_marker" ]; then
+        local last_npm_error=\$(cat "\$npm_error_marker" 2>/dev/null || echo "0")
+        local npm_error_age=\$((current_time - last_npm_error))
         
-        # 再起動検出情報を記録
-        echo "\${instance_id}:\${current_time}" > "\$restart_detection_file"
-        chmod 600 "\$restart_detection_file"
-        
-        log "\$message"
-        
-        # ロック解放
-        rm -rf "\$lock_dir" 2>/dev/null || true
-        return 0
-    else
-        log "Backtest startup message suppressed (another process is logging)"
-        return 0
+        # Issue #5254: NPMエラー後30秒以内はメッセージを抑制
+        if [ \$npm_error_age -lt 30 ]; then
+            log "Backtest startup message suppressed (Issue #5254 - NPM error recovery: \${npm_error_age}s ago)"
+            exec 200>&-
+            return 0
+        fi
     fi
+    
+    # メッセージ出力とタイムスタンプ更新
+    log "\$message"
+    echo "\$current_time" > "\$timestamp_file"
+    chmod 600 "\$timestamp_file"
+    
+    # ファイルディスクリプタを閉じてロック解放
+    exec 200>&-
+    return 0
 }
 
 # Issue #5254で発生したシナリオをシミュレート:
@@ -137,7 +125,6 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 
 # クリーンアップ
 rm -f "\$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || true
-rm -f "\$BACKTEST_CONTAINER_RESTART_DETECTION_FILE" 2>/dev/null || true
 `;
 
     const testScriptPath = path.join(tmpDir, `test-issue-5254-${Date.now()}.sh`);

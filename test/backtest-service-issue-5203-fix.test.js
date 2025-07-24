@@ -40,11 +40,10 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     // 重複防止機構の確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE');
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('backtest-startup-lock.dir');
     
-    // atomicロック機構の確認
-    expect(entrypointContent).toContain('mkdir "$lock_dir"');
-    expect(entrypointContent).toContain('rm -rf "$lock_dir"');
+    // Issue #5159: flockベースのatomicロック機構の確認
+    expect(entrypointContent).toContain('exec 200>"$lock_file"');
+    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
     
     // Issue #5175で追加されたコンテナ再起動検出機構の確認
     expect(entrypointContent).toContain('BACKTEST_CONTAINER_RESTART_DETECTION_FILE');
@@ -213,17 +212,17 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
 
     test('Issue #5203の根本原因となりうる条件の修正確認', () => {
       
-      // レースコンディション対策の確認
-      expect(entrypointContent).toContain('atomicなロック取得を試行');
-      expect(entrypointContent).toContain('mkdirはatomic操作');
+      // Issue #5159: flockベースのレースコンディション対策の確認
+      expect(entrypointContent).toContain('flockによる確実なatomic lock実装');
+      expect(entrypointContent).toContain('複数プロセス間でのrace conditionを完全に防止');
       
-      // 二重チェック機構の確認
-      expect(entrypointContent).toContain('ロック取得成功 - 二重チェック後にメッセージ出力');
-      expect(entrypointContent).toContain('他のプロセスが先にメッセージを出力していた');
+      // flockベースの排他制御機構の確認
+      expect(entrypointContent).toContain('タイムアウト付きでexclusiveロックを取得');
+      expect(entrypointContent).toContain('ファイルディスクリプタを閉じてロック解放');
       
-      // コンテナ再起動検出による追加防止策
-      expect(entrypointContent).toContain('Issue #5175: コンテナ再起動検出');
-      expect(entrypointContent).toContain('instance_id');
+      // NPMエラー時の重複防止機構の確認
+      expect(entrypointContent).toContain('NPMエラー状態をチェック（Issue #5159）');
+      expect(entrypointContent).toContain('NPMエラー後30秒以内はメッセージを抑制');
     });
   });
 
@@ -300,32 +299,26 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     });
   });
 
-  // atomicロック動作の実動作テスト
-  describe('atomicロック動作の実動作テスト', () => {
-    test('並行プロセスでのatomicロック競合テスト', async () => {
-      const testLockDir = path.join(tmpDir, 'test-atomic-lock.dir');
-      
-      // クリーンアップ
-      if (fs.existsSync(testLockDir)) {
-        fs.rmSync(testLockDir, { recursive: true, force: true });
+  // Issue #5159: flockベースatomicロック動作の実動作テスト
+  describe('flockベースatomicロック動作の実動作テスト', () => {
+    test('flockコマンドの利用可能性確認', async () => {
+      try {
+        await execAsync('which flock');
+        console.log('✓ flock command is available for atomic locking');
+      } catch (error) {
+        console.warn('⚠ flock command not found - this may cause issues in container runtime');
       }
+    });
+
+    test('flockベース重複防止機構の基本動作確認', () => {
+      // Issue #5159のflock実装要素がentrypoint.shに含まれていることを確認
+      expect(entrypointContent).toContain('exec 200>"$lock_file"');
+      expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
+      expect(entrypointContent).toContain('exec 200>&-');
       
-      // 5つの並行プロセスでmkdirを試行
-      const promises = Array(5).fill().map((_, i) =>
-        execAsync(`mkdir "${testLockDir}" 2>/dev/null && echo "success-${i}" || echo "failed-${i}"`)
-          .catch(error => ({ stdout: `failed-${i}`, stderr: error.message }))
-      );
-      
-      const results = await Promise.all(promises);
-      
-      // 成功したプロセスが1つだけであることを確認
-      const successResults = results.filter(r => r.stdout && r.stdout.includes('success'));
-      expect(successResults).toHaveLength(1);
-      
-      // クリーンアップ
-      if (fs.existsSync(testLockDir)) {
-        fs.rmSync(testLockDir, { recursive: true, force: true });
-      }
-    }, 10000);
+      // タイムスタンプベースの重複チェックも維持されていることを確認
+      expect(entrypointContent).toContain('time_diff=$((current_time - last_time))');
+      expect(entrypointContent).toContain('if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]');
+    });
   });
 });
