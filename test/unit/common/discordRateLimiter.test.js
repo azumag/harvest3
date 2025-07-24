@@ -602,7 +602,33 @@ describe('DiscordRateLimiter', () => {
       expect(result.details.webhookHealth.reason).toBe('Webhook not found (deleted)');
     });
 
-    test('handles HTTP errors other than 400 and 429', async () => {
+    test('handles HTTP 503 Service Unavailable errors with backoff', async () => {
+      const message = 'Test message';
+      const error = new Error('Service Unavailable');
+      error.response = {
+        status: 503,
+        statusText: 'Service Unavailable',
+        data: 'upstream connect error or disconnect/reset before headers. reset reason: overflow'
+      };
+      
+      mockedAxios.post.mockRejectedValue(error);
+
+      const result = await rateLimiter.sendToDiscord(validUrl, message);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('service_unavailable');
+      expect(result.rateLimitUntil).toBeDefined();
+      expect(result.details.status).toBe(503);
+      expect(result.details.statusText).toBe('Service Unavailable');
+      expect(result.details.backoffSeconds).toBe(30);
+      expect(result.details.recommendedAction).toBe('Discord API側の過負荷解消を待機中');
+      
+      // Verify that rateLimitUntil is set to 30 seconds + buffer from now
+      const expectedMinTime = Date.now() + (30 * 1000);
+      expect(result.rateLimitUntil).toBeGreaterThanOrEqual(expectedMinTime);
+    });
+
+    test('handles HTTP errors other than 400, 429, and 503', async () => {
       const message = 'Test message';
       const error = new Error('Server Error');
       error.response = {
