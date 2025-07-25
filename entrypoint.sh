@@ -42,7 +42,7 @@ BACKGROUND_CLEANUP_PIDS=""
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル
 BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-timestamp.state"  # Issue #5194修正: タイムスタンプ専用ファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
-BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-5}  # flock最大待機時間（秒）
+BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-15}  # flock最大待機時間（秒）- Issue #5269: Docker再起動対応で延長
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
 
 # セキュリティ注記: /tmp使用について
@@ -61,6 +61,21 @@ mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 # 前回の実行で残ったロックファイルを削除してクリーンな状態で開始
 find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
 find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Issue #5269: バックテスト専用のタイムスタンプファイルクリーンアップ強化
+# Docker再起動時の重複メッセージ防止のため、古いタイムスタンプファイルを削除
+if [ "$BACKTEST_MODE" = "true" ]; then
+    # 両方のディレクトリ（/var/run/backtest と /tmp）をクリーンアップ
+    for cleanup_dir in "/var/run/backtest" "/tmp"; do
+        if [ -d "$cleanup_dir" ]; then
+            rm -f "$cleanup_dir/startup-timestamp-global.state" 2>/dev/null || true
+            rm -f "$cleanup_dir/startup-message-global.lock" 2>/dev/null || true
+        fi
+    done
+    
+    # NPMエラーマーカーも初期化（新鮮な状態で開始）
+    rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
+fi
 
 # MD5ハッシュ値生成関数（DRY原則適用）
 get_message_hash() {
@@ -472,6 +487,7 @@ log_backtest_startup_message() {
     
     # Issue #5333修正: ロック取得後、より厳密なタイムスタンプチェック
     # Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
+    # Issue #5269修正: Docker再起動時の新規コンテナ判定を追加
     # パフォーマンス最適化: 複数cutコマンドの代わりに1回のIFS読み込み使用
     if [ -f "$timestamp_file" ]; then
         IFS=':' read -r last_time last_container last_pid < "$timestamp_file" 2>/dev/null || {
@@ -483,9 +499,17 @@ log_backtest_startup_message() {
         local last_time_int=${last_time%.*}
         local time_diff=$((current_time_int - last_time_int))
         
+        # Issue #5269修正: Docker再起動の場合は異なるコンテナとして扱う
+        # システム稼働時間が短い場合（60秒未満）は新規コンテナとみなしてメッセージを許可
+        local uptime_seconds=0
+        if [ -f /proc/uptime ]; then
+            uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
+        fi
+        
         # Issue #5333修正: より詳細な重複検出ログ
         # 整数算術でタイムスタンプ比較（bcコマンド不要）
-        if [ "$time_diff" -lt "$BACKTEST_STARTUP_LOCK_TIMEOUT" ]; then
+        # Docker再起動の場合（uptime < 60s）はメッセージを許可
+        if [ "$time_diff" -lt "$BACKTEST_STARTUP_LOCK_TIMEOUT" ] && [ "$uptime_seconds" -ge 60 ]; then
             if [ "$last_container" = "$container_id" ] && [ "$last_pid" = "$process_id" ]; then
                 log "Backtest startup message suppressed (same process, last shown ${time_diff}s ago)"
             else
@@ -493,6 +517,8 @@ log_backtest_startup_message() {
             fi
             cleanup_backtest_lock
             return 0
+        elif [ "$uptime_seconds" -lt 60 ]; then
+            log "Docker container restart detected (uptime: ${uptime_seconds}s) - allowing startup message"
         fi
     fi
     
