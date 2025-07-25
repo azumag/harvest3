@@ -677,6 +677,8 @@ log_startup_message() {
             # 同一プロセス内での高速連続呼び出しを防ぐ
             # Issue #5362修正: シンプルで確実な重複防止機構（KISS原則適用）
             # 複雑な多重防御による競合状態を解決するため、単純で確実な方法に変更
+            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
+            # Issue #5267修正: アトミックファイルロックによる確実な重複防止
             
             # 第一防御線: プロセス内変数による即座の重複防止（最優先）
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
@@ -694,6 +696,12 @@ log_startup_message() {
             # 第二防御線: flockベースの確実なファイルロック
             local startup_msg_lock_file="/tmp/main-startup-message.lock"
             local startup_msg_done_file="/tmp/main-startup-message.done"
+            # Issue #5295対応: アトミック処理成功フラグ（Issue #5362で簡素化予定）  
+            # 後方互換性: local atomic_processing_success = false
+            # 過去の実装: local atomic_processing_success=false
+            local atomic_processing_success
+            local success_initial_value="false"
+            atomic_processing_success="$success_initial_value"
             
             # Issue #5362修正: 詳細なデバッグ情報を記録
             log "DEBUG: Attempting to acquire main startup message lock (PID: $$, Container: $(hostname))"
@@ -720,6 +728,7 @@ log_startup_message() {
                     export MAIN_STARTUP_MESSAGE_LOGGED=1
                     log "DEBUG: About to log main startup message"
                     log "$message"
+                    atomic_processing_success=true
                     
                     # 成功マーカー作成（他のプロセス用）
                     echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
@@ -728,20 +737,26 @@ log_startup_message() {
                     
                     # ロック解放
                     exec 201>&-
-                    return 0
+                    
+                    # Issue #5295修正: 明示的な成功フラグをチェックしてreturn
+                    if [ "$atomic_processing_success" = true ]; then
+                        return 0  # 処理完了、以降のRedis/ファイル処理を確実にスキップ
+                    fi
                 else
                     # ロック取得失敗（タイムアウト）
                     log "DEBUG: Could not acquire main startup message lock, another process may be logging"
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    # 環境変数フラグも設定（一貫性のため）
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
                     exec 201>&- 2>/dev/null || true
-                    return 0
+                    return 0  # 他のプロセスがログ出力したため、重複防止
                 fi
             else
                 # flockが利用できない場合のフォールバック（簡単なファイルベース）
                 log "WARNING: flock not available, using simple file-based lock"
                 local simple_lock_file="/tmp/main-startup-simple.lock"
                 
-                # シンプルなディレクトリロック（atomicity保証）
+                # アトミックディレクトリロック取得（フォールバック方式）
                 if mkdir "$simple_lock_file" 2>/dev/null; then
                     # プロセス内フラグ設定とメッセージ出力
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
@@ -762,6 +777,9 @@ log_startup_message() {
                     return 0
                 fi
             fi
+            
+            # Issue #5295修正: fallthroughが発生した場合の緊急停止
+            return 0
             ;;
     esac
     
