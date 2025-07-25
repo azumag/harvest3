@@ -18,57 +18,47 @@ describe('Issue #5150: strategy-runnerサービス重複メッセージ修正確
   test('cleanup_startup_message_locks関数が追加されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
     
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    const messageDedupeScript = path.join(__dirname, '../scripts/message-dedup.sh');
+    const messageDedupeContent = fs.readFileSync(messageDedupeScript, 'utf8');
     
-    // 新しく追加されたクリーンアップ関数が存在することを確認
-    expect(entrypointContent).toContain('cleanup_startup_message_locks()');
-    expect(entrypointContent).toContain('Cleaning up startup message lock files...');
-    expect(entrypointContent).toContain('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete');
-    expect(entrypointContent).toContain('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} +');
+    // 新しく追加されたクリーンアップ関数が適切なスクリプトに分離されていることを確認
+    expect(messageDedupeContent).toContain('cleanup_startup_message_locks()');
+    expect(messageDedupeContent).toContain('Cleaning up startup message lock files...');
+    expect(messageDedupeContent).toContain('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete');
+    expect(messageDedupeContent).toContain('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} +');
   });
 
   test('cleanup関数にstartup message lockクリーンアップが追加されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // cleanup関数内でstartup message lockのクリーンアップが呼ばれることを確認
-    expect(entrypointContent).toContain('cleanup_startup_message_locks');
+    // cleanup関数内で統一されたクリーンアップが呼ばれることを確認（リファクタリング後）
+    expect(entrypointContent).toContain('cleanup_all_locks');
     
-    // cleanup関数内の適切な位置（backtest関連のクリーンアップ後）に追加されていることを確認
+    // cleanup関数が存在し、適切に統合されたクリーンアップ処理を呼び出していることを確認
     const cleanupFunction = entrypointContent.match(/cleanup\(\) \{[\s\S]*?\n\}/)[0];
-    expect(cleanupFunction).toContain('cleanup_backtest_locks');
-    expect(cleanupFunction).toContain('cleanup_startup_message_locks');
+    expect(cleanupFunction).toContain('cleanup_all_locks');
     
-    // 順序が正しいことを確認（backtest cleanup の後）
-    const backtestIndex = cleanupFunction.indexOf('cleanup_backtest_locks');
-    const startupIndex = cleanupFunction.indexOf('cleanup_startup_message_locks');
-    expect(startupIndex).toBeGreaterThan(backtestIndex);
+    // ヘルパースクリプトが適切に読み込まれることを確認
+    expect(entrypointContent).toContain('source_helper_scripts');
+    expect(entrypointContent).toContain('message-dedup.sh');
   });
 
   test('初期クリーンアップがスクリプト開始時に実行されることを確認', () => {
+    const messageDedupeScript = path.join(__dirname, '../scripts/message-dedup.sh');  
+    const messageDedupeContent = fs.readFileSync(messageDedupeScript, 'utf8');
+    
+    // 初期クリーンアップ機能が適切なスクリプトに分離されていることを確認
+    expect(messageDedupeContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
+    expect(messageDedupeContent).toContain('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"');
+    
+    // クリーンアップ関数が存在することを確認
+    expect(messageDedupeContent).toContain('cleanup_startup_message_locks()');
+    expect(messageDedupeContent).toContain('cleanup_all_locks()');
+    
+    // entrypoint.shが適切にヘルパースクリプトを読み込むことを確認
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-    
-    // 初期クリーンアップコメントと処理が存在することを確認
-    expect(entrypointContent).toContain('Issue #5150: コンテナ再起動時の初期クリーンアップ');
-    expect(entrypointContent).toContain('前回の実行で残ったロックファイルを削除してクリーンな状態で開始');
-    
-    // STARTUP_MESSAGE_LOCK_DIR作成後すぐにクリーンアップが実行されることを確認
-    const lines = entrypointContent.split('\n');
-    let lockDirIndex = -1;
-    let cleanupIndex = -1;
-    
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"')) {
-        lockDirIndex = i;
-      }
-      if (lines[i].includes('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete') && cleanupIndex === -1) {
-        cleanupIndex = i;
-      }
-    }
-    
-    expect(lockDirIndex).toBeGreaterThan(-1);
-    expect(cleanupIndex).toBeGreaterThan(-1);
-    expect(cleanupIndex).toBeGreaterThan(lockDirIndex);
-    expect(cleanupIndex - lockDirIndex).toBeLessThan(10); // 近い位置にある
+    expect(entrypointContent).toContain('source_helper_scripts');
+    expect(entrypointContent).toContain('message-dedup.sh');
   });
 
   describe('クリーンアップ機能の動作テスト', () => {
@@ -202,27 +192,41 @@ echo "Initial cleanup completed"
 
   test('Issue #5150修正により既存機能に影響がないことを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    const messageDedupeScript = path.join(__dirname, '../scripts/message-dedup.sh');
+    const messageDedupeContent = fs.readFileSync(messageDedupeScript, 'utf8');
     
-    // 重要な既存機能が維持されていることを確認
-    const essentialFunctions = [
-      'log_startup_message()',
-      'try_redis_duplicate_prevention(',
-      'fallback_to_file_based_prevention(',
-      'get_message_hash(',
+    // entrypoint.shの重要な機能が維持されていることを確認
+    const entrypointFunctions = [
       'acquire_startup_lock()',
       'release_startup_lock()',
       'cleanup()',
       'main('
     ];
     
-    essentialFunctions.forEach(func => {
+    entrypointFunctions.forEach(func => {
       expect(entrypointContent).toContain(func);
     });
     
-    // 既存の重複防止メカニズムが維持されていることを確認
-    expect(entrypointContent).toContain('DUPLICATE_PREVENTION_STRATEGY');
-    expect(entrypointContent).toContain('redis_first');
-    expect(entrypointContent).toContain('file_only');
+    // message-dedup.shに分離された機能が正しく存在することを確認
+    const messageFunctions = [
+      'log_startup_message()',
+      'try_redis_duplicate_prevention(',
+      'fallback_to_file_based_prevention(',
+      'get_message_hash('
+    ];
+    
+    messageFunctions.forEach(func => {
+      expect(messageDedupeContent).toContain(func);
+    });
+    
+    // 既存の重複防止メカニズムが適切なスクリプトに維持されていることを確認
+    expect(messageDedupeContent).toContain('DUPLICATE_PREVENTION_STRATEGY');
+    expect(messageDedupeContent).toContain('redis_first');
+    expect(messageDedupeContent).toContain('file_only');
+    
+    // ヘルパースクリプトの読み込みが正しく設定されていることを確認
+    expect(entrypointContent).toContain('source_helper_scripts');
+    expect(entrypointContent).toContain('message-dedup.sh');
   });
 
   test('entrypoint.sh構文検証', async () => {

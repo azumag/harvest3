@@ -20,12 +20,14 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     expect(fs.existsSync(entrypointPath)).toBe(true);
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    const messageDedupeScript = path.join(__dirname, '../scripts/message-dedup.sh');
+    const messageDedupeContent = fs.readFileSync(messageDedupeScript, 'utf8');
     
-    // Issue #2525の修正が適用されていることを確認
-    expect(entrypointContent).toContain('log_startup_message()');
-    expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
-    expect(entrypointContent).toContain('get_message_hash');
-    expect(entrypointContent).toContain('mkdir \"$lock_file\"');
+    // Issue #2525の修正が適切なスクリプトに分離されていることを確認
+    expect(messageDedupeContent).toContain('log_startup_message()');
+    expect(messageDedupeContent).toContain('STARTUP_MESSAGE_LOCK_DIR');
+    expect(messageDedupeContent).toContain('get_message_hash');
+    expect(messageDedupeContent).toContain('mkdir \"$lock_file\"');
     
     // Issue #5049の修正が適用されていることを確認
     expect(entrypointContent).toContain('log() {');
@@ -34,6 +36,10 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     
     // Issue #5036で問題となったメッセージの出力箇所を確認
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    
+    // ヘルパースクリプトの読み込みが正しく設定されていることを確認  
+    expect(entrypointContent).toContain('source_helper_scripts');
+    expect(entrypointContent).toContain('message-dedup.sh');
   });
 
   describe('重複メッセージ防止機能の個別テスト', () => {
@@ -202,15 +208,17 @@ log_startup_message "Starting strategy-runner container with enhanced error hand
 
   test('Issue #5036の問題の根本原因が修正されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    const messageDedupeScript = path.join(__dirname, '../scripts/message-dedup.sh');
+    const messageDedupeContent = fs.readFileSync(messageDedupeScript, 'utf8');
     
     // 過去の問題があったコードパターンが存在しないことを確認
     expect(entrypointContent).not.toContain('exec 1>&1'); // Issue #5049で削除
     expect(entrypointContent).not.toContain('STARTUP_MESSAGE_SENT=""'); // Issue #2525で改良
     
-    // 現在の正しい実装が存在することを確認
-    expect(entrypointContent).toContain('log_startup_message()'); // 重複防止関数
-    expect(entrypointContent).toContain('get_message_hash()'); // ハッシュベース識別
-    expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR'); // atomicロック実装
+    // 重複防止関数が適切なスクリプトに分離されていることを確認
+    expect(messageDedupeContent).toContain('log_startup_message()'); // 重複防止関数
+    expect(messageDedupeContent).toContain('get_message_hash()'); // ハッシュベース識別
+    expect(messageDedupeContent).toContain('STARTUP_MESSAGE_LOCK_DIR'); // atomicロック実装
     
     // Issue #5036で報告されたメッセージが適切に処理されることを確認
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
