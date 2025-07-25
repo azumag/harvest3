@@ -39,7 +39,8 @@ DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # �
 BACKGROUND_CLEANUP_PIDS=""
 
 # Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
-BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル  
+BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル
+BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-timestamp.state"  # Issue #5194修正: タイムスタンプ専用ファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
 BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-5}  # flock最大待機時間（秒）
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
@@ -410,7 +411,7 @@ log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s.%N)
     local lock_file="/tmp/backtest-startup-message.lock"
-    local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
+    local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"  # Issue #5194修正: 専用のタイムスタンプファイルを使用
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
     
     # Issue #5216修正: 複雑な事前チェックを削除し、atomicロック内でのみタイムスタンプチェック
@@ -864,6 +865,12 @@ cleanup_backtest_locks() {
     if [ -f "/tmp/backtest-npm-error-detection.state" ]; then
         rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
         log "Removed backtest NPM error detection file (Issue #5254)"
+    fi
+    
+    # Issue #5194修正: タイムスタンプファイルのクリーンアップ
+    if [ -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" ]; then
+        rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
+        log "Removed backtest timestamp file (Issue #5194)"
     fi
     
     # Issue #5292レビュー対応: PIDマーカーは不要になったためコメントアウト
