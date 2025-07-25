@@ -31,7 +31,7 @@ describe('Issue #5175: backtestサービス重複メッセージ修正', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5175修正の確認
-    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）');
+    expect(entrypointContent).toContain('Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）');
     // Issue #5159: flock方式による確実な重複防止機構への更新
     expect(entrypointContent).toContain('Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）');
     
