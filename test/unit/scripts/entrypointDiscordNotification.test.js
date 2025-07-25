@@ -33,11 +33,11 @@ describe('entrypoint.sh Discord通知機能', () => {
       // スクリプト内のNode.jsコード部分を抽出・検証
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
-      expect(entrypointContent).toContain('axios = require(\'axios\');');
+      // Assert - 新しい簡素化されたDiscord通知機能
+      expect(entrypointContent).toContain('const axios = require(\'axios\');');
       expect(entrypointContent).toContain('await axios.post(webhookUrl, message, { timeout });');
-      expect(entrypointContent).toContain('package.json not found');
-      expect(entrypointContent).toContain('axios module not available');
+      expect(entrypointContent).toContain('mktemp "/tmp/discord_notify_XXXXXX.js"');
+      expect(entrypointContent).toContain('sendDiscordNotification');
     });
 
     test('環境変数が未設定時、適切な警告メッセージが出力される', () => {
@@ -62,50 +62,51 @@ describe('entrypoint.sh Discord通知機能', () => {
     test('package.json不存在時の処理', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
-      expect(entrypointContent).toContain('!fs.existsSync(\'package.json\')');
-      expect(entrypointContent).toContain('package.json not found');
+      // Assert - 新しいentrypoint.shでは必須ファイルチェックで実装
+      expect(entrypointContent).toContain('package.json');
+      expect(entrypointContent).toContain('Required file');
     });
 
     test('axiosモジュール不存在時の処理', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
+      // Assert - 新しいentrypoint.shではtry-catchでエラーハンドリング
       expect(entrypointContent).toContain('require(\'axios\')');
-      expect(entrypointContent).toContain('axios module not available');
+      expect(entrypointContent).toContain('Discord notification failed');
     });
 
     test('ネットワークタイムアウト設定', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert
+      // Assert - 新しい実装でのタイムアウト設定
       expect(entrypointContent).toContain('const timeout = parseInt(process.argv[3]) * 1000 || 10000;');
+      expect(entrypointContent).toContain('DISCORD_NOTIFICATION_TIMEOUT');
     });
   });
 
   describe('設定値テスト', () => {
-    test('API起動タイムアウト値が90秒に設定されている', () => {
+    test('基本タイムアウト値が設定されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert - 設定値が適切に定義されていることを確認
-      expect(entrypointContent).toContain('API_STARTUP_TIMEOUT=${API_STARTUP_TIMEOUT:-90}');
-      expect(entrypointContent).toContain('API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}');
-      expect(entrypointContent).toContain('PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}');
-    });
-
-    test('進捗ログ間隔が15秒に設定されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // Assert - 進捗ログ間隔設定が定義されていることを確認
-      expect(entrypointContent).toContain('PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}');
-    });
-
-    test('ヘルスチェック間隔が3秒に設定されている', () => {
-      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-      
-      // Assert - ヘルスチェック間隔設定が定義されていることを確認
-      expect(entrypointContent).toContain('API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}');
+      // Assert - 新しいentrypoint.shの設定値を確認
+      expect(entrypointContent).toContain('MAX_STARTUP_TIME=${MAX_STARTUP_TIME:-60}');
       expect(entrypointContent).toContain('HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}');
+      expect(entrypointContent).toContain('DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}');
+    });
+
+    test('Discord通知タイムアウトが設定されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // Assert - Discord通知タイムアウト設定
+      expect(entrypointContent).toContain('DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}');
+    });
+
+    test('起動ロック設定が定義されている', () => {
+      const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+      
+      // Assert - 起動ロック関連設定
+      expect(entrypointContent).toContain('STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}');
+      expect(entrypointContent).toContain('STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"');
     });
   });
 
@@ -127,19 +128,19 @@ describe('entrypoint.sh Discord通知機能', () => {
     test('send_startup_error_to_discord関数が適切なタイミングで呼ばれる', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert - 各エラーケースで関数が呼ばれることを確認
+      // Assert - 新しいentrypoint.shでの関数呼び出しパターン
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Environment variable validation failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "File system validation failed"');
-      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Node.js dependency validation failed"');
-      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed after retries"');
+      expect(entrypointContent).toContain('send_startup_error_to_discord "NPM dependency installation failed" "See npm-handler logs for details"');
+      expect(entrypointContent).toContain('send_startup_error_to_discord "$error_msg" "Both Redis and MongoDB connectivity failed"');
       expect(entrypointContent).toContain('send_startup_error_to_discord "Container startup failed" "Exit code: $exit_code"');
     });
     
     test('改善されたDiscord通知処理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert - 改善されたDiscord通知機能の確認
-      expect(entrypointContent).toContain('return 0  # 設定されていない場合は正常として扱う');
+      // Assert - 新しい簡素化されたDiscord通知機能
+      expect(entrypointContent).toContain('WARNING: DISCORD_ERROR_WEBHOOK_URL not set, skipping Discord notification');
       expect(entrypointContent).toContain('local temp_script=$(mktemp "/tmp/discord_notify_XXXXXX.js")');
       expect(entrypointContent).toContain('WARNING: Discord notification failed (non-critical)');
       expect(entrypointContent).toContain('rm -f "$temp_script"');
@@ -148,10 +149,11 @@ describe('entrypoint.sh Discord通知機能', () => {
     test('データベース接続の改善された処理が実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Assert - 改善されたDB接続チェック
+      // Assert - 新しいDB接続チェック実装
       expect(entrypointContent).toContain('local redis_failed=false');
       expect(entrypointContent).toContain('local mongo_failed=false');
-      expect(entrypointContent).toContain('WARNING: $service_name connection failed after $max_retries attempts (service will retry later)');
+      expect(entrypointContent).toContain('WARNING: Redis connection failed (service will retry later)');
+      expect(entrypointContent).toContain('WARNING: MongoDB connection failed (service will retry later)');
       expect(entrypointContent).toContain('両方のデータベースが失敗した場合のみエラー終了');
     });
   });
