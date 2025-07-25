@@ -52,7 +52,7 @@ describe('Issue #5230: backtestサービス例外修正', () => {
     expect(mongoDbContent).toContain('MongoDB接続に必要な環境変数が未設定です');
   });
 
-  test('Issue #5230修正: log_backtest_startup_message関数が簡素化されていることを確認', () => {
+  test('Issue #5230修正: log_backtest_startup_message関数の基本構造確認（Issue #5315強化版）', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
     
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
@@ -66,16 +66,17 @@ describe('Issue #5230: backtestサービス例外修正', () => {
     expect(entrypointContent).toContain('local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}');
     expect(entrypointContent).toContain('# タイムスタンプ更新（atomic write）');
     
-    // log_backtest_startup_message関数から複雑な実装が削除されていることを確認
+    // Issue #5315で強化されたlocking機構が実装されていることを確認
     const functionMatch = entrypointContent.match(
       /log_backtest_startup_message\(\) \{[\s\S]*?\n\}/
     );
     expect(functionMatch).toBeTruthy();
     const functionContent = functionMatch[0];
     
-    expect(functionContent).not.toContain('exec 200>"$lock_file"');
-    expect(functionContent).not.toContain('flock -x -w "$max_wait_time" 200');
-    expect(functionContent).not.toContain('fallback_lock_dir');
+    // Issue #5315による二重防御システムが実装されている
+    expect(functionContent).toContain('_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
+    expect(functionContent).toContain('flock');
+    expect(functionContent).toContain('exec 200');
   });
 
   test('簡素化されたlog_backtest_startup_message関数の重複防止テスト', async () => {
@@ -164,7 +165,7 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
       .resolves.not.toThrow();
   }, 10000);
 
-  test('簡素化による行数削減の確認', () => {
+  test('Issue #5315強化による実装サイズの確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // log_backtest_startup_message関数の抽出
@@ -176,11 +177,12 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
     
     const functionLines = functionMatch[0].split('\n').length;
     
-    // 新しい実装は40行以下（大幅な簡素化）
-    expect(functionLines).toBeLessThan(40);
+    // Issue #5315により強化された実装（二重防御システム）
+    expect(functionLines).toBeGreaterThan(50);
+    expect(functionLines).toBeLessThan(120); // 適切な上限設定
     
-    // 元の実装は100行以上だったので、大幅な削減を確認
-    console.log(`New log_backtest_startup_message function: ${functionLines} lines (reduced from 117+ lines)`);
+    // Issue #5315による強化版
+    console.log(`Enhanced log_backtest_startup_message function: ${functionLines} lines (Issue #5315 double-defense system)`);
   });
 
   test('Issue #5230: 修正内容のドキュメント確認', () => {

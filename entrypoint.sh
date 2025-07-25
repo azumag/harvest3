@@ -404,11 +404,13 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）
-# レースコンディション対策として、プロセス内フラグ + flockによる二重防御を実装
+# Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
+# 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
+# Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
+    local timestamp_file="/tmp/backtest-startup-message.last"
     local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
