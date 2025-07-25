@@ -174,8 +174,80 @@ fi
   });
 
   describe('重複防止機構の統合テスト', () => {
-    test('複数の失敗パターンでの最終的なfallback動作', () => {
-      const fallbackTestDir = path.join(tmpDir, `fallback-${Date.now()}`);
+    test('Node.js不在時のfallback動作', () => {
+      const fallbackTestDir = path.join(tmpDir, `nodejs-fallback-${Date.now()}`);
+      fs.mkdirSync(fallbackTestDir, { recursive: true });
+
+      try {
+        const testScript = `#!/bin/bash
+export STARTUP_MESSAGE_LOCK_DIR="${fallbackTestDir}"
+export PATH="/usr/bin:/bin"  # Node.jsを除外
+
+source "${testFixturesPath}"
+
+# Node.js不在でのfallback動作をテスト
+log_startup_message "nodejs-fallback-test"
+echo "Node.js fallback test completed"
+`;
+
+        const testScriptPath = path.join(tmpDir, `test-nodejs-fallback-${Date.now()}.sh`);
+        fs.writeFileSync(testScriptPath, testScript);
+        fs.chmodSync(testScriptPath, '755');
+
+        const output = execSync(`bash ${testScriptPath}`, { 
+          encoding: 'utf8',
+          timeout: 3000 
+        });
+        
+        // メッセージが出力され、処理が完了することを確認
+        expect(output).toContain('nodejs-fallback-test');
+        expect(output).toContain('Node.js fallback test completed');
+        
+      } finally {
+        if (fs.existsSync(fallbackTestDir)) {
+          fs.rmSync(fallbackTestDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    test('Redis接続失敗時のfallback動作', () => {
+      const fallbackTestDir = path.join(tmpDir, `redis-fallback-${Date.now()}`);
+      fs.mkdirSync(fallbackTestDir, { recursive: true });
+
+      try {
+        const testScript = `#!/bin/bash
+export STARTUP_MESSAGE_LOCK_DIR="${fallbackTestDir}"
+export REDIS_URL="redis://127.0.0.1:99999"  # 存在しないポート
+
+source "${testFixturesPath}"
+
+# Redis接続失敗でのfallback動作をテスト
+log_startup_message "redis-fallback-test"
+echo "Redis fallback test completed"
+`;
+
+        const testScriptPath = path.join(tmpDir, `test-redis-fallback-${Date.now()}.sh`);
+        fs.writeFileSync(testScriptPath, testScript);
+        fs.chmodSync(testScriptPath, '755');
+
+        const output = execSync(`bash ${testScriptPath}`, { 
+          encoding: 'utf8',
+          timeout: 3000 
+        });
+        
+        // メッセージが出力され、処理が完了することを確認
+        expect(output).toContain('redis-fallback-test');
+        expect(output).toContain('Redis fallback test completed');
+        
+      } finally {
+        if (fs.existsSync(fallbackTestDir)) {
+          fs.rmSync(fallbackTestDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    test('複合エラー時の最終fallback動作', () => {
+      const fallbackTestDir = path.join(tmpDir, `combined-fallback-${Date.now()}`);
       fs.mkdirSync(fallbackTestDir, { recursive: true });
 
       try {
@@ -186,12 +258,12 @@ export PATH="/usr/bin:/bin"  # Node.jsを除外
 
 source "${testFixturesPath}"
 
-# メインの重複防止関数をテスト
-log_startup_message "fallback-integration-test"
-echo "Final fallback test completed"
+# 複合エラー時の最終fallback動作をテスト
+log_startup_message "combined-fallback-test"
+echo "Combined fallback test completed"
 `;
 
-        const testScriptPath = path.join(tmpDir, `test-fallback-${Date.now()}.sh`);
+        const testScriptPath = path.join(tmpDir, `test-combined-fallback-${Date.now()}.sh`);
         fs.writeFileSync(testScriptPath, testScript);
         fs.chmodSync(testScriptPath, '755');
 
@@ -201,8 +273,8 @@ echo "Final fallback test completed"
         });
         
         // メッセージが出力され、処理が完了することを確認
-        expect(output).toContain('fallback-integration-test');
-        expect(output).toContain('Final fallback test completed');
+        expect(output).toContain('combined-fallback-test');
+        expect(output).toContain('Combined fallback test completed');
         
       } finally {
         if (fs.existsSync(fallbackTestDir)) {
@@ -263,6 +335,9 @@ echo "Process duplicate prevention test completed"
         file.includes('restricted-') ||
         file.includes('lockdir-') ||
         file.includes('fallback-') ||
+        file.includes('nodejs-fallback-') ||
+        file.includes('redis-fallback-') ||
+        file.includes('combined-fallback-') ||
         file.includes('process-')
       );
       testFiles.forEach(file => {
