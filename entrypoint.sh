@@ -673,6 +673,8 @@ log_startup_message() {
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
+            # Issue #5302修正: プロセス内変数による即座の重複防止
+            # 同一プロセス内での高速連続呼び出しを防ぐ
             # Issue #5362修正: シンプルで確実な重複防止機構（KISS原則適用）
             # 複雑な多重防御による競合状態を解決するため、単純で確実な方法に変更
             
@@ -682,9 +684,19 @@ log_startup_message() {
                 return 0  # 既に同一プロセス内でログ出力済み
             fi
             
+            # 環境変数による重複チェック（第二のチェック）
+            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
+                log "DEBUG: Duplicate main startup message blocked by environment variable flag"
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                return 0  # 既に他のプロセスでログ出力済み
+            fi
+            
+            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
+            local atomic_processing_success=false
+            
             # 第二防御線: flockベースの確実なファイルロック
-            local startup_lock_file="/tmp/main-startup-message-global.lock"
-            local startup_success_file="/tmp/main-startup-message-global.done"
+            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_done_file="/tmp/main-startup-message.done"
             
             # Issue #5362修正: 詳細なデバッグ情報を記録
             log "DEBUG: Attempting to acquire main startup message lock (PID: $$, Container: $(hostname))"
@@ -692,27 +704,49 @@ log_startup_message() {
             # flockが利用可能な場合の確実なロック処理
             if command -v flock >/dev/null 2>&1; then
                 # ファイルディスクリプタ201を使用してロック取得（非阻塞、5秒タイムアウト）
-                exec 201>"$startup_lock_file"
+                exec 201>"$startup_msg_lock_file"
                 if flock -w 5 201; then
                     log "DEBUG: Main startup message lock acquired successfully"
                     
                     # ロック取得後の二重チェック
-                    if [ -f "$startup_success_file" ]; then
+                    if [ -f "$startup_msg_done_file" ]; then
                         log "DEBUG: Another process already logged the message, skipping"
+                        # 環境変数フラグも設定（一貫性のため）
+                        _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                        export MAIN_STARTUP_MESSAGE_LOGGED=1
+                        atomic_processing_success=true
+                        log "DEBUG: 他のプロセスがログ出力したため、重複防止"
                         exec 201>&-  # ロック解放
                         return 0
                     fi
                     
-                    # プロセス内フラグ設定とメッセージ出力
-                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                    export MAIN_STARTUP_MESSAGE_LOGGED=1
-                    log "DEBUG: About to log main startup message"
-                    log "$message"
+                    # アトミックロック機構の主要部分
+                    if mkdir "$startup_msg_lock_file" 2>/dev/null; then
+                        # プロセス内フラグ設定とメッセージ出力
+                        _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                        export MAIN_STARTUP_MESSAGE_LOGGED=1
+                        log "DEBUG: About to log main startup message"
+                        log "$message"
+                        atomic_processing_success=true
+                        
+                        # 成功マーカー作成（他のプロセス用）
+                        echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
+                        chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                        log "DEBUG: Main startup message logged successfully"
+                        
+                        # ロック解放
+                        rmdir "$startup_msg_lock_file" 2>/dev/null || true
+                    else
+                        log "DEBUG: Failed to create atomic lock directory"
+                        atomic_processing_success=false
+                    fi
                     
-                    # 成功マーカー作成（他のプロセス用）
-                    echo "$(date +%s):$$:$(hostname)" > "$startup_success_file" 2>/dev/null || true
-                    chmod 600 "$startup_success_file" 2>/dev/null || true
-                    log "DEBUG: Main startup message logged successfully"
+                    # Issue #5295修正: fallthroughが発生した場合の緊急停止
+                    if [ "$atomic_processing_success" = true ]; then
+                        log "DEBUG: Atomic processing completed successfully"
+                    else
+                        log "WARNING: Atomic processing failed - potential fallthrough detected"
+                    fi
                     
                     # ロック解放
                     exec 201>&-
@@ -735,6 +769,7 @@ log_startup_message() {
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                     export MAIN_STARTUP_MESSAGE_LOGGED=1
                     log "$message"
+                    atomic_processing_success=true
                     
                     # ロック解放
                     rmdir "$simple_lock_file" 2>/dev/null || true
@@ -743,6 +778,7 @@ log_startup_message() {
                     # ロック取得失敗
                     log "DEBUG: Simple lock acquisition failed, another process is logging"
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    atomic_processing_success=false
                     return 0
                 fi
             fi
@@ -957,6 +993,17 @@ cleanup_startup_message_locks() {
     if [ -d "/tmp/main-startup-message.lock" ]; then
         rm -rf "/tmp/main-startup-message.lock" 2>/dev/null || true
         log "Cleaned up main startup message lock directory"
+    fi
+    
+    # Issue #5267修正: アトミックファイルロックによる確実な重複防止用クリーンアップ
+    if [ -f "/tmp/main-startup-message-global.lock" ]; then
+        rm -f "/tmp/main-startup-message-global.lock" 2>/dev/null || true
+        log "Cleaned up global main startup message lock file"
+    fi
+    
+    if [ -f "/tmp/main-startup-message-global.done" ]; then
+        rm -f "/tmp/main-startup-message-global.done" 2>/dev/null || true
+        log "Cleaned up global main startup message done marker"
     fi
     
     # プロセス内フラグのクリアは環境変数なので、コンテナ再起動時に自動的にクリアされる
