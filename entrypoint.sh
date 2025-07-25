@@ -691,9 +691,6 @@ log_startup_message() {
                 return 0  # 既に他のプロセスでログ出力済み
             fi
             
-            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
-            local atomic_processing_success=false
-            
             # 第二防御線: flockベースの確実なファイルロック
             local startup_msg_lock_file="/tmp/main-startup-message.lock"
             local startup_msg_done_file="/tmp/main-startup-message.done"
@@ -714,39 +711,20 @@ log_startup_message() {
                         # 環境変数フラグも設定（一貫性のため）
                         _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                         export MAIN_STARTUP_MESSAGE_LOGGED=1
-                        atomic_processing_success=true
-                        log "DEBUG: 他のプロセスがログ出力したため、重複防止"
                         exec 201>&-  # ロック解放
                         return 0
                     fi
                     
-                    # アトミックロック機構の主要部分
-                    if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                        # プロセス内フラグ設定とメッセージ出力
-                        _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                        export MAIN_STARTUP_MESSAGE_LOGGED=1
-                        log "DEBUG: About to log main startup message"
-                        log "$message"
-                        atomic_processing_success=true
-                        
-                        # 成功マーカー作成（他のプロセス用）
-                        echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                        chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                        log "DEBUG: Main startup message logged successfully"
-                        
-                        # ロック解放
-                        rmdir "$startup_msg_lock_file" 2>/dev/null || true
-                    else
-                        log "DEBUG: Failed to create atomic lock directory"
-                        atomic_processing_success=false
-                    fi
+                    # プロセス内フラグ設定とメッセージ出力
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
+                    log "DEBUG: About to log main startup message"
+                    log "$message"
                     
-                    # Issue #5295修正: fallthroughが発生した場合の緊急停止
-                    if [ "$atomic_processing_success" = true ]; then
-                        log "DEBUG: Atomic processing completed successfully"
-                    else
-                        log "WARNING: Atomic processing failed - potential fallthrough detected"
-                    fi
+                    # 成功マーカー作成（他のプロセス用）
+                    echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
+                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                    log "DEBUG: Main startup message logged successfully"
                     
                     # ロック解放
                     exec 201>&-
@@ -769,7 +747,10 @@ log_startup_message() {
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                     export MAIN_STARTUP_MESSAGE_LOGGED=1
                     log "$message"
-                    atomic_processing_success=true
+                    
+                    # 成功マーカー作成（他のプロセス用）
+                    echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
+                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
                     
                     # ロック解放
                     rmdir "$simple_lock_file" 2>/dev/null || true
@@ -778,7 +759,6 @@ log_startup_message() {
                     # ロック取得失敗
                     log "DEBUG: Simple lock acquisition failed, another process is logging"
                     _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                    atomic_processing_success=false
                     return 0
                 fi
             fi
