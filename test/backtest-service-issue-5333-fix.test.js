@@ -89,10 +89,10 @@ cleanup_backtest_lock() {
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s.%N)
-    local lock_file="/tmp/test-backtest-startup-message-global-${Date.now()}.lock"
-    local timestamp_file="/tmp/test-backtest-startup-timestamp-global-${Date.now()}.state"
+    local lock_file="/tmp/test-backtest-startup-message-global.lock"
+    local timestamp_file="/tmp/test-backtest-startup-timestamp-global.state"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
-    local container_id=\${1:-"test-container-$(hostname)"}
+    local container_id=\${2:-"test-container-$(hostname)"}
     local process_id=$$
     
     if command -v flock >/dev/null 2>&1; then
@@ -160,8 +160,8 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 log_backtest_startup_message "Starting backtest container with enhanced error handling" "container3"
 
 # クリーンアップ
-rm -f /tmp/test-backtest-startup-message-global-*.lock* 2>/dev/null || true
-rm -f /tmp/test-backtest-startup-timestamp-global-*.state 2>/dev/null || true
+rm -f /tmp/test-backtest-startup-message-global.lock* 2>/dev/null || true
+rm -f /tmp/test-backtest-startup-timestamp-global.state 2>/dev/null || true
 `;
 
     const testScriptPath = path.join(tmpDir, `test-issue-5333-${Date.now()}.sh`);

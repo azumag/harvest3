@@ -404,6 +404,7 @@ cleanup_backtest_lock() {
     fi
 }
 
+# Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
 # Issue #5127, #5058 & #5175 & #5216 & #5333: backtest container専用起動メッセージ関数（強化版）
 # Issue #5333修正: 複数コンテナ間での重複メッセージ防止を強化
 # Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
@@ -424,6 +425,7 @@ log_backtest_startup_message() {
     
     # Issue #5216修正: 複雑な事前チェックを削除し、atomicロック内でのみタイムスタンプチェック
     # レースコンディションの原因となっていた複数チェックポイントを単一化
+    # Issue #5216修正: 単一のクリティカルセクション内でタイムスタンプチェックを実行
     
     # flockによるatomicロック取得（フォールバック対応）
     # 複数プロセス間でのrace conditionを完全に防止
@@ -855,7 +857,8 @@ cleanup_background_processes() {
     fi
 }
 
-# Issue #5127, #5058 & #5175 & #5333: backtest専用クリーンアップ関数（改良版）
+# Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）  
+# Issue #5127, #5058 & #5175 & #5333: backtest専用クリーンアップ関数（強化版）
 # Issue #5333修正: グローバルファイルのクリーンアップを追加
 # Issue #5292: 新しいマーカーファイルのクリーンアップ追加
 cleanup_backtest_locks() {
