@@ -406,33 +406,94 @@ cleanup_backtest_lock() {
 
 # Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
 # 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
+# Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
+# Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local timestamp_file="/tmp/backtest-startup-message.last"
     local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
-    # 前回のメッセージ出力時刻をチェック
-    if [ -f "$timestamp_file" ]; then
-        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
-        local time_diff=$((current_time - last_time))
-        
-        if [ "$time_diff" -lt "$suppress_duration" ]; then
-            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
-            return 0
-        fi
+    # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
+    if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+        return 0  # 既に同一プロセス内でログ出力済み
     fi
     
-    # メッセージ出力
-    log "$message"
+    # Issue #5315修正: flockによる確実なファイルロック（第二防御線）
+    local lock_file="/tmp/backtest-startup-message.lock"
+    local timestamp_file="/tmp/backtest-startup-message.last"
     
-    # タイムスタンプ更新（atomic write）
-    local temp_file="${timestamp_file}.tmp.$$"
-    if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
-        chmod 600 "$timestamp_file" 2>/dev/null || true
+    # flockが利用可能な場合の確実なロック取得
+    if command -v flock >/dev/null 2>&1; then
+        # ファイルディスクリプタ200を使用してロック取得（タイムアウト付き）
+        exec 200>"$lock_file"
+        if flock -w 5 200; then  # 5秒タイムアウト
+            # ロック取得成功 - 重複チェックとメッセージ出力
+            local should_output=true
+            
+            # タイムスタンプファイルチェック
+            if [ -f "$timestamp_file" ]; then
+                local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+                local time_diff=$((current_time - last_time))
+                
+                if [ "$time_diff" -lt "$suppress_duration" ]; then
+                    should_output=false
+                    log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+                fi
+            fi
+            
+            # メッセージ出力とタイムスタンプ更新
+            if [ "$should_output" = true ]; then
+                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # プロセス内フラグ設定
+                log "$message"
+                
+                # アトミックタイムスタンプ更新
+                local temp_file="${timestamp_file}.tmp.$$"
+                if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
+                    chmod 600 "$timestamp_file" 2>/dev/null || true
+                else
+                    rm -f "$temp_file" 2>/dev/null || true
+                    log "WARNING: Failed to update startup message timestamp"
+                fi
+            else
+                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # 抑制の場合もフラグ設定
+            fi
+            
+            # ロック解放
+            exec 200>&-
+        else
+            # ロック取得失敗（タイムアウト）
+            log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
+            _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+        fi
     else
-        rm -f "$temp_file" 2>/dev/null || true
-        log "WARNING: Failed to update startup message timestamp"
+        # flockが利用できない場合のフォールバック（従来の方法）
+        log "WARNING: flock not available, using fallback duplicate prevention"
+        
+        # 前回のメッセージ出力時刻をチェック
+        if [ -f "$timestamp_file" ]; then
+            local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+            local time_diff=$((current_time - last_time))
+            
+            if [ "$time_diff" -lt "$suppress_duration" ]; then
+                log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                return 0
+            fi
+        fi
+        
+        # メッセージ出力
+        _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+        log "$message"
+        
+        # タイムスタンプ更新（atomic write）
+        local temp_file="${timestamp_file}.tmp.$$"
+        if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
+            chmod 600 "$timestamp_file" 2>/dev/null || true
+        else
+            rm -f "$temp_file" 2>/dev/null || true
+            log "WARNING: Failed to update startup message timestamp"
+        fi
     fi
     
     return 0
@@ -790,12 +851,27 @@ cleanup_background_processes() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）  
-# Issue #5127, #5058 & #5175 & #5333: backtest専用クリーンアップ関数（強化版）
-# Issue #5333修正: グローバルファイルのクリーンアップを追加
-# Issue #5292: 新しいマーカーファイルのクリーンアップ追加
+# Issue #5127, #5058 & #5175 & #5315: backtest専用クリーンアップ関数（強化版）
+# Issue #5315修正: 新しいプロセス内フラグとflockリソースのクリーンアップを追加
 cleanup_backtest_locks() {
     log "Cleaning up backtest-specific lock files..."
+    
+    # Issue #5315修正: プロセス内フラグのリセット
+    unset _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS
+    
+    # Issue #5315修正: flockのファイルディスクリプタクリーンアップ
+    exec 200>&- 2>/dev/null || true
+    
+    # Issue #5315修正: 新しいロックファイルのクリーンアップ
+    if [ -f "/tmp/backtest-startup-message.lock" ]; then
+        rm -f "/tmp/backtest-startup-message.lock" 2>/dev/null || true
+        log "Removed backtest startup message lock file (Issue #5315)"
+    fi
+    
+    if [ -f "/tmp/backtest-startup-message.last" ]; then
+        rm -f "/tmp/backtest-startup-message.last" 2>/dev/null || true
+        log "Removed backtest startup message timestamp file (Issue #5315)"
+    fi
     
     # backtest開始時刻マーカーのクリーンアップ
     if [ -f "/tmp/backtest-start-time.marker" ]; then
@@ -837,9 +913,6 @@ cleanup_backtest_locks() {
         rm -f "/tmp/backtest-startup-timestamp-global.state" 2>/dev/null || true
         log "Removed global backtest timestamp file (Issue #5333)"
     fi
-    
-    # Issue #5292レビュー対応: PIDマーカーは不要になったためコメントアウト
-    # PIDマーカーは簡素化により削除されました
     
     # Issue #5292レビュー対応: セキュリティ改善 - より制限的なパターン使用
     if ls /tmp/backtest-message-*.marker 1> /dev/null 2>&1; then
