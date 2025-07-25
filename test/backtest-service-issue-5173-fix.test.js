@@ -11,6 +11,7 @@ const path = require('path');
 
 describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
+  const notificationServicePath = path.join(__dirname, '..', 'notification-service.sh');
 
   test('Issue #5173修正がentrypoint.shに適用されていることを確認', () => {
     expect(fs.existsSync(entrypointPath)).toBe(true);
@@ -33,15 +34,18 @@ describe('Issue #5173: backtestサービス重複メッセージ修正', () => {
 
   test('log_backtest_startup_message関数が存在することを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    const notificationContent = fs.readFileSync(notificationServicePath, 'utf8');
     
-    // log_backtest_startup_message関数の定義が存在することを確認
-    expect(entrypointContent).toContain('log_backtest_startup_message() {');
+    // log_backtest_startup_message関数の定義がnotification-service.shに存在することを確認
+    expect(notificationContent).toContain('log_backtest_startup_message() {');
     
-    // Issue #5159: flock方式の重複防止機構の要素が含まれていることを確認
+    // Issue #5159: flock方式の重複防止機構の要素がnotification-service.shに含まれていることを確認
+    expect(notificationContent).toContain('exec 200>"$lock_file"');
+    expect(notificationContent).toContain('flock -x -w "$max_wait_time" 200');
+    expect(notificationContent).toContain('exec 200>&-');
+    
+    // 設定値がentrypoint.shに含まれていることを確認
     expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_TIMEOUT');
-    expect(entrypointContent).toContain('exec 200>"$lock_file"');
-    expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
-    expect(entrypointContent).toContain('exec 200>&-');
   });
 
   test('修正により重複メッセージが防止されることを確認', () => {
