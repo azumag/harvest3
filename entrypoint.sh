@@ -35,6 +35,9 @@ PROCESS_MONITOR_INTERVAL=${PROCESS_MONITOR_INTERVAL:-10}  # プロセス監視�
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}  # Redis重複防止TTL（秒）
 DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略
 
+# Issue #5321: コンテナ再起動検出機構の設定外部化
+CONTAINER_RESTART_THRESHOLD=${CONTAINER_RESTART_THRESHOLD:-60}  # コンテナ再起動検出閾値（秒）
+
 # バックグラウンドプロセス追跡
 BACKGROUND_CLEANUP_PIDS=""
 
@@ -162,8 +165,8 @@ check_container_recently_restarted() {
     # /proc/uptimeを使用してコンテナの稼働時間をチェック
     if [ -f /proc/uptime ]; then
         local uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
-        # 60秒以内の場合は最近再起動したと判定
-        if [ "$uptime_seconds" -lt 60 ]; then
+        # CONTAINER_RESTART_THRESHOLD秒以内の場合は最近再起動したと判定
+        if [ "$uptime_seconds" -lt "$CONTAINER_RESTART_THRESHOLD" ]; then
             return 0  # 最近再起動した
         fi
     fi
