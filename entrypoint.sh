@@ -67,6 +67,7 @@ get_message_hash() {
 }
 
 # Issue #5292レビュー対応: 統一されたタイムスタンプ検証関数（DRY原則）
+# Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
 check_timestamp_validity() {
     local marker_file="$1"
     local suppress_duration="$2"
@@ -74,11 +75,13 @@ check_timestamp_validity() {
     
     if [ -f "$marker_file" ]; then
         local last_time=$(cat "$marker_file" 2>/dev/null || echo "0")
-        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
-        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
+        # 整数部分のみを使用してCI環境での互換性を確保
+        local current_time_int=${current_time%.*}
+        local last_time_int=${last_time%.*}
+        local time_diff=$((current_time_int - last_time_int))
         
-        # bcが利用不可またはエラーの場合は抑制しない（999 > suppress_duration）
-        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $suppress_duration" | bc 2>/dev/null)" = "1" ]; then
+        # 整数算術でタイムスタンプ比較（bcコマンド不要）
+        if [ "$time_diff" -lt "$suppress_duration" ]; then
             return 0  # 抑制すべき（タイムスタンプが新しすぎる）
         fi
     fi
@@ -451,13 +454,16 @@ log_backtest_startup_message() {
     fi
     
     # Issue #5216修正: ロック取得後、単一のクリティカルセクション内でタイムスタンプチェック
+    # Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
-        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
-        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
+        # 整数部分のみを使用してCI環境での互換性を確保
+        local current_time_int=${current_time%.*}
+        local last_time_int=${last_time%.*}
+        local time_diff=$((current_time_int - last_time_int))
         
-        # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
-        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
+        # 整数算術でタイムスタンプ比較（bcコマンド不要）
+        if [ "$time_diff" -lt "$BACKTEST_STARTUP_LOCK_TIMEOUT" ]; then
             log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
             cleanup_backtest_lock
             return 0
