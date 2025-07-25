@@ -125,7 +125,7 @@ log_backtest_startup_message() {
     
     # メッセージ出力とタイムスタンプ更新（原子的書き込み）
     log "$message"
-    local temp_timestamp="${timestamp_file}.tmp.$$"
+    local temp_timestamp="\${timestamp_file}.tmp.$$"
     echo "$current_time" > "$temp_timestamp"
     chmod 600 "$temp_timestamp"
     mv "$temp_timestamp" "$timestamp_file"
@@ -244,7 +244,7 @@ log_backtest_startup_message() {
     fi
     
     # タイムアウトを超えているのでメッセージ出力（原子的書き込み）
-    local temp_timestamp="${timestamp_file}.tmp.$$"
+    local temp_timestamp="\${timestamp_file}.tmp.$$"
     echo "$current_time" > "$temp_timestamp"
     chmod 600 "$temp_timestamp"
     mv "$temp_timestamp" "$timestamp_file"

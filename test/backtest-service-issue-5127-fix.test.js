@@ -78,7 +78,7 @@ log_backtest_startup_message() {
         fi
     fi
     
-    local temp_timestamp="${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
+    local temp_timestamp="\${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
     echo "$current_time" > "$temp_timestamp"
     chmod 600 "$temp_timestamp"
     mv "$temp_timestamp" "$BACKTEST_STARTUP_LOCK_FILE"
@@ -142,7 +142,7 @@ log_backtest_startup_message() {
         fi
     fi
     
-    local temp_timestamp="${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
+    local temp_timestamp="\${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
     echo "$current_time" > "$temp_timestamp"
     chmod 600 "$temp_timestamp"
     mv "$temp_timestamp" "$BACKTEST_STARTUP_LOCK_FILE"
