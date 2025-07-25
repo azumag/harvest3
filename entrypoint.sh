@@ -405,17 +405,33 @@ cleanup_backtest_lock() {
 }
 
 # Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5127, #5058 & #5175 & #5216 & #5333: backtest container専用起動メッセージ関数（強化版）
+# Issue #5333修正: 複数コンテナ間での重複メッセージ防止を強化
 # Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
 # Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s.%N)
-    local lock_file="/tmp/backtest-startup-message.lock"
-    local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"  # Issue #5194修正: 専用のタイムスタンプファイルを使用
+    # Issue #5333修正: よりグローバルなロックファイル名を使用（複数コンテナ間で共有）
+    # セキュリティ強化: より安全なディレクトリを使用（/var/run優先、フォールバック付き）
+    local temp_dir="/var/run/backtest"
+    if ! mkdir -p "$temp_dir" 2>/dev/null || ! [ -w "$temp_dir" ]; then
+        temp_dir="/tmp"  # フォールバック
+    fi
+    chmod 700 "$temp_dir" 2>/dev/null || true
+    local lock_file="$temp_dir/startup-message-global.lock"
+    # Issue #5333修正: グローバルなタイムスタンプファイルを使用
+    local timestamp_file="$temp_dir/startup-timestamp-global.state"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
+    local container_id=$(hostname)
+    local process_id=$$
+    
+    # Issue #5333修正: デバッグ情報の記録（一時的）
+    # この情報は実際の問題解決後に削除される予定
     
     # Issue #5216修正: 複雑な事前チェックを削除し、atomicロック内でのみタイムスタンプチェック
     # レースコンディションの原因となっていた複数チェックポイントを単一化
+    # Issue #5216修正: 単一のクリティカルセクション内でタイムスタンプチェックを実行
     
     # flockによるatomicロック取得（フォールバック対応）
     # 複数プロセス間でのrace conditionを完全に防止
@@ -454,18 +470,27 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # Issue #5216修正: ロック取得後、単一のクリティカルセクション内でタイムスタンプチェック
+    # Issue #5333修正: ロック取得後、より厳密なタイムスタンプチェック
     # Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
+    # パフォーマンス最適化: 複数cutコマンドの代わりに1回のIFS読み込み使用
     if [ -f "$timestamp_file" ]; then
-        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+        IFS=':' read -r last_time last_container last_pid < "$timestamp_file" 2>/dev/null || {
+            last_time=0; last_container="unknown"; last_pid="unknown"
+        }
+        
         # 整数部分のみを使用してCI環境での互換性を確保
         local current_time_int=${current_time%.*}
         local last_time_int=${last_time%.*}
         local time_diff=$((current_time_int - last_time_int))
         
+        # Issue #5333修正: より詳細な重複検出ログ
         # 整数算術でタイムスタンプ比較（bcコマンド不要）
         if [ "$time_diff" -lt "$BACKTEST_STARTUP_LOCK_TIMEOUT" ]; then
-            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
+            if [ "$last_container" = "$container_id" ] && [ "$last_pid" = "$process_id" ]; then
+                log "Backtest startup message suppressed (same process, last shown ${time_diff}s ago)"
+            else
+                log "Backtest startup message suppressed (different process: ${last_container}:${last_pid}, last shown ${time_diff}s ago)"
+            fi
             cleanup_backtest_lock
             return 0
         fi
@@ -484,10 +509,19 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # メッセージ出力とタイムスタンプ更新
+    # Issue #5333修正: メッセージ出力とより詳細なタイムスタンプ更新
     log "$message"
-    echo "$current_time" > "$timestamp_file"
-    chmod 600 "$timestamp_file"
+    
+    # エラーハンドリング強化: 原子的ファイル書き込み実装
+    local temp_timestamp="${timestamp_file}.tmp.$$"
+    if ! echo "${current_time}:${container_id}:${process_id}" > "$temp_timestamp" || 
+       ! chmod 600 "$temp_timestamp" ||
+       ! mv "$temp_timestamp" "$timestamp_file"; then
+        log "ERROR: Failed to update timestamp file"
+        rm -f "$temp_timestamp" 2>/dev/null || true
+        cleanup_backtest_lock
+        return 1
+    fi
     
     # ロック解放
     cleanup_backtest_lock
@@ -838,7 +872,9 @@ cleanup_background_processes() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）
+# Issue #5127, #5058 & #5175: backtest専用クリーンアップ関数（改良版）  
+# Issue #5127, #5058 & #5175 & #5333: backtest専用クリーンアップ関数（強化版）
+# Issue #5333修正: グローバルファイルのクリーンアップを追加
 # Issue #5292: 新しいマーカーファイルのクリーンアップ追加
 cleanup_backtest_locks() {
     log "Cleaning up backtest-specific lock files..."
@@ -871,6 +907,17 @@ cleanup_backtest_locks() {
     if [ -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" ]; then
         rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
         log "Removed backtest timestamp file (Issue #5194)"
+    fi
+    
+    # Issue #5333修正: グローバルファイルのクリーンアップ
+    if [ -f "/tmp/backtest-startup-message-global.lock" ]; then
+        rm -f "/tmp/backtest-startup-message-global.lock" 2>/dev/null || true
+        log "Removed global backtest startup lock file (Issue #5333)"
+    fi
+    
+    if [ -f "/tmp/backtest-startup-timestamp-global.state" ]; then
+        rm -f "/tmp/backtest-startup-timestamp-global.state" 2>/dev/null || true
+        log "Removed global backtest timestamp file (Issue #5333)"
     fi
     
     # Issue #5292レビュー対応: PIDマーカーは不要になったためコメントアウト
