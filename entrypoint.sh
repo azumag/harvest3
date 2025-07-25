@@ -400,7 +400,7 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
 # Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
 # Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
 log_backtest_startup_message() {
