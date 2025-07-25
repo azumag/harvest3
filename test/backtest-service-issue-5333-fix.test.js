@@ -40,7 +40,9 @@ describe('Issue #5333: backtestサービス重複メッセージ修正', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5333修正：コンテナIDとプロセスIDを含む詳細なタイムスタンプ
-    expect(entrypointContent).toContain('echo "${current_time}:${container_id}:${process_id}" > "$timestamp_file"');
+    // エラーハンドリング強化のため原子的書き込みを使用
+    expect(entrypointContent).toContain('echo "${current_time}:${container_id}:${process_id}" > "$temp_timestamp"');
+    expect(entrypointContent).toContain('mv "$temp_timestamp" "$timestamp_file"');
     expect(entrypointContent).toContain('local container_id=$(hostname)');
     expect(entrypointContent).toContain('local process_id=$$');
   });

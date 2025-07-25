@@ -413,9 +413,15 @@ log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s.%N)
     # Issue #5333修正: よりグローバルなロックファイル名を使用（複数コンテナ間で共有）
-    local lock_file="/tmp/backtest-startup-message-global.lock"
+    # セキュリティ強化: より安全なディレクトリを使用（/var/run優先、フォールバック付き）
+    local temp_dir="/var/run/backtest"
+    if ! mkdir -p "$temp_dir" 2>/dev/null || ! [ -w "$temp_dir" ]; then
+        temp_dir="/tmp"  # フォールバック
+    fi
+    chmod 700 "$temp_dir" 2>/dev/null || true
+    local lock_file="$temp_dir/startup-message-global.lock"
     # Issue #5333修正: グローバルなタイムスタンプファイルを使用
-    local timestamp_file="/tmp/backtest-startup-timestamp-global.state"
+    local timestamp_file="$temp_dir/startup-timestamp-global.state"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
     local container_id=$(hostname)
     local process_id=$$
@@ -466,11 +472,11 @@ log_backtest_startup_message() {
     
     # Issue #5333修正: ロック取得後、より厳密なタイムスタンプチェック
     # Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
+    # パフォーマンス最適化: 複数cutコマンドの代わりに1回のIFS読み込み使用
     if [ -f "$timestamp_file" ]; then
-        local timestamp_content=$(cat "$timestamp_file" 2>/dev/null || echo "0:unknown:unknown")
-        local last_time=$(echo "$timestamp_content" | cut -d':' -f1)
-        local last_container=$(echo "$timestamp_content" | cut -d':' -f2)
-        local last_pid=$(echo "$timestamp_content" | cut -d':' -f3)
+        IFS=':' read -r last_time last_container last_pid < "$timestamp_file" 2>/dev/null || {
+            last_time=0; last_container="unknown"; last_pid="unknown"
+        }
         
         # 整数部分のみを使用してCI環境での互換性を確保
         local current_time_int=${current_time%.*}
@@ -505,8 +511,17 @@ log_backtest_startup_message() {
     
     # Issue #5333修正: メッセージ出力とより詳細なタイムスタンプ更新
     log "$message"
-    echo "${current_time}:${container_id}:${process_id}" > "$timestamp_file"
-    chmod 600 "$timestamp_file"
+    
+    # エラーハンドリング強化: 原子的ファイル書き込み実装
+    local temp_timestamp="${timestamp_file}.tmp.$$"
+    if ! echo "${current_time}:${container_id}:${process_id}" > "$temp_timestamp" || 
+       ! chmod 600 "$temp_timestamp" ||
+       ! mv "$temp_timestamp" "$timestamp_file"; then
+        log "ERROR: Failed to update timestamp file"
+        rm -f "$temp_timestamp" 2>/dev/null || true
+        cleanup_backtest_lock
+        return 1
+    fi
     
     # ロック解放
     cleanup_backtest_lock
