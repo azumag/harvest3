@@ -74,8 +74,23 @@ check_timestamp_validity() {
     
     if [ -f "$marker_file" ]; then
         local last_time=$(cat "$marker_file" 2>/dev/null || echo "0")
-        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
-        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
+        
+        # Issue #5331セキュリティ強化: 数値検証を追加してセキュリティを強化
+        local time_diff="999"  # デフォルトは抑制しない
+        if [[ "$current_time" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$last_time" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
+            time_diff=$(echo "$current_time - $last_time" < /dev/null | bc 2>/dev/null || echo "999")
+            
+            # Issue #5331エラーハンドリング改善: bc計算エラー時の詳細ログ
+            if [ "$time_diff" = "999" ] && [ "${DEBUG_MODE:-false}" = "true" ]; then
+                log "DEBUG: bc calculation failed for timestamp validation (current: $current_time, last: $last_time)"
+            fi
+        else
+            # Issue #5331セキュリティ強化: 不正な入力値の場合の詳細ログ
+            if [ "${DEBUG_MODE:-false}" = "true" ]; then
+                log "DEBUG: Invalid timestamp format detected (current: '$current_time', last: '$last_time')"
+            fi
+        fi
         
         # bcが利用不可またはエラーの場合は抑制しない（999 > suppress_duration）
         if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $suppress_duration" | bc 2>/dev/null)" = "1" ]; then
@@ -461,8 +476,23 @@ log_backtest_startup_message() {
     # ロック取得後、タイムスタンプをチェック
     if [ -f "$timestamp_file" ]; then
         local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
-        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
+        
+        # Issue #5331セキュリティ強化: 数値検証を追加してセキュリティを強化
+        local time_diff="999"  # デフォルトは抑制しない
+        if [[ "$current_time" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$last_time" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
+            time_diff=$(echo "$current_time - $last_time" < /dev/null | bc 2>/dev/null || echo "999")
+            
+            # Issue #5331エラーハンドリング改善: bc計算エラー時の詳細ログ
+            if [ "$time_diff" = "999" ] && [ "${DEBUG_MODE:-false}" = "true" ]; then
+                log "DEBUG: bc calculation failed for backtest timestamp validation (current: $current_time, last: $last_time)"
+            fi
+        else
+            # Issue #5331セキュリティ強化: 不正な入力値の場合の詳細ログ
+            if [ "${DEBUG_MODE:-false}" = "true" ]; then
+                log "DEBUG: Invalid backtest timestamp format detected (current: '$current_time', last: '$last_time')"
+            fi
+        fi
         
         # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
         if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
