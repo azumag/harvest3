@@ -407,6 +407,7 @@ cleanup_backtest_lock() {
 # Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
 # 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
 # Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
+# Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
