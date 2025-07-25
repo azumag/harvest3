@@ -388,6 +388,7 @@ install_npm_dependencies() {
 # ロッククリーンアップヘルパー関数
 cleanup_backtest_lock() {
     # flock利用時のファイルディスクリプタクリーンアップ
+    # ファイルディスクリプタを閉じてロック解放
     if command -v flock >/dev/null 2>&1; then
         exec 200>&- 2>/dev/null || true
         trap - EXIT INT TERM 2>/dev/null || true
@@ -399,27 +400,20 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）
-# Issue #5292レビュー対応: KISS原則に基づく簡素化された重複防止機構
+# Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
+# Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s.%N)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
-    local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"  # 設定変数化
+    local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
     
-    # Issue #5292レビュー対応: 簡素化された重複防止（メッセージハッシュベース）
-    local message_hash=$(echo "$message" | md5sum | cut -d' ' -f1)
-    local message_marker="/tmp/backtest-message-${message_hash}.marker"
+    # Issue #5216修正: 複雑な事前チェックを削除し、atomicロック内でのみタイムスタンプチェック
+    # レースコンディションの原因となっていた複数チェックポイントを単一化
     
-    # メッセージ重複チェック（統一関数使用）
-    if check_timestamp_validity "$message_marker" "$MESSAGE_SUPPRESS_DURATION" "$current_time"; then
-        log "Backtest startup message suppressed (identical message within ${MESSAGE_SUPPRESS_DURATION}s)"
-        return 0
-    fi
-    
-    
-    # Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
+    # flockによるatomicロック取得（フォールバック対応）
     # 複数プロセス間でのrace conditionを完全に防止
     if command -v flock >/dev/null 2>&1; then
         # flock利用可能な場合の実装
@@ -431,7 +425,6 @@ log_backtest_startup_message() {
         # タイムアウト付きでexclusiveロックを取得
         if ! flock -x -w "$max_wait_time" 200; then
             log "Backtest startup message suppressed (lock acquisition timeout)"
-            # ファイルディスクリプタを閉じてロック解放
             exec 200>&-
             trap - EXIT INT TERM
             return 0
@@ -444,7 +437,6 @@ log_backtest_startup_message() {
         
         while [ $attempt -lt $max_attempts ]; do
             if mkdir "$fallback_lock_dir" 2>/dev/null; then
-                # ロック取得成功、クリーンアップ用trap設定
                 trap 'rmdir "$fallback_lock_dir" 2>/dev/null || true' EXIT INT TERM
                 break
             fi
@@ -458,17 +450,15 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # ロック取得後、タイムスタンプをチェック
+    # Issue #5216修正: ロック取得後、単一のクリティカルセクション内でタイムスタンプチェック
     if [ -f "$timestamp_file" ]; then
-        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
+        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
         # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
         local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
         
         # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
         if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
-            # 表示用に整数部分のみ抽出
-            local time_diff_int=$(echo "$time_diff" | cut -d'.' -f1)
-            log "Backtest startup message suppressed (last shown ${time_diff_int}s ago)"
+            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
             cleanup_backtest_lock
             return 0
         fi
@@ -476,21 +466,21 @@ log_backtest_startup_message() {
     
     # NPMエラー状態をチェック（Issue #5159）
     local npm_error_marker="/tmp/backtest-npm-error-detection.state"
-    if check_timestamp_validity "$npm_error_marker" "$NPM_ERROR_SUPPRESS_DURATION" "$current_time"; then
-        log "Backtest startup message suppressed (NPM error recovery within ${NPM_ERROR_SUPPRESS_DURATION}s)"
-        cleanup_backtest_lock
-        return 0
+    if [ -f "$npm_error_marker" ]; then
+        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
+        local npm_error_age=$((current_time - last_npm_error))
+        
+        if [ $npm_error_age -lt $NPM_ERROR_SUPPRESS_DURATION ]; then
+            log "Backtest startup message suppressed (NPM error recovery within ${npm_error_age}s)"
+            cleanup_backtest_lock
+            return 0
+        fi
     fi
     
-    
-    # メッセージ出力とタイムスタンプ更新（簡素化）
+    # メッセージ出力とタイムスタンプ更新
     log "$message"
     echo "$current_time" > "$timestamp_file"
     chmod 600 "$timestamp_file"
-    
-    # Issue #5292レビュー対応: メッセージマーカーのみ更新（PIDマーカーは不要）
-    echo "$current_time" > "$message_marker"
-    chmod 600 "$message_marker"
     
     # ロック解放
     cleanup_backtest_lock
