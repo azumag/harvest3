@@ -65,7 +65,9 @@ describe('Issue #5203: backtestサービス重複メッセージ修正', () => {
     expect(entrypointContent).toContain('Backtest startup message suppressed');
     
     // タイムスタンプファイル更新の確認（Issue #5333修正：コンテナID・プロセスID含む詳細形式）
-    expect(entrypointContent).toContain('echo "${current_time}:${container_id}:${process_id}" > "$timestamp_file"');
+    // 原子的ファイル書き込み実装を確認
+    expect(entrypointContent).toContain('echo "${current_time}:${container_id}:${process_id}" > "$temp_timestamp"');
+    expect(entrypointContent).toContain('mv "$temp_timestamp" "$timestamp_file"');
   });
 
   test('Issue #5203でログに出力された具体的なメッセージの処理確認', () => {
