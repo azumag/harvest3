@@ -673,71 +673,79 @@ log_startup_message() {
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            # 同一プロセス内での高速連続呼び出しを防ぐための最初の防御
+            # Issue #5362修正: シンプルで確実な重複防止機構（KISS原則適用）
+            # 複雑な多重防御による競合状態を解決するため、単純で確実な方法に変更
+            
+            # 第一防御線: プロセス内変数による即座の重複防止（最優先）
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-                return 0  # 既に同一プロセス内でログ出力済み、即座に重複防止
+                log "DEBUG: Duplicate main startup message blocked by process internal flag"
+                return 0  # 既に同一プロセス内でログ出力済み
             fi
             
-            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
-            local atomic_processing_success=false
+            # 第二防御線: flockベースの確実なファイルロック
+            local startup_lock_file="/tmp/main-startup-message-global.lock"
+            local startup_success_file="/tmp/main-startup-message-global.done"
             
-            # 既に完了マーカーが存在する場合は重複防止
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0  # 既にログ出力済み、重複防止
-            fi
+            # Issue #5362修正: 詳細なデバッグ情報を記録
+            log "DEBUG: Attempting to acquire main startup message lock (PID: $$, Container: $(hostname))"
             
-            # 環境変数フラグによる高速チェック（第一防御線）
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                return 0  # 既にログ出力済み、重複防止
-            fi
-            
-            # アトミックディレクトリロック取得（第二防御線）
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得成功 - 二重チェック後にメッセージ出力
-                if [ -f "$startup_msg_done_file" ]; then
-                    # 他のプロセスが先にメッセージを出力していた
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
+            # flockが利用可能な場合の確実なロック処理
+            if command -v flock >/dev/null 2>&1; then
+                # ファイルディスクリプタ201を使用してロック取得（非阻塞、5秒タイムアウト）
+                exec 201>"$startup_lock_file"
+                if flock -w 5 201; then
+                    log "DEBUG: Main startup message lock acquired successfully"
+                    
+                    # ロック取得後の二重チェック
+                    if [ -f "$startup_success_file" ]; then
+                        log "DEBUG: Another process already logged the message, skipping"
+                        exec 201>&-  # ロック解放
+                        return 0
+                    fi
+                    
+                    # プロセス内フラグ設定とメッセージ出力
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
+                    log "DEBUG: About to log main startup message"
+                    log "$message"
+                    
+                    # 成功マーカー作成（他のプロセス用）
+                    echo "$(date +%s):$$:$(hostname)" > "$startup_success_file" 2>/dev/null || true
+                    chmod 600 "$startup_success_file" 2>/dev/null || true
+                    log "DEBUG: Main startup message logged successfully"
+                    
+                    # ロック解放
+                    exec 201>&-
+                    return 0
+                else
+                    # ロック取得失敗（タイムアウト）
+                    log "DEBUG: Could not acquire main startup message lock, another process may be logging"
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    exec 201>&- 2>/dev/null || true
                     return 0
                 fi
-                
-                # フラグ設定とメッセージ出力
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                log "$message"
-                atomic_processing_success=true
-                
-                # 完了マーカー作成（他のプロセス用）
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                
-                # ロック解放
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                
-                # Issue #5295修正: 明示的な成功フラグをチェックしてreturn
-                if [ "$atomic_processing_success" = true ]; then
-                    return 0  # 処理完了、以降のRedis/ファイル処理を確実にスキップ
-                fi
             else
-                # ロック取得失敗 - 他のプロセスが処理中
-                # 短時間待機してから完了マーカーをチェック
-                local wait_attempts=0
-                while [ $wait_attempts -lt 10 ] && [ ! -f "$startup_msg_done_file" ]; do
-                    sleep 0.1
-                    wait_attempts=$((wait_attempts + 1))
-                done
+                # flockが利用できない場合のフォールバック（簡単なファイルベース）
+                log "WARNING: flock not available, using simple file-based lock"
+                local simple_lock_file="/tmp/main-startup-simple.lock"
                 
-                # 環境変数フラグも設定（一貫性のため）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0  # 他のプロセスがログ出力したため、重複防止
+                # シンプルなディレクトリロック（atomicity保証）
+                if mkdir "$simple_lock_file" 2>/dev/null; then
+                    # プロセス内フラグ設定とメッセージ出力
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
+                    log "$message"
+                    
+                    # ロック解放
+                    rmdir "$simple_lock_file" 2>/dev/null || true
+                    return 0
+                else
+                    # ロック取得失敗
+                    log "DEBUG: Simple lock acquisition failed, another process is logging"
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    return 0
+                fi
             fi
-            
-            # Issue #5295修正: fallthroughが発生した場合の緊急停止
-            # このコードに到達した場合は予期しない状況なので、安全のためreturn
-            return 0
             ;;
     esac
     
