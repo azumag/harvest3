@@ -612,6 +612,12 @@ log_startup_message() {
     # 注意: バックテストモード以外でのみ適用
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
+            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
+            # 同一プロセス内での高速連続呼び出しを防ぐための最初の防御
+            if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+                return 0  # 既に同一プロセス内でログ出力済み、即座に重複防止
+            fi
+            
             # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
             local startup_msg_lock_file="/tmp/main-startup-message.lock"
             local startup_msg_done_file="/tmp/main-startup-message.done"
@@ -637,6 +643,7 @@ log_startup_message() {
                 fi
                 
                 # フラグ設定とメッセージ出力
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
                 log "$message"
                 atomic_processing_success=true
@@ -662,6 +669,7 @@ log_startup_message() {
                 done
                 
                 # 環境変数フラグも設定（一貫性のため）
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
                 return 0  # 他のプロセスがログ出力したため、重複防止
             fi
