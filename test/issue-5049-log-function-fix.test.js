@@ -185,8 +185,8 @@ echo "=== Test Completed ==="
   test('修正によって他の機能が影響を受けていないことを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // 重要な機能が削除されていないことを確認
-    const importantFunctions = [
+    // entrypoint.shに存在すべき重要な機能を確認
+    const entrypointFunctions = [
       'log(',
       'acquire_startup_lock()',
       'release_startup_lock()', 
@@ -195,18 +195,29 @@ echo "=== Test Completed ==="
       'check_database_connections()',
       'start_application()',
       'cleanup()',
-      'run_diagnostics()',
-      'main()',
-      'log_startup_message('
+      'main()'
     ];
     
-    importantFunctions.forEach(func => {
+    entrypointFunctions.forEach(func => {
       expect(entrypointContent).toContain(func);
     });
     
-    // log_startup_messageの呼び出し箇所が正しく保持されている
-    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
+    // リファクタリング後は run_basic_diagnostics() に名称変更
+    expect(entrypointContent).toContain('run_basic_diagnostics()');
+    
+    // log_startup_message は message-dedup.sh に分離されているが、呼び出しは残っている
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    
+    // helper scriptsの読み込み機能が追加されている
+    expect(entrypointContent).toContain('source_helper_scripts()');
+    expect(entrypointContent).toContain('message-dedup.sh');
+    
+    // message-dedup.sh スクリプトが存在し、log_startup_message関数を含んでいることを確認
+    const messageDedupPath = path.join(__dirname, '..', 'scripts', 'message-dedup.sh');
+    expect(fs.existsSync(messageDedupPath)).toBe(true);
+    
+    const messageDedupContent = fs.readFileSync(messageDedupPath, 'utf8');
+    expect(messageDedupContent).toContain('log_startup_message(');
   });
 
   test('Issue #5049の根本原因が修正されている', () => {

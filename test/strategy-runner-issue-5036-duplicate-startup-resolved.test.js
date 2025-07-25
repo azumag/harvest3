@@ -233,7 +233,7 @@ log_startup_message "Starting strategy-runner container with enhanced error hand
       'check_database_connections()',
       'start_application()',
       'cleanup()',
-      'run_diagnostics()',
+      'run_basic_diagnostics()',
       'main()'
     ];
     
@@ -242,7 +242,7 @@ log_startup_message "Starting strategy-runner container with enhanced error hand
     });
     
     // バックテストメッセージも正しく処理されることを確認
-    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
   test('Issue #5036: ログ監視システムとの整合性確認', () => {

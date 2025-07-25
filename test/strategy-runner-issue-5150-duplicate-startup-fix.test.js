@@ -237,7 +237,8 @@ echo "Initial cleanup completed"
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // ログ出力がlog_startup_message関数を通して行われることを確認
-    expect(entrypointContent).toContain('log_startup_message(');
+    // log_startup_message is now in message-dedup.sh, check that it's called instead
+      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container');
     
     // 直接的なecho文による起動メッセージ出力がないことを確認（log_startup_message以外）
     const lines = entrypointContent.split('\n');

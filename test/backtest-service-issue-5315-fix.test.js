@@ -102,9 +102,9 @@ source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 
 # Test rapid consecutive calls (should only output once due to process flag)
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
-log_backtest_startup_message "Starting backtest container with enhanced error handling" 
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling" 
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
@@ -170,7 +170,7 @@ source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 
 # Test single call to verify flock usage
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # Check that lock file was created and used
 if [ -f "/tmp/backtest-startup-message.last" ]; then
@@ -246,7 +246,7 @@ source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 
 # Test fallback behavior
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true

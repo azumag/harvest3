@@ -78,15 +78,15 @@ rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
 
 # Source only the required functions without running main
-source <(grep -A 200 "^log_backtest_startup_message()" entrypoint.sh | head -n 200)
+source <(grep -A 200 "^log_backtest_startup_message()" "../scripts/message-dedup.sh" | head -n 200)
 source <(grep -A 10 "^log()" entrypoint.sh | head -n 10)
 
 # Test multiple calls to log_backtest_startup_message
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 sleep 2
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 sleep 2  
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
@@ -308,19 +308,19 @@ export BACKTEST_STARTUP_FLOCK_TIMEOUT=2
 export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/test-backtest-startup-timestamp.state"
 
 # Extract only the required functions without executing main()
-source <(grep -A 200 "^log_backtest_startup_message()" entrypoint.sh | head -n 200)
+source <(grep -A 200 "^log_startup_message()" "../scripts/message-dedup.sh" | head -n 200)
 source <(grep -A 10 "^log()" entrypoint.sh | head -n 10)
-source <(grep -A 20 "^cleanup_backtest_lock()" entrypoint.sh | head -n 20)
+# Note: cleanup_backtest_lock is now part of the unified cleanup function
 
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
 
 # Run first call
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 sleep 1
 # Run second call immediately - should be suppressed
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true

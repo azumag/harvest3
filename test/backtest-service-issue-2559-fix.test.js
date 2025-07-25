@@ -73,7 +73,7 @@ describe('Backtest Service Issue #2559 Fix', () => {
 
   describe('Regression prevention', () => {
     test('should maintain existing startup message logic', () => {
-      expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
+      expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
     });
 
     test('should maintain existing startup lock mechanism', () => {

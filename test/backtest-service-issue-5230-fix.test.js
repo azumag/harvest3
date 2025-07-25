@@ -124,9 +124,9 @@ log_backtest_startup_message() {
 }
 
 # テスト実行：連続呼び出しで重複防止をテスト
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
-log_backtest_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
+log_startup_message "Starting backtest container with enhanced error handling"
 
 # クリーンアップ
 rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true

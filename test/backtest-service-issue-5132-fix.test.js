@@ -38,7 +38,7 @@ describe('Issue #5132: backtestサービス重複メッセージ修正', () => {
     expect(entrypointContent).not.toContain('log_backtest_startup_message "Executing backtest command with enhanced error handling..."');
     
     // 最初の正当な呼び出しは残っていることを確認
-    expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
+    expect(entrypointContent).toContain('log_startup_message "Starting backtest container with enhanced error handling"');
   });
 
   test('backtest mode分岐で単一メッセージのみが出力されることを確認', async () => {
@@ -78,7 +78,7 @@ log() {
 # Issue #5132修正後のmain関数backtest部分をシミュレート
 if [ "$BACKTEST_MODE" = "true" ]; then
     # 起動ロック取得後に安全にメッセージを出力（1回目の呼び出し）
-    log_backtest_startup_message "Starting backtest container with enhanced error handling"
+    log_startup_message "Starting backtest container with enhanced error handling"
     
     # Issue #5132修正: 2回目の呼び出しは削除済み
     # log_backtest_startup_message "Executing backtest command with enhanced error handling..." # 削除済み
@@ -198,7 +198,7 @@ rm -f "$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || true
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // backtest用メッセージが1回のみになっている
-    const backtestMessageMatches = entrypointContent.match(/log_backtest_startup_message "Starting backtest container with enhanced error handling"/g);
+    const backtestMessageMatches = entrypointContent.match(/log_startup_message "Starting backtest container with enhanced error handling"/g);
     expect(backtestMessageMatches).not.toBeNull();
     expect(backtestMessageMatches.length).toBe(1);
   });
