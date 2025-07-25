@@ -78,8 +78,10 @@ log_backtest_startup_message() {
         fi
     fi
     
-    echo "$current_time" > "$BACKTEST_STARTUP_LOCK_FILE"
-    chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"
+    local temp_timestamp="\${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
+    echo "$current_time" > "$temp_timestamp"
+    chmod 600 "$temp_timestamp"
+    mv "$temp_timestamp" "$BACKTEST_STARTUP_LOCK_FILE"
     echo "[ENTRYPOINT] $message"
     return 0
 }
@@ -140,8 +142,10 @@ log_backtest_startup_message() {
         fi
     fi
     
-    echo "$current_time" > "$BACKTEST_STARTUP_LOCK_FILE"
-    chmod 600 "$BACKTEST_STARTUP_LOCK_FILE"
+    local temp_timestamp="\${BACKTEST_STARTUP_LOCK_FILE}.tmp.$$"
+    echo "$current_time" > "$temp_timestamp"
+    chmod 600 "$temp_timestamp"
+    mv "$temp_timestamp" "$BACKTEST_STARTUP_LOCK_FILE"
     echo "[ENTRYPOINT] $message"
     return 0
 }
@@ -307,7 +311,7 @@ log_startup_message "Starting container with enhanced error handling"
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // ファイル権限の適切な設定
-    expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
+    expect(entrypointContent).toContain('chmod 600 "$temp_timestamp"');
     
     // /tmpディレクトリ使用のセキュリティ注記が維持されている
     expect(entrypointContent).toContain('セキュリティ注記: /tmp使用について');

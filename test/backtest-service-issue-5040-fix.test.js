@@ -125,7 +125,7 @@ describe('Issue #5040: backtestサービス例外発生修正', () => {
       
       // flock方式のタイムスタンプファイル管理
       expect(entrypointContent).toContain('timestamp_file');
-      expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
+      expect(entrypointContent).toContain('chmod 600 "$temp_timestamp"');
       
       // flockによるファイルディスクリプタ管理
       expect(entrypointContent).toContain('exec 200>&-');

@@ -25,6 +25,8 @@ const { BacktestEnhancer } = require('./strategies/utils/backtestEnhancer');
 const { WalkForwardAnalysis } = require('./strategies/utils/walkForwardAnalysis');
 const { BacktestOptimizer } = require('./optimization');
 const { createIntelligentParameterManager } = require('./parameters');
+const { BacktestErrorClassifier, ERROR_TYPES } = require('./common/backtestErrorClassifier');
+const { unifiedErrorHandler } = require('./common/errorHandler');
 
 // コマンドライン引数を取得
 const args = process.argv.slice(2);
@@ -1547,38 +1549,75 @@ if (process.env.TEST_MODE !== 'true') {
         consecutiveFailures = 0;
         break;
       } catch (error) {
-        consecutiveFailures++;
-        logWithLevel('error', `バックテストメイン関数でエラーが発生しました (連続失敗回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error);
+        // エラー分類の実行
+        const errorAnalysis = BacktestErrorClassifier.analyzeError(error);
+        const { errorType, strategy } = errorAnalysis;
+        
+        logWithLevel('error', `バックテストメイン関数でエラーが発生しました:`, error);
+        logWithLevel('info', `エラー分類: ${errorType} (${strategy.description})`);
         logWithLevel('error', 'エラースタック:', error.stack);
         
-        // Discord通知（利用可能な場合）
-        if (typeof postErrorToDiscord === 'function') {
-          try {
-            await postErrorToDiscord(`バックテスト実行エラー (${consecutiveFailures}回目): ${error.message}`);
-          } catch (discordError) {
-            logWithLevel('error', 'Discord通知エラー:', discordError);
-          }
+        // UnifiedErrorHandlerによる統一エラー処理
+        try {
+          await unifiedErrorHandler.handleError(error, {
+            context: `バックテスト実行 (エラー種別: ${errorType})`,
+            shouldThrow: false
+          });
+        } catch (handlerError) {
+          logWithLevel('error', 'UnifiedErrorHandler処理エラー:', handlerError);
         }
         
-        if (consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
-          // 指数バックオフによる待機時間の計算
-          const retryDelay = BASE_RETRY_DELAY * Math.pow(2, consecutiveFailures - 1);
-          logWithLevel('info', `${retryDelay / 1000}秒後に再試行します (試行回数: ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
-          
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-        } else {
-          logWithLevel('error', `最大連続失敗回数(${MAX_CONSECUTIVE_FAILURES})に達しました。致命的なエラーと判断し、コンテナを終了します。`);
+        // 設定エラーの場合は即座に停止
+        if (strategy.immediateStop) {
+          logWithLevel('error', `設定エラーが検出されました。リトライせずに停止します: ${error.message}`);
           
           // 最終的なDiscord通知
           if (typeof postErrorToDiscord === 'function') {
             try {
-              await postErrorToDiscord(`バックテスト致命的エラー: ${MAX_CONSECUTIVE_FAILURES}回連続で失敗しました。手動での確認が必要です。`);
+              await postErrorToDiscord(`バックテスト設定エラー: ${error.message}。手動での設定確認が必要です。`);
             } catch (discordError) {
               logWithLevel('error', 'Discord通知エラー:', discordError);
             }
           }
           
-          // 致命的エラーの場合のみprocess.exit(1)を実行
+          process.exit(1);
+        }
+        
+        // リトライが無効な場合の処理
+        if (!strategy.shouldRetry) {
+          logWithLevel('error', `リトライが無効なエラー種別です: ${errorType}`);
+          process.exit(1);
+        }
+        
+        consecutiveFailures++;
+        
+        // エラー種別に応じたリトライ制限の適用
+        const maxRetriesForErrorType = Math.min(strategy.maxRetries, MAX_CONSECUTIVE_FAILURES);
+        
+        if (consecutiveFailures < maxRetriesForErrorType) {
+          // エラー種別に応じたバックオフ戦略
+          let retryDelay;
+          if (strategy.useExponentialBackoff) {
+            retryDelay = BASE_RETRY_DELAY * Math.pow(2, consecutiveFailures - 1);
+          } else {
+            retryDelay = BASE_RETRY_DELAY;
+          }
+          
+          logWithLevel('info', `${retryDelay / 1000}秒後に再試行します (試行回数: ${consecutiveFailures}/${maxRetriesForErrorType}, エラー種別: ${errorType})`);
+          
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          logWithLevel('error', `エラー種別 ${errorType} の最大リトライ回数(${maxRetriesForErrorType})に達しました。コンテナを終了します。`);
+          
+          // 最終的なDiscord通知
+          if (typeof postErrorToDiscord === 'function') {
+            try {
+              await postErrorToDiscord(`バックテスト致命的エラー (${errorType}): ${maxRetriesForErrorType}回連続で失敗しました。手動での確認が必要です。`);
+            } catch (discordError) {
+              logWithLevel('error', 'Discord通知エラー:', discordError);
+            }
+          }
+          
           process.exit(1);
         }
       }

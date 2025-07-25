@@ -123,10 +123,12 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # メッセージ出力とタイムスタンプ更新
+    # メッセージ出力とタイムスタンプ更新（原子的書き込み）
     log "$message"
-    echo "$current_time" > "$timestamp_file"
-    chmod 600 "$timestamp_file"
+    local temp_timestamp="\${timestamp_file}.tmp.$$"
+    echo "$current_time" > "$temp_timestamp"
+    chmod 600 "$temp_timestamp"
+    mv "$temp_timestamp" "$timestamp_file"
     
     # ファイルディスクリプタを閉じてロック解放
     exec 200>&-
@@ -241,8 +243,11 @@ log_backtest_startup_message() {
         fi
     fi
     
-    # タイムアウトを超えているのでメッセージ出力
-    echo "$current_time" > "$timestamp_file"
+    # タイムアウトを超えているのでメッセージ出力（原子的書き込み）
+    local temp_timestamp="\${timestamp_file}.tmp.$$"
+    echo "$current_time" > "$temp_timestamp"
+    chmod 600 "$temp_timestamp"
+    mv "$temp_timestamp" "$timestamp_file"
     log "$message"
     
     # ロック解放
@@ -316,7 +321,7 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // ファイル権限の適切な設定（Issue #5159: flock方式）
-    expect(entrypointContent).toContain('chmod 600 "$timestamp_file"');
+    expect(entrypointContent).toContain('chmod 600 "$temp_timestamp"');
     expect(entrypointContent).toContain('chmod 600 "$npm_error_marker"');
     
     // エラーハンドリングの確認
