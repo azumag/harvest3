@@ -404,127 +404,37 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
-# Issue #5127, #5058 & #5175 & #5216 & #5333: backtest container専用起動メッセージ関数（強化版）
-# Issue #5333修正: 複数コンテナ間での重複メッセージ防止を強化
-# Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
-# Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
+# Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
+# 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
 log_backtest_startup_message() {
     local message="$1"
-    local current_time=$(date +%s.%N)
-    # Issue #5333修正: よりグローバルなロックファイル名を使用（複数コンテナ間で共有）
-    # セキュリティ強化: より安全なディレクトリを使用（/var/run優先、フォールバック付き）
-    local temp_dir="/var/run/backtest"
-    if ! mkdir -p "$temp_dir" 2>/dev/null || ! [ -w "$temp_dir" ]; then
-        temp_dir="/tmp"  # フォールバック
-    fi
-    chmod 700 "$temp_dir" 2>/dev/null || true
-    local lock_file="$temp_dir/startup-message-global.lock"
-    # Issue #5333修正: グローバルなタイムスタンプファイルを使用
-    local timestamp_file="$temp_dir/startup-timestamp-global.state"
-    local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
-    local container_id=$(hostname)
-    local process_id=$$
+    local current_time=$(date +%s)
+    local timestamp_file="/tmp/backtest-startup-message.last"
+    local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
-    # Issue #5333修正: デバッグ情報の記録（一時的）
-    # この情報は実際の問題解決後に削除される予定
-    
-    # Issue #5216修正: 複雑な事前チェックを削除し、atomicロック内でのみタイムスタンプチェック
-    # レースコンディションの原因となっていた複数チェックポイントを単一化
-    # Issue #5216修正: 単一のクリティカルセクション内でタイムスタンプチェックを実行
-    
-    # flockによるatomicロック取得（フォールバック対応）
-    # 複数プロセス間でのrace conditionを完全に防止
-    if command -v flock >/dev/null 2>&1; then
-        # flock利用可能な場合の実装
-        exec 200>"$lock_file"
-        
-        # 異常終了時のFDクリーンアップ用trap
-        trap 'exec 200>&- 2>/dev/null || true' EXIT INT TERM
-        
-        # タイムアウト付きでexclusiveロックを取得
-        if ! flock -x -w "$max_wait_time" 200; then
-            log "Backtest startup message suppressed (lock acquisition timeout)"
-            exec 200>&-
-            trap - EXIT INT TERM
-            return 0
-        fi
-    else
-        # flockが利用不可の場合のフォールバック（mkdir-based）
-        local fallback_lock_dir="${lock_file}.fallback"
-        local attempt=0
-        local max_attempts=3
-        
-        while [ $attempt -lt $max_attempts ]; do
-            if mkdir "$fallback_lock_dir" 2>/dev/null; then
-                trap 'rmdir "$fallback_lock_dir" 2>/dev/null || true' EXIT INT TERM
-                break
-            fi
-            attempt=$((attempt + 1))
-            sleep 1
-        done
-        
-        if [ $attempt -eq $max_attempts ]; then
-            log "Backtest startup message suppressed (fallback lock acquisition failed)"
-            return 0
-        fi
-    fi
-    
-    # Issue #5333修正: ロック取得後、より厳密なタイムスタンプチェック
-    # Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用
-    # パフォーマンス最適化: 複数cutコマンドの代わりに1回のIFS読み込み使用
+    # 前回のメッセージ出力時刻をチェック
     if [ -f "$timestamp_file" ]; then
-        IFS=':' read -r last_time last_container last_pid < "$timestamp_file" 2>/dev/null || {
-            last_time=0; last_container="unknown"; last_pid="unknown"
-        }
+        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+        local time_diff=$((current_time - last_time))
         
-        # 整数部分のみを使用してCI環境での互換性を確保
-        local current_time_int=${current_time%.*}
-        local last_time_int=${last_time%.*}
-        local time_diff=$((current_time_int - last_time_int))
-        
-        # Issue #5333修正: より詳細な重複検出ログ
-        # 整数算術でタイムスタンプ比較（bcコマンド不要）
-        if [ "$time_diff" -lt "$BACKTEST_STARTUP_LOCK_TIMEOUT" ]; then
-            if [ "$last_container" = "$container_id" ] && [ "$last_pid" = "$process_id" ]; then
-                log "Backtest startup message suppressed (same process, last shown ${time_diff}s ago)"
-            else
-                log "Backtest startup message suppressed (different process: ${last_container}:${last_pid}, last shown ${time_diff}s ago)"
-            fi
-            cleanup_backtest_lock
+        if [ "$time_diff" -lt "$suppress_duration" ]; then
+            log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
             return 0
         fi
     fi
     
-    # NPMエラー状態をチェック（Issue #5159）
-    local npm_error_marker="/tmp/backtest-npm-error-detection.state"
-    if [ -f "$npm_error_marker" ]; then
-        local last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
-        local npm_error_age=$((current_time - last_npm_error))
-        
-        if [ $npm_error_age -lt $NPM_ERROR_SUPPRESS_DURATION ]; then
-            log "Backtest startup message suppressed (NPM error recovery within ${npm_error_age}s)"
-            cleanup_backtest_lock
-            return 0
-        fi
-    fi
-    
-    # Issue #5333修正: メッセージ出力とより詳細なタイムスタンプ更新
+    # メッセージ出力
     log "$message"
     
-    # エラーハンドリング強化: 原子的ファイル書き込み実装
-    local temp_timestamp="${timestamp_file}.tmp.$$"
-    if ! echo "${current_time}:${container_id}:${process_id}" > "$temp_timestamp" || 
-       ! chmod 600 "$temp_timestamp" ||
-       ! mv "$temp_timestamp" "$timestamp_file"; then
-        log "ERROR: Failed to update timestamp file"
-        rm -f "$temp_timestamp" 2>/dev/null || true
-        cleanup_backtest_lock
-        return 1
+    # タイムスタンプ更新（atomic write）
+    local temp_file="${timestamp_file}.tmp.$$"
+    if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
+        chmod 600 "$timestamp_file" 2>/dev/null || true
+    else
+        rm -f "$temp_file" 2>/dev/null || true
+        log "WARNING: Failed to update startup message timestamp"
     fi
     
-    # ロック解放
-    cleanup_backtest_lock
     return 0
 }
 

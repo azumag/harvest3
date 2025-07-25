@@ -14,6 +14,17 @@ const logger = new Logger('MongoDB');
 const mongoUrl = process.env.MONGO_URL;
 const mongoDbName = process.env.MONGODB_DB_NAME;
 
+// Issue #5230修正: 環境変数検証の追加
+if (!mongoUrl) {
+  logger.error('MONGO_URL環境変数が設定されていません。Dockerコンテナ内またはenv設定を確認してください。');
+  logger.error('期待値例: MONGO_URL=mongodb://mongodb:27017 または MONGO_URL=mongodb://localhost:27017');
+}
+
+if (!mongoDbName) {
+  logger.error('MONGODB_DB_NAME環境変数が設定されていません。');
+  logger.error('期待値例: MONGODB_DB_NAME=harvest3');
+}
+
 // MongoDB接続オプションを追加 - 本番環境向けに最適化
 // レビュー対応: 非対応オプションを削除し、安定した接続設定に変更
 const mongoOptions = {
@@ -193,6 +204,13 @@ async function retryWithBackoff(operation, operationName, maxRetries = 3) {
  * MongoDBに接続し、データベースとコレクションへの参照を取得する（リトライロジック付き）
  */
 async function connectDB() {
+  // Issue #5230修正: 環境変数未設定時の早期return
+  if (!mongoUrl || !mongoDbName) {
+    const errorMsg = 'MongoDB接続に必要な環境変数が未設定です';
+    logger.error(errorMsg);
+    throw new Error(errorMsg + ': MONGO_URL, MONGODB_DB_NAME');
+  }
+
   if (!await isConnected()) {
     await retryWithBackoff(async () => {
       logger.info('MongoDB接続情報:', { mongoDbName, mongoUrl });
