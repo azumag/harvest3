@@ -78,10 +78,10 @@ describe('Issue #5198: backtestサービス例外問題解決確認', () => {
     expect(entrypointContent).toContain('flock -x -w "$max_wait_time" 200');
     expect(entrypointContent).toContain('exec 200>&-');
     
-    // タイムスタンプベースの重複チェック (Issue #5319修正: bc使用の浮動小数点計算)
-    expect(entrypointContent).toContain('$(echo "$current_time - $last_time" | bc');
-    expect(entrypointContent).toContain('command -v bc');
-    expect(entrypointContent).toContain('bc 2>/dev/null)" = "1"');
+    // タイムスタンプベースの重複チェック (Issue #5340修正: bcコマンド依存を除去し、整数算術のみ使用)
+    expect(entrypointContent).toContain('current_time_int=${current_time%.*}');
+    expect(entrypointContent).toContain('last_time_int=${last_time%.*}');
+    expect(entrypointContent).toContain('time_diff=$((current_time_int - last_time_int))');
   });
 
   test('backtestサービス起動シミュレーション（重複メッセージなし）', async () => {
