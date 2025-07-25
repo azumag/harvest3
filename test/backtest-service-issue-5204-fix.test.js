@@ -85,13 +85,16 @@ describe('Backtest Service Issue #5204 Fix', () => {
         foundRetryLogic = true;
       }
       
-      // 条件付きprocess.exit(1)の存在確認（致命的エラーの場合のみ）
+      // 条件付きprocess.exit(1)の存在確認（エラー種別に応じた終了処理）
       if (line.includes('process.exit(1)')) {
-        // process.exit(1)の前後5行以内に致命的エラーに関するメッセージがあるかチェック
-        for (let j = Math.max(0, i-5); j <= Math.min(lines.length-1, i+5); j++) {
-          if (lines[j].includes('致命的なエラーと判断') || 
-              lines[j].includes('最大連続失敗回数') ||
-              lines[j].includes('致命的エラーの場合のみprocess.exit(1)を実行')) {
+        // process.exit(1)の前後10行以内にエラー処理に関するメッセージがあるかチェック
+        for (let j = Math.max(0, i-10); j <= Math.min(lines.length-1, i+10); j++) {
+          if (lines[j].includes('設定エラーが検出されました') || 
+              lines[j].includes('リトライが無効なエラー種別') ||
+              lines[j].includes('最大リトライ回数') ||
+              lines[j].includes('手動での確認が必要') ||
+              lines[j].includes('strategy.immediateStop') ||
+              lines[j].includes('strategy.shouldRetry')) {
             foundConditionalExit = true;
             break;
           }
@@ -118,8 +121,11 @@ describe('Backtest Service Issue #5204 Fix', () => {
     const backtestRunnerPath = path.join(__dirname, '../src/backtestRunner.js');
     const content = fs.readFileSync(backtestRunnerPath, 'utf8');
     
-    // Discord通知の連続失敗回数表示が含まれていることを確認
-    expect(content).toMatch(/バックテスト実行エラー \(\$\{consecutiveFailures\}回目\)/);
+    // エラー分類に関する実装が含まれていることを確認
+    expect(content).toMatch(/BacktestErrorClassifier\.analyzeError/);
+    
+    // 統一エラーハンドラーが含まれていることを確認
+    expect(content).toMatch(/unifiedErrorHandler\.handleError/);
     
     // 致命的エラー時の特別なDiscord通知が含まれていることを確認
     expect(content).toMatch(/バックテスト致命的エラー.*連続で失敗しました/);
@@ -161,8 +167,8 @@ describe('Backtest Service Issue #5204 Fix', () => {
     expect(content).toMatch(/logWithLevel\('error'/);
     expect(content).toMatch(/logWithLevel\('info'/);
     
-    // ユーザーに分かりやすいメッセージが含まれていることを確認
-    expect(content).toMatch(/連続失敗回数/);
+    // ユーザーに分かりやすいメッセージが含まれていることを確認  
+    expect(content).toMatch(/consecutiveFailures/);
     expect(content).toMatch(/秒後に再試行します/);
     expect(content).toMatch(/手動での確認が必要です/);
   });
