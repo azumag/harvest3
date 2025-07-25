@@ -388,6 +388,7 @@ install_npm_dependencies() {
 # ロッククリーンアップヘルパー関数
 cleanup_backtest_lock() {
     # flock利用時のファイルディスクリプタクリーンアップ
+    # ファイルディスクリプタを閉じてロック解放
     if command -v flock >/dev/null 2>&1; then
         exec 200>&- 2>/dev/null || true
         trap - EXIT INT TERM 2>/dev/null || true
@@ -399,11 +400,12 @@ cleanup_backtest_lock() {
     fi
 }
 
-# Issue #5127, #5058 & #5175 & #5216: backtest container専用起動メッセージ関数（簡素化版）
+# Issue #5127, #5058 & #5175: backtest container専用起動メッセージ関数（簡素化版）
 # Issue #5216修正: KISS原則に基づく簡素化でレースコンディション問題を根本解決
+# Issue #5159: flockによる確実なatomic lock実装（フォールバック対応）
 log_backtest_startup_message() {
     local message="$1"
-    local current_time=$(date +%s)
+    local current_time=$(date +%s.%N)
     local lock_file="/tmp/backtest-startup-message.lock"
     local timestamp_file="$BACKTEST_STARTUP_LOCK_FILE"
     local max_wait_time="$BACKTEST_STARTUP_FLOCK_TIMEOUT"
@@ -412,6 +414,7 @@ log_backtest_startup_message() {
     # レースコンディションの原因となっていた複数チェックポイントを単一化
     
     # flockによるatomicロック取得（フォールバック対応）
+    # 複数プロセス間でのrace conditionを完全に防止
     if command -v flock >/dev/null 2>&1; then
         # flock利用可能な場合の実装
         exec 200>"$lock_file"
@@ -449,10 +452,12 @@ log_backtest_startup_message() {
     
     # Issue #5216修正: ロック取得後、単一のクリティカルセクション内でタイムスタンプチェック
     if [ -f "$timestamp_file" ]; then
-        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo 0)
-        local time_diff=$((current_time - last_time))
+        local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+        # Issue #5319修正: ナノ秒精度タイムスタンプ対応（浮動小数点比較）
+        local time_diff=$(echo "$current_time - $last_time" | bc 2>/dev/null || echo "999")
         
-        if [ $time_diff -lt $BACKTEST_STARTUP_LOCK_TIMEOUT ]; then
+        # bcが利用不可またはエラーの場合は抑制しない（999 > BACKTEST_STARTUP_LOCK_TIMEOUT）
+        if command -v bc >/dev/null 2>&1 && [ "$(echo "$time_diff < $BACKTEST_STARTUP_LOCK_TIMEOUT" | bc 2>/dev/null)" = "1" ]; then
             log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
             cleanup_backtest_lock
             return 0
