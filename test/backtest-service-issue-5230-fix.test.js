@@ -61,8 +61,8 @@ describe('Issue #5230: backtestサービス例外修正', () => {
     expect(entrypointContent).toContain('Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）');
     expect(entrypointContent).toContain('過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化');
     
-    // 簡素化された実装の特徴
-    expect(entrypointContent).toContain('local timestamp_file="/tmp/backtest-startup-message.last"');
+    // 簡素化された実装の特徴（変数参照を使用）
+    expect(entrypointContent).toContain('local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"');
     expect(entrypointContent).toContain('local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}');
     expect(entrypointContent).toContain('# タイムスタンプ更新（atomic write）');
     
