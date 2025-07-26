@@ -108,6 +108,7 @@ source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
 
 # Test the improved function
 log_backtest_startup_message "Starting backtest container with Issue #5372 improvements"

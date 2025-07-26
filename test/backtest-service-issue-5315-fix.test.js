@@ -108,6 +108,8 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 
 # Test rapid consecutive calls (should only output once due to process flag)
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
@@ -184,6 +186,8 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 
 # Test single call to verify flock usage
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
@@ -261,6 +265,9 @@ command() {
 # Source the enhanced functions
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 
 # Test fallback behavior
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
