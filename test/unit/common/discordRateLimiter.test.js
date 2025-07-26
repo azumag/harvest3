@@ -162,7 +162,19 @@ describe('DiscordRateLimiter', () => {
       const result = await rateLimiter.sendToDiscord(validUrl, validMessage);
       
       expect(result.success).toBe(true);
-      expect(mockedAxios.post).toHaveBeenCalledWith(validUrl, { content: validMessage });
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        validUrl, 
+        { content: validMessage },
+        expect.objectContaining({
+          timeout: 30000,
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'User-Agent': 'Discord-Webhook-Client/1.0'
+          }),
+          httpAgent: expect.any(Object),
+          httpsAgent: expect.any(Object)
+        })
+      );
     });
   });
 
@@ -564,7 +576,19 @@ describe('DiscordRateLimiter', () => {
       const result = await rateLimiter.sendToDiscord(validUrl, dirtyMessage);
 
       expect(result.success).toBe(true);
-      expect(mockedAxios.post).toHaveBeenCalledWith(validUrl, { content: expectedSanitized });
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        validUrl, 
+        { content: expectedSanitized },
+        expect.objectContaining({
+          timeout: 30000,
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'User-Agent': 'Discord-Webhook-Client/1.0'
+          }),
+          httpAgent: expect.any(Object),
+          httpsAgent: expect.any(Object)
+        })
+      );
     });
 
     test('returns error when message becomes empty after sanitization', async () => {
@@ -616,15 +640,16 @@ describe('DiscordRateLimiter', () => {
       const result = await rateLimiter.sendToDiscord(validUrl, message);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('service_unavailable');
+      expect(result.error).toBe('service_unavailable_overflow');
       expect(result.rateLimitUntil).toBeDefined();
       expect(result.details.status).toBe(503);
       expect(result.details.statusText).toBe('Service Unavailable');
-      expect(result.details.backoffSeconds).toBe(30);
-      expect(result.details.recommendedAction).toBe('Discord API側の過負荷解消を待機中');
+      expect(result.details.backoffSeconds).toBe(60);
+      expect(result.details.isOverflow).toBe(true);
+      expect(result.details.recommendedAction).toBe('Discord API接続バッファオーバーフロー - 長時間待機中');
       
-      // Verify that rateLimitUntil is set to 30 seconds + buffer from now
-      const expectedMinTime = Date.now() + (30 * 1000);
+      // Verify that rateLimitUntil is set to 60 seconds + buffer from now
+      const expectedMinTime = Date.now() + (60 * 1000);
       expect(result.rateLimitUntil).toBeGreaterThanOrEqual(expectedMinTime);
     });
 
