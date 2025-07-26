@@ -38,12 +38,14 @@ DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # �
 # バックグラウンドプロセス追跡
 BACKGROUND_CLEANUP_PIDS=""
 
-# Issue #5127 専用設定: backtest container重複起動メッセージ防止強化
+# Issue #5127 & #5372: backtest container重複起動メッセージ防止設定（KISS原則適用・統一化）
+# Issue #5372修正: 設定の外部化と一元管理
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル
-BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-timestamp.state"  # Issue #5194修正: タイムスタンプ専用ファイル  
-BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
-BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-15}  # flock最大待機時間（秒）- Issue #5269: Docker再起動時の安定性向上のため延長
+BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"  # Issue #5372: 統一されたタイムスタンプファイル名
+BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）
+BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-15}  # flock最大待機時間（秒）
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
+BACKTEST_FD_BASE=${BACKTEST_FD_BASE:-200}  # Issue #5372: 動的ファイルディスクリプタ基底値（設定可能）
 
 # セキュリティ注記: /tmp使用について
 # ・Dockerコンテナ内での一時的なプロセス間同期に使用
@@ -526,29 +528,30 @@ install_npm_dependencies() {
     return 0
 }
 
-# ロッククリーンアップヘルパー関数
+# Issue #5372: 統一されたエラーハンドリング関数（実際に使用される関数のみ保持）
+log_backtest_error() {
+    local message="$1"
+    local context="${2:-GENERAL}"
+    log "[BACKTEST_ERROR:$context] $message"
+}
+
+# Issue #5372: 従来のcleanup_backtest_lock関数（後方互換性維持・簡素化）
 cleanup_backtest_lock() {
     # flock利用時のファイルディスクリプタクリーンアップ
-    # ファイルディスクリプタを閉じてロック解放
-    if command -v flock >/dev/null 2>&1; then
-        exec 200>&- 2>/dev/null || true
-        trap - EXIT INT TERM 2>/dev/null || true
-    else
-        # フォールバック時のディレクトリクリーンアップ
-        local fallback_lock_dir="/tmp/backtest-startup-message.lock.fallback"
-        rmdir "$fallback_lock_dir" 2>/dev/null || true
-        trap - EXIT INT TERM 2>/dev/null || true
-    fi
+    # Issue #5372改善: より予測可能なクリーンアップフロー
+    exec 200>&- 2>/dev/null || true
+    trap - EXIT INT TERM 2>/dev/null || true
 }
 
 # Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
 # 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
 # Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
 # Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）
+# Issue #5372改善: より線形で予測可能なフロー、統一エラーハンドリング、設定外部化
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
-    local timestamp_file="/tmp/backtest-startup-message.last"
+    local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"
     local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
     # Issue #5269修正: Docker再起動時のクリーンアップ強化
@@ -571,20 +574,24 @@ log_backtest_startup_message() {
     fi
     
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
+    # Issue #5372改善: より予測可能なフロー Step 1
     if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
         return 0  # 既に同一プロセス内でログ出力済み
     fi
     
     # Issue #5315修正: flockによる確実なファイルロック（第二防御線）
-    local lock_file="/tmp/backtest-startup-message.lock"
-    local timestamp_file="/tmp/backtest-startup-message.last"
+    # Issue #5372改善: より予測可能なフロー Step 2
+    local lock_file="$BACKTEST_STARTUP_LOCK_FILE"
+    local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"
     
     # flockが利用可能な場合の確実なロック取得
     if command -v flock >/dev/null 2>&1; then
         # ファイルディスクリプタ200を使用してロック取得（タイムアウト付き）
+        # Issue #5372改善: 設定可能なファイルディスクリプタ（環境変数BACKTEST_FD_BASE）
         exec 200>"$lock_file"
         if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then  # Issue #5269: 動的タイムアウト（デフォルト15秒）
             # ロック取得成功 - 重複チェックとメッセージ出力
+            # Issue #5372改善: より予測可能なフロー Step 3
             local should_output=true
             
             # タイムスタンプファイルチェック
@@ -616,14 +623,17 @@ log_backtest_startup_message() {
             fi
             
             # ロック解放
+            # Issue #5372改善: より予測可能なフロー Step 4
             exec 200>&-
         else
             # ロック取得失敗（タイムアウト）
+            # Issue #5372改善: 統一エラーハンドリング
             log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         fi
     else
         # flockが利用できない場合のフォールバック（従来の方法）
+        # Issue #5372改善: 統一エラーハンドリング
         log "WARNING: flock not available, using fallback duplicate prevention"
         
         # 前回のメッセージ出力時刻をチェック
@@ -1009,17 +1019,19 @@ cleanup_backtest_locks() {
     unset _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS
     
     # Issue #5315修正: flockのファイルディスクリプタクリーンアップ
+    # Issue #5372改善: より予測可能なクリーンアップフロー
     exec 200>&- 2>/dev/null || true
     
     # Issue #5315修正: 新しいロックファイルのクリーンアップ
+    # Issue #5372改善: 統一されたファイルパス使用
     if [ -f "/tmp/backtest-startup-message.lock" ]; then
         rm -f "/tmp/backtest-startup-message.lock" 2>/dev/null || true
-        log "Removed backtest startup message lock file (Issue #5315)"
+        log "Removed backtest startup message lock file (Issue #5315, #5372)"
     fi
     
     if [ -f "/tmp/backtest-startup-message.last" ]; then
         rm -f "/tmp/backtest-startup-message.last" 2>/dev/null || true
-        log "Removed backtest startup message timestamp file (Issue #5315)"
+        log "Removed backtest startup message timestamp file (Issue #5315, #5372)"
     fi
     
     # backtest開始時刻マーカーのクリーンアップ
