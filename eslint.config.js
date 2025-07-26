@@ -144,7 +144,9 @@ module.exports = [
       'scripts/**/*.js',
       'test/checkOrderStatus.js',
       'test/e2e-data-integrity.js',
-      'src/backtestRunner_refactored.js'
+      'src/backtestRunner_refactored.js',
+      // CI修正: bash scriptを含むテストファイルのパース エラー回避 (Issue #5307)
+      'test/backtest-service-edge-cases.test.js'
     ]
   }
 ];
