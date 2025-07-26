@@ -733,7 +733,7 @@ log_startup_message() {
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
                 
                 # Issue #5295修正: 明示的な成功フラグをチェックしてreturn
-                if [ "$atomic_processing_success" = true ]; then
+                if [ "$atomic_processing_success" = "true" ]; then
                     return 0  # 処理完了、以降のRedis/ファイル処理を確実にスキップ
                 fi
             else
