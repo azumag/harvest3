@@ -137,7 +137,7 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
     fs.chmodSync(testScriptPath, '755');
 
     try {
-      const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 10000 });
+      const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: global.TEST_TIMEOUTS.BASIC });
       
       // 実際のメッセージ出力は1回のみ
       const startupMessages = stdout.split('\n').filter(line => 
@@ -157,13 +157,13 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
         fs.unlinkSync(testScriptPath);
       }
     }
-  }, 15000);
+  }, global.TEST_TIMEOUTS.LONG_RUNNING);
 
   test('entrypoint.sh構文検証（Issue #5230修正後）', async () => {
     // 修正後もentrypoint.shが正しく動作することを確認
-    await expect(execAsync(`bash -n ${entrypointPath}`, { timeout: 5000 }))
+    await expect(execAsync(`bash -n ${entrypointPath}`, { timeout: global.TEST_TIMEOUTS.QUICK }))
       .resolves.not.toThrow();
-  }, 10000);
+  }, global.TEST_TIMEOUTS.BASIC);
 
   test('Issue #5315強化による実装サイズの確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');

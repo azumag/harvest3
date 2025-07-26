@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Issue #5194: Backtest Service Exception Fix', () => {
-    const testTimeout = 30000; // 30 seconds timeout
+    const testTimeout = global.TEST_TIMEOUTS.SCRIPT_EXECUTION;
     
     // Helper function to clean up test files
     const cleanupTestFiles = () => {
@@ -309,5 +309,5 @@ rm -f /tmp/backtest-npm-error-detection.state 2>/dev/null || true
         
         // This test validates the fix is present in the code
         // The actual duplicate prevention is tested in the other tests
-    }, 5000);
+    }, global.TEST_TIMEOUTS.QUICK);
 });
