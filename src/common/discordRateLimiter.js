@@ -349,7 +349,28 @@ class DiscordRateLimiter {
 
     try {
       const axios = require('axios');
-      await axios.post(webhookUrl, { content: sanitizedMessage });
+      
+      // Overflow防止のためのAxios設定
+      const axiosConfig = {
+        timeout: 30000, // 30秒のタイムアウト
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Discord-Webhook-Client/1.0'
+        },
+        // HTTP/1.1を使用してコネクション数を制限
+        httpAgent: new (require('http').Agent)({
+          keepAlive: true,
+          maxSockets: 5, // 最大5個の同時接続に制限
+          timeout: 30000
+        }),
+        httpsAgent: new (require('https').Agent)({
+          keepAlive: true,
+          maxSockets: 5, // 最大5個の同時接続に制限
+          timeout: 30000
+        })
+      };
+      
+      await axios.post(webhookUrl, { content: sanitizedMessage }, axiosConfig);
       return { success: true };
     } catch (error) {
       if (error.response && error.response.status === 429) {
@@ -367,29 +388,59 @@ class DiscordRateLimiter {
 
       // HTTP 503エラー（Service Unavailable）の専用処理
       if (error.response && error.response.status === 503) {
+        const errorData = error.response.data;
+        const isOverflowError = typeof errorData === 'string' && 
+          errorData.includes('upstream connect error') && 
+          errorData.includes('reset reason: overflow');
+        
         console.warn('[DISCORD_RATE_LIMITER] HTTP 503 Service Unavailable error:');
         console.warn('  Status:', error.response.status);
         console.warn('  Status Text:', error.response.statusText);
-        console.warn('  Response Data:', JSON.stringify(error.response.data, null, 2));
+        console.warn('  Response Data:', JSON.stringify(errorData, null, 2));
         console.warn('  Request URL:', this.maskWebhookUrl(webhookUrl));
-        console.warn('  Discord API側の一時的な過負荷が原因の可能性があります');
         
-        // 503エラーの場合は長めのバックオフ時間を設定（Discord API過負荷対策）
-        const backoffSeconds = 30; // 30秒のバックオフ
-        const rateLimitUntil = Date.now() + (backoffSeconds * 1000) + (SETTINGS.MONITORING.DISCORD_RATE_LIMIT_BUFFER_MS || 5000);
-        
-        return {
-          success: false,
-          rateLimitUntil,
-          error: 'service_unavailable',
-          details: {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            data: error.response.data,
-            backoffSeconds,
-            recommendedAction: 'Discord API側の過負荷解消を待機中'
-          }
-        };
+        if (isOverflowError) {
+          console.warn('  → Overflow Error Detected: Discord API接続バッファオーバーフロー');
+          console.warn('  → 接続数制限または処理能力不足による一時的な問題です');
+          
+          // Overflowエラーの場合はより長いバックオフ（60秒）
+          const backoffSeconds = 60;
+          const rateLimitUntil = Date.now() + (backoffSeconds * 1000) + (SETTINGS.MONITORING.DISCORD_RATE_LIMIT_BUFFER_MS || 5000);
+          
+          return {
+            success: false,
+            rateLimitUntil,
+            error: 'service_unavailable_overflow',
+            details: {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: errorData,
+              backoffSeconds,
+              isOverflow: true,
+              recommendedAction: 'Discord API接続バッファオーバーフロー - 長時間待機中'
+            }
+          };
+        } else {
+          console.warn('  Discord API側の一時的な過負荷が原因の可能性があります');
+          
+          // 通常の503エラーの場合は30秒のバックオフ
+          const backoffSeconds = 30;
+          const rateLimitUntil = Date.now() + (backoffSeconds * 1000) + (SETTINGS.MONITORING.DISCORD_RATE_LIMIT_BUFFER_MS || 5000);
+          
+          return {
+            success: false,
+            rateLimitUntil,
+            error: 'service_unavailable',
+            details: {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: errorData,
+              backoffSeconds,
+              isOverflow: false,
+              recommendedAction: 'Discord API側の過負荷解消を待機中'
+            }
+          };
+        }
       }
 
       // HTTP 400エラーの詳細処理
