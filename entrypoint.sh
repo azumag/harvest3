@@ -42,7 +42,7 @@ BACKGROUND_CLEANUP_PIDS=""
 BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル
 BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-timestamp.state"  # Issue #5194修正: タイムスタンプ専用ファイル  
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）- Issue #5175: 60秒に延長
-BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-5}  # flock最大待機時間（秒）
+BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-15}  # flock最大待機時間（秒）- Issue #5269: Docker再起動時の安定性向上のため延長
 BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
 
 # セキュリティ注記: /tmp使用について
@@ -414,6 +414,22 @@ log_backtest_startup_message() {
     local timestamp_file="/tmp/backtest-startup-message.last"
     local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
+    # Issue #5269修正: Docker再起動時のクリーンアップ強化
+    # システム稼働時間から新規コンテナかを判定
+    local system_uptime_seconds=0
+    if [ -f /proc/uptime ]; then
+        system_uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
+    fi
+    
+    # 60秒以内の稼働時間の場合は新規コンテナと判定してクリーンアップ
+    if [ "$system_uptime_seconds" -lt 60 ]; then
+        log "New container detected (uptime: ${system_uptime_seconds}s), cleaning up old timestamp files"
+        rm -f "$timestamp_file" 2>/dev/null || true
+        rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
+        # 古いロックファイルもクリーンアップ
+        find /tmp -name "backtest-startup-message*" -mtime +1 -delete 2>/dev/null || true
+    fi
+    
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
     if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
         return 0  # 既に同一プロセス内でログ出力済み
@@ -427,7 +443,7 @@ log_backtest_startup_message() {
     if command -v flock >/dev/null 2>&1; then
         # ファイルディスクリプタ200を使用してロック取得（タイムアウト付き）
         exec 200>"$lock_file"
-        if flock -w 5 200; then  # 5秒タイムアウト
+        if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then  # Issue #5269: 動的タイムアウト（デフォルト15秒）
             # ロック取得成功 - 重複チェックとメッセージ出力
             local should_output=true
             
