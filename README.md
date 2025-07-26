@@ -65,16 +65,25 @@ open http://localhost:3000
 #### 検出ロジック
 ```bash
 # 実装場所: entrypoint.sh の check_container_recently_restarted()
-# システム稼働時間が60秒以内の場合、「最近再起動した」と判定
-if [ "$uptime_seconds" -lt 60 ]; then
-    return 0  # 最近再起動した
-fi
+# /proc/uptimeファイルの存在確認とシステム稼働時間チェック
+check_container_recently_restarted() {
+    # エラーハンドリング: /proc/uptimeファイルの存在確認
+    if [ -f /proc/uptime ]; then
+        # uptime値を秒単位で取得（小数点以下切り捨て）
+        local uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
+        # 60秒以内の場合は「最近再起動した」と判定
+        if [ "$uptime_seconds" -lt 60 ]; then
+            return 0  # 最近再起動した
+        fi
+    fi
+    return 1  # 安定稼働中
+}
 ```
 
 #### 利用用途
-- **npm installリトライ戦略の調整**: 再起動直後は適切なリトライ回数に調整
-- **重複メッセージ防止**: 起動メッセージの重複出力を防止
-- **backtestクリーンアップ**: 古いタイムスタンプファイルとエラー状態ファイルの自動削除
+- **npm installリトライ戦略の調整**: 再起動直後は`restart_count=2`とみなし、最大リトライ回数を調整（entrypoint.sh:185-188）
+- **重複メッセージ防止**: "Container recently restarted" ログメッセージによる状態通知とアトミックファイルロック併用の重複防止機構
+- **最大再起動制限**: 3回を超える再起動時は最小限のnpm installに制限し、システム安定性を確保
 
 ### 設定パラメーター
 現在の実装では固定値（60秒）を使用していますが、将来的な拡張に備えた設定項目：
@@ -105,6 +114,25 @@ CONTAINER_RESTART_THRESHOLD=60
 3. **環境変数の確認**（Issue #5321実装後）
    ```bash
    echo $CONTAINER_RESTART_THRESHOLD
+   ```
+
+4. **システム稼働時間の直接確認**
+   ```bash
+   # システム全体の稼働時間確認
+   uptime
+   
+   # プロセス稼働時間の詳細確認
+   ps -o etime,pid,cmd
+   ```
+
+5. **コンテナ再起動検出のテスト**
+   ```bash
+   # 関数の動作テスト（entrypoint.sh内で）
+   if check_container_recently_restarted; then
+       echo "Recently restarted (< 60 seconds)"
+   else
+       echo "Stable operation (>= 60 seconds)"
+   fi
    ```
 
 #### 実装の利点
