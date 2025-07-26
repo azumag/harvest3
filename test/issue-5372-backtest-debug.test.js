@@ -93,6 +93,12 @@ export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
+# Issue #5372: Set configuration variables
+export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_FD_BASE=200
+export CONTAINER_RESTART_DETECTION_THRESHOLD=300
+
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
@@ -101,6 +107,7 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 
 # Test the improved function
 log_backtest_startup_message "Starting backtest container with Issue #5372 improvements"
@@ -174,9 +181,9 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
         expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"');
         expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"');
         
-        // Check that the function uses the current hardcoded approach for compatibility
-        expect(entrypointContent).toContain('local timestamp_file="/tmp/backtest-startup-message.last"');
-        expect(entrypointContent).toContain('local lock_file="/tmp/backtest-startup-message.lock"');
+        // Check that the function uses the configuration variables for externalization
+        expect(entrypointContent).toContain('local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"');
+        expect(entrypointContent).toContain('local lock_file="$BACKTEST_STARTUP_LOCK_FILE"');
     });
 
 });

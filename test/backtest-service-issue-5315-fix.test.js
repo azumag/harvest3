@@ -94,6 +94,12 @@ export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
+# Issue #5372: Set configuration variables
+export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_FD_BASE=200
+export CONTAINER_RESTART_DETECTION_THRESHOLD=300
+
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
@@ -101,6 +107,7 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 # Source the enhanced log_backtest_startup_message function
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 
 # Test rapid consecutive calls (should only output once due to process flag)
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
@@ -163,6 +170,12 @@ export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
+# Issue #5372: Set configuration variables
+export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_FD_BASE=200
+export CONTAINER_RESTART_DETECTION_THRESHOLD=300
+
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
@@ -170,6 +183,7 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 # Source the enhanced functions
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
+source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 
 # Test single call to verify flock usage
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
