@@ -332,7 +332,7 @@ fi
             
             expect(hash1).toBe(hash2);
             expect(lines[2]).toBe('Duplicate detection: SUCCESS');
-            expect(hash1).toStartWith('direct:');
+            expect(hash1.startsWith('direct:')).toBe(true);
         });
     });
 });

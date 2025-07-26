@@ -516,7 +516,7 @@ test_combined_failure_scenarios() {
     fi
     
     # 一時ファイルのクリーンアップ
-    for temp_file in "${temp_files[@]}"; do
+    for temp_file in "\${temp_files[@]}"; do
         rm -f "$temp_file" 2>/dev/null || true
     done
     
