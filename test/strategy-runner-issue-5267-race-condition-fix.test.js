@@ -17,10 +17,11 @@ const execAsync = promisify(exec);
 
 describe('Issue #5267: strategy-runner重複起動メッセージレースコンディション修正', () => {
     const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
-    const testTmpDir = getTempDir('tests', 'issue-5267');
+    let testTmpDir;
 
     beforeEach(async () => {
-        // テスト用一時ディレクトリの準備（getTempDirで既に作成済み）
+        // テスト用一時ディレクトリの準備（各テストごとに新規作成）
+        testTmpDir = getTempDir('tests', 'issue-5267');
         
         // Issue #5267用のロックファイルをクリーンアップ
         const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
@@ -31,7 +32,9 @@ describe('Issue #5267: strategy-runner重複起動メッセージレースコン
 
     afterEach(async () => {
         // テスト後クリーンアップ
-        cleanup(testTmpDir);
+        if (testTmpDir) {
+            cleanup(testTmpDir);
+        }
         const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
         const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
         cleanup(lockFile);

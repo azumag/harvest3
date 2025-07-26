@@ -17,18 +17,20 @@ const { getTempDir, cleanup } = require('./helpers/temp-path-helper');
 const execAsync = promisify(exec);
 
 // テスト用の一時ディレクトリ
-const TEST_TMP_DIR = getTempDir('tests', 'issue-5195');
+let TEST_TMP_DIR;
 const ENTRYPOINT_PATH = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
 
 describe('Issue #5195: Strategy-runnerレースコンディション修正', () => {
     beforeEach(() => {
-        // テスト環境の初期化（getTempDirで既に作成済み）
-        // 追加の初期化が必要な場合はここに記述
+        // テスト環境の初期化（各テストごとに新規作成）
+        TEST_TMP_DIR = getTempDir('tests', 'issue-5195');
     });
 
     afterEach(() => {
         // クリーンアップ
-        cleanup(TEST_TMP_DIR);
+        if (TEST_TMP_DIR) {
+            cleanup(TEST_TMP_DIR);
+        }
     });
 
     describe('コンテナ再起動時レースコンディション防止', () => {
