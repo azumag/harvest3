@@ -103,6 +103,15 @@ if (process.env.CI) {
   };
 }
 
+// 共通のテストタイムアウト設定 - DRY原則に基づく集約化
+global.TEST_TIMEOUTS = {
+  DEFAULT: process.env.CI ? 30000 : 60000,
+  SCRIPT_EXECUTION: 30000,
+  LONG_RUNNING: process.env.CI ? 15000 : 30000,
+  BASIC: 10000,
+  QUICK: 5000
+};
+
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = 'redis://localhost:6379';
