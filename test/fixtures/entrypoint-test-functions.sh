@@ -16,8 +16,8 @@ LOCK_RETRY_DELAY=${LOCK_RETRY_DELAY:-0.01}  # テスト用により高速化
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}
 DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-file_only}  # テスト用はfile_only
 
-# 重複起動メッセージ防止（ファイルベースの超簡素版）
-STARTUP_MESSAGE_LOCK_DIR=${STARTUP_MESSAGE_LOCK_DIR:-"/tmp/startup_messages"}
+# 重複起動メッセージ防止（ファイルベースの超簡素版）- .tmpディレクトリ使用
+STARTUP_MESSAGE_LOCK_DIR=${STARTUP_MESSAGE_LOCK_DIR:-"${PROJECT_ROOT:-.}/.tmp/locks/startup_messages"}
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # MD5ハッシュ値生成関数（シンプル版）
@@ -180,18 +180,19 @@ acquire_message_lock() {
     return 1
 }
 
-# backtest専用関数（超軽量版）
+# backtest専用関数（超軽量版）- .tmpディレクトリ使用
 log_backtest_startup_message() {
     local message="$1"
     
-    local backtest_lock_file="/tmp/backtest-startup-message.lock"
+    local backtest_lock_file="${PROJECT_ROOT:-.}/.tmp/locks/backtest-startup-message.lock"
     
     # 簡単な重複チェック
     if [ -f "$backtest_lock_file" ]; then
         return 0
     fi
     
-    # ロックファイル作成
+    # ロックファイル作成（ディレクトリ確保）
+    mkdir -p "$(dirname "$backtest_lock_file")" 2>/dev/null || true
     echo "$$" > "$backtest_lock_file" 2>/dev/null || true
     
     # メッセージ出力

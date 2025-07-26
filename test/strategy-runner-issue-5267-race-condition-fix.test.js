@@ -11,30 +11,41 @@ const fs = require('fs');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
+const { getTempDir, getTempPath, cleanup } = require('./helpers/temp-path-helper');
 
 const execAsync = promisify(exec);
 
 describe('Issue #5267: strategy-runner重複起動メッセージレースコンディション修正', () => {
     const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
-    const testTmpDir = '.tmp/test-issue-5267';
+    let testTmpDir;
 
     beforeEach(async () => {
-        // テスト用一時ディレクトリの準備
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync(`mkdir -p ${testTmpDir}`);
+        // テスト用一時ディレクトリの準備（各テストごとに新規作成）
+        testTmpDir = getTempDir('tests', 'issue-5267');
         
         // Issue #5267用のロックファイルをクリーンアップ
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
     });
 
     afterEach(async () => {
         // テスト後クリーンアップ
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        if (testTmpDir) {
+            cleanup(testTmpDir);
+        }
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
     });
 
     test('Issue #5267: アトミックファイルロックによる重複防止が正しく動作することを確認', async () => {
         // Issue #5267修正版のロジックをテスト
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        
         const fixedScript = `#!/bin/bash
 set -e
 
@@ -49,8 +60,8 @@ log_startup_message_fixed() {
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # Issue #5267修正: アトミックファイルロックによる確実な重複防止
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_lock_file="${lockFile}"
+            local startup_msg_done_file="${doneFile}"
             
             # 既に完了マーカーが存在する場合は重複防止
             if [ -f "$startup_msg_done_file" ]; then
@@ -133,6 +144,9 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
 
     test('Issue #5267: 並行プロセスでのレースコンディション耐性テスト', async () => {
         // 複数のプロセスを並行実行してレースコンディション耐性をテスト
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        
         const parallelScript = `#!/bin/bash
 set -e
 
@@ -146,8 +160,8 @@ log_startup_message_concurrent() {
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_lock_file="${lockFile}"
+            local startup_msg_done_file="${doneFile}"
             
             if [ -f "$startup_msg_done_file" ]; then
                 return 0
@@ -230,16 +244,19 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
             if (messages.length !== 1) {
                 console.log('RACE CONDITION DETECTED - Full debug info:');
                 console.log('All output combined:', allOutput);
-                console.log('Lock file exists:', fs.existsSync('/tmp/main-startup-message.lock'));
-                console.log('Done file exists:', fs.existsSync('/tmp/main-startup-message.done'));
-                if (fs.existsSync('/tmp/main-startup-message.done')) {
-                    console.log('Done file content:', fs.readFileSync('/tmp/main-startup-message.done', 'utf8'));
+                const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+                const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+                console.log('Lock file exists:', fs.existsSync(lockFile));
+                console.log('Done file exists:', fs.existsSync(doneFile));
+                if (fs.existsSync(doneFile)) {
+                    console.log('Done file content:', fs.readFileSync(doneFile, 'utf8'));
                 }
             }
             expect(messages.length).toBe(1);
             
             // 完了マーカーファイルが作成されていることを確認
-            expect(fs.existsSync('/tmp/main-startup-message.done')).toBe(true);
+            const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+            expect(fs.existsSync(doneFile)).toBe(true);
             
         } finally {
             if (fs.existsSync(testScriptPath)) {
@@ -268,23 +285,26 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
 
     test('Issue #5267: クリーンアップ機能が正しく動作することを確認', async () => {
         // まずロックファイルを作成
-        await execAsync('mkdir -p /tmp/main-startup-message.lock');
-        await execAsync('echo "test" > /tmp/main-startup-message.done');
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        
+        await execAsync(`mkdir -p "${lockFile}"`);
+        await execAsync(`echo "test" > "${doneFile}"`);
         
         // ファイルが存在することを確認
-        expect(fs.existsSync('/tmp/main-startup-message.lock')).toBe(true);
-        expect(fs.existsSync('/tmp/main-startup-message.done')).toBe(true);
+        expect(fs.existsSync(lockFile)).toBe(true);
+        expect(fs.existsSync(doneFile)).toBe(true);
         
         // クリーンアップ機能をテスト
         const cleanupScript = `#!/bin/bash
 cleanup_startup_message_locks() {
-    if [ -f "/tmp/main-startup-message.done" ]; then
-        rm -f "/tmp/main-startup-message.done" 2>/dev/null || true
+    if [ -f "${doneFile}" ]; then
+        rm -f "${doneFile}" 2>/dev/null || true
         echo "Cleaned up main startup message done marker"
     fi
     
-    if [ -d "/tmp/main-startup-message.lock" ]; then
-        rm -rf "/tmp/main-startup-message.lock" 2>/dev/null || true  
+    if [ -d "${lockFile}" ]; then
+        rm -rf "${lockFile}" 2>/dev/null || true  
         echo "Cleaned up main startup message lock directory"
     fi
 }
@@ -304,8 +324,8 @@ cleanup_startup_message_locks
             expect(stdout).toContain('Cleaned up main startup message lock directory');
             
             // ファイルが削除されていることを確認
-            expect(fs.existsSync('/tmp/main-startup-message.lock')).toBe(false);
-            expect(fs.existsSync('/tmp/main-startup-message.done')).toBe(false);
+            expect(fs.existsSync(lockFile)).toBe(false);
+            expect(fs.existsSync(doneFile)).toBe(false);
             
         } finally {
             if (fs.existsSync(cleanupScriptPath)) {

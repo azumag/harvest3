@@ -11,26 +11,24 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { getTempDir, cleanup } = require('./helpers/temp-path-helper');
 
 const execAsync = promisify(exec);
 
 // テスト用の一時ディレクトリ
-const TEST_TMP_DIR = '/tmp/test-issue-5103';
+let TEST_TMP_DIR;
 const ENTRYPOINT_PATH = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
 
 describe('Issue #5103: Strategy-runner重複ログメッセージ修正', () => {
     beforeEach(() => {
-        // テスト環境の初期化
-        if (fs.existsSync(TEST_TMP_DIR)) {
-            fs.rmSync(TEST_TMP_DIR, { recursive: true, force: true });
-        }
-        fs.mkdirSync(TEST_TMP_DIR, { recursive: true });
+        // テスト環境の初期化（各テストごとに新規作成）
+        TEST_TMP_DIR = getTempDir('tests', 'issue-5103');
     });
 
     afterEach(() => {
         // クリーンアップ
-        if (fs.existsSync(TEST_TMP_DIR)) {
-            fs.rmSync(TEST_TMP_DIR, { recursive: true, force: true });
+        if (TEST_TMP_DIR) {
+            cleanup(TEST_TMP_DIR);
         }
     });
 

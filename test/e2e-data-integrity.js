@@ -361,7 +361,8 @@ class E2EDataIntegrityTester {
 
     // レポートをファイルに保存
     const fs = require('fs');
-    const reportPath = '/tmp/e2e-test-report.json';
+    const { getTempPath } = require('./helpers/temp-path-helper');
+    const reportPath = getTempPath('tests', 'e2e-test-report.json', {unique: false});
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
     console.log(`📝 詳細レポートを保存しました: ${reportPath}`);

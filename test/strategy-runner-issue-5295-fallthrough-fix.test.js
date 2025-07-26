@@ -11,32 +11,43 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { getTempDir, getTempPath, cleanup } = require('./helpers/temp-path-helper');
 
 const execAsync = promisify(exec);
 
 describe('Issue #5295: strategy-runner重複ログfallthrough修正', () => {
     const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
-    const testTmpDir = '.tmp/test-issue-5295';
+    let testTmpDir;
 
     beforeEach(async () => {
-        // テスト用一時ディレクトリの準備
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync(`mkdir -p ${testTmpDir}`);
+        // テスト用一時ディレクトリの準備（各テストごとに新規作成）
+        testTmpDir = getTempDir('tests', 'issue-5295');
         
         // Issue #5295用のロックファイルをクリーンアップ
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
     afterEach(async () => {
         // テスト後クリーンアップ
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        if (testTmpDir) {
+            cleanup(testTmpDir);
+        }
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
     test('Issue #5295: fallthrough防止機構が正しく動作することを確認', async () => {
         // Issue #5295修正版のロジックをテスト
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        
         const fixedScript = `#!/bin/bash
 set -e
 
@@ -51,8 +62,8 @@ log_startup_message_fixed() {
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_lock_file="${lockFile}"
+            local startup_msg_done_file="${doneFile}"
             local atomic_processing_success=false
             
             # 既に完了マーカーが存在する場合は重複防止
@@ -165,6 +176,9 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
 
     test('Issue #5295: 同一プロセス内での複数回呼び出し重複防止テスト', async () => {
         // 実際のentrypoint.sh関数を使用したテスト
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        
         const realWorldScript = `#!/bin/bash
 set -e
 
@@ -180,7 +194,7 @@ log_startup_message() {
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_done_file="${doneFile}"
             
             if [ -f "$startup_msg_done_file" ]; then
                 return 0
@@ -190,7 +204,7 @@ log_startup_message() {
                 return 0
             fi
             
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_lock_file="${lockFile}"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 if [ -f "$startup_msg_done_file" ]; then
                     rm -rf "$startup_msg_lock_file" 2>/dev/null || true

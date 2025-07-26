@@ -12,6 +12,9 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+// PROJECT_ROOTをtemp-path-helper.jsからimport
+const { PROJECT_ROOT } = require('./temp-path-helper');
+
 /**
  * 起動メッセージテスト用のベーススクリプトテンプレート
  * @param {Object} options - テスト設定オプション
@@ -54,9 +57,9 @@ log_startup_message() {
             ` : ''}
             
             ${enableFilelock ? `
-            # Issue #5295修正: アトミックファイルロックによる確実な重複防止
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            # Issue #5295修正: アトミックファイルロックによる確実な重複防止 (.tmpディレクトリ使用)
+            local startup_msg_lock_file="\${TEMP_LOCKS_DIR:-${PROJECT_ROOT}/.tmp/locks}/main-startup-message.lock"
+            local startup_msg_done_file="\${TEMP_LOCKS_DIR:-${PROJECT_ROOT}/.tmp/locks}/main-startup-message.done"
             local atomic_processing_success=false
             
             # 既に完了マーカーが存在する場合は重複防止
@@ -221,8 +224,12 @@ const testEnvironment = {
     await execAsync(`rm -rf "${testTmpDir}"`);
     await execAsync(`mkdir -p "${testTmpDir}"`);
     
-    // ロックファイルとフラグのクリーンアップ
-    await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+    // ロックファイルとフラグのクリーンアップ (.tmpディレクトリ使用)
+    const { getTempPath, cleanup } = require('./temp-path-helper');
+    const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+    const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+    cleanup(lockFile);
+    cleanup(doneFile);
     await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
   },
@@ -232,9 +239,13 @@ const testEnvironment = {
    * @param {string} testTmpDir - テスト用一時ディレクトリ
    */
   async cleanup(testTmpDir) {
-    // テスト後クリーンアップ
-    await execAsync(`rm -rf "${testTmpDir}"`);
-    await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+    // テスト後クリーンアップ (.tmpディレクトリ使用)
+    const { getTempPath, cleanup } = require('./temp-path-helper');
+    cleanup(testTmpDir);
+    const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+    const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+    cleanup(lockFile);
+    cleanup(doneFile);
     await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
   }

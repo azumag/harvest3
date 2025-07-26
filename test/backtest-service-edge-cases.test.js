@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const { promisify } = require('util');
+const { mkdtempSync, cleanup } = require('./helpers/temp-path-helper');
 
 describe('Issue #5307 - Edge case tests for backtest service', () => {
     let tempDir;
@@ -17,7 +18,7 @@ describe('Issue #5307 - Edge case tests for backtest service', () => {
 
     beforeEach(() => {
         // 一時ディレクトリの作成
-        tempDir = fs.mkdtempSync('/tmp/backtest-edge-test-');
+        tempDir = mkdtempSync('backtest', 'edge-test-');
         
         // 環境変数の保存
         originalEnv = { ...process.env };
@@ -30,13 +31,7 @@ describe('Issue #5307 - Edge case tests for backtest service', () => {
 
     afterEach(() => {
         // 一時ファイルのクリーンアップ
-        if (fs.existsSync(tempDir)) {
-            try {
-                fs.rmSync(tempDir, { recursive: true, force: true });
-            } catch (error) {
-                // クリーンアップエラーは無視
-            }
-        }
+        cleanup(tempDir);
         
         // 環境変数の復元
         Object.keys(process.env).forEach(key => {
