@@ -927,6 +927,9 @@ log_startup_message() {
             ;;
     esac
     
+    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
+    return 0
+    
     local message_hash=$(get_message_hash "$message")
     
     # 戦略に応じた重複防止処理
