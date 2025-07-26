@@ -687,73 +687,66 @@ log_startup_message() {
     # Issue #5267修正: アトミックファイルロックによる確実な重複防止
     # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
     # 注意: バックテストモード以外でのみ適用
+    # Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            # 同一プロセス内での高速連続呼び出しを防ぐための最初の防御
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-                return 0  # 既に同一プロセス内でログ出力済み、即座に重複防止
+                return 0
             fi
             
-            # Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            local startup_msg_done_file="/tmp/main-startup-message.done"
-            local atomic_processing_success=false
-            
-            # 既に完了マーカーが存在する場合は重複防止
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0  # 既にログ出力済み、重複防止
-            fi
-            
-            # 環境変数フラグによる高速チェック（第一防御線）
+            # Issue #5264修正: 環境変数フラグによる第1防御線
             if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                return 0  # 既にログ出力済み、重複防止
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                return 0
             fi
             
-            # アトミックディレクトリロック取得（第二防御線）
+            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
+            local startup_msg_done_file="/tmp/main-startup-message.done"
+            if [ -f "$startup_msg_done_file" ]; then
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                export MAIN_STARTUP_MESSAGE_LOGGED=1
+                return 0
+            fi
+            
+            # Issue #5264修正: アトミックロック取得（第3防御線）
+            local startup_msg_lock_file="/tmp/main-startup-message.lock"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得成功 - 二重チェック後にメッセージ出力
+                # ロック取得後の最終チェック
                 if [ -f "$startup_msg_done_file" ]; then
-                    # 他のプロセスが先にメッセージを出力していた
                     rm -rf "$startup_msg_lock_file" 2>/dev/null || true
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
                     return 0
                 fi
                 
-                # フラグ設定とメッセージ出力
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
+                # 確実にフラグを設定してからメッセージ出力
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
-                log "$message"
-                atomic_processing_success=true
                 
-                # 完了マーカー作成（他のプロセス用）
+                # メッセージ出力
+                log "$message"
+                
+                # 完了マーカー作成
                 echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
                 chmod 600 "$startup_msg_done_file" 2>/dev/null || true
                 
                 # ロック解放
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                
-                # Issue #5295修正: 明示的な成功フラグをチェックしてreturn
-                if [ "$atomic_processing_success" = true ]; then
-                    return 0  # 処理完了、以降のRedis/ファイル処理を確実にスキップ
-                fi
+                return 0
             else
-                # ロック取得失敗 - 他のプロセスが処理中
-                # 短時間待機してから完了マーカーをチェック
+                # ロック取得失敗時の処理
                 local wait_attempts=0
-                while [ $wait_attempts -lt 10 ] && [ ! -f "$startup_msg_done_file" ]; do
+                while [ $wait_attempts -lt 5 ] && [ ! -f "$startup_msg_done_file" ]; do
                     sleep 0.1
                     wait_attempts=$((wait_attempts + 1))
                 done
                 
-                # 環境変数フラグも設定（一貫性のため）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # Issue #5302修正: プロセス内フラグ設定
+                # フラグ設定
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0  # 他のプロセスがログ出力したため、重複防止
+                return 0
             fi
-            
-            # Issue #5295修正: fallthroughが発生した場合の緊急停止
-            # このコードに到達した場合は予期しない状況なので、安全のためreturn
-            return 0
             ;;
     esac
     
