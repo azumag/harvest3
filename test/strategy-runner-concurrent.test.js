@@ -6,6 +6,10 @@ describe('Issue #5228: 並行実行テストカバレッジ', () => {
   const tmpDir = path.join(__dirname, '..', '.tmp');
   const testFixturesPath = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
   
+  // プロセス固有の一意な識別子で並行実行時の競合を回避
+  const testId = `${process.pid}-${Date.now()}`;
+  const backtestLockFile = path.join(tmpDir, `backtest-startup-message-${testId}.lock`);
+  
   beforeAll(() => {
     if (!fs.existsSync(tmpDir)) {
       fs.mkdirSync(tmpDir, { recursive: true });
@@ -192,6 +196,7 @@ echo "Sequential test completed"
         const testScript = `#!/bin/bash
 export STARTUP_MESSAGE_LOCK_DIR="${backtestDir}"
 export BACKTEST_MODE=true
+backtestLockFile="${backtestLockFile}"
 source "${testFixturesPath}"
 
 echo "=== Backtest mode duplicate prevention test ==="
@@ -204,9 +209,9 @@ echo "Second backtest message (should be blocked):"
 log_startup_message "backtest-duplicate-test"
 
 # バックテストロックファイルの状態確認
-if [ -f "/tmp/backtest-startup-message.lock" ]; then
+if [ -f "${backtestLockFile}" ]; then
   echo "Backtest lock file exists"
-  cat "/tmp/backtest-startup-message.lock"
+  cat "${backtestLockFile}"
 else
   echo "Backtest lock file not found"
 fi
@@ -237,7 +242,7 @@ echo "Backtest duplicate prevention test completed"
           fs.rmSync(backtestDir, { recursive: true, force: true });
         }
         // バックテストロックファイルのクリーンアップ
-        execSync('rm -f /tmp/backtest-startup-message.lock', { encoding: 'utf8' });
+        execSync(`rm -f "${backtestLockFile}"`, { encoding: 'utf8' });
       }
     });
   });
@@ -335,6 +340,6 @@ echo "Mass lock cleanup test completed"
     }
     
     // グローバルなクリーンアップ
-    execSync('rm -f /tmp/backtest-startup-message.lock', { encoding: 'utf8' });
+    execSync(`rm -f "${backtestLockFile}"`, { encoding: 'utf8' });
   });
 });
