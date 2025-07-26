@@ -14,38 +14,64 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-
-const execAsync = promisify(exec);
+const os = require('os');
 
 describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
   const testTmpDir = '.tmp/test-issue-5329';
+  const systemTmpDir = os.tmpdir();
+  const mainStartupLockPath = path.join(systemTmpDir, 'main-startup-message.lock');
+  const mainStartupDonePath = path.join(systemTmpDir, 'main-startup-message.done');
+  const startupMessagesPath = path.join(systemTmpDir, 'startup_messages');
+  
+  let entrypointContent;
+
+  beforeAll(() => {
+    // entrypoint.shの内容を一度だけ読み込み（パフォーマンス最適化）
+    entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+  });
 
   beforeEach(async () => {
     // テスト用一時ディレクトリの準備
-    await execAsync(`rm -rf ${testTmpDir}`);
-    await execAsync(`mkdir -p ${testTmpDir}`);
+    try {
+      await fs.promises.rm(testTmpDir, { recursive: true, force: true });
+    } catch (error) {
+      // ディレクトリが存在しない場合は無視
+    }
+    await fs.promises.mkdir(testTmpDir, { recursive: true });
     
     // Issue #5329用のロックファイルとフラグをクリーンアップ
-    await execAsync('rm -rf /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
-    await execAsync('rm -rf /tmp/startup_messages 2>/dev/null || true');
+    const filesToClean = [mainStartupLockPath, mainStartupDonePath, startupMessagesPath];
+    for (const filePath of filesToClean) {
+      try {
+        await fs.promises.rm(filePath, { recursive: true, force: true });
+      } catch (error) {
+        // ファイルが存在しない場合は無視
+      }
+    }
   });
 
   afterEach(async () => {
     // テスト後クリーンアップ
-    await execAsync(`rm -rf ${testTmpDir}`);
-    await execAsync('rm -rf /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
-    await execAsync('rm -rf /tmp/startup_messages 2>/dev/null || true');
+    try {
+      await fs.promises.rm(testTmpDir, { recursive: true, force: true });
+    } catch (error) {
+      // ディレクトリが存在しない場合は無視
+    }
+    
+    const filesToClean = [mainStartupLockPath, mainStartupDonePath, startupMessagesPath];
+    for (const filePath of filesToClean) {
+      try {
+        await fs.promises.rm(filePath, { recursive: true, force: true });
+      } catch (error) {
+        // ファイルが存在しない場合は無視
+      }
+    }
   });
 
   test('Issue #5329: 報告された具体的な重複メッセージが防止されることを確認', async () => {
     // Issue #5329で報告されたログと同じ形式のメッセージでテスト
     // 複雑なshellスクリプトテストではなく、実用的なテストとして直接確認
-    
-    // entrypoint.shの存在と重複防止機能の確認
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5329で報告された具体的なメッセージパターンへの対応が含まれていることを確認
     expect(entrypointContent).toMatch(/Starting strategy-runner container with enhanced error handling/);
@@ -62,8 +88,6 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // 複数プロセスでの並行実行に対する保護機能の確認
     // 実際の並行実行テストは複雑すぎるため、実装の存在確認に集中
     
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
-    
     // アトミックロック機構の存在確認
     expect(entrypointContent).toMatch(/mkdir.*startup_msg_lock_file/);
     expect(entrypointContent).toMatch(/アトミックディレクトリロック取得/);
@@ -79,8 +103,7 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
   });
 
   test('Issue #5329: entrypoint.shに必要な重複防止機能が実装されていることを確認', () => {
-    // entrypoint.shファイルの内容を確認
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
+    // entrypoint.shファイルの内容を確認（beforeAllで読み込み済み）
 
     // Issue #5302の修正が含まれていることを確認
     expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
@@ -100,7 +123,6 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
   });
 
   test('Issue #5329: 重複防止機能の動作順序が正しいことを確認', () => {
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     const lines = entrypointContent.split('\n');
     let processInternalCheckLine = -1;
@@ -143,8 +165,6 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // Issue #5329は2025-07-24に報告されたが、
     // 実際の修正は以前のIssue（#5302, #5267, #5295など）で既に実装済み
     // このテストで重複防止が機能することが確認できれば、Issue #5329は解決済みとみなせる
-    
-    const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 複数の修正が統合されていることを確認
     const fixes = [
