@@ -69,7 +69,7 @@ test_disk_full_handling() {
     # 大きなファイルの作成を試行（容量制限に達するまで）
     for i in {1..100}; do
         if ! dd if=/dev/zero of="$test_file.$i" bs=1024 count=100 2>/dev/null; then
-            echo "Disk full detected at iteration $i" >> "$RESULTS_FILE"
+            echo "Disk full detected at iteration \$i" >> "$RESULTS_FILE"
             error_logged=true
             break
         fi
@@ -203,7 +203,7 @@ monitor_memory_usage() {
     
     # 初期メモリ使用量の記録
     local initial_memory=$(free -m | grep '^Mem:' | awk '{print $3}' || echo "unknown")
-    echo "Initial memory usage: ${initial_memory}MB" >> "$RESULTS_FILE"
+    echo "Initial memory usage: \${initial_memory}MB" >> "$RESULTS_FILE"
     
     # メモリ制約下での動作テスト
     local pid_list=""
@@ -225,7 +225,7 @@ monitor_memory_usage() {
     # 監視期間中のメモリ使用量をチェック
     for i in {1..5}; do
         local current_memory=$(free -m | grep '^Mem:' | awk '{print $3}' || echo "unknown")
-        echo "Memory usage at ${i}s: ${current_memory}MB" >> "$RESULTS_FILE"
+        echo "Memory usage at \${i}s: \${current_memory}MB" >> "$RESULTS_FILE"
         sleep 1
     done
     
@@ -236,7 +236,7 @@ monitor_memory_usage() {
     
     # 最終メモリ使用量の記録
     local final_memory=$(free -m | grep '^Mem:' | awk '{print $3}' || echo "unknown")
-    echo "Final memory usage: ${final_memory}MB" >> "$RESULTS_FILE"
+    echo "Final memory usage: \${final_memory}MB" >> "$RESULTS_FILE"
     echo "Memory stress test completed" >> "$RESULTS_FILE"
 }
 
@@ -292,7 +292,7 @@ test_core_memory_efficiency() {
     if [ "$lock_test_successful" = true ]; then
         echo "Lock mechanism memory test: PASSED" >> "$RESULTS_FILE"
     else
-        echo "Lock mechanism memory test: FAILED at iteration $i" >> "$RESULTS_FILE"
+        echo "Lock mechanism memory test: FAILED at iteration \$i" >> "$RESULTS_FILE"
     fi
     
     # ファイル操作のメモリ効率テスト
@@ -310,7 +310,7 @@ test_core_memory_efficiency() {
     if [ "$file_operations_successful" = true ]; then
         echo "File operations memory test: PASSED" >> "$RESULTS_FILE"
     else
-        echo "File operations memory test: FAILED at iteration $i" >> "$RESULTS_FILE"
+        echo "File operations memory test: FAILED at iteration \$i" >> "$RESULTS_FILE"
     fi
 }
 
@@ -450,7 +450,7 @@ test_database_connection_failures() {
     # 接続リトライ機構のテスト
     local retry_test_successful=true
     for attempt in {1..3}; do
-        echo "Connection retry attempt $attempt..." >> "$RESULTS_FILE"
+        echo "Connection retry attempt \$attempt..." >> "$RESULTS_FILE"
         sleep 0.1
         # 実際のリトライロジックをシミュレート
         if [ $attempt -eq 3 ]; then
