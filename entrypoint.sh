@@ -868,6 +868,7 @@ log_startup_message() {
     # Issue #5437修正: より強固な重複防止機構（原子性の向上）
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
+            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
             # Issue #5437修正: まず最初にプロセス内フラグをチェック（最速の防御線）
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
                 return 0
@@ -916,18 +917,16 @@ log_startup_message() {
                 log "$message"
                 
                 # 完了マーカー作成（原子的操作）
-                local temp_marker="${startup_msg_done_file}.tmp.$$"
-                if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
-                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                else
-                    rm -f "$temp_marker" 2>/dev/null || true
-                fi
+                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file"
+                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
                 
                 # ロック解放
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
                 return 0
             else
+                # ロック取得失敗時の処理
                 # ロック取得失敗の場合はメッセージを抑制（重複防止を優先）
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 log "DEBUG: Startup message lock acquisition timeout - message suppressed to prevent duplicate"
                 return 0
             fi
@@ -1148,7 +1147,7 @@ cleanup_startup_message_locks() {
     # Issue #5417修正: セキュアなディレクトリパス使用
     if [ -f "$LOCK_BASE_DIR/main-startup-message.done" ]; then
         rm -f "$LOCK_BASE_DIR/main-startup-message.done" 2>/dev/null || true
-        log "Cleaned up main startup message done marker (Issue #5417)"
+        log "Cleaned up main startup message done marker (Issue #5267, #5417)"
     fi
     
     if [ -d "$LOCK_BASE_DIR/main-startup-message.lock" ]; then
