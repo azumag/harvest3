@@ -913,12 +913,19 @@ log_startup_message() {
                     return 0
                 fi
                 
-                # メッセージ出力（ロック保護下で実行）
-                log "$message"
-                
-                # 完了マーカー作成（原子的操作）
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file"
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                # Issue #5381修正: メッセージ出力前の最終重複チェック
+                # 完了マーカーファイルを原子的に作成し、成功した場合のみメッセージを出力
+                local temp_marker="${startup_msg_done_file}.tmp.$$"
+                if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && \
+                   mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
+                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                    
+                    # メッセージ出力（完了マーカー作成成功後のみ）
+                    log "$message"
+                else
+                    # 完了マーカー作成失敗時は重複と判定してメッセージを抑制
+                    rm -f "$temp_marker" 2>/dev/null || true
+                fi
                 
                 # ロック解放
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
