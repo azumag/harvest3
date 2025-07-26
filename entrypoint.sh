@@ -873,7 +873,7 @@ log_startup_message() {
                 return 0
             fi
             
-            # Issue #5437修正: 環境変数による即座の重複防止を強化
+            # Issue #5264修正: 環境変数フラグによる第1防御線
             if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
@@ -883,13 +883,13 @@ log_startup_message() {
             _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
             export MAIN_STARTUP_MESSAGE_LOGGED=1
             
-            # Issue #5437修正: 完了マーカーファイル存在チェック（第2防御線）
+            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
             local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
                 return 0
             fi
             
-            # Issue #5437修正: より強固なアトミックロック取得（第3防御線）
+            # Issue #5264修正: アトミックロック取得（第3防御線）
             local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
             local lock_acquired=false
             local lock_timeout=5
