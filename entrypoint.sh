@@ -16,6 +16,32 @@ PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒�
 DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
 DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
 
+# Issue #5417: セキュリティ強化 - 一時ファイル格納場所の改善
+# /tmpから/var/runへの移行（環境変数で設定可能、後方互換性維持）
+LOCK_BASE_DIR=${LOCK_BASE_DIR:-/var/run/strategy-runner}  # 一時ファイル・ロックファイル基底ディレクトリ
+
+# Issue #5417: セキュアなディレクトリ作成とセットアップ関数
+setup_lock_base_directory() {
+    # ディレクトリが存在しない場合は作成
+    if [ ! -d "$LOCK_BASE_DIR" ]; then
+        log "Creating secure lock directory: $LOCK_BASE_DIR"
+        if ! mkdir -p "$LOCK_BASE_DIR" 2>/dev/null; then
+            # /var/runの作成に失敗した場合はフォールバック
+            log "WARNING: Failed to create $LOCK_BASE_DIR, falling back to /tmp"
+            LOCK_BASE_DIR="/tmp"
+            return 0
+        fi
+    fi
+    
+    # セキュアな権限設定（所有者のみアクセス可能）
+    if ! set_secure_permissions "$LOCK_BASE_DIR" "dir"; then
+        log "WARNING: Failed to set secure permissions on $LOCK_BASE_DIR"
+    fi
+    
+    log "Lock base directory setup completed: $LOCK_BASE_DIR"
+    return 0
+}
+
 # Issue #5121 専用設定: 重複ログ防止ロック機構
 LOCK_CLEANUP_TIMEOUT=${LOCK_CLEANUP_TIMEOUT:-60}  # 古いロックファイル削除タイムアウト（秒）
 SUCCESS_FILE_CLEANUP_DELAY=${SUCCESS_FILE_CLEANUP_DELAY:-300}  # 完了マーカーファイル削除遅延（秒）
@@ -40,29 +66,25 @@ BACKGROUND_CLEANUP_PIDS=""
 
 # Issue #5127 & #5372: backtest container重複起動メッセージ防止設定（KISS原則適用・統一化）
 # Issue #5372修正: 設定の外部化と一元管理
-BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"  # backtest用永続ロックファイル
-BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"  # Issue #5372: 統一されたタイムスタンプファイル名
+# Issue #5417修正: セキュリティ強化により$LOCK_BASE_DIRを使用
+BACKTEST_STARTUP_LOCK_FILE="$LOCK_BASE_DIR/backtest-startup-message.lock"  # backtest用永続ロックファイル
+BACKTEST_STARTUP_TIMESTAMP_FILE="$LOCK_BASE_DIR/backtest-startup-message.last"  # Issue #5372: 統一されたタイムスタンプファイル名
 BACKTEST_STARTUP_LOCK_TIMEOUT=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}  # backtest起動ロックタイムアウト（秒）
 BACKTEST_STARTUP_FLOCK_TIMEOUT=${BACKTEST_STARTUP_FLOCK_TIMEOUT:-15}  # flock最大待機時間（秒）
-BACKTEST_CONTAINER_RESTART_DETECTION_FILE="/tmp/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
+BACKTEST_CONTAINER_RESTART_DETECTION_FILE="$LOCK_BASE_DIR/backtest-restart-detection.state"  # Issue #5175: コンテナ再起動検出用
 BACKTEST_FD_BASE=${BACKTEST_FD_BASE:-200}  # Issue #5372: 動的ファイルディスクリプタ基底値（設定可能）
 
-# セキュリティ注記: /tmp使用について
+# セキュリティ注記: Issue #5417により/var/runへ移行
 # ・Dockerコンテナ内での一時的なプロセス間同期に使用
-# ・ファイル権限600でアクセス制御、プロセスID検証実装済み
+# ・ファイル権限700でアクセス制御、プロセスID検証実装済み
 # ・コンテナ再起動時に自動クリーンアップされるため永続化の懸念なし
-STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"  # 起動ロックファイル
+STARTUP_LOCK_FILE="$LOCK_BASE_DIR/strategy-runner-startup.lock"  # 起動ロックファイル
 STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}  # 起動ロックタイムアウト（秒）
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
 # atomic ファイルベース実装によるメッセージ重複防止システム
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
-mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
+STARTUP_MESSAGE_LOCK_DIR="$LOCK_BASE_DIR/startup_messages"
 
-# Issue #5150: コンテナ再起動時の初期クリーンアップ
-# 前回の実行で残ったロックファイルを削除してクリーンな状態で開始
-find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
-find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Issue #5307 Phase 2: MD5計算の最適化
 # 短いメッセージ（64文字以下）は直接比較用、長いメッセージはMD5ハッシュ化
@@ -109,7 +131,8 @@ set_secure_permissions() {
 }
 
 # Issue #5307 Phase 3: 統一的なエラーハンドリング戦略
-ERROR_LOG_FILE=${ERROR_LOG_FILE:-"/tmp/backtest-errors.log"}
+# Issue #5417修正: セキュリティ強化により$LOCK_BASE_DIRを使用
+ERROR_LOG_FILE=${ERROR_LOG_FILE:-"$LOCK_BASE_DIR/backtest-errors.log"}
 ERROR_NOTIFICATION_THRESHOLD=${ERROR_NOTIFICATION_THRESHOLD:-3}  # 連続エラー通知閾値
 
 # 統一エラーハンドリング関数
@@ -409,7 +432,7 @@ retry_npm_install_with_backoff() {
     if [ "$npm_install_success" = false ]; then
         # Issue #5159: NPMエラー発生時刻を記録（改良版）
         if [ "$BACKTEST_MODE" = "true" ]; then
-            local npm_error_marker="/tmp/backtest-npm-error-detection.state"
+            local npm_error_marker="$LOCK_BASE_DIR/backtest-npm-error-detection.state"
             echo "$(date +%s)" > "$npm_error_marker"
             set_secure_permissions "$npm_error_marker" "file"
             log "NPM error recorded for Issue #5159 duplicate message prevention"
@@ -565,7 +588,7 @@ log_backtest_startup_message() {
     if [ "$system_uptime_seconds" -lt $CONTAINER_RESTART_DETECTION_THRESHOLD ]; then
         log "New container detected (uptime: ${system_uptime_seconds}s), cleaning up old timestamp files"
         rm -f "$timestamp_file" 2>/dev/null || true
-        rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
+        rm -f "$LOCK_BASE_DIR/backtest-npm-error-detection.state" 2>/dev/null || true
         # 古いロックファイルもクリーンアップ
         # Issue #5307 Phase 3: より制限的なセキュリティパターン使用
         find /tmp -maxdepth 1 -name "backtest-startup-message*.lock" -type f -mtime +1 -delete 2>/dev/null || true
@@ -852,7 +875,7 @@ log_startup_message() {
             fi
             
             # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
@@ -860,7 +883,7 @@ log_startup_message() {
             fi
             
             # Issue #5264修正: アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 # ロック取得後の最終チェック
                 if [ -f "$startup_msg_done_file" ]; then
@@ -1024,25 +1047,26 @@ cleanup_backtest_locks() {
     
     # Issue #5315修正: 新しいロックファイルのクリーンアップ
     # Issue #5372改善: 統一されたファイルパス使用
-    if [ -f "/tmp/backtest-startup-message.lock" ]; then
-        rm -f "/tmp/backtest-startup-message.lock" 2>/dev/null || true
-        log "Removed backtest startup message lock file (Issue #5315, #5372)"
+    # Issue #5417修正: セキュアなディレクトリパス使用
+    if [ -f "$LOCK_BASE_DIR/backtest-startup-message.lock" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-startup-message.lock" 2>/dev/null || true
+        log "Removed backtest startup message lock file (Issue #5315, #5372, #5417)"
     fi
     
-    if [ -f "/tmp/backtest-startup-message.last" ]; then
-        rm -f "/tmp/backtest-startup-message.last" 2>/dev/null || true
-        log "Removed backtest startup message timestamp file (Issue #5315, #5372)"
+    if [ -f "$LOCK_BASE_DIR/backtest-startup-message.last" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-startup-message.last" 2>/dev/null || true
+        log "Removed backtest startup message timestamp file (Issue #5315, #5372, #5417)"
     fi
     
     # backtest開始時刻マーカーのクリーンアップ
-    if [ -f "/tmp/backtest-start-time.marker" ]; then
-        rm -f "/tmp/backtest-start-time.marker" 2>/dev/null || true
+    if [ -f "$LOCK_BASE_DIR/backtest-start-time.marker" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-start-time.marker" 2>/dev/null || true
         log "Removed backtest start time marker"
     fi
     
     # Issue #5058: 新しいatomicロックディレクトリのクリーンアップ
-    if [ -d "/tmp/backtest-startup-lock.dir" ]; then
-        rm -rf "/tmp/backtest-startup-lock.dir" 2>/dev/null || true
+    if [ -d "$LOCK_BASE_DIR/backtest-startup-lock.dir" ]; then
+        rm -rf "$LOCK_BASE_DIR/backtest-startup-lock.dir" 2>/dev/null || true
         log "Removed backtest startup lock directory"
     fi
     
@@ -1053,9 +1077,9 @@ cleanup_backtest_locks() {
     fi
     
     # Issue #5254: NPMエラー検出ファイルのクリーンアップ
-    if [ -f "/tmp/backtest-npm-error-detection.state" ]; then
-        rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
-        log "Removed backtest NPM error detection file (Issue #5254)"
+    if [ -f "$LOCK_BASE_DIR/backtest-npm-error-detection.state" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-npm-error-detection.state" 2>/dev/null || true
+        log "Removed backtest NPM error detection file (Issue #5254, #5417)"
     fi
     
     # Issue #5194修正: タイムスタンプファイルのクリーンアップ
@@ -1065,14 +1089,14 @@ cleanup_backtest_locks() {
     fi
     
     # Issue #5333修正: グローバルファイルのクリーンアップ
-    if [ -f "/tmp/backtest-startup-message-global.lock" ]; then
-        rm -f "/tmp/backtest-startup-message-global.lock" 2>/dev/null || true
-        log "Removed global backtest startup lock file (Issue #5333)"
+    if [ -f "$LOCK_BASE_DIR/backtest-startup-message-global.lock" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-startup-message-global.lock" 2>/dev/null || true
+        log "Removed global backtest startup lock file (Issue #5333, #5417)"
     fi
     
-    if [ -f "/tmp/backtest-startup-timestamp-global.state" ]; then
-        rm -f "/tmp/backtest-startup-timestamp-global.state" 2>/dev/null || true
-        log "Removed global backtest timestamp file (Issue #5333)"
+    if [ -f "$LOCK_BASE_DIR/backtest-startup-timestamp-global.state" ]; then
+        rm -f "$LOCK_BASE_DIR/backtest-startup-timestamp-global.state" 2>/dev/null || true
+        log "Removed global backtest timestamp file (Issue #5333, #5417)"
     fi
     
     # Issue #5307 Phase 3: セキュリティ強化 - findコマンドによる安全なファイル操作
@@ -1107,14 +1131,15 @@ cleanup_startup_message_locks() {
     fi
     
     # Issue #5267: メインの起動メッセージ用ロックファイルのクリーンアップ
-    if [ -f "/tmp/main-startup-message.done" ]; then
-        rm -f "/tmp/main-startup-message.done" 2>/dev/null || true
-        log "Cleaned up main startup message done marker"
+    # Issue #5417修正: セキュアなディレクトリパス使用
+    if [ -f "$LOCK_BASE_DIR/main-startup-message.done" ]; then
+        rm -f "$LOCK_BASE_DIR/main-startup-message.done" 2>/dev/null || true
+        log "Cleaned up main startup message done marker (Issue #5417)"
     fi
     
-    if [ -d "/tmp/main-startup-message.lock" ]; then
-        rm -rf "/tmp/main-startup-message.lock" 2>/dev/null || true
-        log "Cleaned up main startup message lock directory"
+    if [ -d "$LOCK_BASE_DIR/main-startup-message.lock" ]; then
+        rm -rf "$LOCK_BASE_DIR/main-startup-message.lock" 2>/dev/null || true
+        log "Cleaned up main startup message lock directory (Issue #5417)"
     fi
     
     # プロセス内フラグのクリアは環境変数なので、コンテナ再起動時に自動的にクリアされる
@@ -1696,6 +1721,18 @@ main() {
     log "作業ディレクトリ: $(pwd)"
     log "バックテストモード: ${BACKTEST_MODE:-false}"
     
+    # Issue #5417: セキュアなロックディレクトリのセットアップ
+    setup_lock_base_directory
+    
+    # ロックディレクトリセットアップ後にstartupmessageディレクトリを作成
+    mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
+    set_secure_permissions "$STARTUP_MESSAGE_LOCK_DIR" "dir" || true
+    
+    # Issue #5150: コンテナ再起動時の初期クリーンアップ
+    # 前回の実行で残ったロックファイルを削除してクリーンな状態で開始
+    find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
+    find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
+    
     # 起動ロックの取得（重複起動防止）
     if ! acquire_startup_lock; then
         log "ERROR: Failed to acquire startup lock"
@@ -1752,7 +1789,7 @@ main() {
         # バックテスト実行開始はline 1288で既に通知済み
         
         # backtest開始時刻を記録（問題追跡用）
-        echo "$(date +%s)" > /tmp/backtest-start-time.marker
+        echo "$(date +%s)" > "$LOCK_BASE_DIR/backtest-start-time.marker"
         
         
         # execコマンドの実行

@@ -22,6 +22,11 @@ RUN apt-get update && apt-get install -y gcc-10 g++-10 \
 # 作業ディレクトリを設定
 WORKDIR /usr/src/app
 
+# Issue #5417: セキュリティ強化 - 一時ファイル用のセキュアディレクトリを作成
+RUN mkdir -p /var/run/strategy-runner && \
+    chmod 700 /var/run/strategy-runner && \
+    chown root:root /var/run/strategy-runner
+
 # パッケージファイルをコピー
 COPY package*.json ./
 
