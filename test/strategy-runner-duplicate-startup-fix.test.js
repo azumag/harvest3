@@ -128,7 +128,7 @@ describe('Strategy-Runner重複起動修正', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // デフォルトのロックファイルパスを確認
-      expect(entrypointContent).toContain('STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"');
+      expect(entrypointContent).toContain('STARTUP_LOCK_FILE="$LOCK_BASE_DIR/strategy-runner-startup.lock"');
       
       // デフォルトのタイムアウト値を確認
       expect(entrypointContent).toContain('STARTUP_LOCK_TIMEOUT=${STARTUP_LOCK_TIMEOUT:-30}');

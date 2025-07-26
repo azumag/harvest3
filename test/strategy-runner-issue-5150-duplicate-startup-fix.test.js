@@ -60,7 +60,9 @@ describe('Issue #5150: strategy-runnerサービス重複メッセージ修正確
       if (lines[i].includes('mkdir -p "$STARTUP_MESSAGE_LOCK_DIR"')) {
         lockDirIndex = i;
       }
-      if (lines[i].includes('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete') && cleanupIndex === -1) {
+      // Find cleanup that comes AFTER the mkdir command
+      if (lines[i].includes('find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete') && 
+          cleanupIndex === -1 && lockDirIndex !== -1 && i > lockDirIndex) {
         cleanupIndex = i;
       }
     }

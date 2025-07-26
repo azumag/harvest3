@@ -279,8 +279,8 @@ test_defense_line "none"
         // 重複防止機構の主要部分が含まれていることを確認
         expect(entrypointContent).toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1');
         expect(entrypointContent).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
-        expect(entrypointContent).toContain('startup_msg_done_file="/tmp/main-startup-message.done"');
-        expect(entrypointContent).toContain('startup_msg_lock_file="/tmp/main-startup-message.lock"');
+        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
+        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
     });
 
     test('Issue #5264: 並行プロセステスト', async () => {
