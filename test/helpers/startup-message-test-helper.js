@@ -58,8 +58,8 @@ log_startup_message() {
             
             ${enableFilelock ? `
             # Issue #5295修正: アトミックファイルロックによる確実な重複防止 (.tmpディレクトリ使用)
-            local startup_msg_lock_file="\${TEMP_LOCKS_DIR:-$${PROJECT_ROOT}/.tmp/locks}/main-startup-message.lock"
-            local startup_msg_done_file="\${TEMP_LOCKS_DIR:-$${PROJECT_ROOT}/.tmp/locks}/main-startup-message.done"
+            local startup_msg_lock_file="\${TEMP_LOCKS_DIR:-${PROJECT_ROOT}/.tmp/locks}/main-startup-message.lock"
+            local startup_msg_done_file="\${TEMP_LOCKS_DIR:-${PROJECT_ROOT}/.tmp/locks}/main-startup-message.done"
             local atomic_processing_success=false
             
             # 既に完了マーカーが存在する場合は重複防止
