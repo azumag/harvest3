@@ -12,11 +12,22 @@ jest.mock('axios');
 const axios = require('axios');
 
 describe('Issue #5240: Backtest Service Overflow Error Fix', () => {
+  const pendingTimeouts = [];
+  
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset rate limiter state
     discordRateLimiter.webhookQueues?.clear?.();
     discordRateLimiter.errorHashes?.clear?.();
+  });
+
+  afterEach(async () => {
+    // Clear all pending timeouts to prevent Jest environment issues
+    pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    pendingTimeouts.length = 0;
+    
+    // Wait for any pending async operations to complete
+    await new Promise(resolve => setImmediate(resolve));
   });
 
   test('Discord Rate Limiter should handle overflow error with extended backoff', async () => {
@@ -42,7 +53,10 @@ describe('Issue #5240: Backtest Service Overflow Error Fix', () => {
     expect(result.reason).toBe('queued');
 
     // Wait for queue processing
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => {
+      const timeoutId = setTimeout(resolve, 100);
+      pendingTimeouts.push(timeoutId);
+    });
 
     // Verify axios was called with proper configuration
     expect(axios.post).toHaveBeenCalledWith(
@@ -84,7 +98,10 @@ describe('Issue #5240: Backtest Service Overflow Error Fix', () => {
     expect(result.reason).toBe('queued');
 
     // Wait for queue processing
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => {
+      const timeoutId = setTimeout(resolve, 100);
+      pendingTimeouts.push(timeoutId);
+    });
 
     // Should have been called once
     expect(axios.post).toHaveBeenCalledTimes(1);
@@ -99,7 +116,10 @@ describe('Issue #5240: Backtest Service Overflow Error Fix', () => {
     await discordRateLimiter.send(webhookUrl, message);
 
     // Wait for processing
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => {
+      const timeoutId = setTimeout(resolve, 100);
+      pendingTimeouts.push(timeoutId);
+    });
 
     expect(axios.post).toHaveBeenCalledWith(
       webhookUrl,
@@ -189,7 +209,10 @@ describe('Issue #5240: Backtest Service Overflow Error Fix', () => {
     expect(result.reason).toBe('queued');
 
     // Wait for initial processing (overflow error has 60 sec backoff, but retry logic should still work)
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => {
+      const timeoutId = setTimeout(resolve, 100);
+      pendingTimeouts.push(timeoutId);
+    });
 
     // Should be called at least once (initial attempt)
     // Note: The overflow error has a 60-second backoff, so the retry won't happen immediately
