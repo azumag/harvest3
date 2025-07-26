@@ -88,16 +88,16 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // 複数プロセスでの並行実行に対する保護機能の確認
     // 実際の並行実行テストは複雑すぎるため、実装の存在確認に集中
     
-    // アトミックロック機構の存在確認
+    // アトミックロック機構の存在確認（Issue #5264統合実装）
     expect(entrypointContent).toMatch(/mkdir.*startup_msg_lock_file/);
-    expect(entrypointContent).toMatch(/アトミックディレクトリロック取得/);
+    expect(entrypointContent).toMatch(/Issue #5264修正.*アトミックロック取得/);
     
     // プロセス間の競合状態に対する保護の存在確認
-    expect(entrypointContent).toMatch(/他のプロセスが処理中/);
+    expect(entrypointContent).toMatch(/Another startup process is running/);
     expect(entrypointContent).toMatch(/レースコンディション/);
     
-    // ファイルベースの重複防止機構の存在確認
-    expect(entrypointContent).toMatch(/atomic_processing_success/);
+    // ファイルベースの重複防止機構の存在確認（Issue #5264統合実装）
+    expect(entrypointContent).toMatch(/startup_msg_done_file/);
     
     console.log('Issue #5329: Concurrent process protection mechanisms verified');
   });
@@ -105,15 +105,15 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
   test('Issue #5329: entrypoint.shに必要な重複防止機能が実装されていることを確認', () => {
     // entrypoint.shファイルの内容を確認（beforeAllで読み込み済み）
 
-    // Issue #5302の修正が含まれていることを確認
+    // Issue #5302の修正が含まれていることを確認（Issue #5264で統合実装）
     expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
     expect(entrypointContent).toMatch(/Issue #5302修正.*プロセス内変数による即座の重複防止/);
     
-    // Issue #5295の修正が含まれていることを確認
-    expect(entrypointContent).toMatch(/Issue #5295修正.*アトミックファイルロックによる確実な重複防止/);
-    expect(entrypointContent).toMatch(/fallthrough防止/);
+    // Issue #5295の修正が含まれていることを確認（Issue #5264で統合実装）
+    expect(entrypointContent).toMatch(/Issue #5264修正.*起動メッセージの完全分離処理.*fallthrough完全防止/);
+    expect(entrypointContent).toMatch(/fallthrough完全防止/);
     
-    // Issue #5267の修正が含まれていることを確認
+    // Issue #5267の修正が含まれていることを確認（Issue #5264で統合実装）
     expect(entrypointContent).toMatch(/Issue #5267修正.*アトミックファイルロック/);
     
     // 基本的な重複防止メカニズムが存在することを確認
@@ -166,11 +166,11 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // 実際の修正は以前のIssue（#5302, #5267, #5295など）で既に実装済み
     // このテストで重複防止が機能することが確認できれば、Issue #5329は解決済みとみなせる
     
-    // 複数の修正が統合されていることを確認
+    // 複数の修正が統合されていることを確認（Issue #5264で統合実装）
     const fixes = [
       'Issue #5302', // プロセス内重複防止
       'Issue #5267', // レースコンディション修正
-      'Issue #5295', // fallthrough防止
+      'Issue #5264.*fallthrough完全防止', // fallthrough防止（Issue #5295機能を#5264で統合）
     ];
     
     fixes.forEach(fix => {
