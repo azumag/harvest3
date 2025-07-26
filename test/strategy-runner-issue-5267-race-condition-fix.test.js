@@ -186,7 +186,13 @@ log_startup_message_concurrent() {
 }
 
 # プロセス識別用のスリープを追加してタイミングをずらす
-sleep $(echo "scale=3; $1 / 10" | bc -l 2>/dev/null || echo "0.1")
+# Issue #5307修正: bc失敗時の全プロセス同時実行を防ぐため、確実な分散タイミングを実装
+if command -v bc >/dev/null 2>&1; then
+    sleep $(echo "scale=3; $1 / 10" | bc -l 2>/dev/null || echo "0.$(($1 + 1))")
+else
+    # bc未使用時は単純な分散タイミング (0.1, 0.2, 0.3, 0.4, 0.5秒)
+    sleep 0.$(($1 + 1))
+fi
 log_startup_message_concurrent "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
 `;
 
@@ -214,10 +220,23 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
                 line.includes('Starting strategy-runner container with enhanced error handling')
             );
             
-            // 並行実行でも1回のみ出力されることを確認
-            expect(messages.length).toBe(1);
+            // Issue #5307修正: デバッグ情報追加でCI失敗原因を詳細に追跡
             console.log('Concurrent test - Messages found:', messages.length);
-            console.log('Message:', messages[0]);
+            console.log('All messages:', messages);
+            console.log('Process results:', results.map((r, i) => `Process ${i}: stdout="${r.stdout?.trim()}", stderr="${r.stderr?.trim()}"`));
+            
+            // 並行実行でも1回のみ出力されることを確認
+            // Issue #5307修正: レースコンディションが発生した場合の追加デバッグ情報
+            if (messages.length !== 1) {
+                console.log('RACE CONDITION DETECTED - Full debug info:');
+                console.log('All output combined:', allOutput);
+                console.log('Lock file exists:', fs.existsSync('/tmp/main-startup-message.lock'));
+                console.log('Done file exists:', fs.existsSync('/tmp/main-startup-message.done'));
+                if (fs.existsSync('/tmp/main-startup-message.done')) {
+                    console.log('Done file content:', fs.readFileSync('/tmp/main-startup-message.done', 'utf8'));
+                }
+            }
+            expect(messages.length).toBe(1);
             
             // 完了マーカーファイルが作成されていることを確認
             expect(fs.existsSync('/tmp/main-startup-message.done')).toBe(true);

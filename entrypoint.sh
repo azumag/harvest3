@@ -62,9 +62,146 @@ mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.done" -type f -delete 2>/dev/null || true
 find "$STARTUP_MESSAGE_LOCK_DIR" -name "*.lock" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# MD5ハッシュ値生成関数（DRY原則適用）
+# Issue #5307 Phase 2: MD5計算の最適化
+# 短いメッセージ（64文字以下）は直接比較用、長いメッセージはMD5ハッシュ化
+MESSAGE_DIRECT_COMPARISON_THRESHOLD=${MESSAGE_DIRECT_COMPARISON_THRESHOLD:-64}
+
+# Issue #5307 Phase 3: 統一的なファイル権限ポリシー
+TEMP_FILE_PERMISSIONS=${TEMP_FILE_PERMISSIONS:-600}  # 所有者のみ読み書き可能
+TEMP_DIR_PERMISSIONS=${TEMP_DIR_PERMISSIONS:-700}   # 所有者のみアクセス可能
+
+# Issue #5307 Phase 3: 残存するマジックナンバーの外部化
+CONTAINER_RESTART_DETECTION_THRESHOLD=${CONTAINER_RESTART_DETECTION_THRESHOLD:-60}  # コンテナ再起動検出閾値（秒）
+PROCESS_RESTART_COOLDOWN=${PROCESS_RESTART_COOLDOWN:-45}  # プロセス再起動クールダウン（秒）
+GRACEFUL_SHUTDOWN_TIMEOUT=${GRACEFUL_SHUTDOWN_TIMEOUT:-15}  # 優雅な終了タイムアウト（秒）
+
+# 統一的なファイル権限設定関数
+set_secure_permissions() {
+    local target="$1"
+    local target_type="$2"  # "file" or "dir"
+    
+    if [ ! -e "$target" ]; then
+        return 1  # ファイル/ディレクトリが存在しない
+    fi
+    
+    case "$target_type" in
+        "file")
+            chmod "$TEMP_FILE_PERMISSIONS" "$target" 2>/dev/null || {
+                log "WARNING: Failed to set permissions on file: $target"
+                return 1
+            }
+            ;;
+        "dir")
+            chmod "$TEMP_DIR_PERMISSIONS" "$target" 2>/dev/null || {
+                log "WARNING: Failed to set permissions on directory: $target"
+                return 1
+            }
+            ;;
+        *)
+            log "ERROR: Invalid target type '$target_type' for set_secure_permissions"
+            return 1
+            ;;
+    esac
+    
+    return 0
+}
+
+# Issue #5307 Phase 3: 統一的なエラーハンドリング戦略
+ERROR_LOG_FILE=${ERROR_LOG_FILE:-"/tmp/backtest-errors.log"}
+ERROR_NOTIFICATION_THRESHOLD=${ERROR_NOTIFICATION_THRESHOLD:-3}  # 連続エラー通知閾値
+
+# 統一エラーハンドリング関数
+handle_unified_error() {
+    local error_type="$1"      # "critical", "warning", "info"
+    local error_message="$2"   # エラーメッセージ
+    local error_context="$3"   # エラーコンテキスト（オプション）
+    local notify_discord="$4"  # Discord通知フラグ（true/false）
+    
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local full_message="[$timestamp] [$error_type] $error_message"
+    
+    # コンテキスト情報があれば追加
+    if [ -n "$error_context" ]; then
+        full_message="$full_message (Context: $error_context)"
+    fi
+    
+    # ログファイルに記録
+    echo "$full_message" >> "$ERROR_LOG_FILE" 2>/dev/null || {
+        # ログファイルへの書き込みが失敗した場合はstderrに出力
+        echo "$full_message" >&2
+    }
+    
+    # エラータイプに応じた処理
+    case "$error_type" in
+        "critical")
+            log "CRITICAL ERROR: $error_message"
+            # クリティカルエラーは必ずDiscord通知
+            if [ "$notify_discord" != "false" ]; then
+                send_startup_error_to_discord "Critical Error" "$error_message"
+            fi
+            ;;
+        "warning")
+            log "WARNING: $error_message"
+            # 警告は閾値を超えた場合のみ通知（原子的カウンター操作）
+            local warning_count
+            if command -v flock >/dev/null 2>&1; then
+                warning_count=$(flock -x "$ERROR_LOG_FILE.lock" -c "grep -c 'WARNING.*$error_message' '$ERROR_LOG_FILE' 2>/dev/null || echo '0'")
+            else
+                warning_count=$(grep -c "WARNING.*$error_message" "$ERROR_LOG_FILE" 2>/dev/null || echo "0")
+            fi
+            if [ "$warning_count" -ge "$ERROR_NOTIFICATION_THRESHOLD" ] && [ "$notify_discord" != "false" ]; then
+                send_startup_error_to_discord "Repeated Warning" "$error_message (occurred $warning_count times)"
+            fi
+            ;;
+        "info")
+            log "INFO: $error_message"
+            # 情報レベルは通常Discord通知しない
+            ;;
+        *)
+            log "UNKNOWN ERROR TYPE [$error_type]: $error_message"
+            ;;
+    esac
+    
+    # ログファイルサイズ制限（1MB超過で古いエントリを削除）
+    if [ -f "$ERROR_LOG_FILE" ]; then
+        local log_size=$(wc -c < "$ERROR_LOG_FILE" 2>/dev/null || echo "0")
+        if [ "$log_size" -gt 1048576 ]; then  # 1MB = 1048576 bytes
+            # 原子的ログローテーション操作
+            local temp_log="${ERROR_LOG_FILE}.rotate.$$"
+            tail -n 500 "$ERROR_LOG_FILE" > "$temp_log" 2>/dev/null && \
+                mv "$temp_log" "$ERROR_LOG_FILE" 2>/dev/null || \
+                rm -f "$temp_log" 2>/dev/null
+            set_secure_permissions "$ERROR_LOG_FILE" "file"
+        fi
+    fi
+    
+    return 0
+}
+
+# 簡便なエラーハンドリング関数
+critical_error() {
+    handle_unified_error "critical" "$1" "$2" "${3:-true}"
+}
+
+warning_error() {
+    handle_unified_error "warning" "$1" "$2" "${3:-false}"
+}
+
+info_message() {
+    handle_unified_error "info" "$1" "$2" "false"
+}
+
 get_message_hash() {
-    echo "$1" | md5sum | cut -d' ' -f1
+    local message="$1"
+    local message_length=${#message}
+    
+    # 短いメッセージの場合は直接比較のため元のメッセージを返す（prefix付き）
+    if [ $message_length -le $MESSAGE_DIRECT_COMPARISON_THRESHOLD ]; then
+        echo "direct:$message"
+    else
+        # 長いメッセージの場合はMD5ハッシュ化（prefix付き）
+        echo "md5:$(echo "$message" | md5sum | cut -d' ' -f1)"
+    fi
 }
 
 # Issue #5292レビュー対応: 統一されたタイムスタンプ検証関数（DRY原則）
@@ -162,8 +299,8 @@ check_container_recently_restarted() {
     # /proc/uptimeを使用してコンテナの稼働時間をチェック
     if [ -f /proc/uptime ]; then
         local uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
-        # 60秒以内の場合は最近再起動したと判定
-        if [ "$uptime_seconds" -lt 60 ]; then
+        # 設定可能な閾値以内の場合は最近再起動したと判定
+        if [ "$uptime_seconds" -lt $CONTAINER_RESTART_DETECTION_THRESHOLD ]; then
             return 0  # 最近再起動した
         fi
     fi
@@ -272,7 +409,7 @@ retry_npm_install_with_backoff() {
         if [ "$BACKTEST_MODE" = "true" ]; then
             local npm_error_marker="/tmp/backtest-npm-error-detection.state"
             echo "$(date +%s)" > "$npm_error_marker"
-            chmod 600 "$npm_error_marker"
+            set_secure_permissions "$npm_error_marker" "file"
             log "NPM error recorded for Issue #5159 duplicate message prevention"
             
             # NPMエラー時は明示的にDiscord通知を送信
@@ -421,13 +558,16 @@ log_backtest_startup_message() {
         system_uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
     fi
     
-    # 60秒以内の稼働時間の場合は新規コンテナと判定してクリーンアップ
-    if [ "$system_uptime_seconds" -lt 60 ]; then
+    # 設定可能な閾値以内の稼働時間の場合は新規コンテナと判定してクリーンアップ
+    if [ "$system_uptime_seconds" -lt $CONTAINER_RESTART_DETECTION_THRESHOLD ]; then
         log "New container detected (uptime: ${system_uptime_seconds}s), cleaning up old timestamp files"
         rm -f "$timestamp_file" 2>/dev/null || true
         rm -f "/tmp/backtest-npm-error-detection.state" 2>/dev/null || true
         # 古いロックファイルもクリーンアップ
-        find /tmp -name "backtest-startup-message*" -mtime +1 -delete 2>/dev/null || true
+        # Issue #5307 Phase 3: より制限的なセキュリティパターン使用
+        find /tmp -maxdepth 1 -name "backtest-startup-message*.lock" -type f -mtime +1 -delete 2>/dev/null || true
+        find /tmp -maxdepth 1 -name "backtest-startup-message*.last" -type f -mtime +1 -delete 2>/dev/null || true
+        find /tmp -maxdepth 1 -name "backtest-startup-message*.state" -type f -mtime +1 -delete 2>/dev/null || true
     fi
     
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
@@ -466,7 +606,7 @@ log_backtest_startup_message() {
                 # アトミックタイムスタンプ更新
                 local temp_file="${timestamp_file}.tmp.$$"
                 if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
-                    chmod 600 "$timestamp_file" 2>/dev/null || true
+                    set_secure_permissions "$timestamp_file" "file"
                 else
                     rm -f "$temp_file" 2>/dev/null || true
                     log "WARNING: Failed to update startup message timestamp"
@@ -930,10 +1070,15 @@ cleanup_backtest_locks() {
         log "Removed global backtest timestamp file (Issue #5333)"
     fi
     
-    # Issue #5292レビュー対応: セキュリティ改善 - より制限的なパターン使用
-    if ls /tmp/backtest-message-*.marker 1> /dev/null 2>&1; then
-        rm -f /tmp/backtest-message-*.marker 2>/dev/null || true
-        log "Cleaned up backtest message markers (Issue #5292)"
+    # Issue #5307 Phase 3: セキュリティ強化 - findコマンドによる安全なファイル操作
+    local marker_files_found=false
+    if find /tmp -maxdepth 1 -name "backtest-message-*.marker" -type f -print0 2>/dev/null | grep -q .; then
+        marker_files_found=true
+        find /tmp -maxdepth 1 -name "backtest-message-*.marker" -type f -delete 2>/dev/null || true
+    fi
+    
+    if [ "$marker_files_found" = true ]; then
+        log "Cleaned up backtest message markers (Issue #5307 security enhancement)"
     fi
     
     # backtest専用ロックファイルは通常は残す（次回起動時に重複メッセージを防ぐため）
@@ -1395,7 +1540,7 @@ start_application() {
             fi
         fi
         
-        sleep 5
+        sleep $PROCESS_MONITOR_INTERVAL
     done
 }
 
