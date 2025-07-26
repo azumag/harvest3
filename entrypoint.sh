@@ -880,10 +880,6 @@ log_startup_message() {
                 return 0
             fi
             
-            # Issue #5437修正: ロック取得前にフラグを即座に設定（レースコンディション防止）
-            _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-            export MAIN_STARTUP_MESSAGE_LOGGED=1
-            
             # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
             local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
@@ -907,6 +903,10 @@ log_startup_message() {
             done
             
             if [ "$lock_acquired" = true ]; then
+                # Issue #5437修正: ロック取得成功後にフラグを設定（レースコンディション防止）
+                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                export MAIN_STARTUP_MESSAGE_LOGGED=1
+                
                 # ロック取得後の最終チェック（二重防止）
                 if [ -f "$startup_msg_done_file" ]; then
                     rm -rf "$startup_msg_lock_file" 2>/dev/null || true
@@ -927,6 +927,7 @@ log_startup_message() {
                 # ロック取得失敗時の処理
                 # ロック取得失敗の場合はメッセージを抑制（重複防止を優先）
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                export MAIN_STARTUP_MESSAGE_LOGGED=1
                 log "DEBUG: Startup message lock acquisition timeout - message suppressed to prevent duplicate"
                 return 0
             fi
