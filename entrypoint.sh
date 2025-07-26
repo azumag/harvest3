@@ -142,8 +142,13 @@ handle_unified_error() {
             ;;
         "warning")
             log "WARNING: $error_message"
-            # 警告は閾値を超えた場合のみ通知
-            local warning_count=$(grep -c "WARNING.*$error_message" "$ERROR_LOG_FILE" 2>/dev/null || echo "0")
+            # 警告は閾値を超えた場合のみ通知（原子的カウンター操作）
+            local warning_count
+            if command -v flock >/dev/null 2>&1; then
+                warning_count=$(flock -x "$ERROR_LOG_FILE.lock" -c "grep -c 'WARNING.*$error_message' '$ERROR_LOG_FILE' 2>/dev/null || echo '0'")
+            else
+                warning_count=$(grep -c "WARNING.*$error_message" "$ERROR_LOG_FILE" 2>/dev/null || echo "0")
+            fi
             if [ "$warning_count" -ge "$ERROR_NOTIFICATION_THRESHOLD" ] && [ "$notify_discord" != "false" ]; then
                 send_startup_error_to_discord "Repeated Warning" "$error_message (occurred $warning_count times)"
             fi
@@ -161,8 +166,11 @@ handle_unified_error() {
     if [ -f "$ERROR_LOG_FILE" ]; then
         local log_size=$(wc -c < "$ERROR_LOG_FILE" 2>/dev/null || echo "0")
         if [ "$log_size" -gt 1048576 ]; then  # 1MB = 1048576 bytes
-            tail -n 500 "$ERROR_LOG_FILE" > "${ERROR_LOG_FILE}.tmp" 2>/dev/null && \
-            mv "${ERROR_LOG_FILE}.tmp" "$ERROR_LOG_FILE" 2>/dev/null
+            # 原子的ログローテーション操作
+            local temp_log="${ERROR_LOG_FILE}.rotate.$$"
+            tail -n 500 "$ERROR_LOG_FILE" > "$temp_log" 2>/dev/null && \
+                mv "$temp_log" "$ERROR_LOG_FILE" 2>/dev/null || \
+                rm -f "$temp_log" 2>/dev/null
             set_secure_permissions "$ERROR_LOG_FILE" "file"
         fi
     fi

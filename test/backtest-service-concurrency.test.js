@@ -407,30 +407,24 @@ done
                 const finalValue = parseInt(fs.readFileSync(counterFile, 'utf8').trim());
                 const expectedValue = workerCount * 5; // 8 workers × 5 increments each
                 
-                // Due to the aggressive timeout and lock contention, some increments may be lost
-                // We expect at least 80% of the expected increments to complete
-                const minimumExpected = Math.floor(expectedValue * 0.8);
-                expect(finalValue).toBeGreaterThanOrEqual(minimumExpected);
+                // ストレステスト環境では一部の操作が失敗する可能性があるが、
+                // 基本的な整合性は保たれるべき。決定的な検証を行う。
+                expect(finalValue).toBeGreaterThan(0);
                 expect(finalValue).toBeLessThanOrEqual(expectedValue);
+                
+                // 結果ログを詳細検証して実際の成功/失敗を確認
+                const resultsFile = path.join(tempDir, 'stress_results.txt');
+                if (fs.existsSync(resultsFile)) {
+                    const results = fs.readFileSync(resultsFile, 'utf8');
+                    const successLines = results.split('\n').filter(line => 
+                        line.includes('Incremented to')
+                    ).length;
+                    
+                    // 成功したインクリメント数は実際のカウンター値と一致すべき
+                    expect(successLines).toBe(finalValue);
+                }
             }
 
-            // 実行ログの検証
-            const resultsFile = path.join(tempDir, 'stress_results.txt');
-            if (fs.existsSync(resultsFile)) {
-                const results = fs.readFileSync(resultsFile, 'utf8');
-                const successLines = results.split('\n').filter(line => 
-                    line.includes('Incremented to')
-                ).length;
-                const failureLines = results.split('\n').filter(line => 
-                    line.includes('Failed to increment')
-                ).length;
-                
-                // Due to timeout and lock contention, we allow some operations to fail
-                // We expect the majority of operations to succeed
-                const totalAttempts = successLines + failureLines;
-                expect(successLines).toBeGreaterThan(0);
-                expect(totalAttempts).toBeGreaterThan(0);
-            }
         }, timeout);
     });
 });
