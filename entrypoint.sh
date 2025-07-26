@@ -61,6 +61,10 @@ PROCESS_MONITOR_INTERVAL=${PROCESS_MONITOR_INTERVAL:-10}  # プロセス監視�
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}  # Redis重複防止TTL（秒）
 DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略
 
+# Issue #5338: 重複防止メトリクス設定
+ENABLE_DUPLICATE_STATS=${ENABLE_DUPLICATE_STATS:-false}  # 重複防止統計記録機能（デフォルト無効）
+DUPLICATE_STATS_LOG_FILE=${DUPLICATE_STATS_LOG_FILE:-"$LOCK_BASE_DIR/duplicate-stats.log"}  # 統計ログファイルパス（セキュア）
+
 # バックグラウンドプロセス追跡
 BACKGROUND_CLEANUP_PIDS=""
 
@@ -615,6 +619,7 @@ log_backtest_startup_message() {
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
     # Issue #5372改善: より予測可能なフロー Step 1
     if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
         return 0  # 既に同一プロセス内でログ出力済み
     fi
     
@@ -640,6 +645,7 @@ log_backtest_startup_message() {
                 
                 if [ "$time_diff" -lt "$suppress_duration" ]; then
                     should_output=false
+                    log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
                     log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 fi
             fi
@@ -661,6 +667,7 @@ log_backtest_startup_message() {
         else
             # ロック取得失敗（タイムアウト）
             # Issue #5372改善: 統一エラーハンドリング
+            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
             log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         fi
@@ -675,6 +682,7 @@ log_backtest_startup_message() {
             local time_diff=$((current_time - last_time))
             
             if [ "$time_diff" -lt "$suppress_duration" ]; then
+                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
                 log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
@@ -765,6 +773,40 @@ create_success_file() {
     return 1  # 失敗
 }
 
+# Issue #5338: 重複防止統計記録関数（強化版）
+log_duplicate_stats() {
+    # 重複防止統計が有効な場合のみ記録
+    if [ "$ENABLE_DUPLICATE_STATS" = "true" ]; then
+        local timestamp=$(date +%s)
+        
+        # エラーハンドリング強化：ログファイル書き込み
+        if ! echo "${timestamp}:suppressed" >> "$DUPLICATE_STATS_LOG_FILE" 2>/dev/null; then
+            log "WARNING: Failed to write duplicate stats to $DUPLICATE_STATS_LOG_FILE"
+            return 1
+        fi
+        
+        # セキュアな権限設定
+        set_secure_permissions "$DUPLICATE_STATS_LOG_FILE" "file" 2>/dev/null || true
+        
+        # ログローテーション（1MB制限）
+        if [ -f "$DUPLICATE_STATS_LOG_FILE" ]; then
+            local log_size=$(wc -c < "$DUPLICATE_STATS_LOG_FILE" 2>/dev/null || echo "0")
+            if [ "$log_size" -gt 1048576 ]; then
+                # 原子的ログローテーション操作
+                local temp_log="${DUPLICATE_STATS_LOG_FILE}.rotate.$$"
+                if tail -n 1000 "$DUPLICATE_STATS_LOG_FILE" > "$temp_log" 2>/dev/null && \
+                   mv "$temp_log" "$DUPLICATE_STATS_LOG_FILE" 2>/dev/null; then
+                    set_secure_permissions "$DUPLICATE_STATS_LOG_FILE" "file" 2>/dev/null || true
+                else
+                    rm -f "$temp_log" 2>/dev/null || true
+                    log "WARNING: Failed to rotate duplicate stats log file"
+                fi
+            fi
+        fi
+    fi
+    return 0
+}
+
 # Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）
 try_redis_duplicate_prevention() {
     local message="$1"
@@ -794,6 +836,7 @@ try_redis_duplicate_prevention() {
         " 2>/dev/null || echo "error")
         
         if [ "$redis_check_result" = "duplicate" ]; then
+            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
             return 0  # Redisで重複検出
         elif [ "$redis_check_result" = "new" ]; then
             log "$message"
@@ -814,6 +857,7 @@ fallback_to_file_based_prevention() {
     # プロセス内重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
+        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
         return 0
     fi
     
@@ -825,6 +869,7 @@ fallback_to_file_based_prevention() {
     # success fileチェック
     if validate_success_file "$success_file" "$container_id" "$current_time"; then
         export "$var_name"=1
+        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
         return 0
     fi
     
