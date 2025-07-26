@@ -109,10 +109,10 @@ echo "=== テスト完了 ==="
         // entrypoint.shファイルの内容を確認
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // Issue #5302修正のプロセス内変数チェックが追加されていることを確認
+        // Issue #5302修正のプロセス内変数チェックが追加されていることを確認（Issue #5264で統合実装）
         expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
         expect(entrypointContent).toMatch(/Issue #5302修正.*プロセス内変数による即座の重複防止/);
-        expect(entrypointContent).toMatch(/同一プロセス内での高速連続呼び出しを防ぐ/);
+        expect(entrypointContent).toMatch(/第0防御線/);
         
         // プロセス内変数のチェックが最初の防御線として配置されていることを確認
         const lines = entrypointContent.split('\n');
@@ -143,13 +143,13 @@ echo "=== テスト完了 ==="
     test('Issue #5302: プロセス内変数設定がメッセージ出力時と待機時の両方で行われることを確認', () => {
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // メッセージ出力時のプロセス内変数設定を確認
-        const messageLogSection = entrypointContent.match(/log "\$message"[\s\S]*?atomic_processing_success=true/);
+        // メッセージ出力時のプロセス内変数設定を確認（Issue #5264統合実装）
+        const messageLogSection = entrypointContent.match(/log "\$message"[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
         expect(messageLogSection).toBeTruthy();
         expect(messageLogSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
 
-        // 他のプロセスが処理済みの場合の待機セクションでのプロセス内変数設定を確認
-        const waitingSection = entrypointContent.match(/環境変数フラグも設定（一貫性のため）[\s\S]*?他のプロセスがログ出力したため、重複防止/);
+        // ロック取得失敗時の待機セクションでのプロセス内変数設定を確認
+        const waitingSection = entrypointContent.match(/ロック取得失敗時の処理[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
         expect(waitingSection).toBeTruthy();
         expect(waitingSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
     });

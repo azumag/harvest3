@@ -153,12 +153,12 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5295の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5295修正: アトミックファイルロックによる確実な重複防止とfallthrough防止');
-        expect(entrypointContent).toContain('local atomic_processing_success=false');
-        expect(entrypointContent).toContain('atomic_processing_success=true');
-        expect(entrypointContent).toContain('if [ "$atomic_processing_success" = true ]; then');
-        expect(entrypointContent).toContain('Issue #5295修正: fallthroughが発生した場合の緊急停止');
+        // Issue #5295の修正が適用されていることを確認（Issue #5264で統合実装）
+        expect(entrypointContent).toContain('Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）');
+        expect(entrypointContent).toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
+        expect(entrypointContent).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
+        expect(entrypointContent).toContain('Issue #5264修正: アトミックロック取得（第3防御線）');
+        expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file"');
         
         console.log('Issue #5295 fix found in entrypoint.sh');
     });
