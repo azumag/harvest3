@@ -12,6 +12,9 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+// PROJECT_ROOTをtemp-path-helper.jsからimport
+const { PROJECT_ROOT } = require('./temp-path-helper');
+
 /**
  * 起動メッセージテスト用のベーススクリプトテンプレート
  * @param {Object} options - テスト設定オプション

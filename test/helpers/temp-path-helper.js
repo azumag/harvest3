@@ -161,6 +161,7 @@ function cleanupOldFiles(subdir, maxAgeMs = 24 * 60 * 60 * 1000) { // デフォ�
 }
 
 module.exports = {
+  PROJECT_ROOT,
   getTempPath,
   getTempDir, 
   mkdtempSync,
