@@ -865,63 +865,70 @@ log_startup_message() {
     # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
     # 注意: バックテストモード以外でのみ適用
     # Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）
+    # Issue #5437修正: より強固な重複防止機構（原子性の向上）
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
+            # Issue #5437修正: まず最初にプロセス内フラグをチェック（最速の防御線）
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
                 return 0
             fi
             
-            # Issue #5264修正: 環境変数フラグによる第1防御線
+            # Issue #5437修正: 環境変数による即座の重複防止を強化
             if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
             fi
             
-            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
+            # Issue #5437修正: ロック取得前にフラグを即座に設定（レースコンディション防止）
+            _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+            export MAIN_STARTUP_MESSAGE_LOGGED=1
+            
+            # Issue #5437修正: 完了マーカーファイル存在チェック（第2防御線）
             local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
                 return 0
             fi
             
-            # Issue #5264修正: アトミックロック取得（第3防御線）
+            # Issue #5437修正: より強固なアトミックロック取得（第3防御線）
             local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得後の最終チェック
+            local lock_acquired=false
+            local lock_timeout=5
+            local lock_attempts=0
+            
+            # タイムアウト付きロック取得
+            while [ $lock_attempts -lt $lock_timeout ] && [ "$lock_acquired" = false ]; do
+                if mkdir "$startup_msg_lock_file" 2>/dev/null; then
+                    lock_acquired=true
+                    break
+                fi
+                lock_attempts=$((lock_attempts + 1))
+                sleep 0.1
+            done
+            
+            if [ "$lock_acquired" = true ]; then
+                # ロック取得後の最終チェック（二重防止）
                 if [ -f "$startup_msg_done_file" ]; then
                     rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                    export MAIN_STARTUP_MESSAGE_LOGGED=1
                     return 0
                 fi
                 
-                # 確実にフラグを設定してからメッセージ出力
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                
-                # メッセージ出力
+                # メッセージ出力（ロック保護下で実行）
                 log "$message"
                 
-                # 完了マーカー作成
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                # 完了マーカー作成（原子的操作）
+                local temp_marker="${startup_msg_done_file}.tmp.$$"
+                if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
+                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
+                else
+                    rm -f "$temp_marker" 2>/dev/null || true
+                fi
                 
                 # ロック解放
                 rm -rf "$startup_msg_lock_file" 2>/dev/null || true
                 return 0
             else
-                # ロック取得失敗時の処理
-                local wait_attempts=0
-                while [ $wait_attempts -lt 5 ] && [ ! -f "$startup_msg_done_file" ]; do
-                    sleep 0.1
-                    wait_attempts=$((wait_attempts + 1))
-                done
-                
-                # フラグ設定
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
+                # ロック取得失敗の場合はメッセージを抑制（重複防止を優先）
+                log "DEBUG: Startup message lock acquisition timeout - message suppressed to prevent duplicate"
                 return 0
             fi
             ;;
