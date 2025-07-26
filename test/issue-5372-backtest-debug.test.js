@@ -178,8 +178,8 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
         expect(entrypointContent).toContain('# Issue #5372: 統一されたタイムスタンプファイル名');
         
         // Check that backward compatibility is maintained while allowing future externalization
-        expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"');
-        expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"');
+        expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE="$LOCK_BASE_DIR/backtest-startup-message.last"');
+        expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE="$LOCK_BASE_DIR/backtest-startup-message.lock"');
         
         // Check that the function uses the configuration variables for externalization
         expect(entrypointContent).toContain('local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"');

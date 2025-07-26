@@ -255,8 +255,8 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
         
         // Issue #5267の修正が適用されていることを確認
         expect(entrypointContent).toContain('Issue #5267修正: アトミックファイルロックによる確実な重複防止');
-        expect(entrypointContent).toContain('startup_msg_lock_file="/tmp/main-startup-message.lock"');
-        expect(entrypointContent).toContain('startup_msg_done_file="/tmp/main-startup-message.done"');
+        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
+        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
         
         // アトミックロック機構の主要部分が含まれていることを確認
         expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file" 2>/dev/null');

@@ -311,8 +311,8 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
         expect(entrypointContent).toContain('# Issue #5315修正: flockのファイルディスクリプタクリーンアップ');
         expect(entrypointContent).toContain('exec 200>&- 2>/dev/null || true');
         expect(entrypointContent).toContain('# Issue #5315修正: 新しいロックファイルのクリーンアップ');
-        expect(entrypointContent).toContain('/tmp/backtest-startup-message.lock');
-        expect(entrypointContent).toContain('/tmp/backtest-startup-message.last');
+        expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE="$LOCK_BASE_DIR/backtest-startup-message.lock"');
+        expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE="$LOCK_BASE_DIR/backtest-startup-message.last"');
     });
 
     test('docker-compose.yml should have backtest service configured correctly', () => {

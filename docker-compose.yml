@@ -101,6 +101,8 @@ services:
       - MONGO_URL=mongodb://mongodb:27017/harvest3
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB_NAME=harvest3
+      # Issue #5417: セキュリティ強化 - 一時ファイル格納場所設定
+      - LOCK_BASE_DIR=/var/run/strategy-runner
     volumes:
       - ./src:/usr/src/app/src:cached
       - ./strategies:/usr/src/app/strategies:cached  
@@ -175,6 +177,8 @@ services:
       - MONGO_URL=mongodb://mongodb:27017/harvest3
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB_NAME=harvest3
+      # Issue #5417: セキュリティ強化 - 一時ファイル格納場所設定
+      - LOCK_BASE_DIR=/var/run/strategy-runner
       
       # Discord webhook URLs (minimal necessary variables)
       - DISCORD_ERROR_WEBHOOK_URL=${DISCORD_ERROR_WEBHOOK_URL}
