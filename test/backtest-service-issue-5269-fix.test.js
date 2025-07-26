@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
+const { mkdtempSync, cleanup } = require('./helpers/temp-path-helper');
 
 describe('Issue #5269 - backtest service exception fix', () => {
     let tempDir;
@@ -20,7 +21,7 @@ describe('Issue #5269 - backtest service exception fix', () => {
 
     beforeEach(() => {
         // 一時ディレクトリの作成
-        tempDir = fs.mkdtempSync('/tmp/backtest-test-');
+        tempDir = mkdtempSync('backtest', 'test-');
         
         // /proc/uptimeのモック
         mockProcUptime = path.join(tempDir, 'uptime');
@@ -35,9 +36,7 @@ describe('Issue #5269 - backtest service exception fix', () => {
 
     afterEach(() => {
         // 一時ファイルのクリーンアップ
-        if (fs.existsSync(tempDir)) {
-            fs.rmSync(tempDir, { recursive: true, force: true });
-        }
+        cleanup(tempDir);
         
         // 環境変数の復元
         Object.keys(process.env).forEach(key => {

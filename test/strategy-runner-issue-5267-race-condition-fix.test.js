@@ -11,26 +11,31 @@ const fs = require('fs');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
+const { getTempDir, getTempPath, cleanup } = require('./helpers/temp-path-helper');
 
 const execAsync = promisify(exec);
 
 describe('Issue #5267: strategy-runner重複起動メッセージレースコンディション修正', () => {
     const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
-    const testTmpDir = '.tmp/test-issue-5267';
+    const testTmpDir = getTempDir('tests', 'issue-5267');
 
     beforeEach(async () => {
-        // テスト用一時ディレクトリの準備
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync(`mkdir -p ${testTmpDir}`);
+        // テスト用一時ディレクトリの準備（getTempDirで既に作成済み）
         
         // Issue #5267用のロックファイルをクリーンアップ
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
     });
 
     afterEach(async () => {
         // テスト後クリーンアップ
-        await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        cleanup(testTmpDir);
+        const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
+        const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
+        cleanup(lockFile);
+        cleanup(doneFile);
     });
 
     test('Issue #5267: アトミックファイルロックによる重複防止が正しく動作することを確認', async () => {

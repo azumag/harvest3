@@ -12,27 +12,23 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { getTempDir, cleanup } = require('./helpers/temp-path-helper');
 
 const execAsync = promisify(exec);
 
 // テスト用の一時ディレクトリ
-const TEST_TMP_DIR = '/tmp/test-issue-5195';
+const TEST_TMP_DIR = getTempDir('tests', 'issue-5195');
 const ENTRYPOINT_PATH = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
 
 describe('Issue #5195: Strategy-runnerレースコンディション修正', () => {
     beforeEach(() => {
-        // テスト環境の初期化
-        if (fs.existsSync(TEST_TMP_DIR)) {
-            fs.rmSync(TEST_TMP_DIR, { recursive: true, force: true });
-        }
-        fs.mkdirSync(TEST_TMP_DIR, { recursive: true });
+        // テスト環境の初期化（getTempDirで既に作成済み）
+        // 追加の初期化が必要な場合はここに記述
     });
 
     afterEach(() => {
         // クリーンアップ
-        if (fs.existsSync(TEST_TMP_DIR)) {
-            fs.rmSync(TEST_TMP_DIR, { recursive: true, force: true });
-        }
+        cleanup(TEST_TMP_DIR);
     });
 
     describe('コンテナ再起動時レースコンディション防止', () => {
