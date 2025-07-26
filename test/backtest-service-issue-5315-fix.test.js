@@ -76,7 +76,7 @@ describe('Issue #5315: Backtest Service Duplicate Message Fix', () => {
         expect(entrypointContent).toContain('_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
         
         // Check for flock implementation
-        expect(entrypointContent).toContain('flock -w 5 200');
+        expect(entrypointContent).toContain('flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200');
         expect(entrypointContent).toContain('exec 200>"$lock_file"');
         
         // Check for enhanced cleanup
@@ -92,6 +92,7 @@ describe('Issue #5315: Backtest Service Duplicate Message Fix', () => {
 # Set environment variables for test
 export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
+export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
@@ -160,6 +161,7 @@ fi
 # Set environment variables for test
 export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
+export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
@@ -228,6 +230,7 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
 # Set environment variables for test
 export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
+export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Clean up test files
 rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
