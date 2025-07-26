@@ -260,7 +260,10 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
         
         // アトミックロック機構の主要部分が含まれていることを確認
         expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file" 2>/dev/null');
-        expect(entrypointContent).toContain('echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file"');
+        // Issue #5381: 原子的ファイル作成の確認（改善された実装）
+        expect(entrypointContent).toContain('local temp_marker="${startup_msg_done_file}.tmp.$$"');
+        expect(entrypointContent).toContain('echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null');
+        expect(entrypointContent).toContain('mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null');
         
         // クリーンアップ関数も更新されていることを確認
         expect(entrypointContent).toContain('Issue #5267: メインの起動メッセージ用ロックファイルのクリーンアップ');
