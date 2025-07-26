@@ -135,6 +135,22 @@ set_secure_permissions() {
 ERROR_LOG_FILE=${ERROR_LOG_FILE:-"$LOCK_BASE_DIR/backtest-errors.log"}
 ERROR_NOTIFICATION_THRESHOLD=${ERROR_NOTIFICATION_THRESHOLD:-3}  # 連続エラー通知閾値
 
+# Issue #5370: DRY原則適用 - 統一的なタイムスタンプ更新関数
+update_timestamp_atomically() {
+    local file="$1"
+    local time="$2"
+    local temp="${file}.tmp.$$"
+    
+    if echo "$time" > "$temp" && mv "$temp" "$file"; then
+        set_secure_permissions "$file" "file"
+        return 0
+    else
+        rm -f "$temp" 2>/dev/null || true
+        log "WARNING: Failed to update startup message timestamp"
+        return 1
+    fi
+}
+
 # 統一エラーハンドリング関数
 handle_unified_error() {
     local error_type="$1"      # "critical", "warning", "info"
@@ -634,13 +650,7 @@ log_backtest_startup_message() {
                 log "$message"
                 
                 # アトミックタイムスタンプ更新
-                local temp_file="${timestamp_file}.tmp.$$"
-                if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
-                    set_secure_permissions "$timestamp_file" "file"
-                else
-                    rm -f "$temp_file" 2>/dev/null || true
-                    log "WARNING: Failed to update startup message timestamp"
-                fi
+                update_timestamp_atomically "$timestamp_file" "$current_time"
             else
                 _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # 抑制の場合もフラグ設定
             fi
@@ -676,13 +686,7 @@ log_backtest_startup_message() {
         log "$message"
         
         # タイムスタンプ更新（atomic write）
-        local temp_file="${timestamp_file}.tmp.$$"
-        if echo "$current_time" > "$temp_file" && mv "$temp_file" "$timestamp_file"; then
-            chmod 600 "$timestamp_file" 2>/dev/null || true
-        else
-            rm -f "$temp_file" 2>/dev/null || true
-            log "WARNING: Failed to update startup message timestamp"
-        fi
+        update_timestamp_atomically "$timestamp_file" "$current_time"
     fi
     
     return 0
