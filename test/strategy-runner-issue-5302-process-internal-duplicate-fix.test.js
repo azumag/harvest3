@@ -105,53 +105,35 @@ echo "=== テスト完了 ==="
         expect(secondCallSection).toMatch(/PROCESS_INTERNAL_BLOCKED/);
     });
 
-    test('Issue #5302: プロセス内変数がentrypoint.shに正しく実装されていることを確認', () => {
+    test('Issue #5415: KISS原則簡素化によりシンプルなflock実装がentrypoint.shに実装されていることを確認', () => {
         // entrypoint.shファイルの内容を確認
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // Issue #5302修正のプロセス内変数チェックが追加されていることを確認（Issue #5264で統合実装）
-        expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
-        expect(entrypointContent).toMatch(/Issue #5302修正.*プロセス内変数による即座の重複防止/);
-        expect(entrypointContent).toMatch(/第0防御線/);
+        // Issue #5415: KISS原則によるシンプルなflock実装が追加されていることを確認
+        expect(entrypointContent).toContain('flock -n 200 || exit 0');
+        expect(entrypointContent).toContain('done_marker="$LOCK_BASE_DIR/main-startup-message.done"');
+        expect(entrypointContent).toContain('touch "$done_marker"');
         
-        // プロセス内変数のチェックが最初の防御線として配置されていることを確認
-        const lines = entrypointContent.split('\n');
-        let processInternalCheckLine = -1;
-        let fileDoneCheckLine = -1;
-        let envVarCheckLine = -1;
-
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
-                processInternalCheckLine = i;
-            }
-            if (lines[i].includes('startup_msg_done_file') && lines[i].includes('if') && lines[i].includes('-f')) {
-                fileDoneCheckLine = i;
-            }
-            if (lines[i].includes('MAIN_STARTUP_MESSAGE_LOGGED') && !lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
-                envVarCheckLine = i;
-            }
-        }
-
-        // プロセス内変数チェックが他のチェックより前に配置されていることを確認
-        expect(processInternalCheckLine).toBeGreaterThan(-1);
-        expect(fileDoneCheckLine).toBeGreaterThan(-1);
-        expect(envVarCheckLine).toBeGreaterThan(-1);
-        expect(processInternalCheckLine).toBeLessThan(fileDoneCheckLine);
-        expect(processInternalCheckLine).toBeLessThan(envVarCheckLine);
+        // 旧実装の複雑な変数が削除されていることを確認
+        expect(entrypointContent).not.toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
+        expect(entrypointContent).not.toContain('MAIN_STARTUP_MESSAGE_LOGGED');
+        
+        // KISS原則に基づくコメントが存在することを確認
+        expect(entrypointContent).toContain('Issue #5415: KISS原則に基づく簡素化');
     });
 
-    test('Issue #5302: プロセス内変数設定がメッセージ出力時と待機時の両方で行われることを確認', () => {
+    test('Issue #5415: KISS原則簡素化によりflock実装のメッセージ出力と重複防止が正しく動作することを確認', () => {
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // メッセージ出力時のプロセス内変数設定を確認（Issue #5264統合実装）
-        const messageLogSection = entrypointContent.match(/log "\$message"[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
-        expect(messageLogSection).toBeTruthy();
-        expect(messageLogSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        // メッセージ出力とdone_marker作成の一連の流れを確認
+        const flockSection = entrypointContent.match(/flock -n 200 \|\| exit 0[\s\S]*?touch "\$done_marker"/);
+        expect(flockSection).toBeTruthy();
+        expect(flockSection[0]).toContain('log "$message"');
+        expect(flockSection[0]).toContain('touch "$done_marker"');
 
-        // ロック取得失敗時の待機セクションでのプロセス内変数設定を確認
-        const waitingSection = entrypointContent.match(/ロック取得失敗時の処理[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
-        expect(waitingSection).toBeTruthy();
-        expect(waitingSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        // done_markerファイルの事前チェックが実装されていることを確認
+        const doneMarkerCheck = entrypointContent.match(/\[ -f "\$done_marker" \] && exit 0/);
+        expect(doneMarkerCheck).toBeTruthy();
     });
 
     test('Issue #5302: 修正により同一タイムスタンプでの重複出力が防止されることを確認', async () => {

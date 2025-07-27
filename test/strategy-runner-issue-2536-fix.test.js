@@ -37,13 +37,13 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
       expect(entrypointContent).not.toContain('STARTUP_LOG_FILE');
     });
 
-    test('atomic重複防止機能が正しく実装されている', () => {
+    test('KISS原則によるflock重複防止機能が正しく実装されている', () => {
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
-      // Issue #5121 修正: 簡素化・安定化版の実装確認
-      expect(entrypointContent).toContain('message_hash=$(get_message_hash "$message")');
-      expect(entrypointContent).toContain('lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"');
-      expect(entrypointContent).toContain('if mkdir "$lock_file" 2>/dev/null; then');
+      // Issue #5415: KISS原則によるシンプルなflock実装確認
+      expect(entrypointContent).toContain('flock -n 200 || exit 0');
+      expect(entrypointContent).toContain('done_marker="$LOCK_BASE_DIR/main-startup-message.done"');
+      expect(entrypointContent).toContain('touch "$done_marker"');
       
       // 複雑な処理が削除されていることを確認
       expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
@@ -122,13 +122,13 @@ echo "Test completed"
         const lines = output.split('\n').filter(line => line.trim() !== '');
         const logMessages = lines.filter(line => line.includes('[ENTRYPOINT]'));
         
-        // "Starting strategy-runner container" が2回出力されることを確認（最初とdone_markerクリーンアップ後）
-        const startupMsgOccurrences = logMessages.filter(line => line.includes('Starting strategy-runner container with enhanced error handling')).length;
-        expect(startupMsgOccurrences).toBe(2);
+        // "Test message 1" が2回出力されることを確認（最初とdone_markerクリーンアップ後）
+        const testMsg1Occurrences = logMessages.filter(line => line.includes('Test message 1')).length;
+        expect(testMsg1Occurrences).toBe(2);
         
-        // "Other message" が一度だけログ出力されることを確認
-        const otherMsgOccurrences = logMessages.filter(line => line.includes('Other message')).length;
-        expect(otherMsgOccurrences).toBe(1);
+        // "Test message 2" が一度だけログ出力されることを確認
+        const testMsg2Occurrences = logMessages.filter(line => line.includes('Test message 2')).length;
+        expect(testMsg2Occurrences).toBe(1);
         
         // テスト完了メッセージがあることを確認
         expect(output).toContain('Test completed');
@@ -278,7 +278,8 @@ fs.unlinkSync(testPath);
       // Issue #5415: KISS原則により不要なファイル操作が削除されていることを確認
       expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
       expect(entrypointContent).not.toContain('grep -q "$instance_signature"');
-      expect(entrypointContent).not.toContain('message_hash=$(');
+      // message_hashは get_message_hash関数として別途存在するが、複雑な重複防止では使用されない
+      expect(entrypointContent).toContain('get_message_hash()');
       
       // シンプルなflock実装が使用されていることを確認
       expect(entrypointContent).toContain('flock -n 200');

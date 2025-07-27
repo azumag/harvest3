@@ -202,14 +202,12 @@ echo "Initial cleanup completed"
     }, 5000);
   });
 
-  test('Issue #5150修正により既存機能に影響がないことを確認', () => {
+  test('Issue #5415: KISS原則簡素化により必要な既存機能が維持されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // 重要な既存機能が維持されていることを確認
     const essentialFunctions = [
       'log_startup_message()',
-      'try_redis_duplicate_prevention(',
-      'fallback_to_file_based_prevention(',
       'get_message_hash(',
       'acquire_startup_lock()',
       'release_startup_lock()',
@@ -221,10 +219,14 @@ echo "Initial cleanup completed"
       expect(entrypointContent).toContain(func);
     });
     
-    // 既存の重複防止メカニズムが維持されていることを確認
-    expect(entrypointContent).toContain('DUPLICATE_PREVENTION_STRATEGY');
-    expect(entrypointContent).toContain('redis_first');
-    expect(entrypointContent).toContain('file_only');
+    // Issue #5415: KISS原則によりシンプルなflock実装が維持されていることを確認
+    expect(entrypointContent).toContain('flock -n 200');
+    expect(entrypointContent).toContain('done_marker');
+    
+    // 旧実装の複雑な機能が削除されていることを確認
+    expect(entrypointContent).not.toContain('try_redis_duplicate_prevention');
+    expect(entrypointContent).not.toContain('fallback_to_file_based_prevention');
+    expect(entrypointContent).not.toContain('file_only');
   });
 
   test('entrypoint.sh構文検証', async () => {

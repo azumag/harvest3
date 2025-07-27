@@ -168,21 +168,22 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
         }
     }, 5000);
 
-    test('Issue #5248: entrypoint.shに修正が適用されていることを確認', () => {
+    test('Issue #5415: KISS原則簡素化によりシンプルなflock実装が適用されていることを確認', () => {
         expect(fs.existsSync(entrypointPath)).toBe(true);
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5248の修正が適用されていることを確認
+        // Issue #5415: KISS原則簡素化実装の確認
         expect(entrypointContent).toContain('log_startup_message()');
-        expect(entrypointContent).toContain('MAIN_STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('flock -n 200 || exit 0');
+        expect(entrypointContent).toContain('done_marker="$LOCK_BASE_DIR/main-startup-message.done"');
         
-        // 修正のキーポイント: フラグ設定とメッセージ出力後にreturnすることを確認
-        const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
+        // 旧実装の複雑な変数が削除されていることを確認
+        expect(entrypointContent).not.toContain('MAIN_STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).not.toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
         
-        // 起動メッセージの処理で適切にreturnしていることを確認
-        expect(logStartupMessageFunction).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
-        expect(logStartupMessageFunction).toContain('return 0');
+        // シンプルなflock実装が使用されていることを確認
+        expect(entrypointContent).toContain('touch "$done_marker"');
     });
 
     test('Issue #5248: 他のメッセージには影響しないことを確認', async () => {
