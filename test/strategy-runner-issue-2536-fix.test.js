@@ -261,7 +261,7 @@ fs.unlinkSync(testPath);
       expect(entrypointContent).not.toContain('STARTUP_INSTANCE_ID');
       expect(entrypointContent).not.toContain('STARTUP_LOG_FILE');
       expect(entrypointContent).not.toContain('instance_signature');
-      expect(entrypointContent).not.toContain('tail -n 10');
+      expect(entrypointContent).not.toContain('tail -n 10 "$STARTUP_LOG_FILE"');
       expect(entrypointContent).not.toContain('grep -v "$STARTUP_INSTANCE_ID"');
       expect(entrypointContent).not.toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
       

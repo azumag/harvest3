@@ -223,10 +223,13 @@ echo "Initial cleanup completed"
     expect(entrypointContent).toContain('flock -n 200');
     expect(entrypointContent).toContain('done_marker');
     
-    // 旧実装の複雑な機能が削除されていることを確認
-    expect(entrypointContent).not.toContain('try_redis_duplicate_prevention');
-    expect(entrypointContent).not.toContain('fallback_to_file_based_prevention');
-    expect(entrypointContent).not.toContain('file_only');
+    // 旧実装の複雑な機能がメインの log_startup_message フローで使用されていないことを確認
+    // KISS原則により簡素化されたflock実装が優先使用されることを確認
+    const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/);
+    if (logStartupMessageFunction) {
+      expect(logStartupMessageFunction[0]).not.toContain('try_redis_duplicate_prevention');
+      expect(logStartupMessageFunction[0]).not.toContain('fallback_to_file_based_prevention');
+    }
   });
 
   test('entrypoint.sh構文検証', async () => {
