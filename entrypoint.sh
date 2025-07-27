@@ -847,8 +847,12 @@ fallback_to_file_based_prevention() {
 log_startup_message() {
     local message="$1"
     
-    # backtest containerの場合は専用関数を使用
+    # Issue #5431修正: backtest containerの場合の重複防止強化
     if [ "$BACKTEST_MODE" = "true" ]; then
+        # 既にbacktest起動メッセージが出力済みの場合は重複を防ぐ
+        if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
+            return 0
+        fi
         log_backtest_startup_message "$message"
         return $?
     fi
@@ -1811,9 +1815,15 @@ main() {
         # backtest開始時刻を記録（問題追跡用）
         echo "$(date +%s)" > "$LOCK_BASE_DIR/backtest-start-time.marker"
         
-        
-        # execコマンドの実行
+        # Issue #5431修正: execコマンド失敗時の適切なエラーハンドリング
+        # execが失敗した場合にelse分岐に進んで重複ログが発生することを防ぐ
+        log "Executing backtest command: $*"
         exec "$@"
+        
+        # execが失敗した場合はここに到達する（通常は到達しない）
+        log "ERROR: Failed to execute backtest command: $*"
+        send_startup_error_to_discord "Backtest execution failed" "Command: $*"
+        exit 1
     else
         # Issue #5413修正: 起動メッセージの確実な重複防止（強化版グローバルフラグ + アトミック操作）
         # Issue #5318修正: グローバルフラグによる重複防止強化実装

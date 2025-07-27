@@ -173,7 +173,8 @@ echo "=== テスト完了 ==="
   const testScriptPath = path.join(testTmpDir, `${testName}-test.sh`);
   
   // スクリプトを安全に作成（セキュリティ対策）
-  const sanitizedScript = fullScript.replace(/[`$\\]/g, '\\$&');
+  // Issue #5431修正: bash変数展開への影響を避けるため、バッククォートのみサニタイズ
+  const sanitizedScript = fullScript.replace(/[`]/g, '\\`');
   fs.writeFileSync(testScriptPath, sanitizedScript);
   fs.chmodSync(testScriptPath, '755');
 
