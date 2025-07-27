@@ -112,7 +112,7 @@ echo "Test completed"
 `;
 
       const testPath = path.join(__dirname, '..', '.tmp', 'kiss_test.sh');
-      fs.writeFileSync(testPath, kissTestScript);
+      fs.writeFileSync(testPath, atomicTestScript);
       fs.chmodSync(testPath, '755');
 
       try {
