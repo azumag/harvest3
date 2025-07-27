@@ -1816,6 +1816,7 @@ main() {
         exec "$@"
     else
         # Issue #5413修正: 起動メッセージの確実な重複防止（強化版グローバルフラグ + アトミック操作）
+        # Issue #5318修正: グローバルフラグによる重複防止強化実装
         # 複数の防御線による重複防止：プロセス内フラグ + 環境変数 + ファイルベース
         local global_flag_file="$LOCK_BASE_DIR/global-startup-flag.marker"
         
@@ -1828,7 +1829,7 @@ main() {
         # 第2防御線: 環境変数による重複防止
         if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" = "1" ]; then
             _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            log "DEBUG: Environment flag prevented duplicate startup message (Issue #5413 fix)" 
+            log "DEBUG: Environment flag prevented duplicate startup message (Issue #5318, #5413 fix)" 
             return 0
         fi
         
@@ -1837,7 +1838,7 @@ main() {
         if [ -f "$global_flag_file" ]; then
             _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
             export _GLOBAL_STARTUP_MESSAGE_SENT=1
-            log "DEBUG: Existing flag file prevented duplicate startup message (Issue #5413 fix)"
+            log "DEBUG: Global flag prevented duplicate startup message (Issue #5318, #5413 fix)"
             return 0
         fi
         
@@ -1850,7 +1851,9 @@ main() {
             chmod 600 "$global_flag_file" 2>/dev/null || true
             
             # 起動ロック取得後に安全にメッセージを出力
-            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+            if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
+                log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+            fi
         else
             # ファイル作成失敗 = 重複実行
             _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1

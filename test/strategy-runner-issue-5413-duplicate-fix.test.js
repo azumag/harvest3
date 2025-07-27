@@ -44,8 +44,8 @@ describe('Issue #5413: strategy-runnerサービス重複メッセージ修正（
     expect(entrypointContent).toContain('Cleaned up global startup flag marker');
   });
 
-  /* eslint-disable no-undef */
   test('Issue #5413修正: 3層防御線による重複防止が正しく動作することを確認', async () => {
+    /* eslint-disable no-undef */
     const testScript = `#!/bin/bash
 # テスト用のlog関数
 log() {
@@ -82,13 +82,13 @@ test_startup_logic() {
     fi
     
     # 第3防御線: アトミックファイル操作による確実な重複防止
-    local temp_flag="${global_flag_file}.tmp.$$"
+    local temp_flag="\${global_flag_file}.tmp.$$"
     if echo "$(date +%s):$$:$(hostname)" > "$temp_flag" 2>/dev/null && \\
-       mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
+       mv "$temp_flag" "\$global_flag_file" 2>/dev/null; then
         # ファイル作成成功 = 最初の実行
         _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
         export _GLOBAL_STARTUP_MESSAGE_SENT=1
-        chmod 600 "$global_flag_file" 2>/dev/null || true
+        chmod 600 "\$global_flag_file" 2>/dev/null || true
         
         # 起動ロック取得後に安全にメッセージを出力
         log "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
@@ -114,6 +114,7 @@ test_startup_logic
 # クリーンアップ
 rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
 `;
+    /* eslint-enable no-undef */
 
     const testScriptPath = path.join(tmpDir, `test-issue-5413-fix-${Date.now()}.sh`);
     fs.writeFileSync(testScriptPath, testScript);
@@ -140,10 +141,9 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
       }
     }
   }, 10000);
-  /* eslint-enable no-undef */
 
-  /* eslint-disable no-undef */
   test('Issue #5413修正: アトミックファイル操作による並行処理耐性確認', async () => {
+    /* eslint-disable no-undef */
     const testScript = `#!/bin/bash
 # 並行実行シミュレーションテスト
 
@@ -166,9 +166,9 @@ simulate_concurrent_startup() {
     echo "Process $process_id: Starting concurrent test"
     
     # アトミックファイル操作をテスト
-    local temp_flag="${global_flag_file}.tmp.$process_id"
+    local temp_flag="\${global_flag_file}.tmp.$process_id"
     if echo "$(date +%s):$process_id:$(hostname)" > "$temp_flag" 2>/dev/null && \\
-       mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
+       mv "$temp_flag" "\$global_flag_file" 2>/dev/null; then
         echo "Process $process_id: SUCCESS - First to create flag file"
         log "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $process_id)"
     else
@@ -186,6 +186,7 @@ simulate_concurrent_startup "1003"
 # クリーンアップ  
 rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
 `;
+    /* eslint-enable no-undef */
 
     const testScriptPath = path.join(tmpDir, `test-issue-5413-concurrent-${Date.now()}.sh`);
     fs.writeFileSync(testScriptPath, testScript);
@@ -217,7 +218,6 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
       }
     }
   }, 10000);
-  /* eslint-enable no-undef */
 
   test('Issue #5413修正: entrypoint.sh構文検証', async () => {
     try {
