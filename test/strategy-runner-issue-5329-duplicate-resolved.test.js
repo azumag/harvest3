@@ -76,8 +76,8 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // Issue #5329で報告された具体的なメッセージパターンへの対応が含まれていることを確認
     expect(entrypointContent).toMatch(/Starting strategy-runner container with enhanced error handling/);
     
-    // 重複防止のための複数の防御線が実装されていることを確認
-    expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS/);
+    // Issue #5415による簡素化実装での重複防止機構の確認
+    expect(entrypointContent).toMatch(/flock -n 200/);
     expect(entrypointContent).toMatch(/main-startup-message\.lock/);
     expect(entrypointContent).toMatch(/main-startup-message\.done/);
     
@@ -88,16 +88,16 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // 複数プロセスでの並行実行に対する保護機能の確認
     // 実際の並行実行テストは複雑すぎるため、実装の存在確認に集中
     
-    // アトミックロック機構の存在確認（Issue #5264統合実装）
-    expect(entrypointContent).toMatch(/mkdir.*startup_msg_lock_file/);
-    expect(entrypointContent).toMatch(/Issue #5264修正.*アトミックロック取得/);
+    // Issue #5415簡素化実装によるflock機構の存在確認
+    expect(entrypointContent).toMatch(/flock -n 200/);
+    expect(entrypointContent).toMatch(/exit 0.*重複防止/);
     
     // プロセス間の競合状態に対する保護の存在確認
     expect(entrypointContent).toMatch(/Another startup process is running/);
     expect(entrypointContent).toMatch(/レースコンディション/);
     
-    // ファイルベースの重複防止機構の存在確認（Issue #5264統合実装）
-    expect(entrypointContent).toMatch(/startup_msg_done_file/);
+    // ファイルベースの重複防止機構の存在確認（Issue #5415簡素化実装）
+    expect(entrypointContent).toMatch(/done_marker/);
     
     console.log('Issue #5329: Concurrent process protection mechanisms verified');
   });
@@ -105,72 +105,60 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
   test('Issue #5329: entrypoint.shに必要な重複防止機能が実装されていることを確認', () => {
     // entrypoint.shファイルの内容を確認（beforeAllで読み込み済み）
 
-    // Issue #5302の修正が含まれていることを確認（Issue #5264で統合実装）
-    expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
-    expect(entrypointContent).toMatch(/Issue #5302修正.*プロセス内変数による即座の重複防止/);
+    // Issue #5415: KISS原則に基づく簡素化実装の確認
+    expect(entrypointContent).toMatch(/Issue #5415.*KISS原則に基づく簡素化.*シンプルなflock使用による重複防止/);
     
-    // Issue #5295の修正が含まれていることを確認（Issue #5264で統合実装）
-    expect(entrypointContent).toMatch(/Issue #5264修正.*起動メッセージの完全分離処理.*fallthrough完全防止/);
-    expect(entrypointContent).toMatch(/fallthrough完全防止/);
-    
-    // Issue #5267の修正が含まれていることを確認（Issue #5264で統合実装）
-    expect(entrypointContent).toMatch(/Issue #5267修正.*アトミックファイルロック/);
+    // 簡素化されたflock実装による重複防止の確認
+    expect(entrypointContent).toMatch(/flock -n 200/);
+    expect(entrypointContent).toMatch(/done_marker/);
     
     // 基本的な重複防止メカニズムが存在することを確認
     expect(entrypointContent).toMatch(/main-startup-message\.lock/);
     expect(entrypointContent).toMatch(/main-startup-message\.done/);
-    expect(entrypointContent).toMatch(/MAIN_STARTUP_MESSAGE_LOGGED/);
   });
 
   test('Issue #5329: 重複防止機能の動作順序が正しいことを確認', () => {
     
     const lines = entrypointContent.split('\n');
-    let processInternalCheckLine = -1;
-    let doneFileCheckLine = -1;
-    let envVarCheckLine = -1;
-    let atomicLockLine = -1;
+    let flockCheckLine = -1;
+    let doneMarkerCheckLine = -1;
+    let logExecutionLine = -1;
 
     for (let i = 0; i < lines.length; i++) {
-      // プロセス内変数チェック（第0防御線）
-      if (lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
-        processInternalCheckLine = i;
+      // flock取得（Issue #5415簡素化実装）
+      if (lines[i].includes('flock -n 200')) {
+        flockCheckLine = i;
       }
-      // 完了ファイルチェック
-      if (lines[i].includes('startup_msg_done_file') && lines[i].includes('if') && lines[i].includes('-f')) {
-        doneFileCheckLine = i;
+      // 完了マーカーチェック
+      if (lines[i].includes('done_marker') && lines[i].includes('-f')) {
+        doneMarkerCheckLine = i;
       }
-      // 環境変数チェック（第一防御線）
-      if (lines[i].includes('MAIN_STARTUP_MESSAGE_LOGGED') && !lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
-        envVarCheckLine = i;
-      }
-      // アトミックロック（第二防御線）
-      if (lines[i].includes('mkdir') && lines[i].includes('startup_msg_lock_file')) {
-        atomicLockLine = i;
+      // ログ実行
+      if (lines[i].includes('log "$message"') && !lines[i].includes('log_')) {
+        logExecutionLine = i;
       }
     }
 
-    // 防御線の順序が正しいことを確認
-    expect(processInternalCheckLine).toBeGreaterThan(-1);
-    expect(doneFileCheckLine).toBeGreaterThan(-1);
-    expect(envVarCheckLine).toBeGreaterThan(-1);
-    expect(atomicLockLine).toBeGreaterThan(-1);
+    // 簡素化実装の動作順序確認
+    expect(flockCheckLine).toBeGreaterThan(-1);
+    expect(doneMarkerCheckLine).toBeGreaterThan(-1);
+    expect(logExecutionLine).toBeGreaterThan(-1);
 
-    // プロセス内変数チェックが最初に来ることを確認
-    expect(processInternalCheckLine).toBeLessThan(doneFileCheckLine);
-    expect(processInternalCheckLine).toBeLessThan(envVarCheckLine);
-    expect(processInternalCheckLine).toBeLessThan(atomicLockLine);
+    // 適切な順序：flock取得 → 完了マーカーチェック → ログ実行
+    expect(flockCheckLine).toBeLessThan(doneMarkerCheckLine);
+    expect(doneMarkerCheckLine).toBeLessThan(logExecutionLine);
   });
 
   test('Issue #5329: 解決済み確認 - Issue #5329の報告時期と修正の時系列確認', () => {
     // Issue #5329は2025-07-24に報告されたが、
-    // 実際の修正は以前のIssue（#5302, #5267, #5295など）で既に実装済み
+    // 実際の修正はIssue #5415のKISS原則に基づく簡素化で完全に解決済み
     // このテストで重複防止が機能することが確認できれば、Issue #5329は解決済みとみなせる
     
-    // 複数の修正が統合されていることを確認（Issue #5264で統合実装）
+    // Issue #5415による統合・簡素化実装の確認
     const fixes = [
-      'Issue #5302', // プロセス内重複防止
-      'Issue #5267', // レースコンディション修正
-      'Issue #5264.*fallthrough完全防止', // fallthrough防止（Issue #5295機能を#5264で統合）
+      'Issue #5415', // KISS原則に基づく簡素化
+      'flock -n', // 簡素化されたロック機構
+      'done_marker', // 完了マーカー
     ];
     
     fixes.forEach(fix => {
