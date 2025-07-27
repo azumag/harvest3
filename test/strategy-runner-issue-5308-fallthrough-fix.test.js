@@ -35,7 +35,7 @@ describe('Issue #5308: strategy-runner重複起動メッセージ問題修正', 
     });
 
     test('Issue #5308: 特定メッセージパターン処理後に汎用ロジックが実行されないことを確認', async () => {
-        // Issue #5308修正前の動作をシミュレートし、修正後は汎用ロジックが実行されないことを確認
+        // Issue #5415 KISS原則簡素化後の動作確認
         const testScript = `#!/bin/bash
 set -e
 
@@ -43,45 +43,31 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# Issue #5308修正版のlog_startup_message関数（簡略版）
-log_startup_message_fixed() {
+# Issue #5415: KISS原則に基づく簡素化後の実装（flock使用）
+log_startup_message_kiss() {
     local message="$1"
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # 特定メッセージパターンの処理
-            local startup_msg_done_file="/tmp/main-startup-message.done"
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local lock_file="${testTmpDir}/main-startup-message-kiss.lock"
+            local done_marker="${testTmpDir}/main-startup-message-kiss.done"
             
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0
-            fi
-            
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                return 0
-            fi
-            
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
+            # シンプルなflock実装による重複防止
+            (
+                flock -n 200 || exit 0
+                [ -f "$done_marker" ] && exit 0
                 log "$message"
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                # Issue #5308修正: ここでreturn 0が追加された
-                return 0
-            else
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0
-            fi
+                touch "$done_marker"
+                chmod 600 "$done_marker" 2>/dev/null || true
+            ) 200>"$lock_file"
+            
+            return 0
             ;;
     esac
     
-    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
+    # その他のメッセージは通常のログ処理
+    log "$message"
     return 0
-    
-    # 汎用ロジック（Issue #5308修正前はここが実行されていた）
-    echo "GENERIC_LOGIC_EXECUTED: This should NOT appear for strategy-runner messages"
-    local message_hash=\$(echo "\$message" | md5sum | cut -d' ' -f1)
-    echo "Generic hash processing: \$message_hash"
 }
 
 # Issue #5308修正前の動作をシミュレート（汎用ロジックが実行される）
@@ -91,8 +77,8 @@ log_startup_message_before_fix() {
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # 特定メッセージパターンの処理
-            local startup_msg_done_file="/tmp/main-startup-message-before.done"
-            local startup_msg_lock_file="/tmp/main-startup-message-before.lock"
+            local startup_msg_done_file="${testTmpDir}/main-startup-message-before.done"
+            local startup_msg_lock_file="${testTmpDir}/main-startup-message-before.lock"
             
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 log "$message"
@@ -109,13 +95,13 @@ log_startup_message_before_fix() {
     echo "Generic hash processing: \$message_hash"
 }
 
-echo "=== Testing Issue #5308 fix ==="
+echo "=== Testing Issue #5415 KISS simplification ==="
 echo "--- Before fix (should show generic logic) ---"
 log_startup_message_before_fix "Starting strategy-runner container with enhanced error handling (test)"
 
 echo ""
-echo "--- After fix (should NOT show generic logic) ---"  
-log_startup_message_fixed "Starting strategy-runner container with enhanced error handling (test)"
+echo "--- After KISS simplification (should NOT show generic logic) ---"  
+log_startup_message_kiss "Starting strategy-runner container with enhanced error handling (test)"
 
 echo "=== Test completed ==="
 `;
@@ -132,20 +118,20 @@ echo "=== Test completed ==="
                 line.includes('GENERIC_LOGIC_EXECUTED') && line.includes('SHOULD appear')
             );
             
-            // 修正後バージョンでは汎用ロジックが実行されない
-            const afterFixGenericLogic = stdout.split('\n').filter(line => 
-                line.includes('GENERIC_LOGIC_EXECUTED') && line.includes('should NOT appear')
+            // Issue #5415 KISS簡素化後は適切なreturnでメッセージ処理が終了
+            const afterKissMessages = stdout.split('\n').filter(line => 
+                line.includes('Starting strategy-runner container with enhanced error handling')
             );
             
             // 修正前では汎用ロジックが実行される
             expect(beforeFixGenericLogic.length).toBe(1);
             
-            // Issue #5308修正により汎用ロジックが実行されない
-            expect(afterFixGenericLogic.length).toBe(0);
+            // Issue #5415 KISS簡素化により、適切にメッセージが処理される
+            expect(afterKissMessages.length).toBeGreaterThan(0);
             
-            console.log('Issue #5308 fix verification:');
+            console.log('Issue #5415 KISS simplification verification:');
             console.log('- Before fix generic logic executed:', beforeFixGenericLogic.length);
-            console.log('- After fix generic logic executed:', afterFixGenericLogic.length);
+            console.log('- After KISS simplification messages processed:', afterKissMessages.length);
         } finally {
             if (fs.existsSync(testScriptPath)) {
                 fs.unlinkSync(testScriptPath);
@@ -158,24 +144,28 @@ echo "=== Test completed ==="
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5308の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ');
+        // Issue #5415: KISS原則による簡素化後の実装を確認
+        expect(entrypointContent).toContain('Issue #5415: KISS原則に基づく簡素化 - シンプルなflock使用による重複防止');
+        expect(entrypointContent).toContain('flock -n 200');
+        expect(entrypointContent).toContain('done_marker');
         expect(entrypointContent).toContain('return 0');
         
-        // 931行目周辺にreturn 0があることを確認
+        // シンプルなflock実装による重複防止が正しく実装されていることを確認
         const lines = entrypointContent.split('\n');
-        const returnLine = lines.find((line, index) => 
-            line.trim() === 'return 0' && 
-            lines[index - 1] && 
-            lines[index - 1].includes('Issue #5308修正')
-        );
-        expect(returnLine).toBeDefined();
+        const flockLineIndex = lines.findIndex(line => line.includes('flock -n 200'));
+        expect(flockLineIndex).toBeGreaterThan(-1);
         
-        console.log('Issue #5308 fix found in entrypoint.sh');
+        // flockブロックが正しく閉じられていることを確認
+        const flockEndIndex = lines.findIndex((line, index) => 
+            index > flockLineIndex && line.includes(') 200>"$lock_file"')
+        );
+        expect(flockEndIndex).toBeGreaterThan(flockLineIndex);
+        
+        console.log('Issue #5415 KISS simplification found in entrypoint.sh');
     });
 
     test('Issue #5308: 修正により重複ログ出力が防止されることを確認', async () => {
-        // 実際のentrypoint.sh関数のロジックに近いテスト
+        // Issue #5415 KISS原則による簡素化後の実装テスト
         const realWorldScript = `#!/bin/bash
 set -e
 
@@ -183,82 +173,34 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# 実際のentrypoint.shのlog_startup_message関数のロジック（簡略版）
+# Issue #5415: KISS原則に基づく簡素化 - シンプルなflock使用による重複防止
 log_startup_message() {
     local message="$1"
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # プロセス内変数による即座の重複防止（第0防御線）
-            if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-                return 0
-            fi
+            local lock_file="${testTmpDir}/main-startup-message.lock"
+            local done_marker="${testTmpDir}/main-startup-message.done"
             
-            # 環境変数フラグによる第1防御線
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                return 0
-            fi
-            
-            # 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="/tmp/main-startup-message.done"
-            if [ -f "$startup_msg_done_file" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0
-            fi
-            
-            # アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得後の最終チェック
-                if [ -f "$startup_msg_done_file" ]; then
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                    export MAIN_STARTUP_MESSAGE_LOGGED=1
-                    return 0
-                fi
-                
-                # 確実にフラグを設定してからメッセージ出力
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                
-                # メッセージ出力
+            # シンプルなflock実装による重複防止
+            (
+                flock -n 200 || exit 0
+                [ -f "$done_marker" ] && exit 0
                 log "$message"
-                
-                # 完了マーカー作成
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                
-                # ロック解放
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                return 0
-            else
-                # ロック取得失敗時の処理
-                local wait_attempts=0
-                while [ $wait_attempts -lt 5 ] && [ ! -f "$startup_msg_done_file" ]; do
-                    sleep 0.1
-                    wait_attempts=$((wait_attempts + 1))
-                done
-                
-                # フラグ設定
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0
-            fi
+                touch "$done_marker"
+                chmod 600 "$done_marker" 2>/dev/null || true
+            ) 200>"$lock_file"
+            
+            return 0
             ;;
     esac
     
-    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
+    # その他のメッセージは通常のログ処理
+    log "$message"
     return 0
-    
-    # ここから先の汎用ロジックは実行されない（Issue #5308修正により）
-    echo "SHOULD_NOT_EXECUTE: Generic duplicate prevention logic"
-    local message_hash=\$(echo "\$message" | md5sum | cut -d' ' -f1)
-    echo "Processing generic hash: \$message_hash"
 }
 
-echo "=== Testing Issue #5308 duplicate prevention ==="
+echo "=== Testing Issue #5415 KISS simplification duplicate prevention ==="
 log_startup_message "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
 log_startup_message "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
 log_startup_message "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
@@ -272,23 +214,17 @@ echo "=== Test completed ==="
         try {
             const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 8000 });
             
-            // メッセージが1回のみ出力されることを確認
+            // Issue #5415 KISS簡素化: メッセージが1回のみ出力されることを確認
             const messages = stdout.split('\n').filter(line => 
                 line.includes('Starting strategy-runner container with enhanced error handling')
             );
             
-            // 汎用ロジックが実行されないことを確認
-            const genericLogic = stdout.split('\n').filter(line => 
-                line.includes('SHOULD_NOT_EXECUTE')
-            );
-            
-            // Issue #5308修正により、メッセージは1回のみ出力され、汎用ロジックは実行されない
+            // Issue #5415により、シンプルなflock実装でメッセージは1回のみ出力される
             expect(messages.length).toBe(1);
-            expect(genericLogic.length).toBe(0);
             
-            console.log('Issue #5308 duplicate prevention test:');
+            console.log('Issue #5415 KISS simplification duplicate prevention test:');
             console.log('- Messages found:', messages.length);
-            console.log('- Generic logic executed:', genericLogic.length);
+            console.log('- Expected: 1 (duplicate prevention working)');
         } finally {
             if (fs.existsSync(testScriptPath)) {
                 fs.unlinkSync(testScriptPath);
@@ -297,7 +233,7 @@ echo "=== Test completed ==="
     }, 12000);
 
     test('entrypoint.sh構文検証', async () => {
-        // Issue #5308修正後もentrypoint.shが正しく動作することを確認
+        // Issue #5415 KISS簡素化後もentrypoint.shが正しく動作することを確認
         await expect(execAsync(`bash -n ${entrypointPath}`, { timeout: 2000 })).resolves.not.toThrow();
     }, 3000);
 });
