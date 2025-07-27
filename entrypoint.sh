@@ -591,122 +591,49 @@ cleanup_backtest_lock() {
 # Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
 # Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）
 # Issue #5372改善: より線形で予測可能なフロー、統一エラーハンドリング、設定外部化
+# Issue #5371: YAGNI原則に基づく簡素化（120行→45行、73%削減）
+# 核心機能のみ保持: プロセス内重複防止 + flockベース同期 + シンプルフォールバック
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
     local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"
     local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
-    # Issue #5269修正: Docker再起動時のクリーンアップ強化
-    # システム稼働時間から新規コンテナかを判定
-    local system_uptime_seconds=0
-    if [ -f /proc/uptime ]; then
-        system_uptime_seconds=$(cat /proc/uptime | cut -d' ' -f1 | cut -d'.' -f1)
-    fi
-    
-    # 設定可能な閾値以内の稼働時間の場合は新規コンテナと判定してクリーンアップ
-    if [ "$system_uptime_seconds" -lt $CONTAINER_RESTART_DETECTION_THRESHOLD ]; then
-        log "New container detected (uptime: ${system_uptime_seconds}s), cleaning up old timestamp files"
-        rm -f "$timestamp_file" 2>/dev/null || true
-        rm -f "$LOCK_BASE_DIR/backtest-npm-error-detection.state" 2>/dev/null || true
-        # 古いロックファイルもクリーンアップ
-        # Issue #5307 Phase 3: より制限的なセキュリティパターン使用
-        find /tmp -maxdepth 1 -name "backtest-startup-message*.lock" -type f -mtime +1 -delete 2>/dev/null || true
-        find /tmp -maxdepth 1 -name "backtest-startup-message*.last" -type f -mtime +1 -delete 2>/dev/null || true
-        find /tmp -maxdepth 1 -name "backtest-startup-message*.state" -type f -mtime +1 -delete 2>/dev/null || true
-    fi
-    
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
-    # Issue #5372改善: より予測可能なフロー Step 1
-    if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
-        return 0  # 既に同一プロセス内でログ出力済み
-    fi
+    [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ] && return 0
     
     # Issue #5315修正: flockによる確実なファイルロック（第二防御線）
-    # Issue #5372改善: より予測可能なフロー Step 2
-    local lock_file="$BACKTEST_STARTUP_LOCK_FILE"
-    local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"
-    
-    # flockが利用可能な場合の確実なロック取得
     if command -v flock >/dev/null 2>&1; then
-        # ファイルディスクリプタ200を使用してロック取得（タイムアウト付き）
-        # Issue #5372改善: 設定可能なファイルディスクリプタ（環境変数BACKTEST_FD_BASE）
+        local lock_file="$BACKTEST_STARTUP_LOCK_FILE"
         exec 200>"$lock_file"
-        if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then  # Issue #5269: 動的タイムアウト（デフォルト15秒）
-            # ロック取得成功 - 重複チェックとメッセージ出力
-            # Issue #5372改善: より予測可能なフロー Step 3
-            local should_output=true
-            
-            # タイムスタンプファイルチェック
+        if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then
+            # 重複チェック
             if [ -f "$timestamp_file" ]; then
                 local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
                 local time_diff=$((current_time - last_time))
-                
-                if [ "$time_diff" -lt "$suppress_duration" ]; then
-                    should_output=false
-                    # Issue #5403修正: log_duplicate_stats関数の存在チェック
-                    if command -v log_duplicate_stats >/dev/null 2>&1; then
-                        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-                    fi
-                    log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
-                fi
+                [ "$time_diff" -lt "$suppress_duration" ] && { _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; exec 200>&-; return 0; }
             fi
             
             # メッセージ出力とタイムスタンプ更新
-            if [ "$should_output" = true ]; then
-                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # プロセス内フラグ設定
-                log "$message"
-                
-                # アトミックタイムスタンプ更新
-                update_timestamp_atomically "$timestamp_file" "$current_time"
-            else
-                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1  # 抑制の場合もフラグ設定
-            fi
-            
-            # ロック解放
-            # Issue #5372改善: より予測可能なフロー Step 4
+            _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+            log "$message"
+            echo "$current_time" > "$timestamp_file"
             exec 200>&-
         else
-            # ロック取得失敗（タイムアウト）
-            # Issue #5372改善: 統一エラーハンドリング
-            # Issue #5403修正: log_duplicate_stats関数の存在チェック
-            if command -v log_duplicate_stats >/dev/null 2>&1; then
-                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-            fi
-            log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         fi
     else
-        # flockが利用できない場合のフォールバック（従来の方法）
-        # Issue #5372改善: 統一エラーハンドリング
+        # flock利用不可時のフォールバック
         log "WARNING: flock not available, using fallback duplicate prevention"
-        
-        # 前回のメッセージ出力時刻をチェック
         if [ -f "$timestamp_file" ]; then
             local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
             local time_diff=$((current_time - last_time))
-            
-            if [ "$time_diff" -lt "$suppress_duration" ]; then
-                # Issue #5403修正: log_duplicate_stats関数の存在チェック
-                if command -v log_duplicate_stats >/dev/null 2>&1; then
-                    log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-                fi
-                log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
-                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                return 0
-            fi
+            [ "$time_diff" -lt "$suppress_duration" ] && { _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; return 0; }
         fi
         
-        # メッセージ出力
         _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         log "$message"
-        
-        # タイムスタンプ更新（atomic write）
-        update_timestamp_atomically "$timestamp_file" "$current_time"
+        echo "$current_time" > "$timestamp_file"
     fi
     
     return 0

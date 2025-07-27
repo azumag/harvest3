@@ -1,12 +1,12 @@
 /**
- * Issue #5269修正のテスト
- * backtestサービスで例外が発生する問題の修正をテスト
+ * Issue #5371: YAGNI原則による簡素化後のテスト
+ * backtestサービスの核心機能が維持されていることを確認
  * 
- * 修正内容:
- * 1. flock タイムアウト延長（5秒→15秒）
- * 2. Docker再起動時クリーンアップ強化
- * 3. システム稼働時間ベースの新規コンテナ判定
- * 4. NPMエラーマーカー初期化
+ * Issue #5371 変更内容:
+ * 1. log_backtest_startup_message関数の大幅簡素化（120行→45行、73%削減）
+ * 2. Docker再起動検出システムの削除（YAGNI原則）
+ * 3. 複雑なatomic操作をシンプルなechoで置換
+ * 4. 核心機能（重複防止、flock同期）は完全保持
  */
 
 const fs = require('fs');
@@ -14,7 +14,7 @@ const path = require('path');
 const { execSync, spawn } = require('child_process');
 const { mkdtempSync, cleanup } = require('./helpers/temp-path-helper');
 
-describe('Issue #5269 - backtest service exception fix', () => {
+describe('Issue #5371 - YAGNI原則による簡素化後の機能確認', () => {
     let tempDir;
     let mockProcUptime;
     let originalEnv;
@@ -71,93 +71,8 @@ describe('Issue #5269 - backtest service exception fix', () => {
         });
     });
 
-    describe('Docker restart detection and cleanup', () => {
-        test('should detect new container based on system uptime', () => {
-            // 新規コンテナ（稼働時間30秒）をシミュレート
-            fs.writeFileSync(mockProcUptime, '30.45 120.30');
-            
-            const testScript = `
-                # Mock /proc/uptime
-                MOCK_PROC_UPTIME="${mockProcUptime}"
-                
-                # Extract container detection logic
-                system_uptime_seconds=0
-                if [ -f "$MOCK_PROC_UPTIME" ]; then
-                    system_uptime_seconds=$(cat "$MOCK_PROC_UPTIME" | cut -d' ' -f1 | cut -d'.' -f1)
-                fi
-                
-                if [ "$system_uptime_seconds" -lt 60 ]; then
-                    echo "NEW_CONTAINER_DETECTED"
-                else
-                    echo "EXISTING_CONTAINER"
-                fi
-            `;
-            
-            const result = execSync(testScript, { shell: '/bin/bash', encoding: 'utf8' }).trim();
-            expect(result).toBe('NEW_CONTAINER_DETECTED');
-        });
-
-        test('should not trigger cleanup for existing container', () => {
-            // 既存コンテナ（稼働時間120秒）をシミュレート
-            fs.writeFileSync(mockProcUptime, '120.45 240.30');
-            
-            const testScript = `
-                # Mock /proc/uptime
-                MOCK_PROC_UPTIME="${mockProcUptime}"
-                
-                # Extract container detection logic
-                system_uptime_seconds=0
-                if [ -f "$MOCK_PROC_UPTIME" ]; then
-                    system_uptime_seconds=$(cat "$MOCK_PROC_UPTIME" | cut -d' ' -f1 | cut -d'.' -f1)
-                fi
-                
-                if [ "$system_uptime_seconds" -lt 60 ]; then
-                    echo "NEW_CONTAINER_DETECTED"
-                else
-                    echo "EXISTING_CONTAINER"
-                fi
-            `;
-            
-            const result = execSync(testScript, { shell: '/bin/bash', encoding: 'utf8' }).trim();
-            expect(result).toBe('EXISTING_CONTAINER');
-        });
-
-        test('should clean up timestamp files on new container', () => {
-            // テスト用のタイムスタンプファイルを作成
-            const timestampFile = path.join(tempDir, 'backtest-startup-message.last');
-            const npmErrorFile = path.join(tempDir, 'backtest-npm-error-detection.state');
-            
-            fs.writeFileSync(timestampFile, '1640995200');
-            fs.writeFileSync(npmErrorFile, '1640995200');
-            
-            // 新規コンテナをシミュレート
-            fs.writeFileSync(mockProcUptime, '30.45 120.30');
-            
-            const testScript = `
-                # Mock /proc/uptime
-                MOCK_PROC_UPTIME="${mockProcUptime}"
-                TEMP_DIR="${tempDir}"
-                
-                # Extract cleanup logic
-                system_uptime_seconds=0
-                if [ -f "$MOCK_PROC_UPTIME" ]; then
-                    system_uptime_seconds=$(cat "$MOCK_PROC_UPTIME" | cut -d' ' -f1 | cut -d'.' -f1)
-                fi
-                
-                if [ "$system_uptime_seconds" -lt 60 ]; then
-                    rm -f "$TEMP_DIR/backtest-startup-message.last" 2>/dev/null || true
-                    rm -f "$TEMP_DIR/backtest-npm-error-detection.state" 2>/dev/null || true
-                    echo "CLEANUP_EXECUTED"
-                fi
-            `;
-            
-            execSync(testScript, { shell: '/bin/bash' });
-            
-            // ファイルが削除されていることを確認
-            expect(fs.existsSync(timestampFile)).toBeFalsy();
-            expect(fs.existsSync(npmErrorFile)).toBeFalsy();
-        });
-    });
+    // Issue #5371: Docker再起動検出システムはYAGNI原則により削除されました
+    // 必要最小限の重複防止機能のみ保持
 
     describe('duplicate message prevention', () => {
         test('should prevent duplicate startup messages within timeout', () => {
@@ -227,62 +142,10 @@ describe('Issue #5269 - backtest service exception fix', () => {
         });
     });
 
-    describe('NPM error marker initialization', () => {
-        test('should reset NPM error marker on Docker restart', () => {
-            const npmErrorFile = path.join(tempDir, 'backtest-npm-error-detection.state');
-            
-            // 既存のNPMエラーマーカーを作成
-            fs.writeFileSync(npmErrorFile, '1640995200');
-            expect(fs.existsSync(npmErrorFile)).toBeTruthy();
-            
-            // 新規コンテナの場合のクリーンアップをシミュレート
-            fs.writeFileSync(mockProcUptime, '25.15 95.30');
-            
-            const testScript = `
-                MOCK_PROC_UPTIME="${mockProcUptime}"
-                NPM_ERROR_FILE="${npmErrorFile}"
-                
-                system_uptime_seconds=0
-                if [ -f "$MOCK_PROC_UPTIME" ]; then
-                    system_uptime_seconds=$(cat "$MOCK_PROC_UPTIME" | cut -d' ' -f1 | cut -d'.' -f1)
-                fi
-                
-                if [ "$system_uptime_seconds" -lt 60 ]; then
-                    rm -f "$NPM_ERROR_FILE" 2>/dev/null || true
-                    echo "NPM_ERROR_MARKER_RESET"
-                fi
-            `;
-            
-            const result = execSync(testScript, { shell: '/bin/bash', encoding: 'utf8' }).trim();
-            expect(result).toBe('NPM_ERROR_MARKER_RESET');
-            expect(fs.existsSync(npmErrorFile)).toBeFalsy();
-        });
-    });
+    // Issue #5371: NPMエラーマーカー機能もYAGNI原則により削除されました
 
     describe('edge cases and error handling', () => {
-        test('should handle missing /proc/uptime gracefully', () => {
-            const testScript = `
-                # /proc/uptimeが存在しない場合をシミュレート
-                MOCK_PROC_UPTIME="/nonexistent/uptime"
-                
-                system_uptime_seconds=0
-                if [ -f "$MOCK_PROC_UPTIME" ]; then
-                    system_uptime_seconds=$(cat "$MOCK_PROC_UPTIME" | cut -d' ' -f1 | cut -d'.' -f1)
-                fi
-                
-                echo "UPTIME: $system_uptime_seconds"
-                
-                if [ "$system_uptime_seconds" -lt 60 ]; then
-                    echo "NEW_CONTAINER_ASSUMED"
-                else
-                    echo "EXISTING_CONTAINER_ASSUMED"
-                fi
-            `;
-            
-            const result = execSync(testScript, { shell: '/bin/bash', encoding: 'utf8' });
-            expect(result).toContain('UPTIME: 0');
-            expect(result).toContain('NEW_CONTAINER_ASSUMED');
-        });
+        // Issue #5371: /proc/uptime関連機能は削除されました
 
         test('should handle corrupted timestamp files', () => {
             const timestampFile = path.join(tempDir, 'backtest-startup-message.last');
@@ -345,9 +208,9 @@ describe('Issue #5269 - backtest service exception fix', () => {
             expect(entrypointContent).toMatch(/BACKTEST_MODE.*true/);
             expect(entrypointContent).toMatch(/exec.*\$@/);
             
-            // Issue #5269の修正が含まれていることを確認
-            expect(entrypointContent).toMatch(/Issue #5269/);
-            expect(entrypointContent).toMatch(/Docker再起動時のクリーンアップ強化/);
+            // Issue #5371: YAGNI原則により簡素化されたため、コア機能のみ確認
+            expect(entrypointContent).toMatch(/log_backtest_startup_message/);
+            expect(entrypointContent).toMatch(/YAGNI原則/);
         });
 
         test('should not interfere with non-backtest mode', () => {

@@ -58,27 +58,25 @@ describe('Issue #5372: KISS Principle - Dual Defense System Debuggability Improv
         cleanupTestFiles();
     });
 
-    test('entrypoint.sh should contain Issue #5372 improvements', () => {
+    test('entrypoint.sh should contain Issue #5372 improvements (YAGNI simplified)', () => {
         const entrypointPath = path.join(__dirname, '../entrypoint.sh');
         expect(fs.existsSync(entrypointPath)).toBe(true);
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Check for Issue #5372 improvements in the existing function
-        expect(entrypointContent).toContain('# Issue #5372改善: より予測可能なフロー');
-        expect(entrypointContent).toContain('# Issue #5372改善: 統一エラーハンドリング');
-        expect(entrypointContent).toContain('# Issue #5372改善: 設定可能なファイルディスクリプタ');
+        // Issue #5371: YAGNI原則適用後の実際のIssue #5372関連コメントをチェック
         expect(entrypointContent).toContain('# Issue #5372改善: より予測可能なクリーンアップフロー');
+        expect(entrypointContent).toContain('# Issue #5372修正: 設定の外部化と一元管理');
+        expect(entrypointContent).toContain('# Issue #5372: 統一されたタイムスタンプファイル名');
+        expect(entrypointContent).toContain('# Issue #5372: 動的ファイルディスクリプタ基底値（設定可能）');
         
-        // Check for configuration externalization
+        // Check for configuration externalization (実際に存在する設定)
         expect(entrypointContent).toContain('BACKTEST_FD_BASE=${BACKTEST_FD_BASE:-200}');
         expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE');
         
-        // Check for step-by-step flow comments
-        expect(entrypointContent).toContain('Step 1');
-        expect(entrypointContent).toContain('Step 2');
-        expect(entrypointContent).toContain('Step 3');
-        expect(entrypointContent).toContain('Step 4');
+        // YAGNI簡素化により削除されたStep-by-stepコメントは期待しない
+        // 代わりに実際に存在するIssue #5372参照をチェック
+        expect(entrypointContent).toContain('# Issue #5372: 従来のcleanup_backtest_lock関数（後方互換性維持・簡素化）');
         
         // Check that original Issue #5315 functionality is maintained
         expect(entrypointContent).toContain('# Issue #5315修正: backtest container専用起動メッセージ関数（強化版重複防止）');
@@ -156,24 +154,27 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
         }
     });
 
-    test('improved cleanup should have Issue #5372 enhancements', () => {
+    test('improved cleanup should have Issue #5372 enhancements (YAGNI simplified)', () => {
         const entrypointPath = path.join(__dirname, '../entrypoint.sh');
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Check that cleanup functions have Issue #5372 improvements
+        // YAGNI簡素化後に実際に存在するクリーンアップ改善をチェック
         expect(entrypointContent).toContain('# Issue #5372改善: より予測可能なクリーンアップフロー');
-        expect(entrypointContent).toContain('# Issue #5372改善: 統一されたファイルパス使用');
         
-        // Check that cleanup_backtest_lock function is improved 
+        // Check that cleanup_backtest_lock function exists (simplified version)
         expect(entrypointContent).toContain('cleanup_backtest_lock()');
         expect(entrypointContent).toContain('# Issue #5372: 従来のcleanup_backtest_lock関数（後方互換性維持・簡素化）');
+        
+        // YAGNI原則により「統一されたファイルパス使用」コメントは削除されたため期待しない
+        // 代わりにより重要な実際の機能をチェック
+        expect(entrypointContent).toContain('exec 200>&- 2>/dev/null || true'); // flockクリーンアップ
     });
 
-    test('configuration externalization should be properly implemented', () => {
+    test('configuration externalization should be properly implemented (YAGNI simplified)', () => {
         const entrypointPath = path.join(__dirname, '../entrypoint.sh');
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Check that configuration is externalized and unified
+        // Check that configuration is externalized and unified (実際に存在する設定)
         expect(entrypointContent).toContain('BACKTEST_FD_BASE=${BACKTEST_FD_BASE:-200}');
         expect(entrypointContent).toContain('# Issue #5372修正: 設定の外部化と一元管理');
         expect(entrypointContent).toContain('# Issue #5372: 統一されたタイムスタンプファイル名');
@@ -182,9 +183,9 @@ rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
         expect(entrypointContent).toContain('BACKTEST_STARTUP_TIMESTAMP_FILE="$LOCK_BASE_DIR/backtest-startup-message.last"');
         expect(entrypointContent).toContain('BACKTEST_STARTUP_LOCK_FILE="$LOCK_BASE_DIR/backtest-startup-message.lock"');
         
-        // Check that the function uses the configuration variables for externalization
+        // YAGNI簡素化により複雑なlocal変数は削除されたが、基本的な設定は維持
+        // 簡素化されたlog_backtest_startup_message関数で直接変数を使用
         expect(entrypointContent).toContain('local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"');
-        expect(entrypointContent).toContain('local lock_file="$BACKTEST_STARTUP_LOCK_FILE"');
     });
 
 });
