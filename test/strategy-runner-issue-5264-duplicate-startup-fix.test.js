@@ -265,22 +265,27 @@ test_defense_line "none"
         }
     }, 10000);
 
-    test('Issue #5264: entrypoint.shに修正が適用されていることを確認', () => {
+    test('Issue #5415: entrypoint.shにKISS原則による簡素化が適用されていることを確認', () => {
         expect(fs.existsSync(entrypointPath)).toBe(true);
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5264の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）');
-        expect(entrypointContent).toContain('Issue #5264修正: 環境変数フラグによる第1防御線');
-        expect(entrypointContent).toContain('Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）');
-        expect(entrypointContent).toContain('Issue #5264修正: アトミックロック取得（第3防御線）');
+        // Issue #5415の簡素化修正が適用されていることを確認
+        expect(entrypointContent).toContain('Issue #5415: KISS原則に基づく簡素化');
+        expect(entrypointContent).toContain('シンプルなflock使用による重複防止');
+        expect(entrypointContent).toContain('flock -n 200 || exit 0');
         
-        // 重複防止機構の主要部分が含まれていることを確認
-        expect(entrypointContent).toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1');
-        expect(entrypointContent).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
-        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
-        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
+        // 簡素化された重複防止機構の主要部分が含まれていることを確認
+        expect(entrypointContent).toContain('local lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
+        expect(entrypointContent).toContain('local done_marker="$LOCK_BASE_DIR/main-startup-message.done"');
+        expect(entrypointContent).toContain('touch "$done_marker"');
+        
+        // 古い複雑な実装が削除されていることを確認
+        expect(entrypointContent).not.toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
+        expect(entrypointContent).not.toContain('第0防御線');
+        expect(entrypointContent).not.toContain('第1防御線');
+        expect(entrypointContent).not.toContain('第2防御線');
+        expect(entrypointContent).not.toContain('第3防御線');
     });
 
     test('Issue #5264: 並行プロセステスト', async () => {

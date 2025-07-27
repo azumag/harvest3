@@ -905,110 +905,27 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5220/#5248/#5267: 起動メッセージの重複防止（アトミックファイルロック強化版）
-    # Issue #5267修正: アトミックファイルロックによる確実な重複防止
-    # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
-    # 注意: バックテストモード以外でのみ適用
-    # Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）
-    # Issue #5437修正: より強固な重複防止機構（原子性の向上）
+    # Issue #5415: KISS原則に基づく簡素化 - シンプルなflock使用による重複防止
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            # Issue #5437修正: まず最初にプロセス内フラグをチェック（最速の防御線）
-            if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-                return 0
-            fi
+            local lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
+            local done_marker="$LOCK_BASE_DIR/main-startup-message.done"
             
-            # Issue #5264修正: 環境変数フラグによる第1防御線
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                return 0
-            fi
+            # シンプルなflock実装による重複防止
+            (
+                flock -n 200 || exit 0
+                [ -f "$done_marker" ] && exit 0
+                log "$message"
+                touch "$done_marker"
+                chmod 600 "$done_marker" 2>/dev/null || true
+            ) 200>"$lock_file"
             
-            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0
-            fi
-            
-            # Issue #5264修正: アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
-            local lock_acquired=false
-            local lock_timeout=5
-            local lock_attempts=0
-            
-            # タイムアウト付きロック取得
-            while [ $lock_attempts -lt $lock_timeout ] && [ "$lock_acquired" = false ]; do
-                if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                    lock_acquired=true
-                    break
-                fi
-                lock_attempts=$((lock_attempts + 1))
-                sleep 0.1
-            done
-            
-            if [ "$lock_acquired" = true ]; then
-                # Issue #5437修正: ロック取得成功後にフラグを設定（レースコンディション防止）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                
-                # ロック取得後の最終チェック（二重防止）
-                if [ -f "$startup_msg_done_file" ]; then
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    return 0
-                fi
-                
-                # Issue #5381修正: メッセージ出力前の最終重複チェック
-                # 完了マーカーファイルを原子的に作成し、成功した場合のみメッセージを出力
-                local temp_marker="${startup_msg_done_file}.tmp.$$"
-                if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && \
-                   mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
-                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                    
-                    # メッセージ出力（完了マーカー作成成功後のみ）
-                    log "$message"
-                else
-                    # 完了マーカー作成失敗時は重複と判定してメッセージを抑制
-                    rm -f "$temp_marker" 2>/dev/null || true
-                fi
-                
-                # ロック解放
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                return 0
-            else
-                # ロック取得失敗時の処理
-                # ロック取得失敗の場合はメッセージを抑制（重複防止を優先）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                log "DEBUG: Startup message lock acquisition timeout - message suppressed to prevent duplicate"
-                return 0
-            fi
+            return 0
             ;;
     esac
     
-    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
-    return 0
-    
-    local message_hash=$(get_message_hash "$message")
-    
-    # 戦略に応じた重複防止処理
-    case "$DUPLICATE_PREVENTION_STRATEGY" in
-        "redis_first")
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-        "file_only")
-            fallback_to_file_based_prevention "$message" "$message_hash"
-            ;;
-        *)
-            # デフォルト: redis_first
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-    esac
-    
+    # その他のメッセージは通常のログ処理
+    log "$message"
     return 0
 }
 
