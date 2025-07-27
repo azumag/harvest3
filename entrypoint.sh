@@ -939,8 +939,10 @@ log_startup_message() {
             ;;
     esac
     
-    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
-    return 0
+    # Issue #5308修正: 特定メッセージパターン処理後に汎用ロジックも実行（Issue #5130, #5150との統合）
+    # Issue #5421修正: 汎用重複防止ロジックを復元（到達不可能コードの修正）
+
+    local message_hash=$(get_message_hash "$message")
     
     # 戦略に応じた重複防止処理
     case "$DUPLICATE_PREVENTION_STRATEGY" in
