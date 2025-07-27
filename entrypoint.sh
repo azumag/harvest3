@@ -1846,14 +1846,14 @@ main() {
         if echo "$(date +%s):$$:$(hostname)" > "$temp_flag" 2>/dev/null && \
            mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
             # ファイル作成成功 = 最初の実行
-            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            export _GLOBAL_STARTUP_MESSAGE_SENT=1
             chmod 600 "$global_flag_file" 2>/dev/null || true
             
             # 起動ロック取得後に安全にメッセージを出力
-            if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
-                log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
-            fi
+            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+            
+            # フラグを設定（メッセージ出力後）
+            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
+            export _GLOBAL_STARTUP_MESSAGE_SENT=1
         else
             # ファイル作成失敗 = 重複実行
             _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
