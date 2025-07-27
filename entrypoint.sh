@@ -586,6 +586,26 @@ cleanup_backtest_lock() {
     trap - EXIT INT TERM 2>/dev/null || true
 }
 
+# Issue #5403修正: DRY原則適用 - 重複統計記録ヘルパー関数
+# log_duplicate_stats関数の安全な呼び出しと初期化時パフォーマンス最適化
+DUPLICATE_STATS_AVAILABLE=""
+
+safe_log_duplicate_stats() {
+    # 初回チェック時に関数の有無を判定（パフォーマンス最適化）
+    if [ -z "$DUPLICATE_STATS_AVAILABLE" ]; then
+        if command -v log_duplicate_stats >/dev/null 2>&1; then
+            DUPLICATE_STATS_AVAILABLE="true"
+        else
+            DUPLICATE_STATS_AVAILABLE="false"
+        fi
+    fi
+    
+    # 関数が利用可能な場合のみ統計記録を実行
+    if [ "$DUPLICATE_STATS_AVAILABLE" = "true" ]; then
+        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+    fi
+}
+
 # Issue #5230修正: backtest container専用起動メッセージ関数（KISS原則適用・簡素化版）
 # 過去の複雑な実装（Issue #5127, #5058, #5175, #5216, #5333）を簡素化
 # Issue #5315修正: プロセス内フラグとflockによる二重防御システムで重複メッセージを確実に防止
@@ -619,10 +639,8 @@ log_backtest_startup_message() {
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
     # Issue #5372改善: より予測可能なフロー Step 1
     if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
+        # Issue #5403修正: DRY原則適用でヘルパー関数使用
+        safe_log_duplicate_stats
         return 0  # 既に同一プロセス内でログ出力済み
     fi
     
@@ -648,10 +666,8 @@ log_backtest_startup_message() {
                 
                 if [ "$time_diff" -lt "$suppress_duration" ]; then
                     should_output=false
-                    # Issue #5403修正: log_duplicate_stats関数の存在チェック
-                    if command -v log_duplicate_stats >/dev/null 2>&1; then
-                        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-                    fi
+                    # Issue #5403修正: DRY原則適用でヘルパー関数使用
+                    safe_log_duplicate_stats
                     log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 fi
             fi
@@ -673,10 +689,8 @@ log_backtest_startup_message() {
         else
             # ロック取得失敗（タイムアウト）
             # Issue #5372改善: 統一エラーハンドリング
-            # Issue #5403修正: log_duplicate_stats関数の存在チェック
-            if command -v log_duplicate_stats >/dev/null 2>&1; then
-                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-            fi
+            # Issue #5403修正: DRY原則適用でヘルパー関数使用
+            safe_log_duplicate_stats
             log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         fi
@@ -691,10 +705,8 @@ log_backtest_startup_message() {
             local time_diff=$((current_time - last_time))
             
             if [ "$time_diff" -lt "$suppress_duration" ]; then
-                # Issue #5403修正: log_duplicate_stats関数の存在チェック
-                if command -v log_duplicate_stats >/dev/null 2>&1; then
-                    log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-                fi
+                # Issue #5403修正: DRY原則適用でヘルパー関数使用
+                safe_log_duplicate_stats
                 log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
@@ -848,10 +860,8 @@ try_redis_duplicate_prevention() {
         " 2>/dev/null || echo "error")
         
         if [ "$redis_check_result" = "duplicate" ]; then
-            # Issue #5403修正: log_duplicate_stats関数の存在チェック
-            if command -v log_duplicate_stats >/dev/null 2>&1; then
-                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-            fi
+            # Issue #5403修正: DRY原則適用でヘルパー関数使用
+            safe_log_duplicate_stats
             return 0  # Redisで重複検出
         elif [ "$redis_check_result" = "new" ]; then
             log "$message"
@@ -872,10 +882,8 @@ fallback_to_file_based_prevention() {
     # プロセス内重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
+        # Issue #5403修正: DRY原則適用でヘルパー関数使用
+        safe_log_duplicate_stats
         return 0
     fi
     
@@ -887,10 +895,8 @@ fallback_to_file_based_prevention() {
     # success fileチェック
     if validate_success_file "$success_file" "$container_id" "$current_time"; then
         export "$var_name"=1
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
+        # Issue #5403修正: DRY原則適用でヘルパー関数使用
+        safe_log_duplicate_stats
         return 0
     fi
     

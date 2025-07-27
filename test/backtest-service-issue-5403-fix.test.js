@@ -58,19 +58,29 @@ describe('Issue #5403: Backtest Service Duplicate Message Fix - Enhanced Error H
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Check for Issue #5403 fix comments
-        expect(entrypointContent).toContain('# Issue #5403修正: log_duplicate_stats関数の存在チェック');
+        // Check for Issue #5403 DRY principle implementation with helper function
+        expect(entrypointContent).toContain('# Issue #5403修正: DRY原則適用 - 重複統計記録ヘルパー関数');
+        expect(entrypointContent).toContain('safe_log_duplicate_stats() {');
         
-        // Check that all log_duplicate_stats calls now have existence checks
-        const duplicateStatsPattern = /log_duplicate_stats\s*#\s*Issue #5338/g;
-        const matches = entrypointContent.match(duplicateStatsPattern);
-        expect(matches).toBeTruthy();
-        expect(matches.length).toBeGreaterThan(0);
+        // Check that helper function contains proper existence check
+        expect(entrypointContent).toContain('if command -v log_duplicate_stats >/dev/null 2>&1; then');
+        expect(entrypointContent).toContain('DUPLICATE_STATS_AVAILABLE="true"');
         
-        // Check that existence checks are present
+        // Check that old duplicate patterns have been replaced with helper function calls
+        const helperCallPattern = /safe_log_duplicate_stats/g;
+        const helperCalls = entrypointContent.match(helperCallPattern);
+        expect(helperCalls).toBeTruthy();
+        expect(helperCalls.length).toBeGreaterThan(6); // Should have multiple calls to the helper
+        
+        // Check that DRY comments are present
+        const dryComments = entrypointContent.match(/# Issue #5403修正: DRY原則適用でヘルパー関数使用/g);
+        expect(dryComments).toBeTruthy();
+        expect(dryComments.length).toBeGreaterThan(5); // Multiple locations should use the helper
+        
+        // Verify that only one existence check remains (in the helper function)
         const existenceChecks = entrypointContent.match(/if command -v log_duplicate_stats >/g);
         expect(existenceChecks).toBeTruthy();
-        expect(existenceChecks.length).toBe(matches.length);
+        expect(existenceChecks.length).toBe(1); // Should only be in the helper function
     });
 
     test('log_backtest_startup_message should work even when log_duplicate_stats is unavailable', async () => {
