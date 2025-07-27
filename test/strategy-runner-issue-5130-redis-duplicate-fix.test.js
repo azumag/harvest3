@@ -14,36 +14,40 @@ const path = require('path');
 const ENTRYPOINT_PATH = path.join(__dirname, '..', 'entrypoint.sh');
 
 describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修正', () => {
-    describe('Redis-based重複防止機構', () => {
-        test('Redis-basedコードが追加されている', () => {
+    describe('Issue #5415: KISS原則簡素化後の重複防止機構', () => {
+        test('Issue #5415: KISS原則簡素化によりRedis-basedコードが削除されシンプルなflock実装になっている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Redis-based duplicate prevention の実装がコメント付きで追加されているかチェック（リファクタリング後）
-            expect(entrypointContent).toContain('Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）');
+            // KISS原則により複雑なRedis処理が削除されていることを確認
+            expect(entrypointContent).not.toContain('Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）');
+            expect(entrypointContent).not.toContain('redis_key="startup_msg:$message_hash"');
+            expect(entrypointContent).not.toContain('const redis = require(\'redis\');');
             
-            // Redis関連の処理が追加されているかチェック
-            expect(entrypointContent).toContain('redis_key="startup_msg:$message_hash"');
-            expect(entrypointContent).toContain('container_id=$(hostname)');
-            expect(entrypointContent).toContain('const redis = require(\'redis\');');
+            // シンプルなflock実装が使用されていることを確認
+            expect(entrypointContent).toContain('flock -n 200 || exit 0');
+            expect(entrypointContent).toContain('container: $(hostname)'); // コンテナ識別は残っている（ログメッセージで）
         });
 
-        test('Redis接続チェック処理が適切に実装されている', () => {
+        test('Issue #5415: KISS原則簡素化により複雑なRedis接続チェックが不要になっている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // Redisの利用可能性チェックが実装されているかチェック
-            expect(entrypointContent).toContain('command -v node >/dev/null 2>&1');
-            expect(entrypointContent).toContain('[ -n "$REDIS_URL" ]');
+            // 旧実装の複雑なRedis接続チェックが削除されていることを確認
+            expect(entrypointContent).not.toContain('if [ "$redis_check_result" = "duplicate" ]; then');
+            expect(entrypointContent).not.toContain('2>/dev/null || echo "error"');
             
-            // Redis処理のエラーハンドリングが実装されているかチェック
-            expect(entrypointContent).toContain('2>/dev/null || echo "error"');
-            expect(entrypointContent).toContain('if [ "$redis_check_result" = "duplicate" ]; then');
+            // シンプルなflock実装に簡素化されている
+            expect(entrypointContent).toContain('flock -n 200 || exit 0');
+            expect(entrypointContent).toContain('Issue #5415: KISS原則に基づく簡素化');
         });
 
-        test('RedisのTTL設定が適切に実装されている', () => {
+        test('Issue #5415: KISS原則簡素化によりTTL設定が不要になっている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // 設定可能なTTLが設定されているかチェック（リファクタリング後）
-            expect(entrypointContent).toContain('await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);');
+            // 旧実装の複雑なTTL設定が削除されていることを確認
+            expect(entrypointContent).not.toContain('await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);');
+            
+            // シンプルなflock実装でTTLが不要になったことを確認
+            expect(entrypointContent).toContain('touch "$done_marker"');
         });
     });
 
@@ -58,8 +62,9 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
         test('コンテナIDの取得にhostnameが使用されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // container_idの設定でhostnameコマンドが使用されているかチェック
-            expect(entrypointContent).toContain('container_id=$(hostname)');
+            // hostnameがコンテナ識別に使用されていることをチェック（KISS原則簡素化後）
+            expect(entrypointContent).toContain('container: $(hostname)');
+            expect(entrypointContent).toContain('ホスト: $(hostname)');
         });
     });
 
@@ -87,12 +92,15 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
             expect(logStartupMessageFunction[0]).toContain('log_backtest_startup_message "$message"');
         });
 
-        test('プロセス内環境変数による重複防止機構が保持されている', () => {
+        test('Issue #5415: KISS原則簡素化により複雑なプロセス内重複防止が削除されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
-            // 既存の第二防御線が保持されているかチェック（リファクタリング後）
-            expect(entrypointContent).toContain('プロセス内重複防止（第二防御線）');
-            expect(entrypointContent).toContain('if [ "${!var_name}" = "1" ]; then');
+            // 旧実装の複雑なプロセス内重複防止（第二防御線）が削除されていることを確認
+            expect(entrypointContent).not.toContain('プロセス内重複防止（第二防御線）');
+            expect(entrypointContent).not.toContain('if [ "${!var_name}" = "1" ]; then');
+            
+            // シンプルなflock実装のみが使用されていることを確認
+            expect(entrypointContent).toContain('flock -n 200 || exit 0');
         });
 
         test('Issue #5415: KISS原則簡素化によりシンプルなflock実装が保持されている', () => {
