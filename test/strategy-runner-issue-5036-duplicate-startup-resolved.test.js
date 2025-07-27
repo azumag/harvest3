@@ -10,6 +10,12 @@ const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const os = require('os');
+const { 
+    createStartupMessageTestScript, 
+    runDuplicatePreventionTest,
+    testEnvironment,
+    behaviorValidation 
+} = require('./helpers/startup-message-test-helper');
 
 const execAsync = promisify(exec);
 
@@ -40,32 +46,23 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     let tmpDir;
     let lockDir;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       // .tmpディレクトリ内にテスト用ディレクトリを作成
-      tmpDir = path.join(__dirname, '..', '.tmp');
-      if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
-      }
-      lockDir = path.join(tmpDir, `startup_messages_test_${Date.now()}`);
+      tmpDir = path.join(__dirname, '..', '.tmp', `test-issue-5036-${Date.now()}`);
+      lockDir = path.join(tmpDir, 'locks');
+      
+      // 共通ヘルパーを使用してテスト環境をセットアップ
+      await testEnvironment.setup(tmpDir);
+      
+      // ロックディレクトリの追加作成
       if (!fs.existsSync(lockDir)) {
         fs.mkdirSync(lockDir, { recursive: true });
       }
     });
 
-    afterEach(() => {
-      // テスト後のクリーンアップ
-      if (fs.existsSync(lockDir)) {
-        const files = fs.readdirSync(lockDir);
-        files.forEach(file => {
-          const filePath = path.join(lockDir, file);
-          if (fs.statSync(filePath).isDirectory()) {
-            fs.rmSync(filePath, { recursive: true, force: true });
-          } else {
-            fs.unlinkSync(filePath);
-          }
-        });
-        fs.rmdirSync(lockDir);
-      }
+    afterEach(async () => {
+      // 共通ヘルパーを使用してテスト環境をクリーンアップ
+      await testEnvironment.cleanup(tmpDir);
     });
 
     test('プロセス内フラグによる重複防止', async () => {
@@ -147,56 +144,21 @@ echo "$hash3"
     }, 3000);
 
     test('Issue #5036重複メッセージ解決確認', async () => {
-      const testScript = `#!/bin/bash
-set -e
-
-LOCK_DIR="${lockDir}"
-
-get_message_hash() {
-    echo "$1" | md5sum | cut -d' ' -f1
-}
-
-log_startup_message() {
-    local message="$1"
-    local hash=$(get_message_hash "$message")
-    local var_name="STARTUP_MSG_$(echo "$hash" | cut -c1-8)"
-    local lock_file="$LOCK_DIR/$hash.lock"
-    
-    if [ "\${!var_name}" = "1" ]; then
-        return 0
-    fi
-    
-    export "$var_name"=1
-    
-    if mkdir "$lock_file" 2>/dev/null; then
-        echo "[ENTRYPOINT] $message"
-        return 0
-    fi
-}
-
-# Issue #5036のメッセージを2回呼び出し（修正後は1回のみ出力）
-log_startup_message "Starting strategy-runner container with enhanced error handling"
-log_startup_message "Starting strategy-runner container with enhanced error handling"
-`;
-
-      const testScriptPath = path.join(tmpDir, `test-issue-5036-${Date.now()}.sh`);
-      fs.writeFileSync(testScriptPath, testScript);
-      fs.chmodSync(testScriptPath, '755');
-
-      try {
-        const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
-        
-        const messages = stdout.split('\n').filter(line => 
-          line.includes('Starting strategy-runner container with enhanced error handling')
-        );
-        
-        // 修正により重複が解消されていることを確認（1回のみ出力）
-        expect(messages.length).toBe(1);
-      } finally {
-        if (fs.existsSync(testScriptPath)) {
-          fs.unlinkSync(testScriptPath);
+      // Issue #5036修正: 共通ヘルパーを使用して重複メッセージ防止テスト
+      const testResult = await runDuplicatePreventionTest({
+        testName: 'issue-5036-duplicate-resolved',
+        testTmpDir: tmpDir,
+        testMessage: "Starting strategy-runner container with enhanced error handling",
+        callCount: 2,
+        expectedOutputCount: 1,
+        scriptOptions: {
+          enableProcessInternal: true,
+          enableFilelock: true
         }
-      }
+      });
+
+      // 動作検証（実装詳細ではなく）
+      behaviorValidation.validateDuplicatePrevention(testResult, 1);
     }, 5000);
   });
 
