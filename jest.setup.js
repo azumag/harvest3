@@ -148,14 +148,15 @@ if (process.env.CI) {
   });
 }
 
-// 安全なクリーンアップ処理 - ワーカープロセスクラッシュを防止
+// 軽量なクリーンアップ処理
 afterAll(async () => {
   // 基本的なクリーンアップのみ実行
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // CI環境でも軽量なハンドルクリーンアップを実行
-  if (process._getActiveHandles) {
+  // CI環境では最小限のクリーンアップのみ
+  if (!process.env.CI && process._getActiveHandles) {
+    // 開発環境でのみアクティブハンドルのクリーンアップを実行
     const activeHandles = process._getActiveHandles();
     if (activeHandles && activeHandles.length > 0) {
       activeHandles.forEach(handle => {
@@ -169,14 +170,17 @@ afterAll(async () => {
       });
     }
   }
-  
-  // 追加のクリーンアップ処理は不要 - forceExit設定で対応
 });
 
-// 各テストスイート後のクリーンアップ
+// 各テストスイート後の軽量クリーンアップ
 afterEach(() => {
-  // モックコールをクリア
-  jest.clearAllMocks();
-  // タイマーをクリア
-  jest.clearAllTimers();
+  // CI環境では最小限のクリーンアップのみ
+  if (process.env.CI) {
+    // CI環境では必要最小限のクリーンアップ
+    jest.clearAllMocks();
+  } else {
+    // 開発環境では完全なクリーンアップ
+    jest.clearAllMocks();
+    jest.clearAllTimers();
+  }
 });
