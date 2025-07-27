@@ -1,0 +1,212 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "created": "2025-07-27",
+    "description": "Configuration for phased timeout reduction plan - Issue #5387",
+    "maintainer": "System Architecture Team"
+  },
+  "phases": {
+    "phase1": {
+      "name": "System Process Optimization",
+      "duration": "Month 1 (August 2025)",
+      "description": "Optimize system-level timeouts from 180s/120s to more reasonable values",
+      "targets": [
+        {
+          "file": "src/common/throttleMonitor.js",
+          "component": "MAX_CAPACITY_RECOVERY_DELAY",
+          "current": 180000,
+          "target": 120000,
+          "reduction": "33%",
+          "safety_period": "2 weeks",
+          "monitoring_required": true
+        },
+        {
+          "file": "src/common/maintenanceScheduler.js",
+          "component": "long_running_maintenance",
+          "current": 180000,
+          "target": 120000,
+          "reduction": "33%",
+          "safety_period": "2 weeks",
+          "monitoring_required": true
+        },
+        {
+          "file": "src/common/maintenanceScheduler.js",
+          "component": "standard_maintenance",
+          "current": 120000,
+          "target": 90000,
+          "reduction": "25%",
+          "safety_period": "1 week",
+          "monitoring_required": true
+        }
+      ],
+      "success_criteria": [
+        "Zero timeout-related failures during safety period",
+        "System stability maintained",
+        "95th percentile execution time + 30% safety margin"
+      ]
+    },
+    "phase2": {
+      "name": "Final Optimization",
+      "duration": "Month 2 (September 2025)",
+      "description": "Final optimization based on Phase 1 data and performance metrics",
+      "targets": [
+        {
+          "file": "src/common/throttleMonitor.js",
+          "component": "MAX_CAPACITY_RECOVERY_DELAY",
+          "current": 120000,
+          "target": 90000,
+          "reduction": "25%",
+          "safety_period": "2 weeks",
+          "monitoring_required": true
+        },
+        {
+          "file": "src/common/maintenanceScheduler.js",
+          "component": "standard_maintenance",
+          "current": 90000,
+          "target": 60000,
+          "reduction": "33%",
+          "safety_period": "2 weeks",
+          "monitoring_required": true
+        }
+      ],
+      "prerequisites": [
+        "Phase 1 completion with 100% success rate",
+        "Monitoring data shows consistent performance",
+        "No critical issues reported during Phase 1"
+      ],
+      "success_criteria": [
+        "Final timeout values provide optimal balance",
+        "System responsiveness improved",
+        "Comprehensive monitoring in place"
+      ]
+    },
+    "phase3": {
+      "name": "Monitoring Infrastructure",
+      "duration": "Month 3 (October 2025)",
+      "description": "Establish comprehensive monitoring and automated optimization",
+      "deliverables": [
+        {
+          "component": "timeout-monitor.js",
+          "description": "Automated timeout monitoring and analysis",
+          "status": "implemented",
+          "features": [
+            "Real-time timeout utilization tracking",
+            "95th percentile performance measurement",
+            "Automated optimization recommendations",
+            "Early warning system for timeout issues"
+          ]
+        },
+        {
+          "component": "alert_system",
+          "description": "Proactive alerting for timeout issues",
+          "status": "planned",
+          "features": [
+            "Slack/Discord integration",
+            "Threshold-based warnings (80% utilization)",
+            "Trend analysis and predictions",
+            "Automated escalation procedures"
+          ]
+        },
+        {
+          "component": "review_process",
+          "description": "Monthly timeout optimization review",
+          "status": "planned",
+          "features": [
+            "Automated performance reports",
+            "Optimization opportunity identification",
+            "Stakeholder review meetings",
+            "Continuous improvement cycle"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "Automated monitoring operational",
+        "Zero manual timeout adjustments needed",
+        "Proactive issue detection and resolution",
+        "Documented review process established"
+      ]
+    }
+  },
+  "jest_status": {
+    "current_state": "OPTIMIZED",
+    "ci_timeout": 30000,
+    "local_timeout": 60000,
+    "last_optimized": "2025-Q2",
+    "optimization_needed": false,
+    "note": "Jest timeouts are already optimized and should not be changed unless performance data indicates issues"
+  },
+  "monitoring_thresholds": {
+    "warning_threshold": 80,
+    "critical_threshold": 95,
+    "measurement_window": "24h",
+    "review_frequency": "weekly",
+    "escalation_timeout": 300
+  },
+  "rollback_procedures": {
+    "immediate_rollback": {
+      "trigger": "Any timeout-related system failure",
+      "action": "Revert to previous timeout values",
+      "notification": "Immediate alert to on-call team",
+      "review_required": true
+    },
+    "performance_degradation": {
+      "trigger": "System performance drop > 15%",
+      "action": "Increase timeout by 25%",
+      "monitoring_period": "48h",
+      "decision_point": "Continue or rollback based on metrics"
+    },
+    "stability_issues": {
+      "trigger": "Increased error rates or instability",
+      "action": "Immediate rollback to last stable configuration",
+      "post_incident": "Full root cause analysis required"
+    }
+  },
+  "implementation_guidelines": {
+    "general_principles": [
+      "Always implement changes gradually",
+      "Monitor for at least 2x the new timeout value duration",
+      "Maintain detailed logs of all changes",
+      "Have rollback plan ready before implementation",
+      "Coordinate with stakeholders before major changes"
+    ],
+    "change_process": [
+      "1. Update configuration file with new timeout",
+      "2. Deploy to staging environment first",
+      "3. Run comprehensive tests",
+      "4. Monitor staging for minimum 48h",
+      "5. Deploy to production during low-traffic period",
+      "6. Monitor production for safety period",
+      "7. Document results and update plan as needed"
+    ],
+    "testing_requirements": [
+      "Unit tests pass with new timeout values",
+      "Integration tests complete successfully",
+      "Load testing confirms performance",
+      "Edge case testing for boundary conditions",
+      "Regression testing for existing functionality"
+    ]
+  },
+  "metrics_and_kpis": {
+    "performance_metrics": [
+      "Average system response time",
+      "95th percentile execution time",
+      "Timeout utilization percentage",
+      "Error rate due to timeouts",
+      "System availability during changes"
+    ],
+    "business_metrics": [
+      "User experience impact",
+      "System downtime reduction",
+      "Resource utilization efficiency",
+      "Development team productivity",
+      "Operational cost reduction"
+    ],
+    "success_indicators": [
+      "Zero timeout-related incidents",
+      "Improved system responsiveness",
+      "Reduced resource consumption",
+      "Enhanced monitoring capabilities",
+      "Streamlined optimization process"
+    ]
+  }
+}
