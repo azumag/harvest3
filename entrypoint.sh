@@ -844,6 +844,7 @@ fallback_to_file_based_prevention() {
 
 # Issue #5172: メイン重複防止関数（簡素化・YAGNI/KISS原則）
 # Issue #5220: 起動メッセージ重複防止を強化（KISS原則に基づく簡素化）
+# Issue #5362修正: KISS原則に基づくシンプルで確実な重複防止機構
 log_startup_message() {
     local message="$1"
     
@@ -857,110 +858,65 @@ log_startup_message() {
         return $?
     fi
     
-    # Issue #5220/#5248/#5267: 起動メッセージの重複防止（アトミックファイルロック強化版）
-    # Issue #5267修正: アトミックファイルロックによる確実な重複防止
-    # レースコンディションを完全に防ぐためのアトミックファイルベース重複防止機構
-    # 注意: バックテストモード以外でのみ適用
-    # Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）
-    # Issue #5437修正: より強固な重複防止機構（原子性の向上）
+    # Issue #5362修正: strategy-runnerメッセージの重複防止（KISS原則）
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            # Issue #5437修正: まず最初にプロセス内フラグをチェック（最速の防御線）
+            # 第1防御線: プロセス内変数による即座の重複防止
             if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+                log "DEBUG: Process flag prevented duplicate startup message (Issue #5362 fix)"
                 return 0
             fi
             
-            # Issue #5264修正: 環境変数フラグによる第1防御線
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                return 0
-            fi
+            # 第2防御線: flockベースの確実なファイルロック（5秒タイムアウト）
+            local lock_file="$LOCK_BASE_DIR/startup-message.lock"
+            local lock_fd=200
             
-            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0
-            fi
-            
-            # Issue #5264修正: アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
-            local lock_acquired=false
-            local lock_timeout=5
-            local lock_attempts=0
-            
-            # タイムアウト付きロック取得
-            while [ $lock_attempts -lt $lock_timeout ] && [ "$lock_acquired" = false ]; do
-                if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                    lock_acquired=true
-                    break
-                fi
-                lock_attempts=$((lock_attempts + 1))
-                sleep 0.1
-            done
-            
-            if [ "$lock_acquired" = true ]; then
-                # Issue #5437修正: ロック取得成功後にフラグを設定（レースコンディション防止）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                
-                # ロック取得後の最終チェック（二重防止）
-                if [ -f "$startup_msg_done_file" ]; then
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
+            # flockが利用可能かチェック
+            if command -v flock >/dev/null 2>&1; then
+                # flockを使用した確実なロック
+                exec 200>"$lock_file"
+                if flock -w 5 200; then
+                    # 二重チェック: ロック取得後の最終確認
+                    if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+                        exec 200>&-
+                        return 0
+                    fi
+                    
+                    # フラグ設定とメッセージ出力
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
+                    log "DEBUG: Acquired flock, outputting startup message (Issue #5362 fix)"
+                    log "$message"
+                    exec 200>&-
+                    return 0
+                else
+                    # タイムアウト時は重複防止を優先
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    log "DEBUG: flock timeout - message suppressed to prevent duplicate (Issue #5362 fix)"
+                    exec 200>&- 2>/dev/null || true
                     return 0
                 fi
-                
-                # Issue #5381修正: メッセージ出力前の最終重複チェック
-                # 完了マーカーファイルを原子的に作成し、成功した場合のみメッセージを出力
-                local temp_marker="${startup_msg_done_file}.tmp.$$"
-                if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && \
-                   mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
-                    chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                    
-                    # メッセージ出力（完了マーカー作成成功後のみ）
-                    log "$message"
-                else
-                    # 完了マーカー作成失敗時は重複と判定してメッセージを抑制
-                    rm -f "$temp_marker" 2>/dev/null || true
-                fi
-                
-                # ロック解放
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                return 0
             else
-                # ロック取得失敗時の処理
-                # ロック取得失敗の場合はメッセージを抑制（重複防止を優先）
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                log "DEBUG: Startup message lock acquisition timeout - message suppressed to prevent duplicate"
-                return 0
+                # フォールバック: mkdirベースロック（flockが利用できない場合）
+                local mkdir_lock="$LOCK_BASE_DIR/startup-message-mkdir.lock"
+                if mkdir "$mkdir_lock" 2>/dev/null; then
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    export MAIN_STARTUP_MESSAGE_LOGGED=1
+                    log "DEBUG: Acquired mkdir lock, outputting startup message (Issue #5362 fix)"
+                    log "$message"
+                    rm -rf "$mkdir_lock" 2>/dev/null || true
+                    return 0
+                else
+                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+                    log "DEBUG: mkdir lock failed - message suppressed to prevent duplicate (Issue #5362 fix)"
+                    return 0
+                fi
             fi
             ;;
     esac
     
-    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
-    return 0
-    
-    local message_hash=$(get_message_hash "$message")
-    
-    # 戦略に応じた重複防止処理
-    case "$DUPLICATE_PREVENTION_STRATEGY" in
-        "redis_first")
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-        "file_only")
-            fallback_to_file_based_prevention "$message" "$message_hash"
-            ;;
-        *)
-            # デフォルト: redis_first
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-    esac
-    
+    # その他のメッセージは通常のlogを使用
+    log "$message"
     return 0
 }
 
@@ -1825,52 +1781,9 @@ main() {
         send_startup_error_to_discord "Backtest execution failed" "Command: $*"
         exit 1
     else
-        # Issue #5413修正: 起動メッセージの確実な重複防止（強化版グローバルフラグ + アトミック操作）
-        # Issue #5318修正: グローバルフラグによる重複防止強化実装
-        # 複数の防御線による重複防止：プロセス内フラグ + 環境変数 + ファイルベース
-        local global_flag_file="$LOCK_BASE_DIR/global-startup-flag.marker"
-        
-        # 第1防御線: プロセス内変数による即座の重複防止
-        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT_PROCESS" = "1" ]; then
-            log "DEBUG: Process-level flag prevented duplicate startup message (Issue #5413 fix)"
-            return 0
-        fi
-        
-        # 第2防御線: 環境変数による重複防止
-        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" = "1" ]; then
-            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            log "DEBUG: Environment flag prevented duplicate startup message (Issue #5318, #5413 fix)" 
-            return 0
-        fi
-        
-        # 第3防御線: アトミックファイル操作による確実な重複防止
-        # 既存のフラグファイルをチェック
-        if [ -f "$global_flag_file" ]; then
-            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            export _GLOBAL_STARTUP_MESSAGE_SENT=1
-            log "DEBUG: Global flag prevented duplicate startup message (Issue #5318, #5413 fix)"
-            return 0
-        fi
-        
-        local temp_flag="${global_flag_file}.tmp.$$"
-        if echo "$(date +%s):$$:$(hostname)" > "$temp_flag" 2>/dev/null && \
-           mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
-            # ファイル作成成功 = 最初の実行
-            chmod 600 "$global_flag_file" 2>/dev/null || true
-            
-            # 起動ロック取得後に安全にメッセージを出力
-            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
-            
-            # フラグを設定（メッセージ出力後）
-            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            export _GLOBAL_STARTUP_MESSAGE_SENT=1
-        else
-            # ファイル作成失敗 = 重複実行
-            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-            export _GLOBAL_STARTUP_MESSAGE_SENT=1
-            rm -f "$temp_flag" 2>/dev/null || true
-            log "DEBUG: Atomic file operation prevented duplicate startup message (Issue #5413 fix)"
-        fi
+        # Issue #5362修正: シンプル化された起動メッセージ出力（KISS原則）
+        # 重複防止は log_startup_message 関数内で一元管理
+        log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
         
         # 初期診断の実行
         run_diagnostics
