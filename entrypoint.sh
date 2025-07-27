@@ -909,19 +909,19 @@ log_startup_message() {
                 # Issue #5421修正: より明確なデバッグログとメッセージ出力制御
                 # 完了マーカーファイルを原子的に作成し、成功した場合のみメッセージを出力
                 local temp_marker="${startup_msg_done_file}.tmp.$$"
-                log "DEBUG: Issue #5421 - Attempting to create completion marker (PID: $$, hostname: $(hostname))"
+                [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - Attempting to create completion marker (PID: $$, hostname: $(hostname))"
                 
                 if echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && \
                    mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null; then
                     chmod 600 "$startup_msg_done_file" 2>/dev/null || true
                     
                     # メッセージ出力（完了マーカー作成成功後のみ）
-                    log "DEBUG: Issue #5421 - Completion marker created successfully, outputting startup message"
+                    [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - Completion marker created successfully, outputting startup message"
                     log "$message"
-                    log "DEBUG: Issue #5421 - Startup message output completed"
+                    [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - Startup message output completed"
                 else
                     # 完了マーカー作成失敗時は重複と判定してメッセージを抑制
-                    log "DEBUG: Issue #5421 - Completion marker creation failed, suppressing duplicate message"
+                    [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - Completion marker creation failed, suppressing duplicate message"
                     rm -f "$temp_marker" 2>/dev/null || true
                 fi
                 
@@ -940,30 +940,6 @@ log_startup_message() {
     esac
     
     # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
-    return 0
-    
-    # Issue #5421修正: 汎用重複防止ロジックを復元（到達不可能コードの修正）
-    
-    local message_hash=$(get_message_hash "$message")
-    
-    # 戦略に応じた重複防止処理
-    case "$DUPLICATE_PREVENTION_STRATEGY" in
-        "redis_first")
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-        "file_only")
-            fallback_to_file_based_prevention "$message" "$message_hash"
-            ;;
-        *)
-            # デフォルト: redis_first
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-    esac
-    
     return 0
 }
 
@@ -1856,9 +1832,9 @@ main() {
             chmod 600 "$global_flag_file" 2>/dev/null || true
             
             # Issue #5421修正: 起動ロック取得後に安全にメッセージを出力
-            log "DEBUG: Issue #5421 - About to call log_startup_message (PID: $$, hostname: $(hostname))"
+            [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - About to call log_startup_message (PID: $$, hostname: $(hostname))"
             log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
-            log "DEBUG: Issue #5421 - log_startup_message call completed"
+            [ "$DEBUG_STARTUP_MESSAGES" = "1" ] && log "DEBUG: Issue #5421 - log_startup_message call completed"
             
             # フラグを設定（メッセージ出力後）
             _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
