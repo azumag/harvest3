@@ -619,7 +619,10 @@ log_backtest_startup_message() {
     # Issue #5315修正: プロセス内フラグによる即座の重複防止（第一防御線）
     # Issue #5372改善: より予測可能なフロー Step 1
     if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        # Issue #5403修正: log_duplicate_stats関数の存在チェック
+        if command -v log_duplicate_stats >/dev/null 2>&1; then
+            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        fi
         return 0  # 既に同一プロセス内でログ出力済み
     fi
     
@@ -645,7 +648,10 @@ log_backtest_startup_message() {
                 
                 if [ "$time_diff" -lt "$suppress_duration" ]; then
                     should_output=false
-                    log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+                    # Issue #5403修正: log_duplicate_stats関数の存在チェック
+                    if command -v log_duplicate_stats >/dev/null 2>&1; then
+                        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+                    fi
                     log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 fi
             fi
@@ -667,7 +673,10 @@ log_backtest_startup_message() {
         else
             # ロック取得失敗（タイムアウト）
             # Issue #5372改善: 統一エラーハンドリング
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+            # Issue #5403修正: log_duplicate_stats関数の存在チェック
+            if command -v log_duplicate_stats >/dev/null 2>&1; then
+                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+            fi
             log "WARNING: Could not acquire backtest startup message lock, skipping duplicate output"
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
         fi
@@ -682,7 +691,10 @@ log_backtest_startup_message() {
             local time_diff=$((current_time - last_time))
             
             if [ "$time_diff" -lt "$suppress_duration" ]; then
-                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+                # Issue #5403修正: log_duplicate_stats関数の存在チェック
+                if command -v log_duplicate_stats >/dev/null 2>&1; then
+                    log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+                fi
                 log "Backtest startup message suppressed (last shown ${time_diff}s ago)"
                 _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
@@ -836,7 +848,10 @@ try_redis_duplicate_prevention() {
         " 2>/dev/null || echo "error")
         
         if [ "$redis_check_result" = "duplicate" ]; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+            # Issue #5403修正: log_duplicate_stats関数の存在チェック
+            if command -v log_duplicate_stats >/dev/null 2>&1; then
+                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+            fi
             return 0  # Redisで重複検出
         elif [ "$redis_check_result" = "new" ]; then
             log "$message"
@@ -857,7 +872,10 @@ fallback_to_file_based_prevention() {
     # プロセス内重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
-        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        # Issue #5403修正: log_duplicate_stats関数の存在チェック
+        if command -v log_duplicate_stats >/dev/null 2>&1; then
+            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        fi
         return 0
     fi
     
@@ -869,7 +887,10 @@ fallback_to_file_based_prevention() {
     # success fileチェック
     if validate_success_file "$success_file" "$container_id" "$current_time"; then
         export "$var_name"=1
-        log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        # Issue #5403修正: log_duplicate_stats関数の存在チェック
+        if command -v log_duplicate_stats >/dev/null 2>&1; then
+            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
+        fi
         return 0
     fi
     
