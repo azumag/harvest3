@@ -1809,14 +1809,9 @@ main() {
         # execコマンドの実行
         exec "$@"
     else
-        # Issue #5318修正: 起動メッセージの確実な重複防止（グローバルフラグによる追加防御）
-        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
-            export _GLOBAL_STARTUP_MESSAGE_SENT=1
-            # 起動ロック取得後に安全にメッセージを出力
-            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
-        else
-            log "DEBUG: Global flag prevented duplicate startup message (Issue #5318)"
-        fi
+        # Issue #5316修正: 重複防止機構の統一（log_startup_message内の多層防御機構を活用）
+        # log_startup_message内の既存の重複防止機構（プロセス内フラグ、環境変数、ロックファイル）で確実に防止
+        log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
         
         # 初期診断の実行
         run_diagnostics

@@ -19,6 +19,7 @@
     "test:e2e-integrity": "node test/e2e-data-integrity.js",
     "test:e2e-position-sizing": "node test/e2e-dynamic-position-sizing.js",
     "test:duplicate-stats": "bash .tmp/test_duplicate_stats.sh",
+    "test:entrypoint-startup-message": "bash tests/test_entrypoint_startup_message.sh",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:ci": "eslint . --max-warnings 0",
