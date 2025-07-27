@@ -1867,7 +1867,7 @@ main() {
             # 起動ロック取得後に安全にメッセージを出力
             log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
         else
-            log "DEBUG: Global flag prevented duplicate startup message"
+            log "DEBUG: Global flag prevented duplicate startup message (Issue #5318)"
         fi
         
         # 初期診断の実行

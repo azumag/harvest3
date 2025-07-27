@@ -69,6 +69,7 @@ test_startup_logic
     fs.chmodSync(testScriptPath, '755');
 
     try {
+      // 通常1秒以内で完了想定のため3秒タイムアウト
       const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
       
       // "Starting strategy-runner container" メッセージが1回のみ出力されることを確認
@@ -111,6 +112,7 @@ test_startup_logic
 
   test('Issue #5318修正: entrypoint.sh構文検証', async () => {
     try {
+      // 構文チェックは即座に完了するため5秒タイムアウト
       await execAsync(`bash -n ${entrypointPath}`, { timeout: 5000 });
     } catch (error) {
       throw new Error(`entrypoint.sh has syntax errors: ${error.message}`);
@@ -166,6 +168,7 @@ main_startup_logic
       fs.chmodSync(testScriptPath, '755');
 
       try {
+        // 通常1秒以内で完了想定のため3秒タイムアウト
         const { stdout } = await execAsync(`bash ${testScriptPath}`, { timeout: 3000 });
         
         // 起動メッセージが1回のみ出力されることを確認
