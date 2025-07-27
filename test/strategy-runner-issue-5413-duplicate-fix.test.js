@@ -44,6 +44,7 @@ describe('Issue #5413: strategy-runnerサービス重複メッセージ修正（
     expect(entrypointContent).toContain('Cleaned up global startup flag marker');
   });
 
+  /* eslint-disable no-undef */
   test('Issue #5413修正: 3層防御線による重複防止が正しく動作することを確認', async () => {
     const testScript = `#!/bin/bash
 # テスト用のlog関数
@@ -139,7 +140,9 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
       }
     }
   }, 10000);
+  /* eslint-enable no-undef */
 
+  /* eslint-disable no-undef */
   test('Issue #5413修正: アトミックファイル操作による並行処理耐性確認', async () => {
     const testScript = `#!/bin/bash
 # 並行実行シミュレーションテスト
@@ -214,6 +217,7 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
       }
     }
   }, 10000);
+  /* eslint-enable no-undef */
 
   test('Issue #5413修正: entrypoint.sh構文検証', async () => {
     try {
