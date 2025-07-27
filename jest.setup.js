@@ -95,9 +95,9 @@ if (process.env.CI) {
   // CI環境でのネットワーク呼び出しタイムアウトを追加
   const originalSetTimeout = setTimeout;
   global.setTimeout = function(callback, delay) {
-    // CI環境では長時間処理を短縮
-    if (delay > 10000) {
-      delay = Math.min(delay, 5000);
+    // CI環境では極端に長時間な処理のみ短縮（5秒以上の場合のみ）
+    if (delay > 5000) {
+      delay = Math.min(delay, 3000);
     }
     return originalSetTimeout.call(this, callback, delay);
   };
@@ -148,29 +148,46 @@ if (process.env.CI) {
   });
 }
 
-// 安全なクリーンアップ処理 - ワーカープロセスクラッシュを防止
+// 安全なクリーンアップ処理 - CI環境でも軽量なハンドルクリーンアップを実行
 afterAll(async () => {
   // 基本的なクリーンアップのみ実行
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // CI環境では積極的なクリーンアップを避ける
-  if (!process.env.CI) {
-    // アクティブなハンドルを安全にクリーンアップ（非CI環境のみ）
+  // CI環境でも軽量なクリーンアップを実行
+  if (process._getActiveHandles) {
+    const activeHandles = process._getActiveHandles();
+    if (activeHandles && activeHandles.length > 0) {
+      activeHandles.forEach(handle => {
+        if (handle && typeof handle.unref === 'function') {
+          try {
+            handle.unref();
+          } catch (error) {
+            // ハンドルのクリーンアップエラーを無視
+          }
+        }
+      });
+    }
+  }
+  
+  // CI環境では追加のプロセスクリーンアップを実行
+  if (process.env.CI) {
+    // アクティブなタイマーを強制クリア
     if (process._getActiveHandles) {
       const activeHandles = process._getActiveHandles();
-      if (activeHandles && activeHandles.length > 0) {
-        activeHandles.forEach(handle => {
-          if (handle && typeof handle.unref === 'function') {
-            try {
-              handle.unref();
-            } catch (error) {
-              // ハンドルのクリーンアップエラーを無視
-            }
+      activeHandles.forEach(handle => {
+        if (handle && handle._handle && handle._handle.close) {
+          try {
+            handle._handle.close();
+          } catch (error) {
+            // タイマークリーンアップエラーを無視
           }
-        });
-      }
+        }
+      });
     }
+    
+    // 短時間待機してプロセスの安定化を図る
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 });
 
