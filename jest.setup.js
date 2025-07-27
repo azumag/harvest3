@@ -154,24 +154,23 @@ afterAll(async () => {
   jest.clearAllTimers();
   jest.clearAllMocks();
   
-  // CI環境では積極的なクリーンアップを避ける
-  if (!process.env.CI) {
-    // アクティブなハンドルを安全にクリーンアップ（非CI環境のみ）
-    if (process._getActiveHandles) {
-      const activeHandles = process._getActiveHandles();
-      if (activeHandles && activeHandles.length > 0) {
-        activeHandles.forEach(handle => {
-          if (handle && typeof handle.unref === 'function') {
-            try {
-              handle.unref();
-            } catch (error) {
-              // ハンドルのクリーンアップエラーを無視
-            }
+  // CI環境でも軽量なハンドルクリーンアップを実行
+  if (process._getActiveHandles) {
+    const activeHandles = process._getActiveHandles();
+    if (activeHandles && activeHandles.length > 0) {
+      activeHandles.forEach(handle => {
+        if (handle && typeof handle.unref === 'function') {
+          try {
+            handle.unref();
+          } catch (error) {
+            // ハンドルのクリーンアップエラーを無視
           }
-        });
-      }
+        }
+      });
     }
   }
+  
+  // 追加のクリーンアップ処理は不要 - forceExit設定で対応
 });
 
 // 各テストスイート後のクリーンアップ
