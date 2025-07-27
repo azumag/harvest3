@@ -174,7 +174,7 @@ echo "=== テスト完了 ==="
   
   // スクリプトを安全に作成（セキュリティ対策）
   const sanitizedScript = fullScript.replace(/[`$\\]/g, '\\$&');
-  fs.writeFileSync(testScriptPath, fullScript);
+  fs.writeFileSync(testScriptPath, sanitizedScript);
   fs.chmodSync(testScriptPath, '755');
 
   try {
