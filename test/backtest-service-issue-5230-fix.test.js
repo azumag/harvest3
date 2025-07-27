@@ -179,7 +179,7 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
     
     // Issue #5315により強化された実装（二重防御システム）
     expect(functionLines).toBeGreaterThan(50);
-    expect(functionLines).toBeLessThan(120); // 適切な上限設定
+    expect(functionLines).toBeLessThanOrEqual(120); // 適切な上限設定（Issue #5403修正でエラーハンドリング強化）
     
     // Issue #5315による強化版
     console.log(`Enhanced log_backtest_startup_message function: ${functionLines} lines (Issue #5315 double-defense system)`);
