@@ -1643,6 +1643,12 @@ cleanup() {
     # Issue #5150: startup message lock のクリーンアップ
     cleanup_startup_message_locks
     
+    # Issue #5413修正: グローバル起動フラグファイルのクリーンアップ
+    if [ -f "$LOCK_BASE_DIR/global-startup-flag.marker" ]; then
+        rm -f "$LOCK_BASE_DIR/global-startup-flag.marker" 2>/dev/null || true
+        log "Cleaned up global startup flag marker (Issue #5413 fix)"
+    fi
+    
     log "Graceful shutdown completed"
     exit 0
 }
@@ -1809,13 +1815,48 @@ main() {
         # execコマンドの実行
         exec "$@"
     else
-        # Issue #5318修正: 起動メッセージの確実な重複防止（グローバルフラグによる追加防御）
-        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
+        # Issue #5413修正: 起動メッセージの確実な重複防止（強化版グローバルフラグ + アトミック操作）
+        # 複数の防御線による重複防止：プロセス内フラグ + 環境変数 + ファイルベース
+        local global_flag_file="$LOCK_BASE_DIR/global-startup-flag.marker"
+        
+        # 第1防御線: プロセス内変数による即座の重複防止
+        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT_PROCESS" = "1" ]; then
+            log "DEBUG: Process-level flag prevented duplicate startup message (Issue #5413 fix)"
+            return 0
+        fi
+        
+        # 第2防御線: 環境変数による重複防止
+        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" = "1" ]; then
+            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
+            log "DEBUG: Environment flag prevented duplicate startup message (Issue #5413 fix)" 
+            return 0
+        fi
+        
+        # 第3防御線: アトミックファイル操作による確実な重複防止
+        # 既存のフラグファイルをチェック
+        if [ -f "$global_flag_file" ]; then
+            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
             export _GLOBAL_STARTUP_MESSAGE_SENT=1
+            log "DEBUG: Existing flag file prevented duplicate startup message (Issue #5413 fix)"
+            return 0
+        fi
+        
+        local temp_flag="${global_flag_file}.tmp.$$"
+        if echo "$(date +%s):$$:$(hostname)" > "$temp_flag" 2>/dev/null && \
+           mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
+            # ファイル作成成功 = 最初の実行
+            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
+            export _GLOBAL_STARTUP_MESSAGE_SENT=1
+            chmod 600 "$global_flag_file" 2>/dev/null || true
+            
             # 起動ロック取得後に安全にメッセージを出力
             log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
         else
-            log "DEBUG: Global flag prevented duplicate startup message (Issue #5318)"
+            # ファイル作成失敗 = 重複実行
+            _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
+            export _GLOBAL_STARTUP_MESSAGE_SENT=1
+            rm -f "$temp_flag" 2>/dev/null || true
+            log "DEBUG: Atomic file operation prevented duplicate startup message (Issue #5413 fix)"
         fi
         
         # 初期診断の実行
