@@ -850,8 +850,7 @@ log_startup_message() {
     # Issue #5431修正: backtest containerの場合の重複防止強化
     if [ "$BACKTEST_MODE" = "true" ]; then
         # 既にbacktest起動メッセージが出力済みの場合は重複を防ぐ
-        if [ "$_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
-            log "DEBUG: Prevented duplicate backtest startup message (Issue #5431 fix)"
+        if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
             return 0
         fi
         log_backtest_startup_message "$message"
