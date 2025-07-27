@@ -1842,11 +1842,13 @@ main() {
             return 0
         fi
         
-        local temp_flag="${global_flag_file}.tmp.$$"
+        local temp_flag="${global_flag_file}.tmp.$$_$(date +%N)_${RANDOM}"
         if echo "$(date +%s):$$:$(hostname)" > "$temp_flag" 2>/dev/null && \
            mv "$temp_flag" "$global_flag_file" 2>/dev/null; then
             # ファイル作成成功 = 最初の実行
-            chmod 600 "$global_flag_file" 2>/dev/null || true
+            if ! chmod 600 "$global_flag_file" 2>/dev/null; then
+                log "Warning: Failed to set permissions on $global_flag_file"
+            fi
             
             # 起動ロック取得後に安全にメッセージを出力
             log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
