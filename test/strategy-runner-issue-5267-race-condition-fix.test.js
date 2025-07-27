@@ -41,87 +41,53 @@ describe('Issue #5267: strategy-runner重複起動メッセージレースコン
         cleanup(doneFile);
     });
 
-    test('Issue #5267: アトミックファイルロックによる重複防止が正しく動作することを確認', async () => {
-        // Issue #5267修正版のロジックをテスト
+    test('Issue #5267: Issue #5415によるKISS簡素化後の重複防止が正しく動作することを確認', async () => {
+        // Issue #5415によるKISS原則適用後の簡素化版ロジックをテスト
         const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
         const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
         
-        const fixedScript = `#!/bin/bash
+        const simplifiedScript = `#!/bin/bash
 set -e
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# Issue #5267修正版: アトミックファイルロックによる重複防止
-log_startup_message_fixed() {
+# Issue #5415: KISS原則に基づく簡素化版
+log_startup_message_simplified() {
     local message="$1"
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5267修正: アトミックファイルロックによる確実な重複防止
-            local startup_msg_lock_file="${lockFile}"
-            local startup_msg_done_file="${doneFile}"
+            local lock_file="${lockFile}"
+            local done_marker="${doneFile}"
             
-            # 既に完了マーカーが存在する場合は重複防止
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0  # 既にログ出力済み、重複防止
-            fi
-            
-            # 環境変数フラグによる高速チェック（第一防御線）
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                return 0  # 既にログ出力済み、重複防止
-            fi
-            
-            # アトミックディレクトリロック取得（第二防御線）
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得成功 - 二重チェック後にメッセージ出力
-                if [ -f "$startup_msg_done_file" ]; then
-                    # 他のプロセスが先にメッセージを出力していた
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    return 0
-                fi
-                
-                # フラグ設定とメッセージ出力
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
+            # シンプルなflock実装による重複防止
+            (
+                flock -n 200 || exit 0
+                [ -f "$done_marker" ] && exit 0
                 log "$message"
-                
-                # 完了マーカー作成（他のプロセス用）
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                
-                # ロック解放
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                
-                return 0  # 処理完了
-            else
-                # ロック取得失敗 - 他のプロセスが処理中
-                # 短時間待機してから完了マーカーをチェック
-                local wait_attempts=0
-                while [ $wait_attempts -lt 10 ] && [ ! -f "$startup_msg_done_file" ]; do
-                    sleep 0.1
-                    wait_attempts=$((wait_attempts + 1))
-                done
-                
-                # 環境変数フラグも設定（一貫性のため）
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0  # 他のプロセスがログ出力したため、重複防止
-            fi
+                touch "$done_marker"
+                chmod 600 "$done_marker" 2>/dev/null || true
+            ) 200>"$lock_file"
+            
+            return 0
             ;;
     esac
     
-    # その他のメッセージは通常処理
+    # その他のメッセージは通常のログ処理
     log "$message"
+    return 0
 }
 
-# 複数回呼び出し（修正後は重複しない）
-log_startup_message_fixed "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
-log_startup_message_fixed "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
-log_startup_message_fixed "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
+# 複数回呼び出し（簡素化後も重複しない）
+log_startup_message_simplified "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
+log_startup_message_simplified "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
+log_startup_message_simplified "Starting strategy-runner container with enhanced error handling (container: test, pid: $$)"
 `;
 
         const testScriptPath = path.join(testTmpDir, 'test-race-condition-fix.sh');
-        fs.writeFileSync(testScriptPath, fixedScript);
+        fs.writeFileSync(testScriptPath, simplifiedScript);
         fs.chmodSync(testScriptPath, '755');
 
         try {
@@ -131,9 +97,9 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
                 line.includes('Starting strategy-runner container with enhanced error handling')
             );
             
-            // 修正後は必ず1回のみ出力される
+            // 簡素化後も必ず1回のみ出力される
             expect(messages.length).toBe(1);
-            console.log('Race condition fix - Messages found:', messages.length);
+            console.log('KISS simplified - Messages found:', messages.length);
             console.log('Message:', messages[0]);
         } finally {
             if (fs.existsSync(testScriptPath)) {
@@ -142,8 +108,8 @@ log_startup_message_fixed "Starting strategy-runner container with enhanced erro
         }
     }, 10000);
 
-    test('Issue #5267: 並行プロセスでのレースコンディション耐性テスト', async () => {
-        // 複数のプロセスを並行実行してレースコンディション耐性をテスト
+    test('Issue #5267: Issue #5415簡素化後の並行プロセスでのレースコンディション耐性テスト', async () => {
+        // 複数のプロセスを並行実行してレースコンディション耐性をテスト（簡素化版）
         const lockFile = getTempPath('locks', 'main-startup-message.lock', {unique: false});
         const doneFile = getTempPath('locks', 'main-startup-message.done', {unique: false});
         
@@ -154,47 +120,25 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] $1"
 }
 
-# Issue #5267修正版のアトミックロック機構
+# Issue #5415: KISS原則に基づく簡素化版のflock機構
 log_startup_message_concurrent() {
     local message="$1"
     
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            local startup_msg_lock_file="${lockFile}"
-            local startup_msg_done_file="${doneFile}"
+            local lock_file="${lockFile}"
+            local done_marker="${doneFile}"
             
-            if [ -f "$startup_msg_done_file" ]; then
-                return 0
-            fi
-            
-            if [ "$MAIN_STARTUP_MESSAGE_LOGGED" = "1" ]; then
-                return 0
-            fi
-            
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                if [ -f "$startup_msg_done_file" ]; then
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    return 0
-                fi
-                
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
+            # シンプルなflock実装による重複防止
+            (
+                flock -n 200 || exit 0
+                [ -f "$done_marker" ] && exit 0
                 log "$message (process: $$)"
-                
-                echo "$(date +%s):$$:$(hostname)" > "$startup_msg_done_file" 2>/dev/null || true
-                chmod 600 "$startup_msg_done_file" 2>/dev/null || true
-                
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                return 0
-            else
-                local wait_attempts=0
-                while [ $wait_attempts -lt 10 ] && [ ! -f "$startup_msg_done_file" ]; do
-                    sleep 0.1
-                    wait_attempts=$((wait_attempts + 1))
-                done
-                
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                return 0
-            fi
+                touch "$done_marker"
+                chmod 600 "$done_marker" 2>/dev/null || true
+            ) 200>"$lock_file"
+            
+            return 0
             ;;
     esac
 }
@@ -270,17 +214,16 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5267の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5267修正: アトミックファイルロックによる確実な重複防止');
-        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
-        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
+        // Issue #5415によるKISS原則適用後の実装を確認
+        expect(entrypointContent).toContain('Issue #5415: KISS原則に基づく簡素化 - シンプルなflock使用による重複防止');
+        expect(entrypointContent).toContain('local lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
+        expect(entrypointContent).toContain('local done_marker="$LOCK_BASE_DIR/main-startup-message.done"');
         
-        // アトミックロック機構の主要部分が含まれていることを確認
-        expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file" 2>/dev/null');
-        // Issue #5381: 原子的ファイル作成の確認（改善された実装）
-        expect(entrypointContent).toContain('local temp_marker="${startup_msg_done_file}.tmp.$$"');
-        expect(entrypointContent).toContain('echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null');
-        expect(entrypointContent).toContain('mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null');
+        // 簡素化されたflock機構の主要部分が含まれていることを確認
+        expect(entrypointContent).toContain('flock -n 200 || exit 0');
+        expect(entrypointContent).toContain('[ -f "$done_marker" ] && exit 0');
+        expect(entrypointContent).toContain('touch "$done_marker"');
+        expect(entrypointContent).toContain(') 200>"$lock_file"');
         
         // クリーンアップ関数も更新されていることを確認
         expect(entrypointContent).toContain('Issue #5267: メインの起動メッセージ用ロックファイルのクリーンアップ');
