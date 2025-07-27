@@ -794,7 +794,7 @@ log_duplicate_stats() {
             if [ "$log_size" -gt 1048576 ]; then
                 # 原子的ログローテーション操作
                 local temp_log="${DUPLICATE_STATS_LOG_FILE}.rotate.$$"
-                if tail -n 1000 "$DUPLICATE_STATS_LOG_FILE" > "$temp_log" 2>/dev/null && \
+                if tail -n 500 "$DUPLICATE_STATS_LOG_FILE" > "$temp_log" 2>/dev/null && \
                    mv "$temp_log" "$DUPLICATE_STATS_LOG_FILE" 2>/dev/null; then
                     set_secure_permissions "$DUPLICATE_STATS_LOG_FILE" "file" 2>/dev/null || true
                 else
