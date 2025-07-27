@@ -32,8 +32,8 @@ describe('Issue #5318: strategy-runnerサービス重複メッセージ修正', 
     expect(entrypointContent).toContain('_GLOBAL_STARTUP_MESSAGE_SENT');
     expect(entrypointContent).toContain('Global flag prevented duplicate startup message');
     
-    // 元の log_startup_message 呼び出しが適切に保護されていることを確認
-    expect(entrypointContent).toMatch(/if.*_GLOBAL_STARTUP_MESSAGE_SENT.*!= "1"/);
+    // 元の log_startup_message 呼び出しが適切に保護されていることを確認（複数の防御線）
+    expect(entrypointContent).toMatch(/if.*\$_GLOBAL_STARTUP_MESSAGE_SENT.*= "1"/);
   });
 
   test('Issue #5318修正: グローバルフラグによる重複防止が正しく動作することを確認', async () => {

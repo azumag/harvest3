@@ -45,7 +45,6 @@ describe('Issue #5413: strategy-runnerサービス重複メッセージ修正（
   });
 
   test('Issue #5413修正: 3層防御線による重複防止が正しく動作することを確認', async () => {
-    /* eslint-disable no-undef */
     const testScript = `#!/bin/bash
 # テスト用のlog関数
 log() {
@@ -114,7 +113,6 @@ test_startup_logic
 # クリーンアップ
 rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
 `;
-    /* eslint-enable no-undef */
 
     const testScriptPath = path.join(tmpDir, `test-issue-5413-fix-${Date.now()}.sh`);
     fs.writeFileSync(testScriptPath, testScript);
@@ -143,7 +141,6 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
   }, 10000);
 
   test('Issue #5413修正: アトミックファイル操作による並行処理耐性確認', async () => {
-    /* eslint-disable no-undef */
     const testScript = `#!/bin/bash
 # 現実的な並行実行シミュレーションテスト（順次実行でタイミング調整）
 
@@ -221,7 +218,6 @@ simulate_concurrent_startup "1003"
 # クリーンアップ  
 rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
 `;
-    /* eslint-enable no-undef */
 
     const testScriptPath = path.join(tmpDir, `test-issue-5413-concurrent-${Date.now()}.sh`);
     fs.writeFileSync(testScriptPath, testScript);
