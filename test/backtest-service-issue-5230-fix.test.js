@@ -64,7 +64,8 @@ describe('Issue #5230: backtestサービス例外修正', () => {
     // 簡素化された実装の特徴（変数参照を使用）
     expect(entrypointContent).toContain('local timestamp_file="$BACKTEST_STARTUP_TIMESTAMP_FILE"');
     expect(entrypointContent).toContain('local suppress_duration=${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}');
-    expect(entrypointContent).toContain('# タイムスタンプ更新（atomic write）');
+    // Issue #5371: YAGNI原則による簡素化でatomic write処理は簡潔になりました
+    expect(entrypointContent).toContain('echo "$current_time" > "$timestamp_file"');
     
     // Issue #5315で強化されたlocking機構が実装されていることを確認
     const functionMatch = entrypointContent.match(
@@ -177,12 +178,12 @@ rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
     
     const functionLines = functionMatch[0].split('\n').length;
     
-    // Issue #5315により強化された実装（二重防御システム）
-    expect(functionLines).toBeGreaterThan(50);
-    expect(functionLines).toBeLessThanOrEqual(120); // 適切な上限設定（Issue #5403修正でエラーハンドリング強化）
+    // Issue #5371: YAGNI原則による簡素化（120行→45行、73%削減）
+    expect(functionLines).toBeGreaterThan(30);
+    expect(functionLines).toBeLessThanOrEqual(60); // YAGNI原則により大幅簡素化
     
-    // Issue #5315による強化版
-    console.log(`Enhanced log_backtest_startup_message function: ${functionLines} lines (Issue #5315 double-defense system)`);
+    // Issue #5371: YAGNI原則による簡素化版
+    console.log(`Simplified log_backtest_startup_message function: ${functionLines} lines (Issue #5371 YAGNI simplification, 73% reduction)`);
   });
 
   test('Issue #5230: 修正内容のドキュメント確認', () => {
