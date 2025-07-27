@@ -9,6 +9,13 @@ lint や test エラーを一時的に回避した場合、github issue に登�
 - KISS（Keep It Simple Stupid）：シンプルに保つ
 - t-wada TDD: テスト駆動開発
 
+## YAGNI適用成功事例
+- **Issue #5371** (2025-07): log_backtest_startup_message関数の簡素化
+  - 120行→45行（73%削減）を達成
+  - Docker再起動検出システム、log_duplicate_stats統計機能を削除
+  - 核心機能（重複防止、flock同期）は完全保持
+  - テスト品質向上、CI通過、レビュー承認済み
+
 # 注意
 - トップディレクトリにテスト用スクリプトを作って放置してはならない
 - テスト用スクリプトは .tmp に作成し、終わったら捨てる
