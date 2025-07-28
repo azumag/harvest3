@@ -114,6 +114,19 @@ function isValidStringValue(str, fieldName) {
 }
 
 /**
+ * Issue #5515: Redis multi/exec結果を統一形式で処理
+ * @param {*} result - Redis結果（配列または直接値）
+ * @returns {{error: Error|null, value: *}} 統一された結果形式
+ */
+function parseRedisResult(result) {
+  if (Array.isArray(result)) {
+    return { error: result[0], value: result[1] };
+  } else {
+    return { error: null, value: result };
+  }
+}
+
+/**
  * Issue #4126: ロックパラメータの型チェック
  * @param {any} lockInfo - ロック情報オブジェクト
  * @returns {Object} バリデーション結果
@@ -464,15 +477,8 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
         }
         
         for (let i = 0; i < results.length; i++) {
-          // Issue #5489: Redis結果形式の互換性対応
-          let error, result;
-          if (Array.isArray(results[i])) {
-            [error, result] = results[i];
-          } else {
-            // 直接結果が返される場合
-            error = null;
-            result = results[i];
-          }
+          // Issue #5489: Redis結果形式の互換性対応 - Issue #5515: DRY原則適用
+          const { error, value: result } = parseRedisResult(results[i]);
           
           if (error !== null) {
             throw new Error(`Transaction command ${i} failed: ${error}`);
@@ -483,15 +489,8 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
           }
         }
         
-        // hGetの結果を検証 - Issue #5489: Redis結果形式の互換性対応
-        let hGetError, hGetResult;
-        if (Array.isArray(results[2])) {
-          [hGetError, hGetResult] = results[2];
-        } else {
-          // 直接結果が返される場合
-          hGetError = null;
-          hGetResult = results[2];
-        }
+        // hGetの結果を検証 - Issue #5489: Redis結果形式の互換性対応 - Issue #5515: DRY原則適用
+        const { error: hGetError, value: hGetResult } = parseRedisResult(results[2]);
         
         if (hGetError === null && hGetResult !== testValue) {
           throw new Error(`Transaction hGet mismatch: expected '${testValue}', got '${hGetResult}'`);
@@ -533,17 +532,12 @@ function shouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
   for (let i = 0; i < totalCommands; i++) {
     const result = redisResults[i];
     
-    // Redis の multi/exec 結果は [error, value] の形式
-    if (Array.isArray(result) && result.length === 2) {
-      const [error, value] = result;
-      
-      // エラーがnull/undefinedで値もnull/undefinedの場合
-      if ((error === null || error === undefined) && 
-          (value === null || value === undefined)) {
-        nullUndefinedCount++;
-      }
-    } else {
-      // 結果の形式が予期しない場合
+    // Issue #5515: DRY原則適用 - Redis結果解析を共通化
+    const { error, value } = parseRedisResult(result);
+    
+    // エラーがnull/undefinedで値もnull/undefinedの場合
+    if ((error === null || error === undefined) && 
+        (value === null || value === undefined)) {
       nullUndefinedCount++;
     }
   }
@@ -4170,5 +4164,6 @@ module.exports = {
   validateRedisTransactionBeforeExecution, // Issue #4826: トランザクション事前検証
   acquireDistributedLock, // Issue #4949: テスト用にエクスポート
   releaseDistributedLock, // Issue #4949: テスト用にエクスポート
-  shouldRecoverFromNullUndefinedErrors // Issue #4932: null/undefined エラー検出機能
+  shouldRecoverFromNullUndefinedErrors, // Issue #4932: null/undefined エラー検出機能
+  parseRedisResult // Issue #5515: Redis結果解析ヘルパー関数
 };
