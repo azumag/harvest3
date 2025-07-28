@@ -59,7 +59,7 @@ PROCESS_MONITOR_INTERVAL=${PROCESS_MONITOR_INTERVAL:-10}  # プロセス監視�
 
 # Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）
 REDIS_DUPLICATE_PREVENTION_TTL=${REDIS_DUPLICATE_PREVENTION_TTL:-300}  # Redis重複防止TTL（秒）
-DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略
+DUPLICATE_PREVENTION_STRATEGY=${DUPLICATE_PREVENTION_STRATEGY:-redis_first}  # 重複防止戦略 (redis_first|file_only)
 
 # Issue #5338: 重複防止メトリクス設定
 ENABLE_DUPLICATE_STATS=${ENABLE_DUPLICATE_STATS:-false}  # 重複防止統計記録機能（デフォルト無効）
@@ -618,6 +618,12 @@ log_backtest_startup_message() {
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
             log "$message"
             echo "$current_time" > "$timestamp_file"
+            
+            # Issue #5403修正: log_duplicate_stats関数の存在チェック
+            if command -v log_duplicate_stats >/dev/null 2>&1; then
+                log_duplicate_stats # Issue #5338
+            fi
+            
             exec 200>&-
         else
             _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
@@ -746,6 +752,138 @@ log_duplicate_stats() {
     return 0
 }
 
+# Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）
+try_redis_duplicate_prevention() {
+    local message="$1"
+    local message_hash="$2"
+    
+    # Redis接続チェック（Node.js版）
+    if ! command -v node >/dev/null 2>&1; then
+        return 1  # Redis不可またはエラー、フォールバックが必要
+    fi
+    
+    # Redis URL チェック
+    if [ -n "$REDIS_URL" ]; then
+        # Redis URL が設定されている場合は処理を続行
+        true
+    else
+        return 1  # Redis不可またはエラー、フォールバックが必要
+    fi
+    
+    # コンテナ識別とRedis重複チェック
+    local container_id=$(hostname)
+    local redis_key="startup_msg:$message_hash"
+    
+    local redis_check_result=$(node -e "
+        const redis = require('redis');
+        const client = redis.createClient({url: process.env.REDIS_URL});
+        const key = '$redis_key';
+        const value = '$container_id:$$:$(date +%s)';
+        
+        (async () => {
+            try {
+                await client.connect();
+                await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);
+                console.log('success');
+                await client.quit();
+            } catch (err) {
+                console.log('error');
+            }
+        })();
+    " 2>/dev/null || echo "error")
+    
+    if [ "$redis_check_result" = "duplicate" ]; then
+        return 1  # 重複検出
+    elif [ "$redis_check_result" = "success" ]; then
+        return 0  # 成功
+    else
+        return 1  # Redis不可またはエラー、フォールバックが必要
+    fi
+}
+
+# Issue #5172: ファイルベースフォールバック関数（単一責任化・KISS原則）
+fallback_to_file_based_prevention() {
+    local message="$1"
+    local message_hash="$2"
+    local container_id=$(hostname)
+    local current_time=$(date +%s)
+    
+    # プロセス内重複防止（第二防御線）
+    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
+    if [ "${!var_name}" = "1" ]; then
+        return 1  # 重複
+    fi
+    
+    # ファイルベース重複防止（第二防御線）
+    local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # success_fileチェック
+    if [ -f "$success_file" ]; then
+        local file_content=$(cat "$success_file" 2>/dev/null || echo "")
+        local file_time=$(echo "$file_content" | cut -d':' -f1 2>/dev/null || echo "0")
+        local file_container=$(echo "$file_content" | cut -d':' -f3 2>/dev/null || echo "")
+        
+        # 同一コンテナ内での重複チェック
+        if [ "$file_container" = "$container_id" ] && [ $((current_time - file_time)) -lt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
+            export "$var_name"=1
+            return 1  # 重複
+        fi
+        
+        # 古いファイルのクリーンアップ
+        if [ "$file_container" != "$container_id" ] || [ $((current_time - file_time)) -gt $SUCCESS_FILE_MAX_AGE ]; then
+            rm -f "$success_file" 2>/dev/null || true
+        fi
+    fi
+    
+    # 古いロックファイルのクリーンアップ
+    if [ -d "$lock_file" ]; then
+        local lock_age=$((current_time - $(stat -c %Y "$lock_file" 2>/dev/null || echo 0)))
+        if [ $lock_age -gt $SAME_CONTAINER_DUPLICATE_THRESHOLD ]; then
+            rm -rf "$lock_file" 2>/dev/null || true
+        fi
+    fi
+    
+    # Issue #5172: atomicロック取得ヘルパー関数（KISS原則適用・簡素化）
+    local process_info="${container_id}:$$:${current_time}"
+    local attempt=0
+    while [ $attempt -lt $MAX_LOCK_ATTEMPTS ]; do
+        if mkdir "$lock_file" 2>/dev/null; then
+            echo "$process_info" > "$lock_file/process_info" 2>/dev/null || true
+            break
+        fi
+        attempt=$((attempt + 1))
+        sleep $LOCK_RETRY_DELAY
+    done
+    
+    # ロック取得失敗時は重複とみなす
+    if [ $attempt -ge $MAX_LOCK_ATTEMPTS ]; then
+        export "$var_name"=1
+        return 1  # 重複
+    fi
+    
+    # success file作成（atomic move操作）
+    local temp_success_file="${success_file}.tmp.$$"
+    if echo "${current_time}:$$:${container_id}" > "$temp_success_file" 2>/dev/null; then
+        if mv "$temp_success_file" "$success_file" 2>/dev/null; then
+            export "$var_name"=1
+            # バックグラウンドでクリーンアップ
+            (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
+            
+            # ロック解放
+            rm -rf "$lock_file" 2>/dev/null || true
+            
+            return 0  # 出力許可
+        fi
+    fi
+    
+    # 失敗時クリーンアップ
+    rm -f "$temp_success_file" 2>/dev/null || true
+    rm -rf "$lock_file" 2>/dev/null || true
+    export "$var_name"=1
+    return 1  # 重複
+}
+
 
 
 # Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）
@@ -838,6 +976,47 @@ log_startup_message() {
     
     # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
     return 0
+    
+    # Issue #5121 修正: 汎用メッセージの atomic 重複防止（簡素化・安定化版）
+    local message_hash=$(get_message_hash "$message")
+    
+    # Issue #5130: Redis-based重複防止戦略の実装
+    case "$DUPLICATE_PREVENTION_STRATEGY" in
+        "redis_first")
+            # Redis-based重複防止を第一選択として試行
+            if try_redis_duplicate_prevention "$message" "$message_hash"; then
+                log "$message"
+                return 0
+            else
+                # Redisが失敗した場合はファイルベースにフォールバック
+                if fallback_to_file_based_prevention "$message" "$message_hash"; then
+                    log "$message"
+                    return 0
+                else
+                    # 重複検出またはエラー
+                    return 0
+                fi
+            fi
+            ;;
+        "file_only")
+            # ファイルベースのみ使用
+            if fallback_to_file_based_prevention "$message" "$message_hash"; then
+                log "$message"
+                return 0
+            else
+                return 0
+            fi
+            ;;
+        *)
+            # デフォルト: 従来のatomic重複防止
+            local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+            if mkdir "$lock_file" 2>/dev/null; then
+                log "$message"
+                (sleep 1 && rm -rf "$lock_file") &
+            fi
+            return 0
+            ;;
+    esac
 }
 
 # 起動ロック関数

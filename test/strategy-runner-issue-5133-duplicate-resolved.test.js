@@ -21,8 +21,8 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
     
     // 重複防止機構が実装されていることを確認（リファクタリング後）
     expect(entrypointContent).toContain('Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）');
-    expect(entrypointContent).toContain('Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）');
-    expect(entrypointContent).toContain('Issue #5172: ファイルベースフォールバック関数（単一責任化・KISS原則）');
+    expect(entrypointContent).toContain('Issue #5172: 共通クリーンアップ関数（DRY原則適用）');
+    expect(entrypointContent).toContain('Issue #5172: atomicロック取得ヘルパー関数（KISS原則適用・簡素化）');
   });
 
   test('log_startup_message関数の重複防止機構が正常に動作することを確認', async () => {
