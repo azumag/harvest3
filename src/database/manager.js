@@ -691,7 +691,9 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
   try {
     const client = redisTransaction.client;
-    if (!client || !client.isReady || !client.isOpen) {
+    const clientReady = Boolean(client?.isReady);
+    const clientOpen = Boolean(client?.isOpen);
+    if (!client || !clientReady || !clientOpen) {
       logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
       throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
     }
@@ -762,8 +764,10 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: トランザクション実行直前の最終チェック
   logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
   const client = redisTransaction.client;
-  if (!client.isReady || !client.isOpen) {
-    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
+  const clientReady = Boolean(client?.isReady);
+  const clientOpen = Boolean(client?.isOpen);
+  if (!clientReady || !clientOpen) {
+    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
     throw new Error('Redis Commit失敗: exec()直前に接続が失われました');
   }
   
@@ -787,7 +791,9 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     logger.debug(`[Redis Transaction] exec()完了: ${JSON.stringify(postExecConnectionState)}`);
     
     // Issue #4941: 接続状態異常の早期検出
-    if (!client.isReady || !client.isOpen) {
+    const clientReady = Boolean(client?.isReady);
+    const clientOpen = Boolean(client?.isOpen);
+    if (!clientReady || !clientOpen) {
       logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);
       updateCircuitBreakerOnFailure();
       throw new Error(`Redis Commit失敗: exec()後に接続が失われました - ${JSON.stringify(postExecConnectionState)}`);
