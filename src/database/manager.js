@@ -691,7 +691,12 @@ function validateRedisClientConnection(client, context, logger) {
     // Issue #5701: プロパティが未定義の場合は接続状態をstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
     if (!statusBasedCheck) {
-      logger.error(`[Redis Transaction] ${context}失敗: ready=${client?.isReady}, open=${client?.isOpen}, status=${client?.status}`);
+      // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
+      const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
+      const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+      const statusInfo = client?.status ? `, status=${client.status}` : '';
+      
+      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
       throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
     }
     
@@ -703,9 +708,15 @@ function validateRedisClientConnection(client, context, logger) {
     // Issue #5667: セキュリティ対策 - 本番環境では詳細な接続情報を制限
     const isProduction = process.env.NODE_ENV === 'production';
     const logLevel = isProduction ? 'warn' : 'error';
+    
+    // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
+    const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
+    const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+    const statusInfo = client?.status ? `, status=${client.status}` : '';
+    
     const errorMsg = isProduction 
       ? `${context}失敗: 接続状態異常`
-      : `${context}失敗: ready=${client?.isReady}, open=${client?.isOpen}`;
+      : `${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`;
     
     logger[logLevel](`[Redis Transaction] ${errorMsg}`);
     throw new Error(`Redis Commit失敗: ${context}時に接続が失われました`);
@@ -2346,8 +2357,9 @@ async function executeDistributedTransaction(trade, isBacktest) {
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
           // Issue #4925: デバッグ情報を追加
-          rawIsReady: currentRedisClient?.isReady,
-          rawIsOpen: currentRedisClient?.isOpen,
+          // Issue #5661: undefined プロパティを意味のある形で表示
+          rawIsReady: 'isReady' in (currentRedisClient || {}) ? currentRedisClient.isReady : '(undefined property)',
+          rawIsOpen: 'isOpen' in (currentRedisClient || {}) ? currentRedisClient.isOpen : '(undefined property)',
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
@@ -2498,8 +2510,9 @@ async function executeDistributedTransaction(trade, isBacktest) {
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
           // Issue #4925: デバッグ情報を追加
-          rawIsReady: currentRedisClient?.isReady,
-          rawIsOpen: currentRedisClient?.isOpen,
+          // Issue #5661: undefined プロパティを意味のある形で表示
+          rawIsReady: 'isReady' in (currentRedisClient || {}) ? currentRedisClient.isReady : '(undefined property)',
+          rawIsOpen: 'isOpen' in (currentRedisClient || {}) ? currentRedisClient.isOpen : '(undefined property)',
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
@@ -4236,5 +4249,7 @@ module.exports = {
   acquireDistributedLock, // Issue #4949: テスト用にエクスポート
   releaseDistributedLock, // Issue #4949: テスト用にエクスポート
   shouldRecoverFromNullUndefinedErrors, // Issue #4932: null/undefined エラー検出機能
-  parseRedisResult // Issue #5515: Redis結果解析ヘルパー関数
+  parseRedisResult, // Issue #5515: Redis結果解析ヘルパー関数
+  // Issue #5661: テスト用のヘルパー関数
+  __getValidateRedisClientConnectionForTesting: () => validateRedisClientConnection
 };
