@@ -852,9 +852,11 @@ log_startup_message() {
     local message="$1"
     
     # Issue #5431修正: backtest containerの場合の重複防止強化
+    # Issue #5447修正: backtest modeでは専用の起動パスのみを使用し、重複を完全防止
     if [ "$BACKTEST_MODE" = "true" ]; then
-        # 既にbacktest起動メッセージが出力済みの場合は重複を防ぐ
+        # Issue #5431修正: backtest mode専用処理で重複防止
         if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
+            log "DEBUG: [Issue #5431] Process flag prevented duplicate backtest startup message"
             return 0
         fi
         log_backtest_startup_message "$message"
