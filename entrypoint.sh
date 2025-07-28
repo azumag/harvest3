@@ -757,19 +757,47 @@ try_redis_duplicate_prevention() {
     local message="$1"
     local message_hash="$2"
     
-    # Redis接続チェック（簡素化）
-    if ! command -v redis-cli >/dev/null 2>&1; then
-        return 1  # Redis CLI不可時はファイルベースにフォールバック
+    # Redis接続チェック（Node.js版）
+    if ! command -v node >/dev/null 2>&1; then
+        return 1  # Redis不可またはエラー、フォールバックが必要
     fi
     
-    # Redis重複チェック
-    local redis_key="startup_msg:$message_hash"
-    if redis-cli -x set "$redis_key" "1" EX "$REDIS_DUPLICATE_PREVENTION_TTL" NX >/dev/null 2>&1 <<< "$(hostname):$$:$(date +%s)"; then
-        # Redis登録成功 = 重複なし
-        return 0
+    # Redis URL チェック
+    if [ -n "$REDIS_URL" ]; then
+        # Redis URL が設定されている場合は処理を続行
+        true
     else
-        # Redis登録失敗 = 重複あり
-        return 1
+        return 1  # Redis不可またはエラー、フォールバックが必要
+    fi
+    
+    # コンテナ識別とRedis重複チェック
+    local container_id=$(hostname)
+    local redis_key="startup_msg:$message_hash"
+    
+    local redis_check_result=$(node -e "
+        const redis = require('redis');
+        const client = redis.createClient({url: process.env.REDIS_URL});
+        const key = '$redis_key';
+        const value = '$container_id:$$:$(date +%s)';
+        
+        (async () => {
+            try {
+                await client.connect();
+                await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);
+                console.log('success');
+                await client.quit();
+            } catch (err) {
+                console.log('error');
+            }
+        })();
+    " 2>/dev/null || echo "error")
+    
+    if [ "$redis_check_result" = "duplicate" ]; then
+        return 1  # 重複検出
+    elif [ "$redis_check_result" = "success" ]; then
+        return 0  # 成功
+    else
+        return 1  # Redis不可またはエラー、フォールバックが必要
     fi
 }
 
@@ -780,7 +808,7 @@ fallback_to_file_based_prevention() {
     local container_id=$(hostname)
     local current_time=$(date +%s)
     
-    # プロセス内重複防止（第一防御線）
+    # プロセス内重複防止（第二防御線）
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
         return 1  # 重複
@@ -946,23 +974,49 @@ log_startup_message() {
             ;;
     esac
     
+    # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
+    return 0
+    
     # Issue #5121 修正: 汎用メッセージの atomic 重複防止（簡素化・安定化版）
     local message_hash=$(get_message_hash "$message")
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
     
-    # atomicな方法でメッセージの重複をチェック
-    if mkdir "$lock_file" 2>/dev/null; then
-        # ロックが取得できた場合のみメッセージを出力
-        log "$message"
-        
-        # 短時間でのクリーンアップ（バックグラウンド）
-        (sleep 1 && rm -rf "$lock_file") &
-    else
-        # 既に同じメッセージが処理済みの場合は何もしない
-        return 0
-    fi
-    
-    return 0
+    # Issue #5130: Redis-based重複防止戦略の実装
+    case "$DUPLICATE_PREVENTION_STRATEGY" in
+        "redis_first")
+            # Redis-based重複防止を第一選択として試行
+            if try_redis_duplicate_prevention "$message" "$message_hash"; then
+                log "$message"
+                return 0
+            else
+                # Redisが失敗した場合はファイルベースにフォールバック
+                if fallback_to_file_based_prevention "$message" "$message_hash"; then
+                    log "$message"
+                    return 0
+                else
+                    # 重複検出またはエラー
+                    return 0
+                fi
+            fi
+            ;;
+        "file_only")
+            # ファイルベースのみ使用
+            if fallback_to_file_based_prevention "$message" "$message_hash"; then
+                log "$message"
+                return 0
+            else
+                return 0
+            fi
+            ;;
+        *)
+            # デフォルト: 従来のatomic重複防止
+            local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+            if mkdir "$lock_file" 2>/dev/null; then
+                log "$message"
+                (sleep 1 && rm -rf "$lock_file") &
+            fi
+            return 0
+            ;;
+    esac
 }
 
 # 起動ロック関数
