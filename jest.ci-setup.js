@@ -3,6 +3,9 @@
  * タイムアウト対策とリソースクリーンアップの強化
  */
 
+// Jest グローバル関数のインポート
+const { afterEach, afterAll } = require('@jest/globals');
+
 // グローバルタイムアウトの設定
 const GLOBAL_TIMEOUT = 25000; // 30秒のテストタイムアウト内に収める
 
@@ -12,33 +15,33 @@ const originalPromise = global.Promise;
 
 global.Promise = class extends originalPromise {
   constructor(executor) {
-    const promise = new originalPromise((resolve, reject) => {
-      pendingPromises.add(promise);
+    const promiseInstance = new originalPromise((resolve, reject) => {
+      pendingPromises.add(promiseInstance);
       
       const wrappedResolve = (value) => {
-        pendingPromises.delete(promise);
+        pendingPromises.delete(promiseInstance);
         resolve(value);
       };
       
       const wrappedReject = (reason) => {
-        pendingPromises.delete(promise);
+        pendingPromises.delete(promiseInstance);
         reject(reason);
       };
       
       try {
         executor(wrappedResolve, wrappedReject);
       } catch (error) {
-        pendingPromises.delete(promise);
+        pendingPromises.delete(promiseInstance);
         reject(error);
       }
     });
     
-    return promise;
+    return promiseInstance;
   }
 };
 
 // タイマーの強制クリア
-let activeTimers = new Set();
+const activeTimers = new Set();
 const originalSetTimeout = global.setTimeout;
 const originalSetInterval = global.setInterval;
 const originalClearTimeout = global.clearTimeout;
