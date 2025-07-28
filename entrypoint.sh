@@ -842,6 +842,7 @@ fallback_to_file_based_prevention() {
     return 0
 }
 
+# Issue #5172: メイン重複防止関数（簡素化・YAGNI/KISS原則）
 # Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）
 log_startup_message() {
     local message="$1"
