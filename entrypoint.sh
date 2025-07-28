@@ -851,14 +851,12 @@ fallback_to_file_based_prevention() {
 log_startup_message() {
     local message="$1"
     
-    # Issue #5431修正: backtest containerの場合の重複防止強化
+    # Issue #5447修正: backtest modeでは専用の起動パスのみを使用し、重複を完全防止
     if [ "$BACKTEST_MODE" = "true" ]; then
-        # 既にbacktest起動メッセージが出力済みの場合は重複を防ぐ
-        if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
-            return 0
-        fi
-        log_backtest_startup_message "$message"
-        return $?
+        # backtest modeでは、log_startup_messageは何も行わない
+        # バックテスト起動メッセージは専用パス（line 1843）でのみ処理される
+        log "DEBUG: [Issue #5447] Skipping startup message in backtest mode to prevent duplication"
+        return 0
     fi
     
     # Issue #5362修正: 起動メッセージの重複防止（KISS原則に基づく確実な単一機構）
