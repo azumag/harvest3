@@ -23,18 +23,16 @@ describe('Issue #5302: strategy-runner プロセス内重複ログ防止修正',
         await execAsync(`rm -rf ${testTmpDir}`);
         await execAsync(`mkdir -p ${testTmpDir}`);
         
-        // Issue #5302用のロックファイルとフラグをクリーンアップ
-        await execAsync('rm -rf /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
-        await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
-        await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
+        // Issue #5362用のロックファイルとフラグをクリーンアップ
+        await execAsync('rm -rf /var/run/strategy-runner/startup-message.lock 2>/dev/null || true');
+        await execAsync('unset _STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
     afterEach(async () => {
         // テスト後クリーンアップ
         await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -rf /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
-        await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
-        await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
+        await execAsync('rm -rf /var/run/strategy-runner/startup-message.lock 2>/dev/null || true');
+        await execAsync('unset _STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
     test('Issue #5302: プロセス内変数による即座の重複防止が正しく動作することを確認', async () => {
@@ -47,14 +45,14 @@ test_log_startup_message() {
     
     case "\$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            if [ "\$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+            # Issue #5362修正: プロセス内変数による即座の重複防止（第一防御線）
+            if [ "\$_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 echo "[PROCESS_INTERNAL_BLOCKED] Message blocked by process internal flag"
                 return 0  # 既に同一プロセス内でログ出力済み、即座に重複防止
             fi
             
             # メッセージ出力とフラグ設定
-            _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+            _STARTUP_MESSAGE_LOGGED=1
             echo "[TEST] \$message"
             return 0
             ;;
@@ -110,34 +108,29 @@ echo "=== テスト完了 ==="
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
         // Issue #5362のKISS原則実装のプロセス内変数チェックが追加されていることを確認（PR #5529の簡素化後）
-        expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED.*=.*"1"/);
+        expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED.*=.*1/);
         expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
-        expect(entrypointContent).toContain('プロセス内変数による即座の重複防止');
+        expect(entrypointContent).toContain('第一防御線: プロセス内変数による即座の重複防止');
         
         // プロセス内変数のチェックが最初の防御線として配置されていることを確認
         const lines = entrypointContent.split('\n');
         let processInternalCheckLine = -1;
-        let fileDoneCheckLine = -1;
-        let envVarCheckLine = -1;
+        let flockCheckLine = -1;
 
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
+            if (lines[i].includes('_STARTUP_MESSAGE_LOGGED') && lines[i].includes('if')) {
                 processInternalCheckLine = i;
             }
-            if (lines[i].includes('startup_msg_done_file') && lines[i].includes('if') && lines[i].includes('-f')) {
-                fileDoneCheckLine = i;
-            }
-            if (lines[i].includes('MAIN_STARTUP_MESSAGE_LOGGED') && !lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
-                envVarCheckLine = i;
+            if (lines[i].includes('flock -w 5 200') && processInternalCheckLine > -1) {
+                flockCheckLine = i;
+                break;
             }
         }
 
-        // プロセス内変数チェックが他のチェックより前に配置されていることを確認
+        // プロセス内変数チェックがflockチェックより前に配置されていることを確認
         expect(processInternalCheckLine).toBeGreaterThan(-1);
-        expect(fileDoneCheckLine).toBeGreaterThan(-1);
-        expect(envVarCheckLine).toBeGreaterThan(-1);
-        expect(processInternalCheckLine).toBeLessThan(fileDoneCheckLine);
-        expect(processInternalCheckLine).toBeLessThan(envVarCheckLine);
+        expect(flockCheckLine).toBeGreaterThan(-1);
+        expect(processInternalCheckLine).toBeLessThan(flockCheckLine);
     });
 
     test('Issue #5362: プロセス内変数設定がメッセージ出力時と待機時の両方で行われることを確認', () => {
@@ -149,9 +142,9 @@ echo "=== テスト完了 ==="
         expect(messageLogSection[0]).toMatch(/_STARTUP_MESSAGE_LOGGED=1/);
 
         // ロック取得失敗時の待機セクションでのプロセス内変数設定を確認（Issue #5362の実装）
-        const waitingSection = entrypointContent.match(/message suppressed to prevent duplicate[\s\S]*?return/);
+        const waitingSection = entrypointContent.match(/message suppressed to prevent duplicate[\s\S]*?_STARTUP_MESSAGE_LOGGED=1/);
         expect(waitingSection).toBeTruthy();
-        // Issue #5362の実装では、プロセス変数は最初にチェックされ、その後はflockロジックに進む
+        // Issue #5362の実装では、プロセス変数はすべての分岐で設定される
     });
 
     test('Issue #5302: 修正により同一タイムスタンプでの重複出力が防止されることを確認', async () => {
@@ -165,14 +158,14 @@ test_log_startup_message_bg() {
     
     case "\$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            if [ "\$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+            # Issue #5362修正: プロセス内変数による即座の重複防止（第一防御線）
+            if [ "\$_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 echo "[\$(date '+%Y-%m-%d %H:%M:%S')] [BLOCKED] Process internal flag prevented duplicate" >> "\$output_file"
                 return 0
             fi
             
             # メッセージ出力とフラグ設定
-            _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+            _STARTUP_MESSAGE_LOGGED=1
             echo "[\$(date '+%Y-%m-%d %H:%M:%S')] [ENTRYPOINT] \$message" >> "\$output_file"
             return 0
             ;;

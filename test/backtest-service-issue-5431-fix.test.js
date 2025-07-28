@@ -31,17 +31,17 @@ describe('Issue #5431: Backtest Service Duplicate Startup Message Fix', () => {
         // Check for backtest container duplicate prevention logic (実際の実装確認)
         expect(entrypointContent).toContain('backtest containerの場合の重複防止');
         
-        // Check that the backtest mode duplicate prevention logic is present
+        // Check that the backtest mode duplicate prevention logic is present (Issue #5362 KISS implementation)
         expect(entrypointContent).toContain('if [ "$BACKTEST_MODE" = "true" ]; then');
         expect(entrypointContent).toContain('if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then');
         expect(entrypointContent).toContain('log_backtest_startup_message "$message"');
         
-        // Verify the fix is in the log_startup_message function
+        // Verify the fix is in the log_startup_message function (Issue #5362 implementation)
         const logStartupMessageMatch = entrypointContent.match(/log_startup_message\(\)\s*{[\s\S]*?^}/m);
         expect(logStartupMessageMatch).toBeTruthy();
         
         const logStartupMessageFunction = logStartupMessageMatch[0];
-        expect(logStartupMessageFunction).toContain('# Issue #5431修正: backtest containerの場合の重複防止強化');
+        expect(logStartupMessageFunction).toContain('# backtest containerの場合の重複防止');
         expect(logStartupMessageFunction).toContain('_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
     });
 
