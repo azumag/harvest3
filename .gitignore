@@ -9,6 +9,7 @@ tools/
 .env.bu
 .ccc.env
 settings.local.json
-.tmp/
+.tmp/*
+!.tmp/.gitkeep
 output.txt
 *.log
