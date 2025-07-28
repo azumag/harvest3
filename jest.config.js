@@ -11,9 +11,9 @@ module.exports = {
   // CI環境での安定性向上 - ハンドルクリーンアップの問題に対応
   detectOpenHandles: process.env.CI ? false : true, // CI環境ではオープンハンドル検出を無効化
   forceExit: true, // ハンドルクリーンアップ後も残るプロセスを強制終了
-  maxConcurrency: process.env.CI ? 4 : 5, // CI環境では並行実行を4に制限（パフォーマンス最適化）
+  maxConcurrency: process.env.CI ? 1 : 5, // CI環境では並行実行を1に制限してtest isolation向上
   workerIdleMemoryLimit: process.env.CI ? '256MB' : '1GB', // CI環境でメモリ制限を256MBに設定して安定性向上
-  maxWorkers: process.env.CI ? 4 : '50%', // CI環境では4ワーカーでパフォーマンス最適化
+  maxWorkers: process.env.CI ? 1 : '50%', // CI環境では1ワーカーで完全なtest isolation
   // Ignore E2E tests in unit test runs
   testPathIgnorePatterns: [
     '/node_modules/',
