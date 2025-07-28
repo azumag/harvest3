@@ -320,6 +320,53 @@ class DiscordRateLimiter {
   }
 
   /**
+   * オブジェクトを安全にJSON文字列化する
+   * 循環参照やタイムアウトを適切に処理
+   */
+  safeStringify(obj, timeout = 1000) {
+    return new Promise((resolve) => {
+      let timedOut = false;
+      let completed = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        if (!completed) {
+          resolve('[STRINGIFY_TIMEOUT]');
+        }
+      }, timeout);
+
+      try {
+        // 循環参照を処理するためのセーフなreplacer
+        const seen = new WeakSet();
+        const replacer = (key, value) => {
+          if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) {
+              return '[Circular Reference]';
+            }
+            seen.add(value);
+          }
+          return value;
+        };
+
+        const stringified = JSON.stringify(obj, replacer, 2);
+        completed = true;
+        clearTimeout(timer);
+        
+        if (!timedOut) {
+          resolve(stringified);
+        }
+      } catch (error) {
+        completed = true;
+        clearTimeout(timer);
+        
+        if (!timedOut) {
+          resolve(`[STRINGIFY_ERROR: ${error.message}]`);
+        }
+      }
+    });
+  }
+
+  /**
    * 実際のDiscord送信処理
    */
   async sendToDiscord(webhookUrl, message) {
@@ -477,25 +524,15 @@ class DiscordRateLimiter {
 
       // その他のHTTPエラーの詳細ログ
       if (error.response) {
-        try {
-          const errorInfo = {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            data: error.response.data,
-            url: this.maskWebhookUrl(webhookUrl)
-          };
-          console.error('[DISCORD_RATE_LIMITER] HTTP error:', JSON.stringify(errorInfo, null, 2));
-        } catch (stringifyError) {
-          // JSON.stringify が失敗した場合のフォールバック
-          console.error('[DISCORD_RATE_LIMITER] HTTP error (serialization failed):', {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            dataType: typeof error.response.data,
-            dataLength: error.response.data ? String(error.response.data).length : 0,
-            url: this.maskWebhookUrl(webhookUrl),
-            serializationError: stringifyError.message
-          });
-        }
+        const errorInfo = {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          url: this.maskWebhookUrl(webhookUrl)
+        };
+        const serializedError = await this.safeStringify(errorInfo);
+        console.error('[DISCORD_RATE_LIMITER] HTTP error:', serializedError);
+        
         return { 
           success: false, 
           error: `http_${error.response.status}`,
@@ -508,22 +545,13 @@ class DiscordRateLimiter {
       }
 
       // ネットワークエラーなどの詳細ログ
-      try {
-        const errorInfo = {
-          message: error.message,
-          code: error.code,
-          url: this.maskWebhookUrl(webhookUrl)
-        };
-        console.error('[DISCORD_RATE_LIMITER] Network/Other error:', JSON.stringify(errorInfo, null, 2));
-      } catch (stringifyError) {
-        // JSON.stringify が失敗した場合のフォールバック
-        console.error('[DISCORD_RATE_LIMITER] Network/Other error (serialization failed):', {
-          messageType: typeof error.message,
-          codeType: typeof error.code,
-          url: this.maskWebhookUrl(webhookUrl),
-          serializationError: stringifyError.message
-        });
-      }
+      const errorInfo = {
+        message: error.message,
+        code: error.code,
+        url: this.maskWebhookUrl(webhookUrl)
+      };
+      const serializedError = await this.safeStringify(errorInfo);
+      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', serializedError);
       return { 
         success: false, 
         error: error.code || error.message,
