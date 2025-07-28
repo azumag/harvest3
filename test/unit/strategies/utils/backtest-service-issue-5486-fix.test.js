@@ -302,20 +302,21 @@ describe('Backtest Service Issue #5486 Fix', () => {
         // createMarketSellOrderが存在しない
       };
 
-      // addOrderのモックを作成してorder構造を検証
-      const mockAddOrder = jest.fn();
-      require('../../../../src/database/manager').addOrder = mockAddOrder;
+      // 既存のaddOrderモックをクリアして検証の準備
+      const databaseManager = require('../../../../src/database/manager');
+      databaseManager.addOrder.mockClear();
 
       await clearPositionMarket(backtestExchange, 'XRP/JPY', 'TEST_STRATEGY');
 
       // addOrderが呼ばれた際の引数を確認
-      expect(mockAddOrder).toHaveBeenCalled();
-      const addOrderArgs = mockAddOrder.mock.calls[0];
-      const orderObject = addOrderArgs[4]; // order.price
+      expect(databaseManager.addOrder).toHaveBeenCalled();
+      const addOrderArgs = databaseManager.addOrder.mock.calls[0];
       
-      // 模擬注文オブジェクトの構造を検証（price = 0 for backtest）
-      expect(addOrderArgs[5]).toContain('backtest_sell_'); // order.id
-      expect(addOrderArgs[6]).toBe('market'); // order type
+      // 模擬注文オブジェクトの構造を検証
+      // addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market')
+      expect(addOrderArgs[5]).toBe(0); // order.price (バックテストでは0)
+      expect(addOrderArgs[6]).toContain('backtest_sell_'); // order.id
+      expect(addOrderArgs[7]).toBe('market'); // order type
     });
   });
 });
