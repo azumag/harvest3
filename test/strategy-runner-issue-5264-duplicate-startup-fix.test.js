@@ -270,17 +270,16 @@ test_defense_line "none"
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5264の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）');
-        expect(entrypointContent).toContain('Issue #5264修正: 環境変数フラグによる第1防御線');
-        expect(entrypointContent).toContain('Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）');
-        expect(entrypointContent).toContain('Issue #5264修正: アトミックロック取得（第3防御線）');
+        // Issue #5362のKISS原則実装が適用されていることを確認（PR #5529で簡素化）
+        expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
+        expect(entrypointContent).toContain('第一防御線: プロセス内変数による即座の重複防止（最優先）');
+        expect(entrypointContent).toContain('第二防御線: flockベースの確実なファイルロック');
         
-        // 重複防止機構の主要部分が含まれていることを確認
-        expect(entrypointContent).toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1');
-        expect(entrypointContent).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
-        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
-        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
+        // 重複防止機構の主要部分が含まれていることを確認（簡素化後の変数名）
+        expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED=1');
+        expect(entrypointContent).toContain('export _STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('startup-message.lock');
+        expect(entrypointContent).toContain('startup-message-mkdir.lock');
     });
 
     test('Issue #5264: 並行プロセステスト', async () => {
