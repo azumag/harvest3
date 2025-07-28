@@ -520,7 +520,17 @@ class DiscordRateLimiter {
         };
         const serializedError = await this.safeStringify(errorInfo);
         
-        console.error('[DISCORD_RATE_LIMITER] HTTP error:', serializedError);
+        // serialization failureを検出してフォールバックログを出力
+        if (serializedError.startsWith('[STRINGIFY_ERROR:') || serializedError === '[STRINGIFY_TIMEOUT]') {
+          console.error('[DISCORD_RATE_LIMITER] HTTP error (serialization failed):', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            dataType: typeof error.response.data,
+            serializationError: serializedError
+          });
+        } else {
+          console.error('[DISCORD_RATE_LIMITER] HTTP error:', serializedError);
+        }
         
         return { 
           success: false, 
@@ -537,7 +547,17 @@ class DiscordRateLimiter {
       // 元のエラーオブジェクト全体をシリアライゼーション
       const serializedError = await this.safeStringify(error);
       
-      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', serializedError);
+      // serialization failureを検出してフォールバックログを出力
+      if (serializedError.startsWith('[STRINGIFY_ERROR:') || serializedError === '[STRINGIFY_TIMEOUT]') {
+        console.error('[DISCORD_RATE_LIMITER] Network/Other error (serialization failed):', {
+          messageType: typeof error.message,
+          codeType: typeof error.code,
+          serializationError: serializedError
+        });
+      } else {
+        console.error('[DISCORD_RATE_LIMITER] Network/Other error:', serializedError);
+      }
+      
       return { 
         success: false, 
         error: error.code || error.message,

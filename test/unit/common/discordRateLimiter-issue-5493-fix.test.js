@@ -212,16 +212,19 @@ describe('Discord Rate Limiter - Issue #5493 Fix', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('ECONNREFUSED');
     
-    // Check that stringify error was handled properly
+    // Check that stringify error was handled properly with fallback logging
     const consoleErrorCalls = consoleSpy.mock.calls;
     const networkErrorCall = consoleErrorCalls.find(call => 
-      call[0].includes('Network/Other error:')
+      call[0].includes('Network/Other error (serialization failed):')
     );
     
     expect(networkErrorCall).toBeDefined();
-    expect(networkErrorCall[1]).toContain('STRINGIFY_ERROR');
-    expect(networkErrorCall[1]).toContain('Stringify failed');
-    expect(networkErrorCall[1]).not.toBe('{'); // Should not be incomplete
+    expect(networkErrorCall[1]).toMatchObject({
+      messageType: 'string',
+      codeType: 'string',
+      serializationError: expect.stringContaining('STRINGIFY_ERROR')
+    });
+    expect(networkErrorCall[1].serializationError).toContain('Stringify failed');
 
     // Restore original JSON.stringify
     JSON.stringify = originalStringify;
