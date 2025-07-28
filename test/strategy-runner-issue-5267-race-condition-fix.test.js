@@ -270,20 +270,18 @@ log_startup_message_concurrent "Starting strategy-runner container with enhanced
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5267の修正が適用されていることを確認
-        expect(entrypointContent).toContain('Issue #5267修正: アトミックファイルロックによる確実な重複防止');
-        expect(entrypointContent).toContain('startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"');
-        expect(entrypointContent).toContain('startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"');
+        // Issue #5362のKISS原則実装が適用されていることを確認（PR #5529の簡素化後）
+        expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
+        expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('log_startup_message');
         
-        // アトミックロック機構の主要部分が含まれていることを確認
-        expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file" 2>/dev/null');
-        // Issue #5381: 原子的ファイル作成の確認（改善された実装）
-        expect(entrypointContent).toContain('local temp_marker="${startup_msg_done_file}.tmp.$$"');
-        expect(entrypointContent).toContain('echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null');
-        expect(entrypointContent).toContain('mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null');
+        // Issue #5362のKISS原則実装の主要部分が含まれていることを確認
+        expect(entrypointContent).toContain('flock -w 5 200');
+        expect(entrypointContent).toContain('プロセス内変数による即座の重複防止');
+        expect(entrypointContent).toContain('flockベースの確実なファイルロック');
         
-        // クリーンアップ関数も更新されていることを確認
-        expect(entrypointContent).toContain('Issue #5267: メインの起動メッセージ用ロックファイルのクリーンアップ');
+        // クリーンアップ関数も含まれていることを確認（Issue #5362の実装）
+        expect(entrypointContent).toContain('exec 200>&-');
     });
 
     test('Issue #5267: クリーンアップ機能が正しく動作することを確認', async () => {

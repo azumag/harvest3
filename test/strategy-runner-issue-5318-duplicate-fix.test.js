@@ -25,15 +25,15 @@ describe('Issue #5318: strategy-runnerサービス重複メッセージ修正', 
   test('Issue #5318修正: グローバルフラグによる重複防止が実装されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5318のコメントが追加されていることを確認
-    expect(entrypointContent).toMatch(/Issue #5318修正.*グローバルフラグ/);
+    // Issue #5362のKISS原則実装のコメントが追加されていることを確認（PR #5529の簡素化後）
+    expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
     
-    // グローバルフラグチェックが実装されていることを確認
-    expect(entrypointContent).toContain('_GLOBAL_STARTUP_MESSAGE_SENT');
-    expect(entrypointContent).toContain('Global flag prevented duplicate startup message');
+    // Issue #5362のプロセス内フラグチェックが実装されていることを確認
+    expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
+    expect(entrypointContent).toContain('Process variable prevented duplicate startup message');
     
-    // 元の log_startup_message 呼び出しが適切に保護されていることを確認（複数の防御線）
-    expect(entrypointContent).toMatch(/if.*\$_GLOBAL_STARTUP_MESSAGE_SENT.*= "1"/);
+    // 元の log_startup_message 呼び出しが適切に保護されていることを確認
+    expect(entrypointContent).toMatch(/if.*\$\{_STARTUP_MESSAGE_LOGGED.*\}.*= "1"/);
   });
 
   test('Issue #5318修正: グローバルフラグによる重複防止が正しく動作することを確認', async () => {

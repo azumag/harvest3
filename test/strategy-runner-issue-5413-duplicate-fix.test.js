@@ -23,25 +23,25 @@ describe('Issue #5413: strategy-runnerサービス重複メッセージ修正（
     }
   });
 
-  test('Issue #5413修正: 3層防御線による重複防止が実装されていることを確認', () => {
+  test('Issue #5362: KISS原則による重複防止が実装されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5413のコメントが追加されていることを確認
-    expect(entrypointContent).toMatch(/Issue #5413修正.*3層の防御線|Issue #5413修正.*アトミック操作/);
+    // Issue #5362のKISS原則実装が追加されていることを確認（PR #5529の簡素化後）
+    expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
     
-    // プロセス内フラグによる第1防御線
-    expect(entrypointContent).toContain('_GLOBAL_STARTUP_MESSAGE_SENT_PROCESS');
-    expect(entrypointContent).toContain('Process-level flag prevented duplicate startup message');
+    // プロセス内フラグによる重複防止（第一防御線）
+    expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
+    expect(entrypointContent).toContain('Process variable prevented duplicate startup message');
     
-    // 環境変数による第2防御線  
-    expect(entrypointContent).toContain('Environment flag prevented duplicate startup message');
+    // flockベースのロック機構（第二防御線）  
+    expect(entrypointContent).toContain('flock -w 5 200');
     
-    // アトミックファイル操作による第3防御線
-    expect(entrypointContent).toContain('global-startup-flag.marker');
-    expect(entrypointContent).toContain('Atomic file operation prevented duplicate startup message');
+    // mkdirベースのフォールバック機構
+    expect(entrypointContent).toContain('startup-message-mkdir.lock');
+    expect(entrypointContent).toContain('mkdir "$mkdir_lock_dir"');
     
     // クリーンアップ処理が追加されていることを確認
-    expect(entrypointContent).toContain('Cleaned up global startup flag marker');
+    expect(entrypointContent).toContain('exec 200>&-');
   });
 
   test('Issue #5413修正: 3層防御線による重複防止が正しく動作することを確認', async () => {
@@ -259,14 +259,13 @@ rm -f "$LOCK_BASE_DIR/global-startup-flag.marker"* 2>/dev/null || true
     // 既存のlog_startup_message関数が維持されていることを確認
     expect(entrypointContent).toContain('log_startup_message()');
     
-    // 既存の重複防止メカニズムが維持されていることを確認
-    expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS/);
-    expect(entrypointContent).toMatch(/MAIN_STARTUP_MESSAGE_LOGGED/);
-    expect(entrypointContent).toMatch(/main-startup-message\.done/);
-    expect(entrypointContent).toMatch(/main-startup-message\.lock/);
+    // Issue #5362のKISS原則実装の重複防止メカニズムが実装されていることを確認
+    expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED/);
+    expect(entrypointContent).toMatch(/startup-message\.lock/);
+    expect(entrypointContent).toMatch(/flock -w 5 200/);
     
-    // 新しい修正が追加層として機能することを確認
-    expect(entrypointContent).toMatch(/global-startup-flag\.marker/);
-    expect(entrypointContent).toMatch(/_GLOBAL_STARTUP_MESSAGE_SENT_PROCESS/);
+    // フォールバック機構も含まれていることを確認
+    expect(entrypointContent).toMatch(/startup-message-mkdir\.lock/);
+    expect(entrypointContent).toMatch(/_GLOBAL_STARTUP_MESSAGE_SENT/);
   });
 });

@@ -105,14 +105,14 @@ echo "=== テスト完了 ==="
         expect(secondCallSection).toMatch(/PROCESS_INTERNAL_BLOCKED/);
     });
 
-    test('Issue #5302: プロセス内変数がentrypoint.shに正しく実装されていることを確認', () => {
+    test('Issue #5362: プロセス内変数がentrypoint.shに正しく実装されていることを確認', () => {
         // entrypoint.shファイルの内容を確認
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // Issue #5302修正のプロセス内変数チェックが追加されていることを確認（Issue #5264で統合実装）
-        expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS.*=.*"1"/);
-        expect(entrypointContent).toMatch(/Issue #5302修正.*プロセス内変数による即座の重複防止/);
-        expect(entrypointContent).toMatch(/第0防御線/);
+        // Issue #5362のKISS原則実装のプロセス内変数チェックが追加されていることを確認（PR #5529の簡素化後）
+        expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED.*=.*"1"/);
+        expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
+        expect(entrypointContent).toContain('プロセス内変数による即座の重複防止');
         
         // プロセス内変数のチェックが最初の防御線として配置されていることを確認
         const lines = entrypointContent.split('\n');
@@ -140,18 +140,18 @@ echo "=== テスト完了 ==="
         expect(processInternalCheckLine).toBeLessThan(envVarCheckLine);
     });
 
-    test('Issue #5302: プロセス内変数設定がメッセージ出力時と待機時の両方で行われることを確認', () => {
+    test('Issue #5362: プロセス内変数設定がメッセージ出力時と待機時の両方で行われることを確認', () => {
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
 
-        // メッセージ出力時のプロセス内変数設定を確認（Issue #5264統合実装）
-        const messageLogSection = entrypointContent.match(/log "\$message"[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        // メッセージ出力時のプロセス内変数設定を確認（Issue #5362のKISS原則実装）
+        const messageLogSection = entrypointContent.match(/log "\$message"[\s\S]*?_STARTUP_MESSAGE_LOGGED=1/);
         expect(messageLogSection).toBeTruthy();
-        expect(messageLogSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        expect(messageLogSection[0]).toMatch(/_STARTUP_MESSAGE_LOGGED=1/);
 
-        // ロック取得失敗時の待機セクションでのプロセス内変数設定を確認
-        const waitingSection = entrypointContent.match(/ロック取得失敗時の処理[\s\S]*?_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        // ロック取得失敗時の待機セクションでのプロセス内変数設定を確認（Issue #5362の実装）
+        const waitingSection = entrypointContent.match(/message suppressed to prevent duplicate[\s\S]*?return/);
         expect(waitingSection).toBeTruthy();
-        expect(waitingSection[0]).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1/);
+        // Issue #5362の実装では、プロセス変数は最初にチェックされ、その後はflockロジックに進む
     });
 
     test('Issue #5302: 修正により同一タイムスタンプでの重複出力が防止されることを確認', async () => {

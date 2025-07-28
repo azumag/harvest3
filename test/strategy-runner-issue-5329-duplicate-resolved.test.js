@@ -76,10 +76,10 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // Issue #5329で報告された具体的なメッセージパターンへの対応が含まれていることを確認
     expect(entrypointContent).toMatch(/Starting strategy-runner container with enhanced error handling/);
     
-    // 重複防止のための複数の防御線が実装されていることを確認
-    expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS/);
-    expect(entrypointContent).toMatch(/main-startup-message\.lock/);
-    expect(entrypointContent).toMatch(/main-startup-message\.done/);
+    // Issue #5362のKISS原則実装による重複防止が実装されていることを確認（PR #5529の簡素化後）
+    expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED/);
+    expect(entrypointContent).toMatch(/startup-message\.lock/);
+    expect(entrypointContent).toContain('flock -w 5 200');
     
     console.log('Issue #5329: Duplicate prevention mechanisms verified in entrypoint.sh');
   });
@@ -88,9 +88,9 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
     // 複数プロセスでの並行実行に対する保護機能の確認
     // 実際の並行実行テストは複雑すぎるため、実装の存在確認に集中
     
-    // アトミックロック機構の存在確認（Issue #5264統合実装）
-    expect(entrypointContent).toMatch(/mkdir.*startup_msg_lock_file/);
-    expect(entrypointContent).toMatch(/Issue #5264修正.*アトミックロック取得/);
+    // Issue #5362のKISS原則実装のflockロック機構の存在確認
+    expect(entrypointContent).toMatch(/flock -w 5 200/);
+    expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
     
     // プロセス間の競合状態に対する保護の存在確認
     expect(entrypointContent).toMatch(/Another startup process is running/);
@@ -139,12 +139,12 @@ describe('Issue #5329: strategy-runner重複ログ問題解決確認', () => {
       if (lines[i].includes('startup_msg_done_file') && lines[i].includes('if') && lines[i].includes('-f')) {
         doneFileCheckLine = i;
       }
-      // 環境変数チェック（第一防御線）
-      if (lines[i].includes('MAIN_STARTUP_MESSAGE_LOGGED') && !lines[i].includes('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS') && lines[i].includes('if')) {
+      // プロセス内変数チェック（第一防御線）
+      if (lines[i].includes('_STARTUP_MESSAGE_LOGGED') && lines[i].includes('if')) {
         envVarCheckLine = i;
       }
-      // アトミックロック（第二防御線）
-      if (lines[i].includes('mkdir') && lines[i].includes('startup_msg_lock_file')) {
+      // flockロック（第二防御線）
+      if (lines[i].includes('flock -w 5 200')) {
         atomicLockLine = i;
       }
     }
