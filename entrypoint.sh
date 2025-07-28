@@ -296,6 +296,32 @@ cleanup_npm_cache() {
     return $cleanup_success
 }
 
+# Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）
+try_redis_duplicate_prevention() {
+    local message="$1"
+    local message_hash="$2"
+    local container_id=$(hostname)
+    
+    # Redis接続チェック
+    if [ -n "$REDIS_URL" ]; then
+        local redis_key="startup_msg:$message_hash"
+        
+        # Node.js Redis client integration
+        const redis = require('redis');
+        local redis_result=$(node -e "
+            const redis = require('redis');
+            const client = redis.createClient('$REDIS_URL');
+            client.setex('$redis_key', $REDIS_DUPLICATE_PREVENTION_TTL, '$container_id');
+        " 2>/dev/null || echo "redis_failed")
+        
+        if [ "$redis_result" != "redis_failed" ]; then
+            return 0  # Redis-based duplicate prevention succeeded
+        fi
+    fi
+    
+    return 1  # Redis not available, fallback required
+}
+
 # Issue #5172: 共通クリーンアップ関数（DRY原則適用）
 cleanup_old_lock_file() {
     local lock_file="$1"
@@ -712,6 +738,7 @@ create_success_file() {
     return 1  # 失敗
 }
 
+# Issue #5403修正: log_duplicate_stats関数の存在チェック
 # Issue #5338: 重複防止統計記録関数（強化版）
 log_duplicate_stats() {
     # 重複防止統計が有効な場合のみ記録
@@ -752,6 +779,28 @@ log_duplicate_stats() {
 log_startup_message() {
     local message="$1"
     
+    # Issue #5121 修正: 簡素化・安定化版の実装確認（atomic重複防止機能）
+    local message_hash=$(get_message_hash "$message")
+    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
+    
+    # Issue #5195修正: コンテナID検証機能
+    local container_id=$(hostname)
+    
+    # atomicな方法でメッセージの重複をチェック
+    if mkdir "$lock_file" 2>/dev/null; then
+        # ロックが取得できた場合のみメッセージを出力
+        log "$message"
+        
+        # 短時間でのクリーンアップ
+        (sleep 1 && rm -rf "$lock_file") &
+        return 0
+    else
+        # Issue #5403修正: 重複メッセージ統計記録（存在チェック付き）
+        if command -v log_duplicate_stats >/dev/null 2>&1; then
+            log_duplicate_stats # Issue #5338
+        fi
+    fi
+    
     # backtest containerの場合の重複防止
     if [ "$BACKTEST_MODE" = "true" ]; then
         if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
@@ -772,7 +821,7 @@ log_startup_message() {
             fi
             
             # 第二防御線: flockベースの確実なファイルロック
-            local lock_file="$LOCK_BASE_DIR/startup-message.lock"
+            local flock_lock_file="$LOCK_BASE_DIR/startup-message.lock"
             local lock_fd=200
             
             # flockが利用可能な場合は使用（より確実）
@@ -788,7 +837,6 @@ log_startup_message() {
                         # メッセージ出力とフラグ設定
                         _STARTUP_MESSAGE_LOGGED=1
                         export _STARTUP_MESSAGE_LOGGED
-                        log "$message"
                         log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: $(hostname))"
                         
                         return 0
@@ -798,7 +846,7 @@ log_startup_message() {
                         export _STARTUP_MESSAGE_LOGGED
                         return 0
                     fi
-                } 200>"$lock_file"
+                } 200>"$flock_lock_file"
             else
                 # フォールバック: flockが利用できない場合のmkdirベースロック
                 local mkdir_lock_dir="$LOCK_BASE_DIR/startup-message-mkdir.lock"
@@ -816,7 +864,6 @@ log_startup_message() {
                         
                         _STARTUP_MESSAGE_LOGGED=1
                         export _STARTUP_MESSAGE_LOGGED
-                        log "$message"
                         log "DEBUG: [Issue #5362] Startup message sent with mkdir fallback protection (PID: $$, Container: $(hostname))"
                         
                         rm -rf "$mkdir_lock_dir" 2>/dev/null || true
