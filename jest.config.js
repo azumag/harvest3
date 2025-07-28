@@ -4,8 +4,10 @@ module.exports = {
   collectCoverage: true,
   coverageDirectory: 'coverage',
   verbose: true,
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testTimeout: process.env.CI ? 60000 : 60000, // CI環境でも60秒に設定してDiscord rate limiterテスト等の長時間実行テストに対応
+  setupFilesAfterEnv: process.env.CI 
+    ? ['<rootDir>/jest.setup.js', '<rootDir>/jest.ci-setup.js']
+    : ['<rootDir>/jest.setup.js'],
+  testTimeout: process.env.CI ? 30000 : 60000, // CI環境では30秒に短縮、ローカルは60秒
   // キャッシュディレクトリを.tmpに設定してキャッシュ問題を回避
   cacheDirectory: '.tmp/jest_cache',
   // CI環境での安定性向上 - ハンドルクリーンアップの問題に対応
