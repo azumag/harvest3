@@ -689,7 +689,11 @@ function validateRedisClientConnection(client, context, logger) {
     logger.warn(`[Redis Transaction] ${context}: プロパティ未定義検出 - ${JSON.stringify(diagnosticInfo)}`);
     
     // Issue #5701: プロパティが未定義の場合は接続状態をstatusで判定
-    const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
+    // Issue #5659: 接続状態判定の改善 - より広範囲の有効状態をサポート
+    const validStatuses = ['ready', 'connected', 'connecting', 'reconnecting'];
+    const recoverableStatuses = ['connecting', 'reconnecting'];
+    const statusBasedCheck = validStatuses.includes(client.status);
+    
     if (!statusBasedCheck) {
       // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
       const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
@@ -697,7 +701,12 @@ function validateRedisClientConnection(client, context, logger) {
       const statusInfo = client?.status ? `, status=${client.status}` : '';
       
       logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
-      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続状態が不正です (status=${client.status})`);
+    }
+    
+    // Issue #5659: 回復可能な状態の場合は警告レベルでログ出力
+    if (recoverableStatuses.includes(client.status)) {
+      logger.warn(`[Redis Transaction] ${context}: 回復可能な接続状態を検出 (status=${client.status})`);
     }
     
     logger.info(`[Redis Transaction] ${context}: status基準で接続OK (status=${client.status})`);
@@ -768,11 +777,33 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
-  try {
-    validateRedisClientConnection(client, '実行前接続チェック', logger);
-  } catch (connectionError) {
-    // Helper function already provides appropriate error message, just re-throw
-    throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+  // Issue #5659: 接続状態チェックの改善 - 回復可能状態に対するリトライ機能追加
+  let connectionValidated = false;
+  const maxRetries = 3;
+  const retryDelayMs = 500; // 0.5秒
+  
+  for (let retry = 0; retry <= maxRetries; retry++) {
+    try {
+      validateRedisClientConnection(client, '実行前接続チェック', logger);
+      connectionValidated = true;
+      break;
+    } catch (connectionError) {
+      if (retry < maxRetries) {
+        // 回復可能な状態の場合のみリトライ
+        const isRecoverableError = connectionError.message.includes('status=connecting') || 
+                                  connectionError.message.includes('status=reconnecting');
+        
+        if (isRecoverableError) {
+          logger.warn(`[Redis Transaction] 実行前接続チェック リトライ ${retry + 1}/${maxRetries}: ${connectionError.message}`);
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs * (retry + 1))); // 指数バックオフ
+          continue;
+        }
+      }
+      
+      // 最終的な失敗またはrecoverableでないエラーの場合
+      logger.error(`[Redis Transaction] 実行前接続チェック最終失敗: ${connectionError.message}`);
+      throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+    }
   }
   
   // Issue #4941: より厳密な接続実用性テスト
