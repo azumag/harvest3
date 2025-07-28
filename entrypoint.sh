@@ -776,7 +776,7 @@ try_redis_duplicate_prevention() {
         
         if [ "$redis_check_result" = "duplicate" ]; then
             # Issue #5403修正: log_duplicate_stats関数の存在チェック
-            if command -v log_duplicate_stats >/dev/null 2>&1; then
+            if type log_duplicate_stats >/dev/null 2>&1; then
                 log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
             fi
             return 0  # Redisで重複検出
@@ -800,7 +800,7 @@ fallback_to_file_based_prevention() {
     local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
     if [ "${!var_name}" = "1" ]; then
         # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
+        if type log_duplicate_stats >/dev/null 2>&1; then
             log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
         fi
         return 0
@@ -815,7 +815,7 @@ fallback_to_file_based_prevention() {
     if validate_success_file "$success_file" "$container_id" "$current_time"; then
         export "$var_name"=1
         # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
+        if type log_duplicate_stats >/dev/null 2>&1; then
             log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
         fi
         return 0
