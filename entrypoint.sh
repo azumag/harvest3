@@ -307,7 +307,6 @@ try_redis_duplicate_prevention() {
         local redis_key="startup_msg:$message_hash"
         
         # Node.js Redis client integration
-        const redis = require('redis');
         local redis_result=$(node -e "
             const redis = require('redis');
             const client = redis.createClient('$REDIS_URL');
