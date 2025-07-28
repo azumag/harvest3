@@ -654,15 +654,34 @@ const logger = new Logger('DatabaseManager');
 
 /**
  * Issue #5667: Redis接続状態を検証するヘルパー関数（DRY原則適用）
- * @param {Object} client - Redis client
+ * Issue #5676: Redis Multi transaction clientの接続状態チェック対応
+ * @param {Object} client - Redis client (transaction clientまたはmain client)
  * @param {string} context - エラー時のコンテキスト情報
  * @param {Object} logger - ログ出力用
  * @returns {Object} 接続状態情報 {clientReady, clientOpen}
  * @throws {Error} 接続状態が無効な場合
  */
 function validateRedisClientConnection(client, context, logger) {
-  const clientReady = Boolean(client?.isReady);
-  const clientOpen = Boolean(client?.isOpen);
+  // Issue #5676: Redis Multi transaction clientの場合、メインクライアントを参照
+  let targetClient = client;
+  
+  // transaction clientの場合、プロパティが存在しない可能性があるため
+  // メインのRedisクライアントにフォールバックする
+  if (client && (client.isReady === undefined || client.isOpen === undefined)) {
+    try {
+      const redisDatabase = require('./redisDatabase');
+      const mainClient = redisDatabase.getClient();
+      if (mainClient && mainClient.isReady !== undefined && mainClient.isOpen !== undefined) {
+        targetClient = mainClient;
+        logger.debug(`[Redis Transaction] ${context}: transaction clientからmain clientにフォールバック`);
+      }
+    } catch (fallbackError) {
+      logger.warn(`[Redis Transaction] ${context}: main clientフォールバック失敗: ${fallbackError.message}`);
+    }
+  }
+  
+  const clientReady = Boolean(targetClient?.isReady);
+  const clientOpen = Boolean(targetClient?.isOpen);
   
   if (!clientReady || !clientOpen) {
     // Issue #5667: セキュリティ対策 - 本番環境では詳細な接続情報を制限
@@ -670,7 +689,7 @@ function validateRedisClientConnection(client, context, logger) {
     const logLevel = isProduction ? 'warn' : 'error';
     const errorMsg = isProduction 
       ? `${context}失敗: 接続状態異常`
-      : `${context}失敗: ready=${client?.isReady}, open=${client?.isOpen}`;
+      : `${context}失敗: ready=${targetClient?.isReady}, open=${targetClient?.isOpen}`;
     
     logger[logLevel](`[Redis Transaction] ${errorMsg}`);
     throw new Error(`Redis Commit失敗: ${context}時に接続が失われました`);
