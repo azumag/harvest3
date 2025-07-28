@@ -20,7 +20,6 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
     mockRedisClient = {
       multi: jest.fn(),
       isReady: true,
-      isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
       ping: jest.fn().mockResolvedValue('PONG')
@@ -59,7 +58,6 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
       getExtendedConnectionHealth: jest.fn().mockResolvedValue({
         clientExists: true,
         clientReady: true,
-        clientOpen: true,
         clientStatus: 'ready',
         circuitBreaker: { state: 'CLOSED', isOpen: false },
         ping: { success: true, latency: 10, error: null },
@@ -78,21 +76,18 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
   describe('checkRedisConnectionHealth - Issue #4951 厳格な接続状態チェック', () => {
     test('全ての接続指標が正常な場合は健全と判定', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
       
       expect(result.isHealthy).toBe(true);
       expect(result.details.clientReady).toBe(true);
-      expect(result.details.clientOpen).toBe(true);
       expect(result.details.clientConnected).toBe(true);
       expect(result.details.pingSuccess).toBe(true);
     });
 
     test('isReady=false の場合は不健全と判定（Issue #4951対応）', async () => {
       mockRedisClient.isReady = false;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
@@ -103,63 +98,57 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
       );
     });
 
-    test('isOpen=false の場合は不健全と判定（Issue #4951対応）', async () => {
-      mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = false;
+    test('isReady=false の場合は不健全と判定（Issue #4951対応）', async () => {
+      mockRedisClient.isReady = false;
       mockRedisClient.status = 'ready';
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
       
       expect(result.isHealthy).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Health Check] 接続状態不良: isOpen=false')
+        expect.stringContaining('[Redis Health Check] 接続状態不良')
       );
     });
 
     test('status!==ready の場合は健全と判定（Issue #4896修正後）', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
-      mockRedisClient.status = 'connecting'; // ready ではない状態だが、isReady=true && isOpen=true なので健全
+      mockRedisClient.status = 'connecting'; // ready ではない状態
       mockRedisClient.ping.mockResolvedValue('PONG');
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
       
-      expect(result.isHealthy).toBe(true); // Issue #4896の修正により、機能的指標で健全性判定
-      expect(mockLogger.warn).not.toHaveBeenCalled(); // 警告は出力されない
+      expect(result.isHealthy).toBe(false); // status が ready でない場合は不健全と判定
+      expect(mockLogger.warn).toHaveBeenCalled(); // 警告が出力される
     });
 
-    test('Issue #4896のケース：isReady=true, isOpen=true, status!=ready（修正後は健全と判定）', async () => {
-      // Issue #4896で報告された接続状態（修正後は健全と判定される）
+    test('Issue #4896のケース：isReady=true, status!=ready（修正後は不健全と判定）', async () => {
+      // Issue #4896で報告された接続状態（修正後は不健全と判定される）
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
-      mockRedisClient.status = 'end'; // ready ではない状態だが、機能的には接続可能
+      mockRedisClient.status = 'end'; // ready ではない状態
       mockRedisClient.ping.mockResolvedValue('PONG');
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
       
-      expect(result.isHealthy).toBe(true); // Issue #4896の修正により健全と判定
+      expect(result.isHealthy).toBe(false); // status が ready でない場合は不健全と判定
       expect(result.details.clientReady).toBe(true);
-      expect(result.details.clientOpen).toBe(true);
-      expect(result.details.clientConnected).toBe(true); // isReady && isOpen で判定
-      expect(mockLogger.warn).not.toHaveBeenCalled(); // 警告は出力されない
+      expect(result.details.clientConnected).toBe(false); // status != ready のため false
+      expect(mockLogger.warn).toHaveBeenCalled(); // 警告が出力される
     });
 
     test('複数の接続指標が不正な場合は詳細ログを出力', async () => {
       mockRedisClient.isReady = false;
-      mockRedisClient.isOpen = false;
       mockRedisClient.status = 'disconnected';
       
       const result = await databaseManager.checkRedisConnectionHealth(mockRedisClient, mockLogger);
       
       expect(result.isHealthy).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("[Redis Health Check] 接続状態不良: isReady=false, isOpen=false (status='disconnected')")
+        expect.stringContaining("[Redis Health Check] 接続状態不良")
       );
     });
 
     test('pingが失敗した場合は不健全と判定', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       mockRedisClient.ping.mockRejectedValue(new Error('Connection timeout'));
       
@@ -175,7 +164,6 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
 
     test('pingがタイムアウトした場合は不健全と判定', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       
       // 5秒以上かかるpingをシミュレート
@@ -194,7 +182,6 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
   describe('Redis接続状態の詳細情報', () => {
     test('健全性チェックの詳細情報が正しく設定される', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       mockRedisClient.serverInfo = { version: '6.2.0' };
       
@@ -204,8 +191,7 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
         expect.objectContaining({
           clientExists: true,
           clientReady: true,
-          clientOpen: true,
-          clientConnected: true,
+            clientConnected: true,
           clientStatus: 'ready',
           serverInfo: 'available',
           pingSuccess: true,
@@ -216,7 +202,6 @@ describe('Issue #4951: Redis接続の厳格な健全性チェック修正', () =
 
     test('serverInfoが存在しない場合は"unavailable"と表示', async () => {
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       delete mockRedisClient.serverInfo;
       

@@ -155,7 +155,7 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
       expect(healthResult.isHealthy).toBe(true);
       expect(healthResult.details.pingSuccess).toBe(true);
       expect(healthResult.details.clientReady).toBe(true);
-      expect(healthResult.details.clientOpen).toBe(true);
+      expect(healthResult.details.clientConnected).toBe(true);
     });
 
     test('status が ready でない場合は不健全と判定（Issue #4951対応）', async () => {
@@ -170,10 +170,9 @@ describe('Issue #4155: strategy-runnerサービス例外の修正', () => {
       const logger = new Logger('Test');
       const healthResult = await databaseManager.checkRedisConnectionHealth(mockRedisClient, logger);
       
-      expect(healthResult.isHealthy).toBe(true); // Issue #4896の修正により健全と判定
+      expect(healthResult.isHealthy).toBe(false); // status が ready でない場合は不健全と判定
       expect(healthResult.details.clientReady).toBe(true);
-      expect(healthResult.details.clientOpen).toBe(true);
-      expect(healthResult.details.clientConnected).toBe(true); // isReady && isOpen で判定
+      expect(healthResult.details.clientConnected).toBe(false); // status != ready のため false
     });
 
     test('pingタイムアウトの検出', async () => {
