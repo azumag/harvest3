@@ -464,7 +464,16 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
         }
         
         for (let i = 0; i < results.length; i++) {
-          const [error, result] = results[i];
+          // Issue #5489: Redis結果形式の互換性対応
+          let error, result;
+          if (Array.isArray(results[i])) {
+            [error, result] = results[i];
+          } else {
+            // 直接結果が返される場合
+            error = null;
+            result = results[i];
+          }
+          
           if (error !== null) {
             throw new Error(`Transaction command ${i} failed: ${error}`);
           }
@@ -474,8 +483,16 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
           }
         }
         
-        // hGetの結果を検証
-        const [hGetError, hGetResult] = results[2];
+        // hGetの結果を検証 - Issue #5489: Redis結果形式の互換性対応
+        let hGetError, hGetResult;
+        if (Array.isArray(results[2])) {
+          [hGetError, hGetResult] = results[2];
+        } else {
+          // 直接結果が返される場合
+          hGetError = null;
+          hGetResult = results[2];
+        }
+        
         if (hGetError === null && hGetResult !== testValue) {
           throw new Error(`Transaction hGet mismatch: expected '${testValue}', got '${hGetResult}'`);
         }
