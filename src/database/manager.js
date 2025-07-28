@@ -345,8 +345,7 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
   
   // Issue #4925: 改善されたRedis接続状態検証
   const clientReady = Boolean(redisClient?.isReady);
-  const clientOpen = Boolean(redisClient?.isOpen);
-  const clientConnected = clientReady && clientOpen;
+  const clientConnected = clientReady && (redisClient?.status === 'ready');
   
   const details = {
     clientExists: !!redisClient,
@@ -357,7 +356,7 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
     // Issue #4925: デバッグ用の詳細情報を追加
     rawIsReady: redisClient?.isReady,
-    rawIsOpen: redisClient?.isOpen,
+    rawStatus: redisClient?.status,
     pingSuccess: false,
     pingError: null,
     operationTestSuccess: false,
@@ -393,13 +392,13 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
     if (!clientReady) {
       failedChecks.push('isReady=false');
     }
-    if (!clientOpen) {
-      failedChecks.push('isOpen=false');
+    if (redisClient?.status !== 'ready') {
+      failedChecks.push(`status='${redisClient?.status}'`);
     }
     // ステータスは参考情報として記録（健全性判定には使用しない）
     const statusInfo = redisClient.status !== 'ready' ? ` (status='${redisClient.status}')` : '';
     
-    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo} [raw: isReady=${details.rawIsReady}, isOpen=${details.rawIsOpen}]`);
+    logger.warn(`[Redis Health Check] 接続状態不良: ${failedChecks.join(', ')}${statusInfo} [raw: isReady=${details.rawIsReady}, status=${details.rawStatus}]`);
     return { isHealthy: false, details };
   }
 
@@ -558,7 +557,7 @@ function shouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
  */
 async function cleanupExistingConnection(currentClient, logger, attempt) {
   try {
-    if (currentClient && (currentClient.isOpen || currentClient.isReady)) {
+    if (currentClient && currentClient.isReady) {
       logger.info(`[Redis Recovery] 既存接続を閉じて再接続を試行 (attempt ${attempt})`);
       await safeDisconnect(currentClient);
     }
@@ -691,8 +690,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
   try {
     const client = redisTransaction.client;
-    if (!client || !client.isReady || !client.isOpen) {
-      logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
+    if (!client || !client.isReady) {
+      logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, status=${client?.status}`);
       throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
     }
     
@@ -736,7 +735,6 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       // Issue #4941: テスト失敗時の詳細な診断情報を収集
       const diagnosticInfo = {
         clientReady: client.isReady,
-        clientOpen: client.isOpen,
         clientStatus: client.status,
         serverInfo: client.serverInfo ? 'available' : 'unavailable',
         testError: testError.message,
@@ -762,8 +760,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: トランザクション実行直前の最終チェック
   logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
   const client = redisTransaction.client;
-  if (!client.isReady || !client.isOpen) {
-    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
+  if (!client.isReady) {
+    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client.isReady}, status=${client.status}`);
     throw new Error('Redis Commit失敗: exec()直前に接続が失われました');
   }
   
@@ -778,7 +776,6 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4941: トランザクション実行直後の接続状態確認
     const postExecConnectionState = {
       clientReady: client.isReady,
-      clientOpen: client.isOpen,
       clientStatus: client.status,
       execDuration: execDuration,
       resultsReceived: !!redisResults,
@@ -787,7 +784,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     logger.debug(`[Redis Transaction] exec()完了: ${JSON.stringify(postExecConnectionState)}`);
     
     // Issue #4941: 接続状態異常の早期検出
-    if (!client.isReady || !client.isOpen) {
+    if (!client.isReady) {
       logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);
       updateCircuitBreakerOnFailure();
       throw new Error(`Redis Commit失敗: exec()後に接続が失われました - ${JSON.stringify(postExecConnectionState)}`);
@@ -885,7 +882,6 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
         tradeId: trade.tradeId,
         connectionState: {
           clientReady: client.isReady,
-          clientOpen: client.isOpen,
           clientStatus: client.status
         },
         failedCommandDetails: failedCommandDetails.map(detail => ({
@@ -2273,16 +2269,15 @@ async function executeDistributedTransaction(trade, isBacktest) {
         
         // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
         const clientReady = Boolean(currentRedisClient?.isReady);
-        const clientOpen = Boolean(currentRedisClient?.isOpen);
+        const clientConnected = currentRedisClient?.status === 'ready';
         const redisConnectionInfo = {
           clientReady,
-          clientOpen,
-          clientConnected: clientReady && clientOpen,
+          clientConnected,
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
           // Issue #4925: デバッグ情報を追加
           rawIsReady: currentRedisClient?.isReady,
-          rawIsOpen: currentRedisClient?.isOpen,
+          rawStatus: currentRedisClient?.status,
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
@@ -2425,16 +2420,15 @@ async function executeDistributedTransaction(trade, isBacktest) {
         
         // Issue #4925: Redis接続状態の詳細情報を修正 - currentRedisClientを使用
         const clientReady = Boolean(currentRedisClient?.isReady);
-        const clientOpen = Boolean(currentRedisClient?.isOpen);
+        const clientConnected = currentRedisClient?.status === 'ready';
         const redisConnectionInfo = {
           clientReady,
-          clientOpen,
-          clientConnected: clientReady && clientOpen,
+          clientConnected,
           clientStatus: currentRedisClient?.status,
           serverInfo: currentRedisClient?.serverInfo ? 'available' : 'unavailable',
           // Issue #4925: デバッグ情報を追加
           rawIsReady: currentRedisClient?.isReady,
-          rawIsOpen: currentRedisClient?.isOpen,
+          rawStatus: currentRedisClient?.status,
           capturedAt: new Date().toISOString(),
           clientRecovered: currentRedisClient !== redisClient
         };
@@ -2754,8 +2748,8 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   // Issue #4910: タイムアウト保護とより詳細なエラーハンドリング
   try {
     // 接続状態の事前チェック
-    if (!redisClient || !redisClient.isReady || !redisClient.isOpen) {
-      logger.error(`分散ロック解放失敗: Redis接続が無効 (ready: ${redisClient?.isReady}, open: ${redisClient?.isOpen})`);
+    if (!redisClient || !redisClient.isReady) {
+      logger.error(`分散ロック解放失敗: Redis接続が無効 (ready: ${redisClient?.isReady}, status: ${redisClient?.status})`);
       return false;
     }
     

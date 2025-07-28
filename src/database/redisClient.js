@@ -156,7 +156,7 @@ client.on('error', (err) => {
     if (err.code === 'ECONNREFUSED') {
       console.log(`Redis接続が拒否されました。${SETTINGS.DATABASE.REDIS.RECONNECTION_INTERVAL}ms後に再接続を試みます...`);
       setTimeout(() => {
-        if (!client.isReady && !client.isOpen) {
+        if (!client.isReady) {
           reconnect();
         }
       }, SETTINGS.DATABASE.REDIS.RECONNECTION_INTERVAL);
@@ -193,7 +193,7 @@ async function reconnect() {
   }
   
   try {
-    if (!client.isReady && !client.isOpen) {
+    if (!client.isReady) {
       console.log('Redisへ再接続を試みています...');
       await client.connect();
       
@@ -210,7 +210,7 @@ async function reconnect() {
     const backoffDelay = Math.min(5000 * Math.pow(2, circuitBreakerState.failures), 60000);
     const jitter = Math.random() * 1000;
     setTimeout(() => {
-      if (!client.isReady && !client.isOpen) {
+      if (!client.isReady) {
         reconnect();
       }
     }, backoffDelay + jitter);
@@ -234,7 +234,7 @@ async function initRedisClient() {
   }
 
   try {
-    if (!client.isReady && !client.isOpen) {
+    if (!client.isReady) {
       console.log(`Redis接続を初期化しています: ${REDIS_URL}`);
       await client.connect();
 
@@ -287,7 +287,7 @@ async function initRedisClient() {
  */
 async function closeRedisClient() {
   try {
-    if (client.isOpen || client.isReady) {
+    if (client.isReady) {
       console.log('Redis接続を終了しています...');
       await client.quit();
     }
@@ -331,12 +331,12 @@ async function getExtendedConnectionHealth() {
   const basicHealth = {
     clientExists: !!client,
     clientReady: client?.isReady || false,
-    clientOpen: client?.isOpen || false,
+    clientConnected: client?.status === 'ready' || false,
     clientStatus: client?.status || 'unknown'
   };
 
   let pingResult = null;
-  if (basicHealth.clientReady && basicHealth.clientOpen && !circuitState.isOpen) {
+  if (basicHealth.clientReady && basicHealth.clientConnected && !circuitState.isOpen) {
     try {
       const start = Date.now();
       await client.ping();
@@ -358,7 +358,7 @@ async function getExtendedConnectionHealth() {
     ...basicHealth,
     circuitBreaker: circuitState,
     ping: pingResult,
-    overallHealth: basicHealth.clientReady && basicHealth.clientOpen && 
+    overallHealth: basicHealth.clientReady && basicHealth.clientConnected && 
                    !circuitState.isOpen && (pingResult?.success !== false)
   };
 }

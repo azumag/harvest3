@@ -81,7 +81,6 @@ describe('Issue #4941: Redis 2PC例外 - Ghost Connection修正', () => {
     // 正常な接続状態のRedisクライアント
     mockRedisClient = {
       isReady: true,
-      isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
       ping: jest.fn().mockResolvedValue('PONG'),
@@ -167,10 +166,9 @@ describe('Issue #4941: Redis 2PC例外 - Ghost Connection修正', () => {
       );
     });
 
-    test('Ghost Connection検出: isReady=true, isOpen=true だが実際の操作で失敗', async () => {
+    test('Ghost Connection検出: isReady=true だが実際の操作で失敗', async () => {
       // Ghost Connection状態をシミュレート
       mockRedisClient.isReady = true;
-      mockRedisClient.isOpen = true;
       mockRedisClient.status = 'ready';
       
       // しかし実際の操作は失敗
@@ -237,7 +235,7 @@ describe('Issue #4941: Redis 2PC例外 - Ghost Connection修正', () => {
       mockRedisTransaction.exec = jest.fn().mockImplementation(() => {
         // exec()呼び出し時に接続状態を変更
         mockRedisClient.isReady = false;
-        mockRedisClient.isOpen = false;
+        mockRedisClient.status = 'closed';
         return originalExec();
       });
 
