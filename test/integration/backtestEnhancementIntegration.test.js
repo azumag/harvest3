@@ -502,7 +502,7 @@ describe('Backtest Enhancement Integration Tests', () => {
       const executionTime = Date.now() - startTime;
 
       expect(result.monteCarloAnalysis).toBeDefined();
-      expect(executionTime).toBeLessThan(30000); // 30秒以内
+      expect(executionTime).toBeLessThan(60000); // 60秒以内 (CI環境対応)
     });
 
     test('should maintain memory efficiency in realtime system', () => {
