@@ -842,104 +842,26 @@ fallback_to_file_based_prevention() {
     return 0
 }
 
-# Issue #5172: メイン重複防止関数（簡素化・YAGNI/KISS原則）
 # Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）
-# Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）
-# Issue #5267修正: アトミックファイルロックによる確実な重複防止
-# Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-# Issue #5413修正: 3層の防御線によるアトミック操作
 log_startup_message() {
     local message="$1"
     
-    # Issue #5431修正: backtest containerの場合の重複防止強化
-    # Issue #5447修正: backtest modeでは専用の起動パスのみを使用し、重複を完全防止
+    # backtest containerの場合の重複防止
     if [ "$BACKTEST_MODE" = "true" ]; then
-        # Issue #5431修正: backtest mode専用処理で重複防止
         if [ "${_BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
-            log "DEBUG: [Issue #5431] Process flag prevented duplicate backtest startup message"
+            log "DEBUG: Process flag prevented duplicate backtest startup message"
             return 0
         fi
         log_backtest_startup_message "$message"
         return $?
     fi
     
-    # Issue #5362修正: 起動メッセージの重複防止（KISS原則に基づく確実な単一機構）
+    # Issue #5362: KISS原則に基づく起動メッセージ重複防止
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # Issue #5302修正: プロセス内変数による即座の重複防止（第0防御線）
-            if [ "${_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS:-}" = "1" ]; then
-                log "DEBUG: [Issue #5302] Process-level flag prevented duplicate startup message (PID: $$)"
-                return 0
-            fi
-            
-            # Issue #5264修正: 環境変数フラグによる第1防御線
-            if [ "${MAIN_STARTUP_MESSAGE_LOGGED:-}" = "1" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                log "DEBUG: [Issue #5264] Environment flag prevented duplicate startup message (PID: $$)"
-                return 0
-            fi
-            
-            # Issue #5264修正: 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="$LOCK_BASE_DIR/main-startup-message.done"
-            if [ -f "$startup_msg_done_file" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                log "DEBUG: [Issue #5264] Done marker file prevented duplicate startup message (PID: $$)"
-                return 0
-            fi
-            
-            # Issue #5413修正: グローバル起動フラグによる防御線
-            local global_startup_flag="$LOCK_BASE_DIR/global-startup-flag.marker"
-            if [ "${_GLOBAL_STARTUP_MESSAGE_SENT_PROCESS:-}" = "1" ] || [ -f "$global_startup_flag" ]; then
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                log "DEBUG: [Issue #5413] Global startup flag prevented duplicate startup message (PID: $$)"
-                return 0
-            fi
-            
             # 第一防御線: プロセス内変数による即座の重複防止（最優先）
             if [ "${_STARTUP_MESSAGE_LOGGED:-}" = "1" ]; then
                 log "DEBUG: [Issue #5362] Process variable prevented duplicate startup message (PID: $$)"
-                return 0
-            fi
-            
-            # Issue #5264修正: アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="$LOCK_BASE_DIR/main-startup-message.lock"
-            
-            # Issue #5267修正: アトミックファイルロックによる確実な重複防止
-            if mkdir "$startup_msg_lock_file" 2>/dev/null; then
-                # ロック取得成功後の二重チェック
-                if [ -f "$startup_msg_done_file" ]; then
-                    rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                    export MAIN_STARTUP_MESSAGE_LOGGED=1
-                    log "DEBUG: [Issue #5267] Double-check prevented duplicate startup message (PID: $$)"
-                    return 0
-                fi
-                
-                # アトミックファイル作成による完了マーカー設定
-                local temp_marker="${startup_msg_done_file}.tmp.$$"
-                echo "$(date +%s):$$:$(hostname)" > "$temp_marker" 2>/dev/null && \
-                mv "$temp_marker" "$startup_msg_done_file" 2>/dev/null
-                
-                # グローバル起動フラグの設定
-                _GLOBAL_STARTUP_MESSAGE_SENT_PROCESS=1
-                echo "$(date +%s):$$:$(hostname)" > "$global_startup_flag" 2>/dev/null || true
-                
-                # メッセージ出力とフラグ設定
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-                export MAIN_STARTUP_MESSAGE_LOGGED=1
-                _STARTUP_MESSAGE_LOGGED=1
-                export _STARTUP_MESSAGE_LOGGED
-                
-                log "$message"
-                log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: $(hostname))"
-                
-                # ロック解除
-                rm -rf "$startup_msg_lock_file" 2>/dev/null || true
-                return 0
-            else
-                log "DEBUG: [Issue #5267] Atomic file operation prevented duplicate startup message (PID: $$)"
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
             fi
             
@@ -971,7 +893,6 @@ log_startup_message() {
                     exec 200>&-
                     _STARTUP_MESSAGE_LOGGED=1
                     export _STARTUP_MESSAGE_LOGGED
-                    _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                     return 0
                 fi
             else
@@ -1006,7 +927,6 @@ log_startup_message() {
                 log "DEBUG: [Issue #5362] Mkdir fallback timeout - message suppressed to prevent duplicate (PID: $$)"
                 _STARTUP_MESSAGE_LOGGED=1
                 export _STARTUP_MESSAGE_LOGGED
-                _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 return 0
             fi
             ;;
