@@ -654,6 +654,7 @@ const logger = new Logger('DatabaseManager');
 
 /**
  * Issue #5667: Redis接続状態を検証するヘルパー関数（DRY原則適用）
+ * Issue #5701: Redis v4.x undefined状態の堅牢な処理追加
  * @param {Object} client - Redis client
  * @param {string} context - エラー時のコンテキスト情報
  * @param {Object} logger - ログ出力用
@@ -661,8 +662,42 @@ const logger = new Logger('DatabaseManager');
  * @throws {Error} 接続状態が無効な場合
  */
 function validateRedisClientConnection(client, context, logger) {
-  const clientReady = Boolean(client?.isReady);
-  const clientOpen = Boolean(client?.isOpen);
+  // Issue #5701: Redis v4.x での undefined プロパティ対応
+  // クライアントオブジェクト自体の存在チェック
+  if (!client) {
+    logger.error(`[Redis Transaction] ${context}失敗: クライアントオブジェクトがnull/undefined`);
+    throw new Error(`Redis Commit失敗: ${context}時にクライアントが存在しません`);  
+  }
+
+  // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
+  const hasReadyProperty = 'isReady' in client;
+  const hasOpenProperty = 'isOpen' in client;
+  const clientReady = Boolean(client.isReady);
+  const clientOpen = Boolean(client.isOpen);
+  
+  // Issue #5701: プロパティが未定義の場合の特別処理
+  if (!hasReadyProperty || !hasOpenProperty) {
+    const diagnosticInfo = {
+      hasReadyProperty,
+      hasOpenProperty,
+      isReadyValue: client.isReady,
+      isOpenValue: client.isOpen,
+      clientStatus: client.status || 'unknown',
+      clientConstructor: client.constructor?.name || 'unknown'
+    };
+    
+    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義検出 - ${JSON.stringify(diagnosticInfo)}`);
+    
+    // Issue #5701: プロパティが未定義の場合は接続状態をstatusで判定
+    const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
+    if (!statusBasedCheck) {
+      logger.error(`[Redis Transaction] ${context}失敗: ready=${client?.isReady}, open=${client?.isOpen}, status=${client?.status}`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
+    }
+    
+    logger.info(`[Redis Transaction] ${context}: status基準で接続OK (status=${client.status})`);
+    return { clientReady: statusBasedCheck, clientOpen: statusBasedCheck };
+  }
   
   if (!clientReady || !clientOpen) {
     // Issue #5667: セキュリティ対策 - 本番環境では詳細な接続情報を制限
