@@ -532,13 +532,19 @@ function shouldRecoverFromNullUndefinedErrors(redisResults, commandNames) {
   for (let i = 0; i < totalCommands; i++) {
     const result = redisResults[i];
     
-    // Issue #5515: DRY原則適用 - Redis結果解析を共通化
-    const { error, value } = parseRedisResult(result);
-    
-    // エラーがnull/undefinedで値もnull/undefinedの場合
-    if ((error === null || error === undefined) && 
-        (value === null || value === undefined)) {
+    // Issue #5515: DRY原則適用 - Redis結果解析を共通化だが、
+    // shouldRecoverFromNullUndefinedErrorsでは不正形式も問題として扱う
+    if (!Array.isArray(result) && result !== null && result !== undefined) {
+      // 非配列で非null/undefinedの結果は不正形式として扱う
       nullUndefinedCount++;
+    } else {
+      const { error, value } = parseRedisResult(result);
+      
+      // エラーがnull/undefinedで値もnull/undefinedの場合
+      if ((error === null || error === undefined) && 
+          (value === null || value === undefined)) {
+        nullUndefinedCount++;
+      }
     }
   }
   
