@@ -658,7 +658,7 @@ const logger = new Logger('DatabaseManager');
  * @param {Object} client - Redis client (transaction clientまたはmain client)
  * @param {string} context - エラー時のコンテキスト情報
  * @param {Object} logger - ログ出力用
- * @returns {Object} 接続状態情報 {clientReady, clientOpen}
+ * @returns {Object} {client: 使用すべきクライアント, clientReady: boolean, clientOpen: boolean}
  * @throws {Error} 接続状態が無効な場合
  */
 function validateRedisClientConnection(client, context, logger) {
@@ -695,7 +695,7 @@ function validateRedisClientConnection(client, context, logger) {
     throw new Error(`Redis Commit失敗: ${context}時に接続が失われました`);
   }
   
-  return { clientReady, clientOpen };
+  return { client: targetClient, clientReady, clientOpen };
 }
 
 /**
@@ -741,8 +741,11 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
+  // Issue #5676: フォールバック後のクライアントを取得
+  let validatedClient;
   try {
-    validateRedisClientConnection(client, '実行前接続チェック', logger);
+    const validation = validateRedisClientConnection(client, '実行前接続チェック', logger);
+    validatedClient = validation.client;
   } catch (connectionError) {
     // Helper function already provides appropriate error message, just re-throw
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
@@ -752,7 +755,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   try {
       // PING コマンドで実際の通信確認（軽量なテスト）
       const pingStart = Date.now();
-      const pingResult = await client.ping();
+      const pingResult = await validatedClient.ping();
       const pingDuration = Date.now() - pingStart;
       
       if (pingResult !== 'PONG') {
@@ -771,9 +774,9 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       const testValue = 'tx_test';
       
       const operationStart = Date.now();
-      await client.set(testKey, testValue, 'EX', 5); // 5秒で期限切れ
-      const retrievedValue = await client.get(testKey);
-      await client.del(testKey);
+      await validatedClient.set(testKey, testValue, 'EX', 5); // 5秒で期限切れ
+      const retrievedValue = await validatedClient.get(testKey);
+      await validatedClient.del(testKey);
       const operationDuration = Date.now() - operationStart;
       
       if (retrievedValue !== testValue) {
@@ -810,7 +813,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: トランザクション実行直前の最終チェック
   logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
-  validateRedisClientConnection(client, 'exec()直前チェック', logger);
+  // Issue #5676: フォールバック機能をサポート（必要に応じて使用）
+  validateRedisClientConnection(validatedClient, 'exec()直前チェック', logger);
   
   const transactionPromise = redisTransaction.exec();
   
@@ -834,7 +838,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4941: 接続状態異常の早期検出
     // Issue #5667: DRY原則適用 - 接続状態チェック共通化
     try {
-      validateRedisClientConnection(client, 'exec()後に接続状態異常を検出', logger);
+      validateRedisClientConnection(validatedClient, 'exec()後に接続状態異常を検出', logger);
     } catch (error) {
       // 追加情報を含めたエラー処理
       logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);

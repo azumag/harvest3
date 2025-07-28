@@ -85,15 +85,34 @@ describe('Issue #5676: Redis Multi transaction client接続状態チェック対
       isOpen: true,
       status: 'ready',
       serverInfo: { version: '6.2.0' },
-      ping: jest.fn().mockResolvedValue('PONG'),
-      set: jest.fn().mockResolvedValue('OK'),
+      ping: jest.fn().mockImplementation(() => {
+        // 接続状態が悪い場合はエラーを返す
+        if (!mockMainRedisClient.isReady || !mockMainRedisClient.isOpen) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve('PONG');
+      }),
+      set: jest.fn().mockImplementation((key, value, ...args) => {
+        if (!mockMainRedisClient.isReady || !mockMainRedisClient.isOpen) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve('OK');
+      }),
       get: jest.fn().mockImplementation((key) => {
+        if (!mockMainRedisClient.isReady || !mockMainRedisClient.isOpen) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
         if (key && key.includes('__tx_health_')) {
           return Promise.resolve('tx_test');
         }
         return Promise.resolve('test-value');
       }),
-      del: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockImplementation((key) => {
+        if (!mockMainRedisClient.isReady || !mockMainRedisClient.isOpen) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve(1);
+      }),
       multi: jest.fn()
     };
 
@@ -105,7 +124,36 @@ describe('Issue #5676: Redis Multi transaction client接続状態チェック対
       status: 'ready',
       // transaction特有のプロパティ
       _queue: [],
-      _client: mockMainRedisClient
+      _client: mockMainRedisClient,
+      // Issue #5676: 接続実用性テスト用のメソッドを追加（接続状態に応じて動作）
+      ping: jest.fn().mockImplementation(() => {
+        // 接続状態が悪い場合（undefined含む）はエラーを返す
+        if (mockTransactionClient.isReady !== true || mockTransactionClient.isOpen !== true) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve('PONG');
+      }),
+      set: jest.fn().mockImplementation((key, value, ...args) => {
+        if (mockTransactionClient.isReady !== true || mockTransactionClient.isOpen !== true) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve('OK');
+      }),
+      get: jest.fn().mockImplementation((key) => {
+        if (mockTransactionClient.isReady !== true || mockTransactionClient.isOpen !== true) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        if (key && key.includes('__tx_health_')) {
+          return Promise.resolve('tx_test');
+        }
+        return Promise.resolve('test-value');
+      }),
+      del: jest.fn().mockImplementation((key) => {
+        if (mockTransactionClient.isReady !== true || mockTransactionClient.isOpen !== true) {
+          return Promise.reject(new Error('Connection not ready'));
+        }
+        return Promise.resolve(1);
+      })
     };
 
     // モックトランザクション
