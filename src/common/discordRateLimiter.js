@@ -324,24 +324,34 @@ class DiscordRateLimiter {
    * 循環参照やタイムアウトを適切に処理
    */
   async safeStringify(obj, timeout = 1000) {
-    try {
-      // 循環参照を処理するためのセーフなreplacer
-      const seen = new WeakSet();
-      const replacer = (key, value) => {
-        if (typeof value === 'object' && value !== null) {
-          if (seen.has(value)) {
-            return '[Circular Reference]';
-          }
-          seen.add(value);
-        }
-        return value;
-      };
+    return new Promise((resolve) => {
+      // タイムアウト設定
+      const timeoutId = setTimeout(() => {
+        resolve('[STRINGIFY_TIMEOUT]');
+      }, timeout);
 
-      const stringified = JSON.stringify(obj, replacer, 2);
-      return stringified;
-    } catch (error) {
-      return `[STRINGIFY_ERROR: ${error.message}]`;
-    }
+      try {
+        // 循環参照を処理するためのreplacer
+        const seen = new WeakSet();
+        const replacer = (key, value) => {
+          if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) {
+              return 'Circular Reference';
+            }
+            seen.add(value);
+          }
+          return value;
+        };
+
+        // JSON.stringifyを実行
+        const stringified = JSON.stringify(obj, replacer, 2);
+        clearTimeout(timeoutId);
+        resolve(stringified);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        resolve(`[STRINGIFY_ERROR: ${error.message}]`);
+      }
+    });
   }
 
   /**
@@ -510,19 +520,7 @@ class DiscordRateLimiter {
         };
         const serializedError = await this.safeStringify(errorInfo);
         
-        // シリアライゼーションが失敗した場合や循環参照がある場合の代替ログ
-        if (serializedError.startsWith('[STRINGIFY_ERROR:') || 
-            serializedError === '[STRINGIFY_TIMEOUT]' || 
-            serializedError.includes('[Circular Reference]')) {
-          console.error('[DISCORD_RATE_LIMITER] HTTP error (serialization failed):', {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            dataType: typeof error.response.data,
-            serializationError: serializedError
-          });
-        } else {
-          console.error('[DISCORD_RATE_LIMITER] HTTP error:', serializedError);
-        }
+        console.error('[DISCORD_RATE_LIMITER] HTTP error:', serializedError);
         
         return { 
           success: false, 
@@ -539,17 +537,7 @@ class DiscordRateLimiter {
       // 元のエラーオブジェクト全体をシリアライゼーション
       const serializedError = await this.safeStringify(error);
       
-      // シリアライゼーションが失敗した場合や循環参照がある場合の代替ログ
-      if (serializedError.startsWith('[STRINGIFY_ERROR:') || 
-          serializedError === '[STRINGIFY_TIMEOUT]') {
-        console.error('[DISCORD_RATE_LIMITER] Network/Other error (serialization failed):', {
-          messageType: typeof error.message,
-          codeType: typeof error.code,
-          serializationError: serializedError
-        });
-      } else {
-        console.error('[DISCORD_RATE_LIMITER] Network/Other error:', serializedError);
-      }
+      console.error('[DISCORD_RATE_LIMITER] Network/Other error:', serializedError);
       return { 
         success: false, 
         error: error.code || error.message,
