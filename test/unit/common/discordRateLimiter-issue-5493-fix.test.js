@@ -107,7 +107,7 @@ describe('Discord Rate Limiter - Issue #5493 Fix', () => {
     );
     
     expect(networkErrorCall).toBeDefined();
-    expect(networkErrorCall[1]).toContain('Circular Reference');
+    expect(networkErrorCall[1]).toContain('[循環参照]');
     expect(networkErrorCall[1]).not.toBe('{'); // Should not be incomplete
   });
 
@@ -143,10 +143,12 @@ describe('Discord Rate Limiter - Issue #5493 Fix', () => {
     expect(httpErrorCall).toBeDefined();
     expect(httpErrorCall[1]).toContain('500');
     expect(httpErrorCall[1]).toContain('Internal Server Error');
-    expect(httpErrorCall[1]).toContain('Circular Reference');
+    expect(httpErrorCall[1]).toContain('[循環参照]');
     expect(httpErrorCall[1]).not.toBe('{'); // Should not be incomplete
   });
 
+  // TODO: タイムアウトテストのモック実装を改善する必要がある
+  // setTimeoutのモックが期待通りに動作せず、実際のタイムアウト処理をテストできない
   test.skip('should handle stringify timeout scenarios', async () => {
     const webhookUrl = 'https://discord.com/api/webhooks/123/test';
     const message = 'test message';
@@ -249,10 +251,12 @@ describe('Discord Rate Limiter - Issue #5493 Fix', () => {
 
     const result = await rateLimiter.safeStringify(circularObj);
     
-    expect(result).toContain('Circular Reference');
+    expect(result).toContain('[循環参照]');
     expect(result).not.toBe('{');
   });
 
+  // TODO: safeStringifyのタイムアウトテストのモック実装を改善する必要がある
+  // 現在のsetTimeoutモックではPromiseベースのタイムアウト処理を適切にテストできない
   test.skip('safeStringify should handle timeout', async () => {
     const obj = { test: 'value' };
     

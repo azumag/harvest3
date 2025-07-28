@@ -336,7 +336,7 @@ class DiscordRateLimiter {
         const replacer = (key, value) => {
           if (typeof value === 'object' && value !== null) {
             if (seen.has(value)) {
-              return 'Circular Reference';
+              return '[循環参照]';
             }
             seen.add(value);
           }
