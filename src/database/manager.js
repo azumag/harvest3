@@ -653,6 +653,33 @@ async function attemptRedisConnectionRecovery(redisDatabase, logger, maxRetries 
 const logger = new Logger('DatabaseManager');
 
 /**
+ * Issue #5667: Redis接続状態を検証するヘルパー関数（DRY原則適用）
+ * @param {Object} client - Redis client
+ * @param {string} context - エラー時のコンテキスト情報
+ * @param {Object} logger - ログ出力用
+ * @returns {Object} 接続状態情報 {clientReady, clientOpen}
+ * @throws {Error} 接続状態が無効な場合
+ */
+function validateRedisClientConnection(client, context, logger) {
+  const clientReady = Boolean(client?.isReady);
+  const clientOpen = Boolean(client?.isOpen);
+  
+  if (!clientReady || !clientOpen) {
+    // Issue #5667: セキュリティ対策 - 本番環境では詳細な接続情報を制限
+    const isProduction = process.env.NODE_ENV === 'production';
+    const logLevel = isProduction ? 'warn' : 'error';
+    const errorMsg = isProduction 
+      ? `${context}失敗: 接続状態異常`
+      : `${context}失敗: ready=${client?.isReady}, open=${client?.isOpen}`;
+    
+    logger[logLevel](`[Redis Transaction] ${errorMsg}`);
+    throw new Error(`Redis Commit失敗: ${context}時に接続が失われました`);
+  }
+  
+  return { clientReady, clientOpen };
+}
+
+/**
  * Issue #4826: Redis トランザクションの堅牢な実行関数
  * タイムアウト制御と詳細なエラーハンドリングを提供
  * 
@@ -689,17 +716,21 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
   
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
+  const client = redisTransaction.client;
+  if (!client) {
+    logger.error(`[Redis Transaction] 実行前接続チェック失敗: clientがnull/undefined`);
+    throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+  }
+  // Issue #5667: DRY原則適用 - 接続状態チェック共通化
   try {
-    const client = redisTransaction.client;
-    const clientReady = Boolean(client?.isReady);
-    const clientOpen = Boolean(client?.isOpen);
-    if (!client || !clientReady || !clientOpen) {
-      logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
-      throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
-    }
-    
-    // Issue #4941: より厳密な接続実用性テスト
-    try {
+    validateRedisClientConnection(client, '実行前接続チェック', logger);
+  } catch (connectionError) {
+    // Helper function already provides appropriate error message, just re-throw
+    throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+  }
+  
+  // Issue #4941: より厳密な接続実用性テスト
+  try {
       // PING コマンドで実際の通信確認（軽量なテスト）
       const pingStart = Date.now();
       const pingResult = await client.ping();
@@ -749,10 +780,6 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       logger.error(`[Redis Transaction] 診断情報: ${JSON.stringify(diagnosticInfo)}`);
       throw new Error(`Redis Commit失敗: 接続実用性テスト失敗 - ${testError.message}`);
     }
-  } catch (connectionError) {
-    logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
-    throw new Error(`Redis Commit失敗: 接続状態チェック失敗 - ${connectionError.message}`);
-  }
   
   // Issue #4920: 改善されたタイムアウト制御
   const timeoutPromise = new Promise((_, reject) => {
@@ -763,13 +790,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   // Issue #4941: トランザクション実行直前の最終チェック
   logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
-  const client = redisTransaction.client;
-  const clientReady = Boolean(client?.isReady);
-  const clientOpen = Boolean(client?.isOpen);
-  if (!clientReady || !clientOpen) {
-    logger.error(`[Redis Transaction] exec()直前チェック失敗: ready=${client?.isReady}, open=${client?.isOpen}`);
-    throw new Error('Redis Commit失敗: exec()直前に接続が失われました');
-  }
+  // Issue #5667: DRY原則適用 - 接続状態チェック共通化
+  validateRedisClientConnection(client, 'exec()直前チェック', logger);
   
   const transactionPromise = redisTransaction.exec();
   
@@ -791,9 +813,11 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     logger.debug(`[Redis Transaction] exec()完了: ${JSON.stringify(postExecConnectionState)}`);
     
     // Issue #4941: 接続状態異常の早期検出
-    const clientReady = Boolean(client?.isReady);
-    const clientOpen = Boolean(client?.isOpen);
-    if (!clientReady || !clientOpen) {
+    // Issue #5667: DRY原則適用 - 接続状態チェック共通化
+    try {
+      validateRedisClientConnection(client, 'exec()後に接続状態異常を検出', logger);
+    } catch (error) {
+      // 追加情報を含めたエラー処理
       logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);
       updateCircuitBreakerOnFailure();
       throw new Error(`Redis Commit失敗: exec()後に接続が失われました - ${JSON.stringify(postExecConnectionState)}`);
