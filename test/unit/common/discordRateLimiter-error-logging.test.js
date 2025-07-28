@@ -85,6 +85,16 @@ describe('DiscordRateLimiter Error Logging Fix (Issue #5222)', () => {
     const webhookUrl = 'https://discord.com/api/webhooks/123/test';
     const message = 'test message';
     
+    // Mock JSON.stringify to fail for HTTP error objects
+    const originalStringify = JSON.stringify;
+    JSON.stringify = jest.fn().mockImplementation((obj, replacer, space) => {
+      // Force failure when stringifying HTTP error info objects
+      if (obj && obj.status === 500 && obj.statusText === 'Internal Server Error') {
+        throw new Error('Converting circular structure to JSON');
+      }
+      return originalStringify(obj, replacer, space);
+    });
+    
     // Create circular reference that will cause JSON.stringify to fail
     const circularData = { error: 'test' };
     circularData.circular = circularData;
@@ -117,6 +127,9 @@ describe('DiscordRateLimiter Error Logging Fix (Issue #5222)', () => {
       dataType: 'object',
       serializationError: expect.any(String)
     });
+    
+    // Restore original JSON.stringify
+    JSON.stringify = originalStringify;
   });
 
   test('should properly serialize network errors', async () => {
