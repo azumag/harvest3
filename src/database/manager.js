@@ -350,7 +350,6 @@ async function checkRedisConnectionHealth(redisClient, logger, includeOperationT
   const details = {
     clientExists: !!redisClient,
     clientReady,
-    clientOpen, 
     clientConnected,
     clientStatus: redisClient?.status,
     serverInfo: redisClient?.serverInfo ? 'available' : 'unavailable',
