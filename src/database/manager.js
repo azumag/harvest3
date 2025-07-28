@@ -3583,6 +3583,27 @@ async function backtestCreateLimitSellOrder(symbol, amount, price, options = {})
   return { id: orderId };
 }
 
+/**
+ * バックテスト用のマーケット売り注文関数
+ * @param {string} symbol - 通貨ペア
+ * @param {number} amount - 注文数量
+ * @param {number} price - 注文価格
+ * @param {object} options - オプション
+ * @returns {object} - 注文情報 (ランダムなorderIDを含む)
+ */
+async function backtestCreateMarketSellOrder(symbol, amount, price, options = {}) {
+  // ランダムなorderIDを生成
+  const orderId = `backtest_${Date.now()}_market_sell_${Math.random().toString(36).substring(2, 15)}`;
+  // logger.info(`[Backtest] マーケット売り注文シミュレーション: ${symbol}, 数量: ${amount}, 価格: ${price}, OrderID: ${orderId}`);
+  // 計画に基づき、ランダムなorderIDを持つオブジェクトを返す
+  options.backtest.sellOrderCount += 1;
+  options.backtest.baseFund += price * amount; // 基本資金を増加
+  options.backtest.currentAmount = 0; // 現在の量を更新
+  options.backtest.totalSellCost = (options.backtest.totalSellCost || 0) + (price * amount);
+  options.backtest.lastSignal = 'sell'; // 最後のシグナルを更新
+  return { id: orderId, price: price }; // market orderなのでpriceも返す
+}
+
 async function getMarketParametersByExchangeSymbol(symbolByExchange, config, options = {}) {
   const exchanges = Object.keys(symbolByExchange);
   const marketParametersByExchange = {};
@@ -4139,6 +4160,7 @@ module.exports = {
   getAvailableFund,
   backtestCreateLimitBuyOrder,
   backtestCreateLimitSellOrder,
+  backtestCreateMarketSellOrder,
   getStrategyConfig,
   getMarketParametersByExchangeSymbol,
   checkBuyOrderAllowance,

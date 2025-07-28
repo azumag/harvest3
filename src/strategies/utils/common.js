@@ -1,5 +1,5 @@
 const { formattedAvailableAmount, getRealizedPnL, addSignal,
-  backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder,
+  backtestCreateLimitBuyOrder, backtestCreateLimitSellOrder, backtestCreateMarketSellOrder,
   addOrder, fetchOHLCVData, getAvailableFund,
   checkBuyOrderAllowance,
   getStrategyParameters,
@@ -1020,7 +1020,11 @@ async function executeSellOrder(exchange, symbol, strategyKey, config, marketPar
 
           // 従来のマーケット注文方式でフォールバック実行
           logger.info(`[${strategyName}] フォールバック: createMarketSellOrder実行 ${symbol} 数量:${formattedAmount}`);
-          order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+          if (options.backtest) {
+            order = await backtestCreateMarketSellOrder(symbol, formattedAmount, currentPrice, options);
+          } else {
+            order = await exchange.createMarketSellOrder(symbol, formattedAmount);
+          }
 
           // フォールバック成功の通知
           if (postOrderToDiscord && !options.backtest) {
@@ -1193,7 +1197,13 @@ async function clearPositionMarket(exchange, symbol, strategyKey, options = {}) 
   const netPosition = Math.max(_netPosition !== null && _netPosition !== undefined ? _netPosition.toFixed(4) : 0, minTradeAmount);
   // 売り注文を作成
   try {
-    const order = await exchange.createMarketSellOrder(symbol, netPosition);
+    let order;
+    if (options.backtest) {
+      const currentPrice = await getCurrentPrice(exchange, symbol, options);
+      order = await backtestCreateMarketSellOrder(symbol, netPosition, currentPrice, options);
+    } else {
+      order = await exchange.createMarketSellOrder(symbol, netPosition);
+    }
     addOrder(exchange, symbol, strategyKey, 'sell', netPosition, order.price, order.id, 'market');
 
     // 売り注文成功後、関連するポジションをクリーンアップ
