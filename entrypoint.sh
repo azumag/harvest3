@@ -1897,8 +1897,14 @@ main() {
         send_startup_error_to_discord "Backtest execution failed" "Command: $*"
         exit 1
     else
-        # Issue #5362修正: 起動メッセージの重複防止をlog_startup_message関数に一元化（KISS原則）
-        log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+        # Issue #5318修正: 起動メッセージの確実な重複防止（グローバルフラグによる追加防御）
+        if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
+            export _GLOBAL_STARTUP_MESSAGE_SENT=1
+            # Issue #5362修正: 起動メッセージの重複防止をlog_startup_message関数に一元化（KISS原則）
+            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+        else
+            log "DEBUG: Global flag prevented duplicate startup message"
+        fi
         
         # 初期診断の実行
         run_diagnostics
