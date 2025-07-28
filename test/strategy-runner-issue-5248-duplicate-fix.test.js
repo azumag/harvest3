@@ -93,15 +93,16 @@ echo "=== Testing Issue #5248 fix ==="
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5248の修正が適用されていることを確認
+        // Issue #5362のKISS原則実装が適用されていることを確認（PR #5529の簡素化後）
         expect(entrypointContent).toContain('log_startup_message()');
-        expect(entrypointContent).toContain('MAIN_STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
         
         // 修正のキーポイント: フラグ設定とメッセージ出力後にreturnすることを確認
         const logStartupMessageFunction = entrypointContent.match(/log_startup_message\(\) \{[\s\S]*?\n\}/)[0];
         
         // 起動メッセージの処理で適切にreturnしていることを確認
-        expect(logStartupMessageFunction).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
+        expect(logStartupMessageFunction).toContain('_STARTUP_MESSAGE_LOGGED=1');
+        expect(logStartupMessageFunction).toContain('export _STARTUP_MESSAGE_LOGGED');
         expect(logStartupMessageFunction).toContain('return 0');
     });
 

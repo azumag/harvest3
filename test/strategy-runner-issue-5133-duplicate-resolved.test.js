@@ -20,7 +20,7 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
     expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
     
     // 重複防止機構が実装されていることを確認（リファクタリング後）
-    expect(entrypointContent).toContain('Issue #5172: メイン重複防止関数（簡素化・YAGNI/KISS原則）');
+    expect(entrypointContent).toContain('Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）');
     expect(entrypointContent).toContain('Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）');
     expect(entrypointContent).toContain('Issue #5172: ファイルベースフォールバック関数（単一責任化・KISS原則）');
   });

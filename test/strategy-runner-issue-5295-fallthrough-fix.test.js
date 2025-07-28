@@ -67,12 +67,13 @@ describe('Issue #5295: strategy-runner重複ログfallthrough修正', () => {
         
         const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
         
-        // Issue #5295の修正が適用されていることを確認（Issue #5264で統合実装）
-        expect(entrypointContent).toContain('Issue #5264修正: 起動メッセージの完全分離処理（fallthrough完全防止）');
-        expect(entrypointContent).toContain('_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
-        expect(entrypointContent).toContain('export MAIN_STARTUP_MESSAGE_LOGGED=1');
-        expect(entrypointContent).toContain('Issue #5264修正: アトミックロック取得（第3防御線）');
-        expect(entrypointContent).toContain('mkdir "$startup_msg_lock_file"');
+        // Issue #5362のKISS原則実装が適用されていることを確認（PR #5529の簡素化後）
+        expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
+        expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED=1');
+        expect(entrypointContent).toContain('export _STARTUP_MESSAGE_LOGGED');
+        expect(entrypointContent).toContain('flockベースの確実なファイルロック');
+        expect(entrypointContent).toContain('flock -w 5 200');
         
         console.log('Issue #5295 fix found in entrypoint.sh');
     });

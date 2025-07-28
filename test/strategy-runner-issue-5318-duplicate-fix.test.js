@@ -25,15 +25,15 @@ describe('Issue #5318: strategy-runnerサービス重複メッセージ修正', 
   test('Issue #5318修正: グローバルフラグによる重複防止が実装されていることを確認', () => {
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
-    // Issue #5318のコメントが追加されていることを確認
-    expect(entrypointContent).toMatch(/Issue #5318修正.*グローバルフラグ/);
+    // Issue #5362のKISS原則実装のコメントが追加されていることを確認（PR #5529の簡素化後）
+    expect(entrypointContent).toContain('Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）');
     
-    // グローバルフラグチェックが実装されていることを確認
-    expect(entrypointContent).toContain('_GLOBAL_STARTUP_MESSAGE_SENT');
-    expect(entrypointContent).toContain('Global flag prevented duplicate startup message');
+    // Issue #5362のプロセス内フラグチェックが実装されていることを確認
+    expect(entrypointContent).toContain('_STARTUP_MESSAGE_LOGGED');
+    expect(entrypointContent).toContain('Process variable prevented duplicate startup message');
     
-    // 元の log_startup_message 呼び出しが適切に保護されていることを確認（複数の防御線）
-    expect(entrypointContent).toMatch(/if.*\$_GLOBAL_STARTUP_MESSAGE_SENT.*= "1"/);
+    // 元の log_startup_message 呼び出しが適切に保護されていることを確認
+    expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED.*=.*1/);
   });
 
   test('Issue #5318修正: グローバルフラグによる重複防止が正しく動作することを確認', async () => {
@@ -97,11 +97,10 @@ test_startup_logic
     // 既存のlog_startup_message関数が維持されていることを確認
     expect(entrypointContent).toContain('log_startup_message()');
     
-    // 既存の重複防止メカニズムが維持されていることを確認
-    expect(entrypointContent).toMatch(/_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS/);
-    expect(entrypointContent).toMatch(/MAIN_STARTUP_MESSAGE_LOGGED/);
-    expect(entrypointContent).toMatch(/main-startup-message\.done/);
-    expect(entrypointContent).toMatch(/main-startup-message\.lock/);
+    // Issue #5362のKISS原則実装による重複防止メカニズムが実装されていることを確認
+    expect(entrypointContent).toMatch(/_STARTUP_MESSAGE_LOGGED/);
+    expect(entrypointContent).toMatch(/startup-message\.lock/);
+    expect(entrypointContent).toMatch(/flock -w 5 200/);
     
     // 新しいグローバルフラグが追加層として機能することを確認
     const logStartupMessageMatch = entrypointContent.match(
@@ -131,13 +130,13 @@ log_startup_message() {
     local message="$1"
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
-            # プロセス内変数による即座の重複防止
-            if [ "$_MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS" = "1" ]; then
+            # Issue #5362: プロセス内変数による即座の重複防止
+            if [ "$_STARTUP_MESSAGE_LOGGED" = "1" ]; then
                 echo "DEBUG: Process flag prevented duplicate"
                 return 0
             fi
-            _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-            export MAIN_STARTUP_MESSAGE_LOGGED=1
+            _STARTUP_MESSAGE_LOGGED=1
+            export _STARTUP_MESSAGE_LOGGED
             log "$message"
             ;;
     esac
