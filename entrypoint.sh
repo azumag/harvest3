@@ -746,101 +746,7 @@ log_duplicate_stats() {
     return 0
 }
 
-# Issue #5172: Redis-based重複防止関数（単一責任化・KISS原則）
-try_redis_duplicate_prevention() {
-    local message="$1"
-    local message_hash="$2"
-    local redis_key="startup_msg:$message_hash"
-    local container_id=$(hostname)
-    local current_time=$(date +%s)
-    
-    # Redisが利用可能な場合のみ実行
-    if command -v node >/dev/null 2>&1 && [ -n "$REDIS_URL" ]; then
-        local redis_check_result=$(node -e "
-            const redis = require('redis');
-            const client = redis.createClient({url: process.env.REDIS_URL});
-            client.on('error', () => process.exit(1));
-            client.connect().then(async () => {
-                const key = '$redis_key';
-                const value = '$container_id:$current_time';
-                const existing = await client.get(key);
-                if (existing) {
-                    console.log('duplicate');
-                    process.exit(0);
-                }
-                await client.setEx(key, $REDIS_DUPLICATE_PREVENTION_TTL, value);
-                console.log('new');
-                process.exit(0);
-            }).catch(() => process.exit(1));
-        " 2>/dev/null || echo "error")
-        
-        if [ "$redis_check_result" = "duplicate" ]; then
-            # Issue #5403修正: log_duplicate_stats関数の存在チェック
-            if command -v log_duplicate_stats >/dev/null 2>&1; then
-                log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-            fi
-            return 0  # Redisで重複検出
-        elif [ "$redis_check_result" = "new" ]; then
-            log "$message"
-            return 0  # Redisでメッセージ出力済み
-        fi
-    fi
-    
-    return 1  # Redis不可またはエラー、フォールバックが必要
-}
 
-# Issue #5172: ファイルベースフォールバック関数（単一責任化・KISS原則）
-fallback_to_file_based_prevention() {
-    local message="$1"
-    local message_hash="$2"
-    local container_id=$(hostname)
-    local current_time=$(date +%s)
-    
-    # プロセス内重複防止（第二防御線）
-    local var_name="STARTUP_MSG_$(echo "$message_hash" | cut -c1-8)"
-    if [ "${!var_name}" = "1" ]; then
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
-        return 0
-    fi
-    
-    # ファイルベース重複防止（第三防御線）
-    local success_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.done"
-    local lock_file="$STARTUP_MESSAGE_LOCK_DIR/$message_hash.lock"
-    local process_info="${current_time}:$$:${container_id}"
-    
-    # success fileチェック
-    if validate_success_file "$success_file" "$container_id" "$current_time"; then
-        export "$var_name"=1
-        # Issue #5403修正: log_duplicate_stats関数の存在チェック
-        if command -v log_duplicate_stats >/dev/null 2>&1; then
-            log_duplicate_stats  # Issue #5338: 重複検出時の統計記録
-        fi
-        return 0
-    fi
-    
-    # atomicロック取得とメッセージ出力
-    if acquire_message_lock "$lock_file" "$process_info" "$current_time"; then
-        if [ ! -f "$success_file" ]; then
-            export "$var_name"=1
-            create_success_file "$success_file" "$process_info" "$message"
-            
-            # バックグラウンドクリーンアップ
-            (sleep "$SUCCESS_FILE_CLEANUP_DELAY" && rm -f "$success_file" 2>/dev/null) &
-            local cleanup_pid=$!
-            BACKGROUND_CLEANUP_PIDS="$BACKGROUND_CLEANUP_PIDS $cleanup_pid"
-        else
-            export "$var_name"=1
-        fi
-        rm -rf "$lock_file" 2>/dev/null || true
-    else
-        export "$var_name"=1
-    fi
-    
-    return 0
-}
 
 # Issue #5362: KISS原則に基づく重複防止機構（簡素化・確実性の向上）
 log_startup_message() {
@@ -871,30 +777,28 @@ log_startup_message() {
             
             # flockが利用可能な場合は使用（より確実）
             if command -v flock >/dev/null 2>&1; then
-                exec 200>"$lock_file"
-                if flock -w 5 200; then
-                    # ロック取得成功後、プロセス変数を再チェック
-                    if [ "${_STARTUP_MESSAGE_LOGGED:-}" = "1" ]; then
-                        log "DEBUG: [Issue #5362] Flock double-check prevented duplicate startup message (PID: $$)"
-                        exec 200>&-
+                {
+                    if flock -w 5 200; then
+                        # ロック取得成功後、プロセス変数を再チェック
+                        if [ "${_STARTUP_MESSAGE_LOGGED:-}" = "1" ]; then
+                            log "DEBUG: [Issue #5362] Flock double-check prevented duplicate startup message (PID: $$)"
+                            return 0
+                        fi
+                        
+                        # メッセージ出力とフラグ設定
+                        _STARTUP_MESSAGE_LOGGED=1
+                        export _STARTUP_MESSAGE_LOGGED
+                        log "$message"
+                        log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: $(hostname))"
+                        
+                        return 0
+                    else
+                        log "DEBUG: [Issue #5362] Flock timeout - message suppressed to prevent duplicate (PID: $$)"
+                        _STARTUP_MESSAGE_LOGGED=1
+                        export _STARTUP_MESSAGE_LOGGED
                         return 0
                     fi
-                    
-                    # メッセージ出力とフラグ設定
-                    _STARTUP_MESSAGE_LOGGED=1
-                    export _STARTUP_MESSAGE_LOGGED
-                    log "$message"
-                    log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: $(hostname))"
-                    
-                    exec 200>&-
-                    return 0
-                else
-                    log "DEBUG: [Issue #5362] Flock timeout - message suppressed to prevent duplicate (PID: $$)"
-                    exec 200>&-
-                    _STARTUP_MESSAGE_LOGGED=1
-                    export _STARTUP_MESSAGE_LOGGED
-                    return 0
-                fi
+                } 200>"$lock_file"
             else
                 # フォールバック: flockが利用できない場合のmkdirベースロック
                 local mkdir_lock_dir="$LOCK_BASE_DIR/startup-message-mkdir.lock"
@@ -933,28 +837,6 @@ log_startup_message() {
     esac
     
     # Issue #5308修正: 特定メッセージパターン処理後は汎用ロジックをスキップ
-    return 0
-    
-    local message_hash=$(get_message_hash "$message")
-    
-    # 戦略に応じた重複防止処理
-    case "$DUPLICATE_PREVENTION_STRATEGY" in
-        "redis_first")
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-        "file_only")
-            fallback_to_file_based_prevention "$message" "$message_hash"
-            ;;
-        *)
-            # デフォルト: redis_first
-            if ! try_redis_duplicate_prevention "$message" "$message_hash"; then
-                fallback_to_file_based_prevention "$message" "$message_hash"
-            fi
-            ;;
-    esac
-    
     return 0
 }
 
