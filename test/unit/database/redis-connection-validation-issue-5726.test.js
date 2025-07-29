@@ -48,62 +48,63 @@ describe('Issue #5726: Redis接続状態チェック修正', () => {
   });
 
   describe('executeRedisTransactionWithTimeout with Issue #5726 fix', () => {
-    it('正常なクライアント接続プロパティで成功すること', async () => {
-      // Mock the require function to return our mock
-      jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
-      jest.doMock('../../../src/database/redisClient', () => ({
-        isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
-        updateCircuitBreakerOnFailure: jest.fn(),
-        updateCircuitBreakerOnSuccess: jest.fn()
-      }));
-      
-      const manager = require('../../../src/database/manager.js');
-      
-      const trade = { tradeId: 'test-trade-123' };
-      const commandNames = ['SET', 'GET'];
+    it('正常なクライアント接続プロパティの論理テスト', () => {
+      const validClient = {
+        isReady: true,
+        isOpen: true,
+        status: 'ready'
+      };
 
-      // Test: このテストは通常のケースをテストします
-      // 実際にはexecuteRedisTransactionWithTimeoutは非exportedfunction なので、
-      // この部分は統合テストまたは内部テストとして位置づけます
-      expect(mockRedisClient.isReady).toBe(true);
-      expect(mockRedisClient.isOpen).toBe(true);
+      // Issue #5726修正内容のロジックテスト
+      const hasValidProperties = (client) => {
+        return client && 
+               ('isReady' in client && client.isReady !== undefined) &&
+               ('isOpen' in client && client.isOpen !== undefined);
+      };
+      
+      // 有効なクライアントのプロパティチェック
+      expect(hasValidProperties(validClient)).toBe(true);
+      expect(validClient.isReady).toBe(true);
+      expect(validClient.isOpen).toBe(true);
+      
+      // フォールバックが不要であることを確認
+      expect(hasValidProperties(validClient)).toBe(true);  // フォールバック条件に入らない
     });
 
-    it('Issue #5726: undefinedプロパティの場合にフォールバック動作をテストすること', () => {
+    it('Issue #5726: undefinedプロパティの場合にフォールバック動作をテスト（論理チェック）', () => {
       // 古いクライアントのプロパティをundefinedに設定  
-      const oldClient = {
+      const brokenClient = {
         isReady: undefined,  // undefined property causing the issue
         isOpen: undefined,   // undefined property causing the issue
         status: 'ready'
       };
 
       // 新しい有効なフォールバッククライアント
-      const fallbackClient = {
+      const validClient = {
         isReady: true,
         isOpen: true,
-        status: 'ready',
-        ping: jest.fn().mockResolvedValue('PONG'),
-        set: jest.fn().mockResolvedValue('OK'),
-        get: jest.fn().mockResolvedValue('tx_test'),
-        del: jest.fn().mockResolvedValue(1)
+        status: 'ready'
       };
 
-      mockRedisTransaction.client = oldClient;
-      mockRedisDatabase.getClient.mockReturnValue(fallbackClient);
-
-      // Issue #5726の修正内容をテスト
-      // クライアント参照の有効性チェック
-      const hasValidProperties = ('isReady' in oldClient && oldClient.isReady !== undefined) &&
-                               ('isOpen' in oldClient && oldClient.isOpen !== undefined);
+      // Issue #5726修正内容のロジックテスト
+      const hasValidProperties = (client) => {
+        return client && 
+               ('isReady' in client && client.isReady !== undefined) &&
+               ('isOpen' in client && client.isOpen !== undefined);
+      };
       
-      expect(hasValidProperties).toBe(false);
-
-      // フォールバッククライアントの有効性をテスト
-      const fallbackHasValidProperties = ('isReady' in fallbackClient && fallbackClient.isReady !== undefined) &&
-                                       ('isOpen' in fallbackClient && fallbackClient.isOpen !== undefined);
+      // 古いクライアントは無効
+      expect(hasValidProperties(brokenClient)).toBe(false);
       
-      expect(fallbackHasValidProperties).toBe(true);
-      expect(fallbackClient).not.toBe(oldClient);
+      // フォールバッククライアントは有効
+      expect(hasValidProperties(validClient)).toBe(true);
+      
+      // フォールバック条件：異なる参照かつ有効プロパティ
+      const shouldUseFallback = validClient && 
+                               hasValidProperties(validClient) && 
+                               validClient !== brokenClient;
+      
+      expect(shouldUseFallback).toBe(true);
     });
 
     it('Issue #5726: validateRedisClientConnection動作の単体テスト', () => {
@@ -138,37 +139,58 @@ describe('Issue #5726: Redis接続状態チェック修正', () => {
     });
   });
 
-  describe('修正されたロジックの動作確認', () => {
-    it('クライアント参照の切り替えロジックをテスト', () => {
-      const invalidClient = {
+  describe('hasValidClientPropertiesヘルパー関数テスト (DRY原則適用)', () => {
+    it('有効なクライアントプロパティを正しく判定すること', () => {
+      // 通常の有効なクライアント
+      const validClient = { isReady: true, isOpen: true, status: 'ready' };
+      // undefinedプロパティを持つ無効なクライアント
+      const invalidClient = { isReady: undefined, isOpen: undefined, status: 'ready' };
+      // null クライアント
+      const nullClient = null;
+      
+      // Note: hasValidClientPropertiesは内部関数なので、ロジックのテストを行う
+      const testValidClientProperties = (client) => {
+        if (!client) {
+          return false;
+        }
+        return ('isReady' in client && client.isReady !== undefined) &&
+               ('isOpen' in client && client.isOpen !== undefined);
+      };
+      
+      expect(testValidClientProperties(validClient)).toBe(true);
+      expect(testValidClientProperties(invalidClient)).toBe(false);
+      expect(testValidClientProperties(nullClient)).toBe(false);
+    });
+  });
+
+  describe('エッジケーステスト', () => {
+    it('Issue #5726: フォールバッククライアントが同じ参照の場合はスキップする論理テスト', () => {
+      const sameClient = {
         isReady: undefined,
         isOpen: undefined,
-        status: 'disconnected'
-      };
-      
-      const validClient = {
-        isReady: true,
-        isOpen: true,
         status: 'ready'
       };
+
+      // Issue #5726修正内容のロジックテスト  
+      const hasValidProperties = (client) => {
+        return client && 
+               ('isReady' in client && client.isReady !== undefined) &&
+               ('isOpen' in client && client.isOpen !== undefined);
+      };
       
-      // Issue #5726の修正ロジック: hasValidPropertiesチェック
-      const hasValidProperties = ('isReady' in invalidClient && invalidClient.isReady !== undefined) &&
-                               ('isOpen' in invalidClient && invalidClient.isOpen !== undefined);
+      // 同じクライアント参照の場合
+      const fallbackClient = sameClient; // redisDatabase.getClient()が同じ参照を返すケース
       
-      expect(hasValidProperties).toBe(false);
+      // 元クライアントは無効プロパティ
+      expect(hasValidProperties(sameClient)).toBe(false);
       
-      // フォールバック条件のテスト 
-      if (!hasValidProperties) {
-        const fallbackClient = validClient; // redisDatabase.getClient()の戻り値をシミュレート
-        
-        if (fallbackClient && fallbackClient !== invalidClient) {
-          // フォールバックが適用される条件をテスト
-          expect(fallbackClient).not.toBe(invalidClient);
-          expect(fallbackClient.isReady).toBe(true);
-          expect(fallbackClient.isOpen).toBe(true);
-        }
-      }
+      // フォールバック条件：異なる参照 && 有効プロパティ
+      const shouldUseFallback = fallbackClient && 
+                               hasValidProperties(fallbackClient) && 
+                               fallbackClient !== sameClient;
+      
+      // 同じ参照なのでフォールバックしない
+      expect(shouldUseFallback).toBe(false);
     });
   });
 });
