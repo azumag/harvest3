@@ -672,26 +672,49 @@ function validateRedisClientConnection(client, context, logger) {
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
   const hasReadyProperty = 'isReady' in client;
   const hasOpenProperty = 'isOpen' in client;
+  
+  // Issue #5722: undefined値も未定義として扱う - プロパティが存在してもundefinedなら無効
+  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined;
+  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined;
+  
   const clientReady = Boolean(client.isReady);
   const clientOpen = Boolean(client.isOpen);
   
-  // Issue #5701: プロパティが未定義の場合の特別処理
-  if (!hasReadyProperty || !hasOpenProperty) {
+  // Issue #5701, #5722: プロパティが未定義、または値がundefinedの場合の特別処理
+  if (!hasValidReadyValue || !hasValidOpenValue) {
     const diagnosticInfo = {
       hasReadyProperty,
       hasOpenProperty,
+      hasValidReadyValue,
+      hasValidOpenValue,
       isReadyValue: client.isReady,
       isOpenValue: client.isOpen,
       clientStatus: client.status || 'unknown',
       clientConstructor: client.constructor?.name || 'unknown'
     };
     
-    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義検出 - ${JSON.stringify(diagnosticInfo)}`);
+    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`);
     
-    // Issue #5701: プロパティが未定義の場合は接続状態をstatusで判定
+    // Issue #5722: undefined値の場合は保守的にエラーとして扱う
+    // プロパティが存在しない場合のみstatus基準でフォールバック
+    const hasUndefinedValues = (hasReadyProperty && client.isReady === undefined) || 
+                              (hasOpenProperty && client.isOpen === undefined);
+    
+    if (hasUndefinedValues) {
+      // Issue #5722: undefined値を含む意味のあるエラーメッセージを生成
+      const readyStatus = hasValidReadyValue ? `ready=${client.isReady}` : 
+                         hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
+      const openStatus = hasValidOpenValue ? `open=${client.isOpen}` : 
+                        hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+      const statusInfo = client?.status ? `, status=${client.status}` : '';
+      
+      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedです`);
+    }
+    
+    // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
     if (!statusBasedCheck) {
-      // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
       const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
       const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
       const statusInfo = client?.status ? `, status=${client.status}` : '';
@@ -709,9 +732,11 @@ function validateRedisClientConnection(client, context, logger) {
     const isProduction = process.env.NODE_ENV === 'production';
     const logLevel = isProduction ? 'warn' : 'error';
     
-    // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
-    const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
-    const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+    // Issue #5661, #5722: undefined プロパティまたはundefined値を含む意味のあるエラーメッセージを生成
+    const readyStatus = hasValidReadyValue ? `ready=${client.isReady}` : 
+                       hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
+    const openStatus = hasValidOpenValue ? `open=${client.isOpen}` : 
+                      hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
     const statusInfo = client?.status ? `, status=${client.status}` : '';
     
     const errorMsg = isProduction 
