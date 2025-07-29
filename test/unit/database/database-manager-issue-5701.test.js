@@ -159,9 +159,9 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
         [null, 2]
       ]);
 
-      // プロパティ未定義の警告ログが出力されることを確認
+      // プロパティ値不正の警告ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('プロパティ未定義検出')
+        expect.stringContaining('プロパティ値不正検出')
       );
       
       // status基準で接続OKのログが出力されることを確認
@@ -202,7 +202,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('ready=(undefined property), open=(undefined property), status=disconnected')
+        expect.stringContaining('ready=(property missing), open=(property missing), status=disconnected')
       );
     });
 
@@ -348,9 +348,9 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
         [null, 2]
       ]);
 
-      // プロパティ未定義の警告が出力されないことを確認
+      // プロパティ値不正の警告が出力されないことを確認
       expect(mockLogger.warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('プロパティ未定義検出')
+        expect.stringContaining('プロパティ値不正検出')
       );
     });
   });
