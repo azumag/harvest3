@@ -691,18 +691,18 @@ function validateRedisClientConnection(client, context, logger) {
       clientConstructor: client.constructor?.name || 'unknown'
     };
     
-    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義検出 - ${JSON.stringify(diagnosticInfo)}`);
+    logger.warn(`[Redis Transaction] ${context}: プロパティ値不正検出 - ${JSON.stringify(diagnosticInfo)}`);
     
     // Issue #5739: プロパティが使用不可の場合は接続状態をstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
     if (!statusBasedCheck) {
       // Issue #5739: undefined/null プロパティを含む意味のあるエラーメッセージを生成
-      const readyStatus = hasReadyProperty ? `ready=${isReadyValue}` : 'ready=(undefined property)';
-      const openStatus = hasOpenProperty ? `open=${isOpenValue}` : 'open=(undefined property)';
+      const readyStatus = hasReadyProperty ? `ready=${isReadyValue}` : 'ready=(property missing)';
+      const openStatus = hasOpenProperty ? `open=${isOpenValue}` : 'open=(property missing)';
       const statusInfo = client?.status ? `, status=${client.status}` : '';
       
       logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
-      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが使用不可です`);
     }
     
     logger.info(`[Redis Transaction] ${context}: status基準で接続OK (status=${client.status})`);
