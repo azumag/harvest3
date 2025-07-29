@@ -814,9 +814,16 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     const redisDatabase = require('./redisDatabase');
     const fallbackClient = redisDatabase.getClient();
     
-    if (fallbackClient && fallbackClient !== client) {
-      logger.info(`[Redis Transaction] フォールバッククライアントを使用して接続状態をチェック`);
-      client = fallbackClient;
+    // フォールバッククライアントが存在し、かつより良いプロパティを持つ場合のみ使用
+    const fallbackHasValidProperties = fallbackClient && 
+                                     ('isReady' in fallbackClient && fallbackClient.isReady !== undefined) &&
+                                     ('isOpen' in fallbackClient && fallbackClient.isOpen !== undefined);
+    
+    if (fallbackClient && (fallbackClient !== client || fallbackHasValidProperties)) {
+      if (fallbackHasValidProperties) {
+        logger.info(`[Redis Transaction] フォールバッククライアントを使用して接続状態をチェック`);
+        client = fallbackClient;
+      }
     }
   }
   
