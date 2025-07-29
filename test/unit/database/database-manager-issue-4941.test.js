@@ -238,6 +238,9 @@ describe('Issue #4941: Redis 2PC例外 - Ghost Connection修正', () => {
         // exec()呼び出し時に接続状態を変更
         mockRedisClient.isReady = false;
         mockRedisClient.isOpen = false;
+        mockRedisClient.status = 'disconnected'; // statusも無効化
+        mockRedisClient.ping = undefined; // pingメソッドを無効化
+        mockRedisClient.quit = undefined; // quitメソッドを無効化
         return originalExec();
       });
 

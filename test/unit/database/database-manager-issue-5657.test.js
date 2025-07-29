@@ -24,6 +24,11 @@ describe('Issue #5657: Redis接続状態チェック改善と分散ロックキ�
       debug: jest.fn()
     };
 
+    // Loggerクラスをモック
+    jest.doMock('../../../src/hft/utils/Logger', () => {
+      return jest.fn().mockImplementation(() => mockLogger);
+    });
+
     // 正常なRedisクライアントモック
     mockRedisClient = {
       multi: jest.fn(),
