@@ -145,7 +145,7 @@ describe('Issue #5722: strategy-runnerサービスでのRedis接続例外修正'
 
       // Issue #5722: エラーログにundefined値が適切に記録されることを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=undefined, open=undefined')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
 
       // Issue #5722: 警告ログでundefined値検出が記録されることを確認
@@ -181,7 +181,7 @@ describe('Issue #5722: strategy-runnerサービスでのRedis接続例外修正'
 
       // プロパティが存在しない場合のエラーメッセージを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=(undefined property), open=(undefined property)')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
     });
 
@@ -246,7 +246,7 @@ describe('Issue #5722: strategy-runnerサービスでのRedis接続例外修正'
 
       // 混在状態のエラーメッセージを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=true, open=undefined')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
     });
   });

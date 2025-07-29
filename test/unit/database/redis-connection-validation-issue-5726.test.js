@@ -50,8 +50,8 @@ describe('Issue #5726: Redis接続状態チェック修正', () => {
   describe('executeRedisTransactionWithTimeout with Issue #5726 fix', () => {
     it('正常なクライアント接続プロパティで成功すること', async () => {
       // Mock the require function to return our mock
-      jest.doMock('./redisDatabase', () => mockRedisDatabase);
-      jest.doMock('./redisClient', () => ({
+      jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
+      jest.doMock('../../../src/database/redisClient', () => ({
         isCircuitBreakerOpen: jest.fn().mockReturnValue(false),
         updateCircuitBreakerOnFailure: jest.fn(),
         updateCircuitBreakerOnSuccess: jest.fn()
@@ -107,7 +107,7 @@ describe('Issue #5726: Redis接続状態チェック修正', () => {
     });
 
     it('Issue #5726: validateRedisClientConnection動作の単体テスト', () => {
-      jest.doMock('./redisDatabase', () => mockRedisDatabase);
+      jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
       
       const manager = require('../../../src/database/manager.js');
       
