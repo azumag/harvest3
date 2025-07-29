@@ -672,46 +672,55 @@ function validateRedisClientConnection(client, context, logger) {
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
   const hasReadyProperty = 'isReady' in client;
   const hasOpenProperty = 'isOpen' in client;
-  const clientReady = Boolean(client.isReady);
-  const clientOpen = Boolean(client.isOpen);
+  const isReadyValue = client.isReady;
+  const isOpenValue = client.isOpen;
   
-  // Issue #5701: プロパティが未定義の場合の特別処理
-  if (!hasReadyProperty || !hasOpenProperty) {
+  // Issue #5739: プロパティが存在しないか、値がundefined/nullの場合の特別処理
+  const hasUsableReadyProperty = hasReadyProperty && (isReadyValue !== undefined && isReadyValue !== null);
+  const hasUsableOpenProperty = hasOpenProperty && (isOpenValue !== undefined && isOpenValue !== null);
+  
+  if (!hasUsableReadyProperty || !hasUsableOpenProperty) {
     const diagnosticInfo = {
       hasReadyProperty,
       hasOpenProperty,
-      isReadyValue: client.isReady,
-      isOpenValue: client.isOpen,
+      hasUsableReadyProperty,
+      hasUsableOpenProperty,
+      isReadyValue,
+      isOpenValue,
       clientStatus: client.status || 'unknown',
       clientConstructor: client.constructor?.name || 'unknown'
     };
     
-    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義検出 - ${JSON.stringify(diagnosticInfo)}`);
+    logger.warn(`[Redis Transaction] ${context}: プロパティ値不正検出 - ${JSON.stringify(diagnosticInfo)}`);
     
-    // Issue #5701: プロパティが未定義の場合は接続状態をstatusで判定
+    // Issue #5739: プロパティが使用不可の場合は接続状態をstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
     if (!statusBasedCheck) {
-      // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
-      const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
-      const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+      // Issue #5739: undefined/null プロパティを含む意味のあるエラーメッセージを生成
+      const readyStatus = hasReadyProperty ? `ready=${isReadyValue}` : 'ready=(property missing)';
+      const openStatus = hasOpenProperty ? `open=${isOpenValue}` : 'open=(property missing)';
       const statusInfo = client?.status ? `, status=${client.status}` : '';
       
       logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
-      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが使用不可です`);
     }
     
     logger.info(`[Redis Transaction] ${context}: status基準で接続OK (status=${client.status})`);
     return { clientReady: statusBasedCheck, clientOpen: statusBasedCheck };
   }
   
+  // Issue #5739: 使用可能なプロパティ値で接続状態を判定
+  const clientReady = Boolean(isReadyValue);
+  const clientOpen = Boolean(isOpenValue);
+  
   if (!clientReady || !clientOpen) {
     // Issue #5667: セキュリティ対策 - 本番環境では詳細な接続情報を制限
     const isProduction = process.env.NODE_ENV === 'production';
     const logLevel = isProduction ? 'warn' : 'error';
     
-    // Issue #5661: undefined プロパティを含む意味のあるエラーメッセージを生成
-    const readyStatus = hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
-    const openStatus = hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+    // Issue #5739: 使用可能プロパティを含む意味のあるエラーメッセージを生成
+    const readyStatus = hasUsableReadyProperty ? `ready=${isReadyValue}` : 'ready=(unusable)';
+    const openStatus = hasUsableOpenProperty ? `open=${isOpenValue}` : 'open=(unusable)';
     const statusInfo = client?.status ? `, status=${client.status}` : '';
     
     const errorMsg = isProduction 
