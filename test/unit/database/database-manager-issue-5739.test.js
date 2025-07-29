@@ -70,7 +70,7 @@ describe('Issue #5739: Redis接続状態チェック undefined/null値プロパ�
       
       // 警告ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ値不正検出')
+        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ未定義検出')
       );
       
       // info ログでstatus基準での接続OKが出力されることを確認
@@ -95,7 +95,7 @@ describe('Issue #5739: Redis接続状態チェック undefined/null値プロパ�
       
       // 警告ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ値不正検出')
+        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ未定義検出')
       );
     });
 
@@ -115,7 +115,7 @@ describe('Issue #5739: Redis接続状態チェック undefined/null値プロパ�
       
       // 警告ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ値不正検出')
+        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ未定義検出')
       );
     });
 
@@ -130,7 +130,7 @@ describe('Issue #5739: Redis接続状態チェック undefined/null値プロパ�
 
       expect(() => {
         validateRedisClientConnection(clientWithBadStatus, 'テスト接続チェック', mockLogger);
-      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが使用不可です');
+      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが未定義です');
 
       // エラーログが適切に出力されることを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -189,7 +189,7 @@ describe('Issue #5739: Redis接続状態チェック undefined/null値プロパ�
 
       // 診断情報を含む警告ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringMatching(/\[Redis Transaction\] テスト接続チェック: プロパティ値不正検出 - \{.*"hasReadyProperty":true.*"hasOpenProperty":true.*"hasUsableReadyProperty":false.*"hasUsableOpenProperty":false.*"clientStatus":"ready".*"clientConstructor":"TestRedisClient".*\}/)
+        expect.stringMatching(/\[Redis Transaction\] テスト接続チェック: プロパティ未定義検出 - \{.*"hasReadyProperty":true.*"hasOpenProperty":true.*"hasUsableReadyProperty":false.*"hasUsableOpenProperty":false.*"clientStatus":"ready".*"clientConstructor":"TestRedisClient".*\}/)
       );
     });
   });
