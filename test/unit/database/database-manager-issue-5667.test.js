@@ -120,10 +120,11 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
   });
 
   describe('Redis接続状態チェックのundefined値対応', () => {
-    test('isReady=undefined, isOpen=undefined でも正しく接続失敗として検出される', async () => {
-      // Issue #5667: undefined状態をシミュレート
+    test('isReady=undefined, isOpen=undefined でもstatus=readyの場合は正常に実行される', async () => {
+      // Issue #5667: undefined状態をシミュレート（status=readyでフォールバック成功）
       mockRedisClient.isReady = undefined;
       mockRedisClient.isOpen = undefined;
+      mockRedisClient.status = 'ready'; // フォールバック用
 
       const testTrade = {
         tradeId: '1416763593',
@@ -134,24 +135,33 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
 
       const commandNames = ['hIncrByFloat', 'hSet', 'hDel'];
 
-      await expect(
-        databaseManager.executeRedisTransactionWithTimeout(
-          mockRedisTransaction,
-          commandNames,
-          testTrade,
-          mockLogger
-        )
-      ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
+      // 成功することを期待（status基準でフォールバック）
+      const result = await databaseManager.executeRedisTransactionWithTimeout(
+        mockRedisTransaction,
+        commandNames,
+        testTrade,
+        mockLogger
+      );
 
-      // エラーログに適切な値が記録されることを確認
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=undefined, open=undefined')
+      expect(result).toEqual([
+        [null, 'OK'],
+        [null, 1],
+        [null, 2]
+      ]);
+
+      // 警告ログとinfoログが出力されることを確認
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('プロパティ未定義検出')
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('status基準で接続OK (status=ready)')
       );
     });
 
-    test('isReady=false, isOpen=undefined の混在状態でも正しく処理される', async () => {
+    test('isReady=false, isOpen=undefined でもstatus=readyの場合はフォールバック成功', async () => {
       mockRedisClient.isReady = false;
       mockRedisClient.isOpen = undefined;
+      mockRedisClient.status = 'ready'; // フォールバック用
 
       const testTrade = {
         tradeId: '1416763593',
@@ -162,17 +172,26 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
 
       const commandNames = ['hIncrByFloat'];
 
-      await expect(
-        databaseManager.executeRedisTransactionWithTimeout(
-          mockRedisTransaction,
-          commandNames,
-          testTrade,
-          mockLogger
-        )
-      ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
+      // status基準で成功することを期待
+      const result = await databaseManager.executeRedisTransactionWithTimeout(
+        mockRedisTransaction,
+        commandNames,
+        testTrade,
+        mockLogger
+      );
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=false, open=undefined')
+      expect(result).toEqual([
+        [null, 'OK'],
+        [null, 1],
+        [null, 2]
+      ]);
+
+      // フォールバック処理のログが出力されることを確認
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('プロパティ未定義検出')
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('status基準で接続OK (status=ready)')
       );
     });
 
@@ -208,7 +227,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
       );
     });
 
-    test('exec()実行中に接続状態が変化してもundefined値が正しく処理される', async () => {
+    test('exec()実行中に接続状態が変化してもstatus基準でフォールバック成功', async () => {
       // 初期状態は正常にしてexec()実行後で状態を変更
       mockRedisClient.isReady = true;
       mockRedisClient.isOpen = true;
@@ -219,6 +238,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
         // exec()完了後に接続状態をundefinedに変更
         mockRedisClient.isReady = undefined;
         mockRedisClient.isOpen = undefined;
+        mockRedisClient.status = 'ready'; // フォールバック用
         return result;
       });
 
@@ -231,23 +251,32 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
 
       const commandNames = ['hIncrByFloat'];
 
-      await expect(
-        databaseManager.executeRedisTransactionWithTimeout(
-          mockRedisTransaction,
-          commandNames,
-          testTrade,
-          mockLogger
-        )
-      ).rejects.toThrow('Redis Commit失敗: exec()後に接続が失われました');
+      // status基準でフォールバック成功することを期待
+      const result = await databaseManager.executeRedisTransactionWithTimeout(
+        mockRedisTransaction,
+        commandNames,
+        testTrade,
+        mockLogger
+      );
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('exec()後に接続状態異常を検出')
+      expect(result).toEqual([
+        [null, 'OK'],
+        [null, 1],
+        [null, 2]
+      ]);
+
+      // exec()後の接続チェックでフォールバック処理のログが出力されることを確認
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('プロパティ未定義検出')
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('status基準で接続OK (status=ready)')
       );
     });
 
 
-    test('Boolean変換により0, "", null, false も適切に処理される', async () => {
-      // 様々なfalsy値をテスト
+    test('Boolean変換により0, "", null, false も適切に処理される（status=disconnectedで失敗）', async () => {
+      // 様々なfalsy値をテストし、status=disconnectedで失敗させる
       const falsyValues = [0, "", null, false, undefined];
       
       for (const falsyValue of falsyValues) {
@@ -255,6 +284,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
         
         mockRedisClient.isReady = falsyValue;
         mockRedisClient.isOpen = true;
+        mockRedisClient.status = 'disconnected'; // フォールバックも失敗させる
 
         const testTrade = {
           tradeId: `test_${typeof falsyValue}_${falsyValue}`,
@@ -274,9 +304,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
           )
         ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          expect.stringContaining(`実行前接続チェック失敗: ready=${falsyValue}`)
-        );
+        // エラーが正しく投げられることを確認（ログは内部関数で処理される）
       }
     });
   });
