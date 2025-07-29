@@ -15,6 +15,7 @@ class APICoordinator {
     this.activeRequests = new Set();
     this.lastRequestTime = 0;
     this.isProcessing = false;
+    this.monitoringIntervalId = null;  // 監視のInterval ID
     
     // Issue #443: throttle queue監視設定
     this.monitoring = EXCHANGE_SETTINGS.THROTTLE_QUEUE_MONITORING;
@@ -340,9 +341,24 @@ class APICoordinator {
    * Queue監視の開始
    */
   startQueueMonitoring() {
-    setInterval(() => {
+    // 既存の監視がある場合は停止
+    if (this.monitoringIntervalId) {
+      this.stopQueueMonitoring();
+    }
+    
+    this.monitoringIntervalId = setInterval(() => {
       this.monitorQueueStatus();
     }, this.monitoring.CHECK_INTERVAL);
+  }
+
+  /**
+   * Queue監視の停止
+   */
+  stopQueueMonitoring() {
+    if (this.monitoringIntervalId) {
+      clearInterval(this.monitoringIntervalId);
+      this.monitoringIntervalId = null;
+    }
   }
 
   /**

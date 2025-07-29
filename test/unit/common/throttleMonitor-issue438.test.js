@@ -4,7 +4,12 @@
  */
 
 const { ThrottleMonitor } = require('../../../src/common/throttleMonitor');
-const { APICoordinator } = require('../../../src/common/apiCoordinator');
+const { APICoordinator, apiCoordinator } = require('../../../src/common/apiCoordinator');
+
+// シングルトンインスタンスの監視を停止
+if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
+  apiCoordinator.stopQueueMonitoring();
+}
 
 // モック設定
 jest.mock('../../../src/common/const', () => ({
@@ -53,6 +58,7 @@ describe('Issue #438: Throttle Queue Overflow 対応テスト', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
     throttleMonitor = new ThrottleMonitor();
     apiCoordinator = new APICoordinator();
     throttleMonitor.setAPICoordinator(apiCoordinator);
@@ -60,9 +66,16 @@ describe('Issue #438: Throttle Queue Overflow 対応テスト', () => {
   });
 
   afterEach(() => {
+    // APICoordinatorの監視を停止
+    if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
+      apiCoordinator.stopQueueMonitoring();
+    }
+    
     if (throttleMonitor) {
       throttleMonitor.resetStats();
     }
+    
+    jest.useRealTimers();
   });
 
   describe('maxCapacityエラー特化処理', () => {
@@ -231,7 +244,17 @@ describe('Issue #438: APICoordinator 強化テスト', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
     apiCoordinator = new APICoordinator();
+  });
+
+  afterEach(() => {
+    // APICoordinatorの監視を停止
+    if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
+      apiCoordinator.stopQueueMonitoring();
+    }
+    
+    jest.useRealTimers();
   });
 
   describe('強化された緊急キュー排出', () => {
