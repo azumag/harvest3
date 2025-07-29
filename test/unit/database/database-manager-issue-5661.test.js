@@ -105,7 +105,7 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
 
       // 警告ログとinfo ログが適切に出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ未定義検出')
+        expect.stringContaining('[Redis Transaction] テスト接続チェック: プロパティ未定義またはundefined値検出')
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         '[Redis Transaction] テスト接続チェック: status基準で接続OK (status=ready)'
