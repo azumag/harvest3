@@ -717,10 +717,7 @@ export DISCORD_WEBHOOK_URL=your_webhook_url           # Discord通知有効化
 - **エラーハンドリング強化**: Bitbank API固有のエラー処理とリトライ機能
 - **テストサポート拡張**: E2Eテスト、Playwright統合、テストカバレッジ測定
 - **Sandboxセキュリティ**: macOSでのSandboxプロファイル改善とプロセス管理権限強化
-- **APIコーディネーター改善**: setInterval適切クリーンアップとテスト安定性向上
-  - setIntervalのメモリリーク防止: stopQueueMonitoringメソッド追加
-  - テストタイムアウト問題解決: fakeTimersとクリーンアップの実装
-  - リソース管理強化: テスト環境でのインターバル適切処理
+- **APIコーディネーター改善**: メモリリーク防止とテスト安定性向上
 
 ### 新しい依存関係
 - **decimal.js**: 高精度数値計算

@@ -6,10 +6,29 @@
 const { ThrottleMonitor } = require('../../../src/common/throttleMonitor');
 const { APICoordinator, apiCoordinator } = require('../../../src/common/apiCoordinator');
 
-// シングルトンインスタンスの監視を停止
-if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
-  apiCoordinator.stopQueueMonitoring();
+// テストヘルパー関数
+function cleanupAPICoordinator(coordinator) {
+  if (coordinator && coordinator.stopQueueMonitoring) {
+    coordinator.stopQueueMonitoring();
+  }
 }
+
+function setupTestEnvironment() {
+  jest.useFakeTimers();
+}
+
+function teardownTestEnvironment(coordinator, throttleMonitor = null) {
+  cleanupAPICoordinator(coordinator);
+  
+  if (throttleMonitor) {
+    throttleMonitor.resetStats();
+  }
+  
+  jest.useRealTimers();
+}
+
+// シングルトンインスタンスの監視を停止
+cleanupAPICoordinator(apiCoordinator);
 
 // モック設定
 jest.mock('../../../src/common/const', () => ({
@@ -58,7 +77,7 @@ describe('Issue #438: Throttle Queue Overflow 対応テスト', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    setupTestEnvironment();
     throttleMonitor = new ThrottleMonitor();
     apiCoordinator = new APICoordinator();
     throttleMonitor.setAPICoordinator(apiCoordinator);
@@ -66,16 +85,7 @@ describe('Issue #438: Throttle Queue Overflow 対応テスト', () => {
   });
 
   afterEach(() => {
-    // APICoordinatorの監視を停止
-    if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
-      apiCoordinator.stopQueueMonitoring();
-    }
-    
-    if (throttleMonitor) {
-      throttleMonitor.resetStats();
-    }
-    
-    jest.useRealTimers();
+    teardownTestEnvironment(apiCoordinator, throttleMonitor);
   });
 
   describe('maxCapacityエラー特化処理', () => {
@@ -244,17 +254,12 @@ describe('Issue #438: APICoordinator 強化テスト', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
+    setupTestEnvironment();
     apiCoordinator = new APICoordinator();
   });
 
   afterEach(() => {
-    // APICoordinatorの監視を停止
-    if (apiCoordinator && apiCoordinator.stopQueueMonitoring) {
-      apiCoordinator.stopQueueMonitoring();
-    }
-    
-    jest.useRealTimers();
+    teardownTestEnvironment(apiCoordinator);
   });
 
   describe('強化された緊急キュー排出', () => {
@@ -317,6 +322,29 @@ describe('Issue #438: APICoordinator 強化テスト', () => {
       // エラー統計の確認
       expect(throttleMonitor.stats.queueOverflowErrors).toBe(1);
       expect(throttleMonitor.stats.throttleErrors).toBe(1);
+    });
+  });
+
+  describe('stopQueueMonitoring', () => {
+    test('監視インターバルが適切にクリアされる', () => {
+      const coordinator = new APICoordinator();
+      coordinator.startQueueMonitoring();
+      
+      expect(coordinator.monitoringIntervalId).not.toBeNull();
+      
+      coordinator.stopQueueMonitoring();
+      
+      expect(coordinator.monitoringIntervalId).toBeNull();
+    });
+
+    test('複数回呼び出しても安全に動作する', () => {
+      const coordinator = new APICoordinator();
+      coordinator.startQueueMonitoring();
+      
+      coordinator.stopQueueMonitoring();
+      coordinator.stopQueueMonitoring(); // 2回目
+      
+      expect(coordinator.monitoringIntervalId).toBeNull();
     });
   });
 });
