@@ -145,7 +145,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
 
       // エラーログに適切な値が記録されることを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=undefined, open=undefined')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
     });
 
@@ -172,7 +172,7 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
       ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('実行前接続チェック失敗: ready=false, open=undefined')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
     });
 

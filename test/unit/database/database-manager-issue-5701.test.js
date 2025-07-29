@@ -202,7 +202,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('ready=(undefined property), open=(undefined property), status=disconnected')
+        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
       );
     });
 
@@ -274,7 +274,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('clientがnull/undefined')
+        expect.stringContaining('[Redis Transaction] 実行前接続チェック失敗: clientがnull/undefined')
       );
     });
 

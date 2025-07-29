@@ -25,6 +25,7 @@ const Logger = require('../hft/utils/Logger');
 const { TRADING_EXECUTION_CONSTANTS, EXCHANGE_SETTINGS } = require('../common/const');
 const { throttleMonitor } = require('../common/throttleMonitor');
 const { apiCoordinator } = require('../common/apiCoordinator');
+const redisDatabase = require('./redisDatabase'); // Issue #5726: パフォーマンス最適化 - 実行時require回避
 
 /**
  * Redisコミットエラークラス（構造化されたエラーハンドリング）
@@ -57,6 +58,18 @@ const REDIS_ERROR_CODES = {
   9: 'Command not supported',
   10: 'Wrong number of arguments'
 };
+
+/**
+ * Redisクライアントのプロパティ有効性をチェックするヘルパー関数
+ * Issue #5726: DRY原則適用 - 重複するプロパティチェックロジックの統一
+ * @param {Object} client - チェック対象のRedisクライアント
+ * @returns {boolean} プロパティが有効かどうか
+ */
+function hasValidClientProperties(client) {
+  return client && 
+         ('isReady' in client && client.isReady !== undefined) &&
+         ('isOpen' in client && client.isOpen !== undefined);
+}
 
 // Issue #4126: マジックナンバーの定数化
 const INVALID_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
@@ -795,16 +808,34 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   logger.info(`[Redis Transaction] 実行開始: ${commandCount}コマンド, タイムアウト: ${adaptiveTimeout}ms`);
   
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
-  const client = redisTransaction.client;
+  // Issue #5726: 接続回復後のクライアント参照不整合対策
+  let client = redisTransaction.client;
   if (!client) {
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: clientがnull/undefined`);
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
+  
+  // Issue #5726: client.isReady/isOpenがundefinedの場合の追加チェック
+  // 接続回復プロセス中にトランザクションオブジェクトの参照が古くなる可能性への対処
+  if (!hasValidClientProperties(client)) {
+    logger.warn(`[Redis Transaction] transaction.clientの接続プロパティが無効 - 代替チェックを実行`);
+    
+    // redisTransactionから実際のRedisクライアントインスタンスを取得する代替手段
+    const fallbackClient = redisDatabase.getClient();
+    
+    // Issue #5726: KISS原則適用 - フォールバック条件の簡素化
+    if (fallbackClient && hasValidClientProperties(fallbackClient) && fallbackClient !== client) {
+      logger.info(`[Redis Transaction] フォールバッククライアントを使用`);
+      client = fallbackClient;
+    }
+  }
+  
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
   try {
     validateRedisClientConnection(client, '実行前接続チェック', logger);
   } catch (connectionError) {
-    // Helper function already provides appropriate error message, just re-throw
+    // Issue #5726: より詳細なエラー情報を提供
+    logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   
