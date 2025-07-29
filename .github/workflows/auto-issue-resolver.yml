@@ -2,8 +2,8 @@ name: Auto Issue Resolver
 
 on:
   schedule:
-    # 全ての時間帯で1時間ごとに実行
-    - cron: '0 * * * *'
+    # 毎日午前0時に実行
+    - cron: '0 0 * * *'
   workflow_dispatch: # 手動実行も可能
 
 jobs:
