@@ -9,6 +9,60 @@ jest.mock('../../../src/common/notifications', () => ({
 }));
 
 describe('Utils module', () => {
+  
+  // Issue #5657: 通貨ペアスラッシュ対応テスト
+  describe('validateLockParameters function', () => {
+    test('通貨ペアにスラッシュが含まれるロックキーを許可', () => {
+      const testCases = [
+        'lock:trade:bitbank:QTUM/JPY:1418933216',
+        'lock:trade:bitbank:BTC/JPY:123456',
+        'lock:trade:coincheck:ETH/USD:789012'
+      ];
+
+      for (const lockKey of testCases) {
+        const result = utils.validateLockParameters(lockKey, 'test_value_123');
+        expect(result.valid).toBe(true);
+        expect(result.error).toBeUndefined();
+      }
+    });
+
+    test('無効な文字を含むロックキーは拒否', () => {
+      const invalidTestCases = [
+        'lock:trade:bitbank:QTUM*JPY:123456',   // アスタリスク
+        'lock:trade:bitbank:QTUM@JPY:123456',   // アットマーク  
+        'lock:trade:bitbank:QTUM JPY:123456',   // スペース
+        'lock:trade:bitbank:QTUM\nJPY:123456'   // 改行
+      ];
+
+      for (const lockKey of invalidTestCases) {
+        const result = utils.validateLockParameters(lockKey, 'test_value_123');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('lockKeyに無効な文字が含まれています');
+      }
+    });
+
+    test('正常な文字のみのロックキーは引き続き許可', () => {
+      const validTestCases = [
+        'lock:trade:bitbank:normal_key:123456',
+        'lock:trade:coincheck:another-key.test:789012',
+        'simple:key:123'
+      ];
+
+      for (const lockKey of validTestCases) {
+        const result = utils.validateLockParameters(lockKey, 'test_value_123');
+        expect(result.valid).toBe(true);
+        expect(result.error).toBeUndefined();
+      }
+    });
+
+    test('空のlockKeyやlockValueは拒否', () => {
+      expect(utils.validateLockParameters('', 'value').valid).toBe(false);
+      expect(utils.validateLockParameters('key', '').valid).toBe(false);
+      expect(utils.validateLockParameters(null, 'value').valid).toBe(false);
+      expect(utils.validateLockParameters('key', null).valid).toBe(false);
+    });
+  });
+
   describe('weightedAverage function', () => {
     test('calculates weighted average correctly', () => {
       const prices = [100, 200, 300];

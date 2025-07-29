@@ -283,8 +283,9 @@ function validateLockParameters(lockKey, lockValue, context = 'lock') {
   }
   
   // Issue #4997: Redis Lua script引数の文字検証強化
-  // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロンのみ許可
-  const validCharRegex = /^[a-zA-Z0-9_:\-\.]+$/;
+  // Issue #5657: 通貨ペア（例: QTUM/JPY）のスラッシュを許可
+  // lockKey: 英数字、アンダースコア、ハイフン、ドット、コロン、スラッシュを許可
+  const validCharRegex = /^[a-zA-Z0-9_:\-\.\/]+$/;
   // lockValue: JSON文字も許可（database/managerでJSONデータを格納する場合があるため）
   const validLockValueRegex = /^[a-zA-Z0-9_:\-\.{}\",]+$/;
   
