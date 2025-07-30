@@ -124,6 +124,9 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
       // Issue #5667: undefined状態をシミュレート
       mockRedisClient.isReady = undefined;
       mockRedisClient.isOpen = undefined;
+      
+      // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+      mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
 
       const testTrade = {
         tradeId: '1416763593',
@@ -152,6 +155,9 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
     test('isReady=false, isOpen=undefined の混在状態でも正しく処理される', async () => {
       mockRedisClient.isReady = false;
       mockRedisClient.isOpen = undefined;
+      
+      // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+      mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
 
       const testTrade = {
         tradeId: '1416763593',
@@ -219,6 +225,8 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
         // exec()完了後に接続状態をundefinedに変更
         mockRedisClient.isReady = undefined;
         mockRedisClient.isOpen = undefined;
+        // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+        mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
         return result;
       });
 
@@ -255,6 +263,13 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
         
         mockRedisClient.isReady = falsyValue;
         mockRedisClient.isOpen = true;
+        
+        // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+        if (falsyValue === undefined) {
+          mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
+        } else {
+          mockRedisClient.ping.mockResolvedValue('PONG');
+        }
 
         const testTrade = {
           tradeId: `test_${typeof falsyValue}_${falsyValue}`,

@@ -54,16 +54,15 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       validateRedisClientConnection = databaseManager.__getValidateRedisClientConnectionForTesting();
     });
 
-    test('isReadyとisOpenプロパティが未定義の場合、意味のあるエラーメッセージを生成', () => {
+    test('isReadyとisOpenプロパティが未定義の場合、意味のあるエラーメッセージを生成', async () => {
       // isReadyとisOpenプロパティが存在しないクライアント
       const clientWithoutProperties = {
         status: 'disconnected',
         constructor: { name: 'RedisClient' }
       };
 
-      expect(() => {
-        validateRedisClientConnection(clientWithoutProperties, 'テスト接続チェック', mockLogger);
-      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが未定義です');
+      await expect(validateRedisClientConnection(clientWithoutProperties, 'テスト接続チェック', mockLogger))
+        .rejects.toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが未定義です');
 
       // エラーログが意味のある形で出力されることを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -71,7 +70,7 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       );
     });
 
-    test('isReadyプロパティのみ未定義の場合、適切なエラーメッセージを生成', () => {
+    test('isReadyプロパティのみ未定義の場合、適切なエラーメッセージを生成', async () => {
       // isReadyプロパティのみ存在しないクライアント
       const clientWithPartialProperties = {
         isOpen: false,
@@ -79,9 +78,8 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
         constructor: { name: 'RedisClient' }
       };
 
-      expect(() => {
-        validateRedisClientConnection(clientWithPartialProperties, 'テスト接続チェック', mockLogger);
-      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが未定義です');
+      await expect(validateRedisClientConnection(clientWithPartialProperties, 'テスト接続チェック', mockLogger))
+        .rejects.toThrow('Redis Commit失敗: テスト接続チェック時に接続プロパティが未定義です');
 
       // エラーログで一つのプロパティは値、もう一つは未定義と表示されることを確認
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -89,14 +87,14 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       );
     });
 
-    test('statusに基づく接続チェックが成功する場合', () => {
+    test('statusに基づく接続チェックが成功する場合', async () => {
       // プロパティが未定義だがstatusがreadyのクライアント
       const clientWithGoodStatus = {
         status: 'ready',
         constructor: { name: 'RedisClient' }
       };
 
-      const result = validateRedisClientConnection(clientWithGoodStatus, 'テスト接続チェック', mockLogger);
+      const result = await validateRedisClientConnection(clientWithGoodStatus, 'テスト接続チェック', mockLogger);
 
       expect(result).toEqual({
         clientReady: true,
@@ -112,8 +110,8 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       );
     });
 
-    test('通常のプロパティが存在する場合、正常に動作', () => {
-      const result = validateRedisClientConnection(mockRedisClient, 'テスト接続チェック', mockLogger);
+    test('通常のプロパティが存在する場合、正常に動作', async () => {
+      const result = await validateRedisClientConnection(mockRedisClient, 'テスト接続チェック', mockLogger);
 
       expect(result).toEqual({
         clientReady: true,
@@ -125,7 +123,7 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
-    test('接続状態が不正な場合、意味のあるエラーメッセージを生成', () => {
+    test('接続状態が不正な場合、意味のあるエラーメッセージを生成', async () => {
       // isReadyがfalseのクライアント
       const clientNotReady = {
         isReady: false,
@@ -134,9 +132,8 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
         constructor: { name: 'RedisClient' }
       };
 
-      expect(() => {
-        validateRedisClientConnection(clientNotReady, 'テスト接続チェック', mockLogger);
-      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続が失われました');
+      await expect(validateRedisClientConnection(clientNotReady, 'テスト接続チェック', mockLogger))
+        .rejects.toThrow('Redis Commit失敗: テスト接続チェック時に接続が失われました');
 
       // エラーログが適切な形式で出力されることを確認（本番環境でない場合）
       process.env.NODE_ENV = 'test';
@@ -145,7 +142,7 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
       );
     });
 
-    test('本番環境では詳細情報を制限', () => {
+    test('本番環境では詳細情報を制限', async () => {
       // 本番環境をシミュレート
       const originalNodeEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'production';
@@ -156,9 +153,8 @@ describe('Issue #5661: Redis接続状態チェック undefined プロパティ�
         status: 'connecting'
       };
 
-      expect(() => {
-        validateRedisClientConnection(clientNotReady, 'テスト接続チェック', mockLogger);
-      }).toThrow('Redis Commit失敗: テスト接続チェック時に接続が失われました');
+      await expect(validateRedisClientConnection(clientNotReady, 'テスト接続チェック', mockLogger))
+        .rejects.toThrow('Redis Commit失敗: テスト接続チェック時に接続が失われました');
 
       // 本番環境では警告レベルで簡潔なメッセージ
       expect(mockLogger.warn).toHaveBeenCalledWith(

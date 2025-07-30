@@ -674,7 +674,7 @@ const logger = new Logger('DatabaseManager');
  * @returns {Object} 接続状態情報 {clientReady, clientOpen}
  * @throws {Error} 接続状態が無効な場合
  */
-function validateRedisClientConnection(client, context, logger) {
+async function validateRedisClientConnection(client, context, logger) {
   // Issue #5701: Redis v4.x での undefined プロパティ対応
   // クライアントオブジェクト自体の存在チェック
   if (!client) {
@@ -731,8 +731,41 @@ function validateRedisClientConnection(client, context, logger) {
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
       
-      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
-      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedです`);
+      logger.warn(`[Redis Transaction] ${context}: プロパティがundefined - PINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
+      
+      // Issue #5704: undefinedプロパティでも実際のPINGテストで接続確認
+      try {
+        const pingResult = await client.ping();
+        if (pingResult === 'PONG') {
+          logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
+          return { clientReady: true, clientOpen: true };
+        } else {
+          logger.error(`[Redis Transaction] ${context}: PINGテスト失敗 - 応答: ${pingResult}`);
+          throw new Error(`PING応答異常: ${pingResult}`);
+        }
+      } catch (pingError) {
+        // PINGテストも失敗した場合はフォールバッククライアントを試行
+        logger.warn(`[Redis Transaction] ${context}: PINGテスト失敗 (${pingError.message}) - フォールバッククライアントを試行`);
+        const redisDatabase = require('./redisDatabase');
+        const fallbackClient = redisDatabase.getClient();
+        
+        if (fallbackClient && fallbackClient !== client) {
+          logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト実行`);
+          try {
+            const fallbackPingResult = await fallbackClient.ping();
+            if (fallbackPingResult === 'PONG') {
+              logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト成功`);
+              // 呼び出し元でクライアント参照を更新できるよう、新しいクライアントを返す
+              throw new Error(`FALLBACK_CLIENT_AVAILABLE:${JSON.stringify({ newClient: 'available' })}`);
+            }
+          } catch (fallbackPingError) {
+            logger.error(`[Redis Transaction] ${context}: フォールバッククライアントでもPINGテスト失敗: ${fallbackPingError.message}`);
+          }
+        }
+        
+        logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
+        throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedで、PINGテストも失敗しました`);
+      }
     }
     
     // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
@@ -832,11 +865,31 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
   try {
-    validateRedisClientConnection(client, '実行前接続チェック', logger);
+    await validateRedisClientConnection(client, '実行前接続チェック', logger);
   } catch (connectionError) {
-    // Issue #5726: より詳細なエラー情報を提供
-    logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
-    throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+    // Issue #5704: フォールバッククライアントが利用可能な場合の特別処理
+    if (connectionError.message.startsWith('FALLBACK_CLIENT_AVAILABLE:')) {
+      logger.info(`[Redis Transaction] フォールバッククライアントに切り替え`);
+      const fallbackClient = redisDatabase.getClient();
+      if (fallbackClient) {
+        client = fallbackClient;
+        // フォールバッククライアントで再度接続チェック
+        try {
+          await validateRedisClientConnection(client, '実行前接続チェック(フォールバック)', logger);
+          logger.info(`[Redis Transaction] フォールバッククライアントで接続チェック成功`);
+        } catch (fallbackError) {
+          logger.error(`[Redis Transaction] フォールバッククライアント接続チェックエラー: ${fallbackError.message}`);
+          throw new Error('Redis Commit失敗: フォールバッククライアントでも接続失敗');
+        }
+      } else {
+        logger.error(`[Redis Transaction] フォールバッククライアントが取得できません`);
+        throw new Error('Redis Commit失敗: フォールバッククライアントが利用できません');
+      }
+    } else {
+      // Issue #5726: より詳細なエラー情報を提供
+      logger.error(`[Redis Transaction] 接続状態チェックエラー: ${connectionError.message}`);
+      throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
+    }
   }
   
   // Issue #4941: より厳密な接続実用性テスト
@@ -901,7 +954,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #4941: トランザクション実行直前の最終チェック
   logger.debug(`[Redis Transaction] exec()実行直前: 接続状態確認`);
   // Issue #5667: DRY原則適用 - 接続状態チェック共通化
-  validateRedisClientConnection(client, 'exec()直前チェック', logger);
+  await validateRedisClientConnection(client, 'exec()直前チェック', logger);
   
   const transactionPromise = redisTransaction.exec();
   
@@ -925,7 +978,7 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #4941: 接続状態異常の早期検出
     // Issue #5667: DRY原則適用 - 接続状態チェック共通化
     try {
-      validateRedisClientConnection(client, 'exec()後に接続状態異常を検出', logger);
+      await validateRedisClientConnection(client, 'exec()後に接続状態異常を検出', logger);
     } catch (error) {
       // 追加情報を含めたエラー処理
       logger.error(`[Redis Transaction] exec()後に接続状態異常を検出: ${JSON.stringify(postExecConnectionState)}`);
