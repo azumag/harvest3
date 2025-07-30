@@ -124,6 +124,9 @@ describe('Issue #5722: strategy-runnerサービスでのRedis接続例外修正'
       // Issue #5722: プロダクションログで確認された状態を再現
       mockRedisClient.isReady = undefined;
       mockRedisClient.isOpen = undefined;
+      
+      // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+      mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
 
       const testTrade = {
         tradeId: '1416742199', // プロダクションログと同じID
@@ -225,6 +228,9 @@ describe('Issue #5722: strategy-runnerサービスでのRedis接続例外修正'
       // Issue #5722: 混在状態のテスト
       mockRedisClient.isReady = true;
       mockRedisClient.isOpen = undefined;
+      
+      // Issue #5704対応: undefined値の場合はPINGテストを失敗させる
+      mockRedisClient.ping.mockRejectedValue(new Error('Connection lost'));
 
       const testTrade = {
         tradeId: '1416742202',
