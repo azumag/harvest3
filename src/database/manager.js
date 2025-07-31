@@ -4368,5 +4368,5 @@ module.exports = {
   shouldRecoverFromNullUndefinedErrors, // Issue #4932: null/undefined エラー検出機能
   parseRedisResult, // Issue #5515: Redis結果解析ヘルパー関数
   // Issue #5661: テスト用のヘルパー関数
-  __getValidateRedisClientConnectionForTesting: () => validateRedisClientConnection
+  __getValidateRedisClientConnectionForTesting: function() { return validateRedisClientConnection; }
 };
