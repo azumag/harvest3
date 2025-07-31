@@ -5,7 +5,7 @@
  */
 
 const Redis = require('redis');
-const { validateRedisClientConnection, executeRedisTransactionWithTimeout } = require('../../src/database/manager');
+const { __getValidateRedisClientConnectionForTesting, executeRedisTransactionWithTimeout } = require('../../src/database/manager');
 
 // テスト用Logger実装
 class TestLogger {
@@ -27,8 +27,11 @@ describe('Issue #5755: Redis接続チェック統合テスト', () => {
   let redisClient;
   let logger;
   let redisAvailable = false;
+  let validateRedisClientConnection;
   
   beforeAll(async () => {
+    // テスト用関数を取得
+    validateRedisClientConnection = __getValidateRedisClientConnectionForTesting();
     try {
       // CI環境のRedisに接続（短いタイムアウト）
       const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
