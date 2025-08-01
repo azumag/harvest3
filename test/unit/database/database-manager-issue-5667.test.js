@@ -289,8 +289,13 @@ describe('Issue #5667: Redis接続状態チェックでのundefined値処理修�
           )
         ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
 
+        // Issue #5653 修正後の新しい出力形式に対応
+        const expectedMessage = falsyValue === undefined 
+          ? 'ready=(undefined value)'
+          : `ready=${falsyValue}`;
+        
         expect(mockLogger.error).toHaveBeenCalledWith(
-          expect.stringContaining(`実行前接続チェック失敗: ready=${falsyValue}`)
+          expect.stringContaining(`実行前接続チェック失敗: ${expectedMessage}`)
         );
       }
     });
