@@ -91,23 +91,22 @@ describe('Issue #5653: Redis接続チェック失敗修正', () => {
     // PINGテストが失敗するようにモック設定
     mockRedisClient.ping.mockRejectedValue(new Error('Connection failed'));
     
-    try {
+    await expect(async () => {
       await validateRedisClientConnection(mockRedisClient, '実行前接続チェック', mockLogger);
-      fail('例外が発生すべきでした');
-    } catch (error) {
-      // エラーメッセージが出力されることを確認
-      expect(mockLogger.error).toHaveBeenCalled();
-      
-      // エラーログの内容を確認
-      const errorCall = mockLogger.error.mock.calls.find(call => 
-        call[0].includes('実行前接続チェック失敗')
-      );
-      
-      expect(errorCall).toBeDefined();
-      // 修正後は "ready=(undefined value)" と表示されることを確認
-      expect(errorCall[0]).toContain('ready=(undefined value)');
-      expect(errorCall[0]).toContain('open=(undefined value)');
-    }
+    }).rejects.toThrow();
+    
+    // エラーメッセージが出力されることを確認
+    expect(mockLogger.error).toHaveBeenCalled();
+    
+    // エラーログの内容を確認
+    const errorCall = mockLogger.error.mock.calls.find(call => 
+      call[0].includes('実行前接続チェック失敗')
+    );
+    
+    expect(errorCall).toBeDefined();
+    // 修正後は "ready=(undefined value)" と表示されることを確認
+    expect(errorCall[0]).toContain('ready=(undefined value)');
+    expect(errorCall[0]).toContain('open=(undefined value)');
   });
 
   test('formatConnectionStatus: プロパティが存在しない場合に適切なメッセージが表示される', async () => {
@@ -119,23 +118,22 @@ describe('Issue #5653: Redis接続チェック失敗修正', () => {
     
     const validateRedisClientConnection = DatabaseManager.__getValidateRedisClientConnectionForTesting();
     
-    try {
+    await expect(async () => {
       await validateRedisClientConnection(clientWithoutProperties, '実行前接続チェック', mockLogger);
-      fail('例外が発生すべきでした');
-    } catch (error) {
-      // エラーメッセージが出力されることを確認
-      expect(mockLogger.error).toHaveBeenCalled();
-      
-      // エラーログの内容を確認
-      const errorCall = mockLogger.error.mock.calls.find(call => 
-        call[0].includes('実行前接続チェック失敗')
-      );
-      
-      expect(errorCall).toBeDefined();
-      // プロパティが存在しない場合は "(undefined property)" と表示されることを確認
-      expect(errorCall[0]).toContain('ready=(undefined property)');
-      expect(errorCall[0]).toContain('open=(undefined property)');
-    }
+    }).rejects.toThrow();
+    
+    // エラーメッセージが出力されることを確認
+    expect(mockLogger.error).toHaveBeenCalled();
+    
+    // エラーログの内容を確認
+    const errorCall = mockLogger.error.mock.calls.find(call => 
+      call[0].includes('実行前接続チェック失敗')
+    );
+    
+    expect(errorCall).toBeDefined();
+    // プロパティが存在しない場合は "(undefined property)" と表示されることを確認
+    expect(errorCall[0]).toContain('ready=(undefined property)');
+    expect(errorCall[0]).toContain('open=(undefined property)');
   });
 
   test('formatConnectionStatus: 正常値の場合に適切なメッセージが表示される', async () => {
