@@ -154,7 +154,7 @@ describe('Issue #5755: Redis接続バリデーション統合テスト', () => {
       ).rejects.toThrow(/Redis Commit失敗/);
       
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('undefined テスト失敗: ready=undefined, open=undefined, status=connecting')
+        expect.stringContaining('undefined テスト失敗: ready=(undefined value), open=(undefined value), status=connecting')
       );
     });
   });
