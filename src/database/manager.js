@@ -699,9 +699,9 @@ async function validateRedisClientConnection(client, context, logger) {
    */
   function formatConnectionStatus(client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty) {
     const readyStatus = hasValidReadyValue ? `ready=${client.isReady}` : 
-                       hasReadyProperty ? `ready=${client.isReady}` : 'ready=(undefined property)';
+                       hasReadyProperty ? `ready=(undefined value)` : 'ready=(undefined property)';
     const openStatus = hasValidOpenValue ? `open=${client.isOpen}` : 
-                      hasOpenProperty ? `open=${client.isOpen}` : 'open=(undefined property)';
+                      hasOpenProperty ? `open=(undefined value)` : 'open=(undefined property)';
     const statusInfo = client?.status ? `, status=${client.status}` : '';
     return { readyStatus, openStatus, statusInfo };
   }
