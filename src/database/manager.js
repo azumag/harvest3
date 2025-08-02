@@ -698,9 +698,10 @@ async function validateRedisClientConnection(client, context, logger) {
    * DRY原則に従い、重複したエラーメッセージ生成ロジックを統一
    */
   function formatConnectionStatus(client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty) {
-    const readyStatus = hasValidReadyValue ? `ready=${client.isReady}` : 
+    // Issue #5687: 防御的プログラミング - undefined値の安全な表示
+    const readyStatus = hasValidReadyValue && client.isReady !== undefined ? `ready=${client.isReady}` : 
                        hasReadyProperty ? `ready=(undefined value)` : 'ready=(undefined property)';
-    const openStatus = hasValidOpenValue ? `open=${client.isOpen}` : 
+    const openStatus = hasValidOpenValue && client.isOpen !== undefined ? `open=${client.isOpen}` : 
                       hasOpenProperty ? `open=(undefined value)` : 'open=(undefined property)';
     const statusInfo = client?.status ? `, status=${client.status}` : '';
     return { readyStatus, openStatus, statusInfo };
@@ -2950,7 +2951,10 @@ async function executeRedisLockRelease(lockKey, lockValue) {
   try {
     // 接続状態の事前チェック
     if (!redisClient || !redisClient.isReady || !redisClient.isOpen) {
-      logger.error(`分散ロック解放失敗: Redis接続が無効 (ready: ${redisClient?.isReady}, open: ${redisClient?.isOpen})`);
+      // Issue #5687: undefined値の安全な表示
+      const readyValue = redisClient?.isReady !== undefined ? redisClient.isReady : '(undefined value)';
+      const openValue = redisClient?.isOpen !== undefined ? redisClient.isOpen : '(undefined value)';
+      logger.error(`分散ロック解放失敗: Redis接続が無効 (ready: ${readyValue}, open: ${openValue})`);
       return false;
     }
     
