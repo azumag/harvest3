@@ -722,8 +722,8 @@ async function validateRedisClientConnection(client, context, logger) {
     
     logger.warn(`[Redis Transaction] ${context}: プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`);
     
-    // Issue #5722: undefined値の場合は保守的にエラーとして扱う
-    // プロパティが存在しない場合のみstatus基準でフォールバック
+    // Issue #5651: Redis v4.x接続回復中のundefined状態を適切に処理
+    // undefinedプロパティがある場合、まずPINGテストで実際の接続状態を確認
     const hasUndefinedValues = (hasReadyProperty && client.isReady === undefined) || 
                               (hasOpenProperty && client.isOpen === undefined);
     
@@ -732,41 +732,62 @@ async function validateRedisClientConnection(client, context, logger) {
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
       
-      logger.warn(`[Redis Transaction] ${context}: プロパティがundefined - PINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
+      logger.info(`[Redis Transaction] ${context}: プロパティがundefined - PINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
       
-      // Issue #5704: undefinedプロパティでも実際のPINGテストで接続確認
+      // Issue #5651: undefinedプロパティの場合、まずPINGテストで接続確認を試行
       try {
-        const pingResult = await client.ping();
+        // タイムアウト付きPINGテストで実際の接続状態を確認
+        const pingPromise = client.ping();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('PING timeout')), 2000);
+        });
+        
+        const pingResult = await Promise.race([pingPromise, timeoutPromise]);
+        
         if (pingResult === 'PONG') {
           logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
           return { clientReady: true, clientOpen: true };
         } else {
-          logger.error(`[Redis Transaction] ${context}: PINGテスト失敗 - 応答: ${pingResult}`);
-          throw new Error(`PING応答異常: ${pingResult}`);
+          logger.warn(`[Redis Transaction] ${context}: PINGテスト応答異常 - 応答: ${pingResult}`);
+          // 異常な応答でもフォールバックを試行
         }
       } catch (pingError) {
-        // PINGテストも失敗した場合はフォールバッククライアントを試行
-        logger.warn(`[Redis Transaction] ${context}: PINGテスト失敗 (${pingError.message}) - フォールバッククライアントを試行`);
-        const redisDatabase = require('./redisDatabase');
-        const fallbackClient = redisDatabase.getClient();
-        
-        if (fallbackClient && fallbackClient !== client) {
-          logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト実行`);
-          try {
-            const fallbackPingResult = await fallbackClient.ping();
-            if (fallbackPingResult === 'PONG') {
-              logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト成功`);
-              // 呼び出し元でクライアント参照を更新できるよう、新しいクライアントを返す
-              throw new Error(`FALLBACK_CLIENT_AVAILABLE:${JSON.stringify({ newClient: 'available' })}`);
-            }
-          } catch (fallbackPingError) {
-            logger.error(`[Redis Transaction] ${context}: フォールバッククライアントでもPINGテスト失敗: ${fallbackPingError.message}`);
-          }
-        }
-        
-        logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
-        throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedで、PINGテストも失敗しました`);
+        logger.warn(`[Redis Transaction] ${context}: PINGテスト失敗 (${pingError.message}) - フォールバック確認中`);
+        // PINGテスト失敗でも即座にエラーとせず、フォールバックを試行
       }
+      
+      // Issue #5651: フォールバッククライアントの詳細チェック
+      const redisDatabase = require('./redisDatabase');
+      const fallbackClient = redisDatabase.getClient();
+      
+      if (fallbackClient && fallbackClient !== client) {
+        logger.info(`[Redis Transaction] ${context}: フォールバッククライアントで接続確認実行`);
+        try {
+          // フォールバッククライアントでもタイムアウト付きPINGテスト
+          const fallbackPingPromise = fallbackClient.ping();
+          const fallbackTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Fallback PING timeout')), 2000);
+          });
+          
+          const fallbackPingResult = await Promise.race([fallbackPingPromise, fallbackTimeoutPromise]);
+          
+          if (fallbackPingResult === 'PONG') {
+            logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト成功`);
+            // 呼び出し元でクライアント参照を更新できるよう、新しいクライアントを返す
+            throw new Error(`FALLBACK_CLIENT_AVAILABLE:${JSON.stringify({ newClient: 'available' })}`);
+          } else {
+            logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPING応答異常: ${fallbackPingResult}`);
+          }
+        } catch (fallbackPingError) {
+          logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPINGテスト失敗: ${fallbackPingError.message}`);
+        }
+      } else {
+        logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントが利用できません`);
+      }
+      
+      // Issue #5651: 全ての試行が失敗した場合のみエラーとする
+      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
+      throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedで、PINGテストも失敗しました`);
     }
     
     // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
