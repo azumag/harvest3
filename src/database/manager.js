@@ -779,6 +779,10 @@ async function validateRedisClientConnection(client, context, logger) {
             logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPING応答異常: ${fallbackPingResult}`);
           }
         } catch (fallbackPingError) {
+          // FALLBACK_CLIENT_AVAILABLEエラーは正常なケースなので再度スロー
+          if (fallbackPingError.message && fallbackPingError.message.startsWith('FALLBACK_CLIENT_AVAILABLE:')) {
+            throw fallbackPingError;
+          }
           logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPINGテスト失敗: ${fallbackPingError.message}`);
         }
       } else {

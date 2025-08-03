@@ -6,13 +6,18 @@
 // jest環境で統一
 jest.unmock('../../../src/database/manager');
 
+// redisDatabase をモック
+jest.mock('../../../src/database/redisDatabase', () => ({
+  getClient: jest.fn()
+}));
+
 // モジュールのパス調整
 const databaseManager = require('../../../src/database/manager');
+const redisDatabase = require('../../../src/database/redisDatabase');
 
 describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
   let mockLogger;
   let mockClient;
-  let mockRedisDatabase;
   let validateRedisClientConnection;
 
   beforeEach(() => {
@@ -35,13 +40,8 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
       ping: jest.fn().mockResolvedValue('PONG')
     };
 
-    // redisDatabase モック
-    mockRedisDatabase = {
-      getClient: jest.fn().mockReturnValue(mockClient)
-    };
-
-    // require のモック（jestスタイル）
-    jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
+    // redisDatabase のモック関数をリセット
+    redisDatabase.getClient.mockReturnValue(mockClient);
   });
 
   afterEach(() => {
@@ -49,17 +49,6 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
   });
 
   describe('undefinedプロパティの処理', () => {
-    // requireモック関数を直接作成
-    const mockRequire = jest.fn();
-    
-    beforeEach(() => {
-      mockRequire.mockImplementation((path) => {
-        if (path === './redisDatabase') {
-          return mockRedisDatabase;
-        }
-        return jest.requireActual(path);
-      });
-    });
     it('isReady/isOpenがundefinedでPINGテスト成功時、接続有効と判定すること', async () => {
       // Arrange
       mockClient.isReady = undefined;
@@ -86,7 +75,7 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
         isOpen: true,
         ping: jest.fn().mockResolvedValue('PONG')
       };
-      mockRedisDatabase.getClient.mockReturnValue(fallbackClient);
+      redisDatabase.getClient.mockReturnValue(fallbackClient);
 
       // Act & Assert
       try {
@@ -110,7 +99,7 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
       }));
 
       // フォールバッククライアントも無効
-      mockRedisDatabase.getClient.mockReturnValue(null);
+      redisDatabase.getClient.mockReturnValue(null);
 
       // Act & Assert
       try {
@@ -135,7 +124,7 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
           setTimeout(() => resolve('PONG'), 3000);
         }))
       };
-      mockRedisDatabase.getClient.mockReturnValue(fallbackClient);
+      redisDatabase.getClient.mockReturnValue(fallbackClient);
 
       // Act & Assert
       try {
@@ -158,7 +147,7 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
         isOpen: true,
         ping: jest.fn().mockResolvedValue('PONG')
       };
-      mockRedisDatabase.getClient.mockReturnValue(fallbackClient);
+      redisDatabase.getClient.mockReturnValue(fallbackClient);
 
       // Act & Assert
       try {
@@ -178,7 +167,7 @@ describe('Issue #5651: Redis接続undefinedプロパティ処理', () => {
       mockClient.ping.mockRejectedValue(new Error('PING失敗'));
       
       // 同一オブジェクトを返す
-      mockRedisDatabase.getClient.mockReturnValue(mockClient);
+      redisDatabase.getClient.mockReturnValue(mockClient);
 
       // Act & Assert
       try {
