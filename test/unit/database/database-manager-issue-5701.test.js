@@ -69,7 +69,10 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
   let databaseManager;
 
   beforeEach(() => {
-    // モックの初期化
+    // キャッシュクリアで独立性を保つ
+    jest.resetModules();
+    
+    // モックの初期化 - 毎回新しいインスタンスを作成
     mockLogger = {
       info: jest.fn(),
       warn: jest.fn(),
@@ -77,7 +80,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       debug: jest.fn()
     };
 
-    // 基本的なRedisクライアント
+    // 基本的なRedisクライアント - 毎回新しいインスタンスを作成
     mockRedisClient = {
       status: 'ready',
       serverInfo: { version: '6.2.0' },
@@ -93,7 +96,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       multi: jest.fn()
     };
 
-    // モックトランザクション
+    // モックトランザクション - 毎回新しいインスタンスを作成
     mockRedisTransaction = {
       client: mockRedisClient,
       exec: jest.fn().mockResolvedValue([
@@ -105,17 +108,24 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
 
     mockRedisClient.multi.mockReturnValue(mockRedisTransaction);
 
+    // mockRedisDatabase - 毎回新しいインスタンスを作成
     mockRedisDatabase = {
       getClient: jest.fn().mockReturnValue(mockRedisClient)
     };
 
-    // databaseManagerをrequire  
+    // databaseManagerをrequire - モックを再設定
     jest.doMock('../../../src/database/redisDatabase', () => mockRedisDatabase);
+    // キャッシュをクリアして新しいモック設定を確実に適用
+    delete require.cache[require.resolve('../../../src/database/manager')];
     databaseManager = require('../../../src/database/manager');
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    // モックの戻り値を基本状態にリセット
+    if (mockRedisDatabase && mockRedisDatabase.getClient && mockRedisClient) {
+      mockRedisDatabase.getClient.mockReturnValue(mockRedisClient);
+    }
   });
 
   describe('Redis v4.x プロパティ未定義状態の処理', () => {
@@ -170,17 +180,24 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       );
     });
 
-    test('statusがreadyでない場合はエラーになる', async () => {
+    test('z_statusがreadyでない場合はエラーになる', async () => {
       // Issue #5701: プロパティ未定義 + status異常の場合
       const clientWithBadStatus = {
         status: 'disconnected',
         ping: jest.fn().mockResolvedValue('PONG'),
         set: jest.fn().mockResolvedValue('OK'),
-        get: jest.fn().mockResolvedValue('test'),
+        get: jest.fn().mockImplementation((key) => {
+          if (key && key.includes('__tx_health_')) {
+            return Promise.resolve('tx_test');
+          }
+          return Promise.resolve('test');
+        }),
         del: jest.fn().mockResolvedValue(1),
         multi: jest.fn().mockReturnValue(mockRedisTransaction)
       };
       
+      // Issue #5702: フォールバッククライアントも無効な状態に設定する
+      mockRedisDatabase.getClient.mockReturnValue(clientWithBadStatus);
       mockRedisTransaction.client = clientWithBadStatus;
 
       const testTrade = {
@@ -199,10 +216,10 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
           testTrade,
           mockLogger
         )
-      ).rejects.toThrow('Redis Commit失敗: クライアントが実行可能状態ではありません');
+      ).rejects.toThrow('Redis Commit失敗: 全てのクライアントが実行可能状態ではありません');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('[Redis Transaction] 接続状態チェックエラー:')
+        expect.stringContaining('[Redis Transaction] フォールバッククライアントも無効な状態です')
       );
     });
 

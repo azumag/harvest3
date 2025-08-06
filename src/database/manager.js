@@ -62,19 +62,49 @@ const REDIS_ERROR_CODES = {
 /**
  * Redisクライアントのプロパティ有効性をチェックするヘルパー関数
  * Issue #5726: DRY原則適用 - 重複するプロパティチェックロジックの統一
+ * Issue #5702: Redis v4.x undefined状態への対応強化
  * @param {Object} client - チェック対象のRedisクライアント
  * @returns {boolean} プロパティが有効かどうか
  */
 function hasValidClientProperties(client) {
-  return client && 
-         ('isReady' in client && client.isReady !== undefined) &&
-         ('isOpen' in client && client.isOpen !== undefined);
+  if (!client) {
+    return false;
+  }
+  
+  // Issue #5702: より厳密なプロパティ存在チェックとundefined値の検証
+  const hasReadyProperty = 'isReady' in client;
+  const hasOpenProperty = 'isOpen' in client;
+  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined;
+  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined;
+  
+  // Issue #5702: statusプロパティを代替として利用可能かもチェック
+  const hasStatusProperty = 'status' in client && client.status !== undefined;
+  
+  // プロパティが有効、または少なくともstatusプロパティが利用可能
+  return (hasValidReadyValue && hasValidOpenValue) || 
+         (hasStatusProperty && (client.status === 'ready' || client.status === 'connected'));
 }
 
 // Issue #4126: マジックナンバーの定数化
+const PING_TIMEOUT_MS = 2000;
 const INVALID_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F-\x9F]/g;
 const INVALID_STRING_VALUES = ['null', 'undefined', '', '[object Object]'];
+
+/**
+ * PINGテスト成功後にstatus値を検証すべきかどうかを判定する
+ * Issue #5702: 複雑な条件式の可読性向上
+ * @param {Object} client - Redisクライアント
+ * @param {boolean} hasValidReady - isReadyプロパティが有効かどうか
+ * @param {boolean} hasValidOpen - isOpenプロパティが有効かどうか
+ * @returns {boolean} status値を検証すべき場合はtrue
+ */
+function shouldValidateStatusAfterPingTest(client, hasValidReady, hasValidOpen) {
+  const hasPropertiesUndefined = !hasValidReady || !hasValidOpen;
+  const hasInvalidStatus = client.status && 
+    !['ready', 'connected'].includes(client.status);
+  return hasPropertiesUndefined && hasInvalidStatus;
+}
 
 /**
  * Issue #4126: 数値バリデーションの共通化
@@ -668,6 +698,7 @@ const logger = new Logger('DatabaseManager');
 /**
  * Issue #5667: Redis接続状態を検証するヘルパー関数（DRY原則適用）
  * Issue #5701: Redis v4.x undefined状態の堅牢な処理追加
+ * Issue #5702: Redis接続エラーハンドリングの強化
  * @param {Object} client - Redis client
  * @param {string} context - エラー時のコンテキスト情報
  * @param {Object} logger - ログ出力用
@@ -681,6 +712,21 @@ async function validateRedisClientConnection(client, context, logger) {
     logger.error(`[Redis Transaction] ${context}失敗: クライアントオブジェクトがnull/undefined`);
     throw new Error(`Redis Commit失敗: ${context}時にクライアントが存在しません`);  
   }
+
+  // Issue #5702: より詳細な診断情報の記録
+  const clientDiagnostics = {
+    hasClient: !!client,
+    hasIsReadyProperty: 'isReady' in client,
+    hasIsOpenProperty: 'isOpen' in client,
+    hasStatusProperty: 'status' in client,
+    isReadyValue: client.isReady,
+    isOpenValue: client.isOpen,
+    statusValue: client.status,
+    clientType: client.constructor?.name || 'unknown',
+    timestamp: new Date().toISOString()
+  };
+  
+  logger.debug(`[Redis Transaction] ${context}: クライアント診断 - ${JSON.stringify(clientDiagnostics)}`);
 
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
   const hasReadyProperty = 'isReady' in client;
@@ -708,6 +754,7 @@ async function validateRedisClientConnection(client, context, logger) {
   }
 
   // Issue #5701, #5722: プロパティが未定義、または値がundefinedの場合の特別処理
+  logger.debug(`[Redis Transaction] ${context}: hasValidReadyValue=${hasValidReadyValue}, hasValidOpenValue=${hasValidOpenValue}`);
   if (!hasValidReadyValue || !hasValidOpenValue) {
     const diagnosticInfo = {
       hasReadyProperty,
@@ -739,14 +786,21 @@ async function validateRedisClientConnection(client, context, logger) {
         // タイムアウト付きPINGテストで実際の接続状態を確認
         const pingPromise = client.ping();
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('PING timeout')), 2000);
+          setTimeout(() => reject(new Error('PING timeout')), PING_TIMEOUT_MS);
         });
         
         const pingResult = await Promise.race([pingPromise, timeoutPromise]);
         
         if (pingResult === 'PONG') {
-          logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
-          return { clientReady: true, clientOpen: true };
+          // Issue #5702: PINGが成功してもstatusをチェックする必要がある
+          const hasValidStatus = !client.status || client.status === 'ready' || client.status === 'connected';
+          if (hasValidStatus) {
+            logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
+            return { clientReady: true, clientOpen: true };
+          } else {
+            logger.warn(`[Redis Transaction] ${context}: PINGテスト成功だがstatus異常 (status=${client.status})`);
+            // statusが異常な場合は続行せずエラーとする
+          }
         } else {
           logger.warn(`[Redis Transaction] ${context}: PINGテスト応答異常 - 応答: ${pingResult}`);
           // 異常な応答でもフォールバックを試行
@@ -766,7 +820,7 @@ async function validateRedisClientConnection(client, context, logger) {
           // フォールバッククライアントでもタイムアウト付きPINGテスト
           const fallbackPingPromise = fallbackClient.ping();
           const fallbackTimeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Fallback PING timeout')), 2000);
+            setTimeout(() => reject(new Error('Fallback PING timeout')), PING_TIMEOUT_MS);
           });
           
           const fallbackPingResult = await Promise.race([fallbackPingPromise, fallbackTimeoutPromise]);
@@ -796,6 +850,7 @@ async function validateRedisClientConnection(client, context, logger) {
     
     // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
+    logger.debug(`[Redis Transaction] ${context}: statusBasedCheck=${statusBasedCheck}, status=${client.status}`);
     if (!statusBasedCheck) {
       const { readyStatus, openStatus, statusInfo } = formatConnectionStatus(
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
@@ -868,16 +923,33 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
   // Issue #5726: 接続回復後のクライアント参照不整合対策
+  // Issue #5702: Redis v4.x undefined状態の堅牢な処理の追加改善
   let client = redisTransaction.client;
   if (!client) {
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: clientがnull/undefined`);
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   
+  // Issue #5702: より堅牢なクライアント状態診断情報の記録
+  const initialClientState = {
+    hasClient: !!client,
+    hasIsReadyProperty: 'isReady' in client,
+    hasIsOpenProperty: 'isOpen' in client,
+    isReadyValue: client.isReady,
+    isOpenValue: client.isOpen,
+    clientStatus: client.status,
+    timestamp: new Date().toISOString()
+  };
+  
+  logger.debug(`[Redis Transaction] 実行前クライアント状態: ${JSON.stringify(initialClientState)}`);
+  
   // Issue #5726: client.isReady/isOpenがundefinedの場合の追加チェック
   // 接続回復プロセス中にトランザクションオブジェクトの参照が古くなる可能性への対処
   if (!hasValidClientProperties(client)) {
     logger.warn(`[Redis Transaction] transaction.clientの接続プロパティが無効 - 代替チェックを実行`);
+    
+    // Issue #5702: エラー状況の詳細な記録（デバッグ用）
+    logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
     
     // redisTransactionから実際のRedisクライアントインスタンスを取得する代替手段
     const fallbackClient = redisDatabase.getClient();
@@ -886,6 +958,12 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     if (fallbackClient && hasValidClientProperties(fallbackClient) && fallbackClient !== client) {
       logger.info(`[Redis Transaction] フォールバッククライアントを使用`);
       client = fallbackClient;
+    } else if (!fallbackClient) {
+      logger.error(`[Redis Transaction] フォールバッククライアントが取得できません`);
+      throw new Error('Redis Commit失敗: フォールバッククライアントが利用できません');
+    } else if (!hasValidClientProperties(fallbackClient)) {
+      logger.error(`[Redis Transaction] フォールバッククライアントも無効な状態です`);
+      throw new Error('Redis Commit失敗: 全てのクライアントが実行可能状態ではありません');
     }
   }
   
@@ -951,6 +1029,15 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       }
       
       logger.debug(`[Redis Transaction] 接続テスト成功: ping=${pingDuration}ms, operation=${operationDuration}ms`);
+      
+      // Issue #5702: PINGテスト成功後でもstatus値を再確認
+      // プロパティ未定義の場合、statusが有効でない限りエラーとする
+      const currentHasValidReadyValue = 'isReady' in client && client.isReady !== undefined;
+      const currentHasValidOpenValue = 'isOpen' in client && client.isOpen !== undefined;
+      if (shouldValidateStatusAfterPingTest(client, currentHasValidReadyValue, currentHasValidOpenValue)) {
+        logger.error(`[Redis Transaction] 接続実用性テスト: PINGテスト成功もstatus値が無効 (status=${client.status})`);
+        throw new Error(`接続テスト失敗: status値が無効です (status=${client.status})`);
+      }
       
     } catch (testError) {
       logger.error(`[Redis Transaction] 接続実用性テスト失敗: ${testError.message}`);
