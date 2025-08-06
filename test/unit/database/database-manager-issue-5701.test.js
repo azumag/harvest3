@@ -69,6 +69,9 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
   let databaseManager;
 
   beforeEach(() => {
+    // キャッシュクリアで独立性を保つ
+    jest.resetModules();
+    
     // モックの初期化 - 毎回新しいインスタンスを作成
     mockLogger = {
       info: jest.fn(),
@@ -183,7 +186,12 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
         status: 'disconnected',
         ping: jest.fn().mockResolvedValue('PONG'),
         set: jest.fn().mockResolvedValue('OK'),
-        get: jest.fn().mockResolvedValue('test'),
+        get: jest.fn().mockImplementation((key) => {
+          if (key && key.includes('__tx_health_')) {
+            return Promise.resolve('tx_test');
+          }
+          return Promise.resolve('test');
+        }),
         del: jest.fn().mockResolvedValue(1),
         multi: jest.fn().mockReturnValue(mockRedisTransaction)
       };

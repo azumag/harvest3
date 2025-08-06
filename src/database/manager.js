@@ -1014,6 +1014,16 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
       
       logger.debug(`[Redis Transaction] 接続テスト成功: ping=${pingDuration}ms, operation=${operationDuration}ms`);
       
+      // Issue #5702: PINGテスト成功後でもstatus値を再確認
+      // プロパティ未定義の場合、statusが有効でない限りエラーとする
+      const currentHasValidReadyValue = 'isReady' in client && client.isReady !== undefined;
+      const currentHasValidOpenValue = 'isOpen' in client && client.isOpen !== undefined;
+      if ((!currentHasValidReadyValue || !currentHasValidOpenValue) && client.status && 
+          !(client.status === 'ready' || client.status === 'connected')) {
+        logger.error(`[Redis Transaction] ${context}: PINGテスト成功もstatus値が無効 (status=${client.status})`);
+        throw new Error(`接続テスト失敗: status値が無効です (status=${client.status})`);
+      }
+      
     } catch (testError) {
       logger.error(`[Redis Transaction] 接続実用性テスト失敗: ${testError.message}`);
       
