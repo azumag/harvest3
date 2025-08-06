@@ -738,6 +738,7 @@ async function validateRedisClientConnection(client, context, logger) {
   }
 
   // Issue #5701, #5722: プロパティが未定義、または値がundefinedの場合の特別処理
+  logger.debug(`[Redis Transaction] ${context}: hasValidReadyValue=${hasValidReadyValue}, hasValidOpenValue=${hasValidOpenValue}`);
   if (!hasValidReadyValue || !hasValidOpenValue) {
     const diagnosticInfo = {
       hasReadyProperty,
@@ -775,8 +776,15 @@ async function validateRedisClientConnection(client, context, logger) {
         const pingResult = await Promise.race([pingPromise, timeoutPromise]);
         
         if (pingResult === 'PONG') {
-          logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
-          return { clientReady: true, clientOpen: true };
+          // Issue #5702: PINGが成功してもstatusをチェックする必要がある
+          const hasValidStatus = !client.status || client.status === 'ready' || client.status === 'connected';
+          if (hasValidStatus) {
+            logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
+            return { clientReady: true, clientOpen: true };
+          } else {
+            logger.warn(`[Redis Transaction] ${context}: PINGテスト成功だがstatus異常 (status=${client.status})`);
+            // statusが異常な場合は続行せずエラーとする
+          }
         } else {
           logger.warn(`[Redis Transaction] ${context}: PINGテスト応答異常 - 応答: ${pingResult}`);
           // 異常な応答でもフォールバックを試行
@@ -826,6 +834,7 @@ async function validateRedisClientConnection(client, context, logger) {
     
     // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
+    logger.debug(`[Redis Transaction] ${context}: statusBasedCheck=${statusBasedCheck}, status=${client.status}`);
     if (!statusBasedCheck) {
       const { readyStatus, openStatus, statusInfo } = formatConnectionStatus(
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
