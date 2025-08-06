@@ -62,13 +62,27 @@ const REDIS_ERROR_CODES = {
 /**
  * Redisクライアントのプロパティ有効性をチェックするヘルパー関数
  * Issue #5726: DRY原則適用 - 重複するプロパティチェックロジックの統一
+ * Issue #5702: Redis v4.x undefined状態への対応強化
  * @param {Object} client - チェック対象のRedisクライアント
  * @returns {boolean} プロパティが有効かどうか
  */
 function hasValidClientProperties(client) {
-  return client && 
-         ('isReady' in client && client.isReady !== undefined) &&
-         ('isOpen' in client && client.isOpen !== undefined);
+  if (!client) {
+    return false;
+  }
+  
+  // Issue #5702: より厳密なプロパティ存在チェックとundefined値の検証
+  const hasReadyProperty = 'isReady' in client;
+  const hasOpenProperty = 'isOpen' in client;
+  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined;
+  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined;
+  
+  // Issue #5702: statusプロパティを代替として利用可能かもチェック
+  const hasStatusProperty = 'status' in client && client.status !== undefined;
+  
+  // プロパティが有効、または少なくともstatusプロパティが利用可能
+  return (hasValidReadyValue && hasValidOpenValue) || 
+         (hasStatusProperty && (client.status === 'ready' || client.status === 'connected'));
 }
 
 // Issue #4126: マジックナンバーの定数化
@@ -668,6 +682,7 @@ const logger = new Logger('DatabaseManager');
 /**
  * Issue #5667: Redis接続状態を検証するヘルパー関数（DRY原則適用）
  * Issue #5701: Redis v4.x undefined状態の堅牢な処理追加
+ * Issue #5702: Redis接続エラーハンドリングの強化
  * @param {Object} client - Redis client
  * @param {string} context - エラー時のコンテキスト情報
  * @param {Object} logger - ログ出力用
@@ -681,6 +696,21 @@ async function validateRedisClientConnection(client, context, logger) {
     logger.error(`[Redis Transaction] ${context}失敗: クライアントオブジェクトがnull/undefined`);
     throw new Error(`Redis Commit失敗: ${context}時にクライアントが存在しません`);  
   }
+
+  // Issue #5702: より詳細な診断情報の記録
+  const clientDiagnostics = {
+    hasClient: !!client,
+    hasIsReadyProperty: 'isReady' in client,
+    hasIsOpenProperty: 'isOpen' in client,
+    hasStatusProperty: 'status' in client,
+    isReadyValue: client.isReady,
+    isOpenValue: client.isOpen,
+    statusValue: client.status,
+    clientType: client.constructor?.name || 'unknown',
+    timestamp: new Date().toISOString()
+  };
+  
+  logger.debug(`[Redis Transaction] ${context}: クライアント診断 - ${JSON.stringify(clientDiagnostics)}`);
 
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
   const hasReadyProperty = 'isReady' in client;
@@ -868,16 +898,33 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   
   // Issue #4941: 強化されたトランザクション実行直前の接続検証
   // Issue #5726: 接続回復後のクライアント参照不整合対策
+  // Issue #5702: Redis v4.x undefined状態の堅牢な処理の追加改善
   let client = redisTransaction.client;
   if (!client) {
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: clientがnull/undefined`);
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   
+  // Issue #5702: より堅牢なクライアント状態診断情報の記録
+  const initialClientState = {
+    hasClient: !!client,
+    hasIsReadyProperty: 'isReady' in client,
+    hasIsOpenProperty: 'isOpen' in client,
+    isReadyValue: client.isReady,
+    isOpenValue: client.isOpen,
+    clientStatus: client.status,
+    timestamp: new Date().toISOString()
+  };
+  
+  logger.debug(`[Redis Transaction] 実行前クライアント状態: ${JSON.stringify(initialClientState)}`);
+  
   // Issue #5726: client.isReady/isOpenがundefinedの場合の追加チェック
   // 接続回復プロセス中にトランザクションオブジェクトの参照が古くなる可能性への対処
   if (!hasValidClientProperties(client)) {
     logger.warn(`[Redis Transaction] transaction.clientの接続プロパティが無効 - 代替チェックを実行`);
+    
+    // Issue #5702: エラー状況の詳細な記録（デバッグ用）
+    logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
     
     // redisTransactionから実際のRedisクライアントインスタンスを取得する代替手段
     const fallbackClient = redisDatabase.getClient();
@@ -886,6 +933,12 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     if (fallbackClient && hasValidClientProperties(fallbackClient) && fallbackClient !== client) {
       logger.info(`[Redis Transaction] フォールバッククライアントを使用`);
       client = fallbackClient;
+    } else if (!fallbackClient) {
+      logger.error(`[Redis Transaction] フォールバッククライアントが取得できません`);
+      throw new Error('Redis Commit失敗: フォールバッククライアントが利用できません');
+    } else if (!hasValidClientProperties(fallbackClient)) {
+      logger.error(`[Redis Transaction] フォールバッククライアントも無効な状態です`);
+      throw new Error('Redis Commit失敗: 全てのクライアントが実行可能状態ではありません');
     }
   }
   
