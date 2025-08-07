@@ -93,8 +93,6 @@ function hasValidClientProperties(client) {
     (client.connectionStatus === 'connected') ||
     // 内部接続状態プロパティ（一部のRedisライブラリで利用）
     (client._client && (client._client.connected === true || client._client.ready === true)) ||
-    // コネクションプールの状態
-    (client.connector && client.connector.status === 'ready') ||
     // Issue #5643: ログに記録されている raw プロパティをチェック（実際の接続状態）
     // Redis内部のraw状態プロパティ（undefinedではなく実際のboolean値）
     (client.socket && client.socket.readable === true && client.socket.writable === true) ||
