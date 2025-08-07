@@ -80,9 +80,29 @@ function hasValidClientProperties(client) {
   // Issue #5702: statusプロパティを代替として利用可能かもチェック
   const hasStatusProperty = 'status' in client && client.status !== undefined;
   
-  // プロパティが有効、または少なくともstatusプロパティが利用可能
-  return (hasValidReadyValue && hasValidOpenValue) || 
-         (hasStatusProperty && (client.status === 'ready' || client.status === 'connected'));
+  // Issue #5643: 接続状態の追加検証 - Redis v4.xで発生するundefined状態への対処
+  // 基本プロパティが有効、またはstatusが有効、または接続関連プロパティが有効
+  const hasValidBasicProperties = hasValidReadyValue && hasValidOpenValue;
+  const hasValidStatus = hasStatusProperty && (client.status === 'ready' || client.status === 'connected');
+  
+  // Issue #5643: Redis接続の代替検証 - より多くの接続指標をチェック
+  const hasAlternativeConnectionIndicators = (
+    // 標準的な接続プロパティ
+    (client.connected === true) ||
+    // Redis v4.x代替プロパティ
+    (client.connectionStatus === 'connected') ||
+    // 内部接続状態プロパティ（一部のRedisライブラリで利用）
+    (client._client && (client._client.connected === true || client._client.ready === true)) ||
+    // コネクションプールの状態
+    (client.connector && client.connector.status === 'ready') ||
+    // Issue #5643: ログに記録されている raw プロパティをチェック（実際の接続状態）
+    // Redis内部のraw状態プロパティ（undefinedではなく実際のboolean値）
+    (client.socket && client.socket.readable === true && client.socket.writable === true) ||
+    // Redis接続のstream状態
+    (client.stream && client.stream.readable === true && client.stream.writable === true)
+  );
+  
+  return hasValidBasicProperties || hasValidStatus || hasAlternativeConnectionIndicators;
 }
 
 // Issue #4126: マジックナンバーの定数化
@@ -779,9 +799,23 @@ async function validateRedisClientConnection(client, context, logger) {
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
       
-      logger.info(`[Redis Transaction] ${context}: プロパティがundefined - PINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
+      logger.info(`[Redis Transaction] ${context}: プロパティがundefined - 代替接続指標とPINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
       
-      // Issue #5651: undefinedプロパティの場合、まずPINGテストで接続確認を試行
+      // Issue #5643: まず代替接続指標をチェックしてPINGテストを回避できるかを確認
+      const hasAlternativeConnection = (
+        (client.socket && client.socket.readable === true && client.socket.writable === true) ||
+        (client.stream && client.stream.readable === true && client.stream.writable === true) ||
+        (client._client && (client._client.connected === true || client._client.ready === true)) ||
+        (client.connected === true) ||
+        (client.connectionStatus === 'connected')
+      );
+      
+      if (hasAlternativeConnection) {
+        logger.info(`[Redis Transaction] ${context}: 代替接続指標で接続有効を確認 - PINGテストをスキップ`);
+        return { clientReady: true, clientOpen: true };
+      }
+      
+      // Issue #5651: 代替接続指標でも確認できない場合、PINGテストで接続確認を試行
       try {
         // タイムアウト付きPINGテストで実際の接続状態を確認
         const pingPromise = client.ping();
@@ -946,7 +980,31 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
   // Issue #5726: client.isReady/isOpenがundefinedの場合の追加チェック
   // 接続回復プロセス中にトランザクションオブジェクトの参照が古くなる可能性への対処
   if (!hasValidClientProperties(client)) {
+    // Issue #5643: 詳細な診断情報を記録してデバッグを支援
+    const connectionDiagnostics = {
+      basicProperties: {
+        isReady: client.isReady,
+        isOpen: client.isOpen,
+        status: client.status
+      },
+      alternativeIndicators: {
+        connected: client.connected,
+        connectionStatus: client.connectionStatus,
+        hasSocket: !!client.socket,
+        socketReadable: client.socket?.readable,
+        socketWritable: client.socket?.writable,
+        hasStream: !!client.stream,
+        streamReadable: client.stream?.readable,
+        streamWritable: client.stream?.writable,
+        hasInternalClient: !!client._client,
+        internalClientConnected: client._client?.connected,
+        internalClientReady: client._client?.ready
+      },
+      timestamp: new Date().toISOString()
+    };
+    
     logger.warn(`[Redis Transaction] transaction.clientの接続プロパティが無効 - 代替チェックを実行`);
+    logger.info(`[Redis Transaction] 接続診断情報: ${JSON.stringify(connectionDiagnostics)}`);
     
     // Issue #5702: エラー状況の詳細な記録（デバッグ用）
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
