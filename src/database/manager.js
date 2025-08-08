@@ -1005,7 +1005,10 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     logger.info(`[Redis Transaction] 接続診断情報: ${JSON.stringify(connectionDiagnostics)}`);
     
     // Issue #5702: エラー状況の詳細な記録（デバッグ用）
-    logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${client.isReady}, open=${client.isOpen}`);
+    // Issue #5696: undefined値の適切な表示
+    const readyDisplay = client.isReady === undefined ? '(undefined value)' : client.isReady;
+    const openDisplay = client.isOpen === undefined ? '(undefined value)' : client.isOpen;
+    logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${readyDisplay}, open=${openDisplay}`);
     
     // redisTransactionから実際のRedisクライアントインスタンスを取得する代替手段
     const fallbackClient = redisDatabase.getClient();
