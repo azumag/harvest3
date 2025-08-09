@@ -86,6 +86,7 @@ function hasValidClientProperties(client) {
   const hasValidStatus = hasStatusProperty && (client.status === 'ready' || client.status === 'connected');
   
   // Issue #5643: Redis接続の代替検証 - より多くの接続指標をチェック
+  // Issue #5732: より厳密な代替接続指標の検証を追加
   const hasAlternativeConnectionIndicators = (
     // 標準的な接続プロパティ
     (client.connected === true) ||
@@ -97,10 +98,22 @@ function hasValidClientProperties(client) {
     // Redis内部のraw状態プロパティ（undefinedではなく実際のboolean値）
     (client.socket && client.socket.readable === true && client.socket.writable === true) ||
     // Redis接続のstream状態
-    (client.stream && client.stream.readable === true && client.stream.writable === true)
+    (client.stream && client.stream.readable === true && client.stream.writable === true) ||
+    // Issue #5732: 追加の接続状態指標をチェック
+    (client.commandQueue && typeof client.commandQueue.length === 'number' && client.commandQueue.length >= 0) ||
+    // Redis v5+ のconnectionName や connectionオブジェクト
+    (client.connection && typeof client.connection === 'object' && client.connection.readyState === 'open')
   );
-  
-  return hasValidBasicProperties || hasValidStatus || hasAlternativeConnectionIndicators;
+
+  // Issue #5732: より柔軟な接続状態判定 - 一つでも有効であれば接続可能とする
+  // ただし、明示的にfalseが設定されている場合は無効として扱う
+  const hasExplicitlyInvalidState = (
+    (hasReadyProperty && client.isReady === false) ||
+    (hasOpenProperty && client.isOpen === false) ||
+    (hasStatusProperty && client.status && ['disconnected', 'error', 'closed'].includes(client.status))
+  );
+
+  return !hasExplicitlyInvalidState && (hasValidBasicProperties || hasValidStatus || hasAlternativeConnectionIndicators);
 }
 
 // Issue #4126: マジックナンバーの定数化
@@ -800,21 +813,45 @@ async function validateRedisClientConnection(client, context, logger) {
       logger.info(`[Redis Transaction] ${context}: プロパティがundefined - 代替接続指標とPINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
       
       // Issue #5643: まず代替接続指標をチェックしてPINGテストを回避できるかを確認
+      // Issue #5732: 代替接続指標の拡張と堅牢性向上
       const hasAlternativeConnection = (
         (client.socket && client.socket.readable === true && client.socket.writable === true) ||
         (client.stream && client.stream.readable === true && client.stream.writable === true) ||
         (client._client && (client._client.connected === true || client._client.ready === true)) ||
         (client.connected === true) ||
-        (client.connectionStatus === 'connected')
+        (client.connectionStatus === 'connected') ||
+        // Issue #5732: 追加の接続状態指標
+        (client.commandQueue && typeof client.commandQueue.length === 'number' && client.commandQueue.length >= 0) ||
+        (client.connection && typeof client.connection === 'object' && client.connection.readyState === 'open')
       );
       
-      if (hasAlternativeConnection) {
+      // Issue #5732: 明示的な切断状態の検証を追加
+      const hasExplicitDisconnection = (
+        (hasReadyProperty && client.isReady === false) ||
+        (hasOpenProperty && client.isOpen === false) ||
+        (client.status && ['disconnected', 'error', 'closed'].includes(client.status)) ||
+        (client.socket && (client.socket.readable === false || client.socket.writable === false)) ||
+        (client.stream && (client.stream.readable === false || client.stream.writable === false))
+      );
+      
+      // Issue #5732: 明示的切断状態がある場合は接続無効として扱う
+      if (hasExplicitDisconnection) {
+        logger.warn(`[Redis Transaction] ${context}: 明示的な切断状態を検出 - 接続無効`);
+        // フォールバッククライアントの確認に進む（以降の処理に委ねる）
+      } else if (hasAlternativeConnection) {
         logger.info(`[Redis Transaction] ${context}: 代替接続指標で接続有効を確認 - PINGテストをスキップ`);
         return { clientReady: true, clientOpen: true };
       }
       
+      // Issue #5732: PINGテストの前により軽量な接続確認を実行
       // Issue #5651: 代替接続指標でも確認できない場合、PINGテストで接続確認を試行
       try {
+        // Issue #5732: まず軽量な接続確認を実行（client.pingが存在し呼び出し可能かチェック）
+        if (typeof client.ping !== 'function') {
+          logger.warn(`[Redis Transaction] ${context}: pingメソッドが利用できません - フォールバッククライアント確認`);
+          throw new Error('PING method not available');
+        }
+        
         // タイムアウト付きPINGテストで実際の接続状態を確認
         const pingPromise = client.ping();
         const timeoutPromise = new Promise((_, reject) => {
@@ -1010,7 +1047,11 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     const openDisplay = client.isOpen === undefined ? '(undefined value)' : client.isOpen;
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${readyDisplay}, open=${openDisplay}`);
     
+    // Issue #5732: 詳細な診断情報を追加
+    logger.info(`[Redis Transaction] 接続診断情報の詳細記録: ${JSON.stringify(connectionDiagnostics)}`);
+    
     // redisTransactionから実際のRedisクライアントインスタンスを取得する代替手段
+    const redisDatabase = require('./redisDatabase');
     const fallbackClient = redisDatabase.getClient();
     
     // Issue #5726: KISS原則適用 - フォールバック条件の簡素化
