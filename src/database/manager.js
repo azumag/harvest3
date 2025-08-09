@@ -745,19 +745,22 @@ async function validateRedisClientConnection(client, context, logger) {
   }
 
   // Issue #5702: より詳細な診断情報の記録
-  const clientDiagnostics = {
-    hasClient: !!client,
-    hasIsReadyProperty: 'isReady' in client,
-    hasIsOpenProperty: 'isOpen' in client,
-    hasStatusProperty: 'status' in client,
-    isReadyValue: client.isReady,
-    isOpenValue: client.isOpen,
-    statusValue: client.status,
-    clientType: client.constructor?.name || 'unknown',
-    timestamp: new Date().toISOString()
-  };
-  
-  logger.debug(`[Redis Transaction] ${context}: クライアント診断 - ${JSON.stringify(clientDiagnostics)}`);
+  // Issue #5769: パフォーマンス最適化 - debug未有効時の診断情報生成コストを削減
+  if (logger.isDebugEnabled?.() !== false) {
+    const clientDiagnostics = {
+      hasClient: !!client,
+      hasIsReadyProperty: 'isReady' in client,
+      hasIsOpenProperty: 'isOpen' in client,
+      hasStatusProperty: 'status' in client,
+      isReadyValue: client.isReady,
+      isOpenValue: client.isOpen,
+      statusValue: client.status,
+      clientType: client.constructor?.name || 'unknown',
+      timestamp: new Date().toISOString()
+    };
+    
+    logger.debug(`[Redis Transaction] ${context}: クライアント診断 - ${JSON.stringify(clientDiagnostics)}`);
+  }
 
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
   const hasReadyProperty = 'isReady' in client;
