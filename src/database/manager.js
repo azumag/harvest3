@@ -72,10 +72,11 @@ function hasValidClientProperties(client) {
   }
   
   // Issue #5702: より厳密なプロパティ存在チェックとundefined値の検証
+  // Issue #5689: 文字列"undefined"も無効値として扱う
   const hasReadyProperty = 'isReady' in client;
   const hasOpenProperty = 'isOpen' in client;
-  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined;
-  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined;
+  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined && client.isReady !== 'undefined';
+  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined && client.isOpen !== 'undefined';
   
   // Issue #5702: statusプロパティを代替として利用可能かもチェック
   const hasStatusProperty = 'status' in client && client.status !== undefined;
@@ -767,8 +768,9 @@ async function validateRedisClientConnection(client, context, logger) {
   const hasOpenProperty = 'isOpen' in client;
   
   // Issue #5722: undefined値も未定義として扱う - プロパティが存在してもundefinedなら無効
-  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined;
-  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined;
+  // Issue #5689: 文字列"undefined"も無効値として扱う
+  const hasValidReadyValue = hasReadyProperty && client.isReady !== undefined && client.isReady !== 'undefined';
+  const hasValidOpenValue = hasOpenProperty && client.isOpen !== undefined && client.isOpen !== 'undefined';
   
   const clientReady = Boolean(client.isReady);
   const clientOpen = Boolean(client.isOpen);
@@ -779,9 +781,12 @@ async function validateRedisClientConnection(client, context, logger) {
    */
   function formatConnectionStatus(client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty) {
     // Issue #5687: 防御的プログラミング - undefined値の安全な表示
-    const readyStatus = hasValidReadyValue && client.isReady !== undefined ? `ready=${client.isReady}` : 
+    // Issue #5689: 文字列"undefined"も適切に処理
+    const readyStatus = hasValidReadyValue && client.isReady !== undefined && client.isReady !== 'undefined' ? 
+                       `ready=${client.isReady}` : 
                        hasReadyProperty ? `ready=(undefined value)` : 'ready=(undefined property)';
-    const openStatus = hasValidOpenValue && client.isOpen !== undefined ? `open=${client.isOpen}` : 
+    const openStatus = hasValidOpenValue && client.isOpen !== undefined && client.isOpen !== 'undefined' ? 
+                      `open=${client.isOpen}` : 
                       hasOpenProperty ? `open=(undefined value)` : 'open=(undefined property)';
     const statusInfo = client?.status ? `, status=${client.status}` : '';
     return { readyStatus, openStatus, statusInfo };
@@ -1046,8 +1051,11 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     
     // Issue #5702: エラー状況の詳細な記録（デバッグ用）
     // Issue #5696: undefined値の適切な表示
-    const readyDisplay = client.isReady === undefined ? '(undefined value)' : client.isReady;
-    const openDisplay = client.isOpen === undefined ? '(undefined value)' : client.isOpen;
+    // Issue #5689: 文字列"undefined"も適切に検出・表示する
+    const readyDisplay = (client.isReady === undefined || client.isReady === 'undefined') ? 
+      '(undefined value)' : client.isReady;
+    const openDisplay = (client.isOpen === undefined || client.isOpen === 'undefined') ? 
+      '(undefined value)' : client.isOpen;
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${readyDisplay}, open=${openDisplay}`);
     
     // Issue #5732: 詳細な診断情報を追加
@@ -4587,5 +4595,7 @@ module.exports = {
   shouldRecoverFromNullUndefinedErrors, // Issue #4932: null/undefined エラー検出機能
   parseRedisResult, // Issue #5515: Redis結果解析ヘルパー関数
   // Issue #5661: テスト用のヘルパー関数
-  __getValidateRedisClientConnectionForTesting: function() { return validateRedisClientConnection; }
+  __getValidateRedisClientConnectionForTesting: function() { return validateRedisClientConnection; },
+  // Issue #5689: テスト用のヘルパー関数
+  __getHasValidClientPropertiesForTesting: function() { return hasValidClientProperties; }
 };
