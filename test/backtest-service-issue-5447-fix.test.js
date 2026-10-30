@@ -23,10 +23,10 @@ describe('Issue #5447: Backtest Service Duplicate Message Fix', () => {
     // Helper function to clean up test files
     const cleanupTestFiles = () => {
         const testFiles = [
-            '/tmp/backtest-startup-message.lock',
-            '/tmp/backtest-startup-message.last',
-            '/tmp/test-backtest-startup-timestamp.state',
-            '/tmp/backtest-start-time.marker'
+            `${process.cwd()}/.tmp/backtest-startup-message.lock`,
+            `${process.cwd()}/.tmp/backtest-startup-message.last`,
+            `${process.cwd()}/.tmp/test-backtest-startup-timestamp.state`,
+            `${process.cwd()}/.tmp/backtest-start-time.marker`
         ];
         
         testFiles.forEach(file => {
@@ -160,8 +160,8 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Clean up any existing files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Create minimal log function
 log() {

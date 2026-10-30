@@ -236,7 +236,7 @@ echo "Initial cleanup completed"
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // Issue #5150で問題となったメッセージパターンが適切に処理されることを確認
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
     
     // ログ出力がlog_startup_message関数を通して行われることを確認
     expect(entrypointContent).toContain('log_startup_message(');

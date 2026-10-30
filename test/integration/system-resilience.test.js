@@ -178,7 +178,7 @@ describe('System Resilience Tests', () => {
     test('Dead Mans Switch動作確認', (done) => {
       const switchInstance = new DeadMansSwitch({
         heartbeatInterval: 100,
-        heartbeatFile: '/tmp/test-heartbeat-' + Date.now()
+        heartbeatFile: `${process.cwd()}/.tmp/test-heartbeat-` + Date.now()
       });
 
       tempFiles.push(switchInstance.options.heartbeatFile);

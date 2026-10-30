@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Strategy-Runner重複起動修正', () => {
-  const lockFilePath = '/tmp/strategy-runner-startup.lock';
+  const lockFilePath = `${process.cwd()}/.tmp/strategy-runner-startup.lock`;
   const entrypointPath = path.join(__dirname, '..', 'entrypoint.sh');
 
   // 各テスト前のクリーンアップ
@@ -210,7 +210,7 @@ describe('Strategy-Runner重複起動修正', () => {
       expect(fs.existsSync('/tmp')).toBe(true);
       
       // テスト用ロックファイルを作成してみる
-      const testLockFile = '/tmp/test-lock-file';
+      const testLockFile = `${process.cwd()}/.tmp/test-lock-file`;
       fs.writeFileSync(testLockFile, 'test');
       expect(fs.existsSync(testLockFile)).toBe(true);
       
@@ -235,11 +235,11 @@ describe('Strategy-Runner重複起動修正', () => {
     test('環境変数の設定が正しく動作する', () => {
       // 環境変数を設定
       process.env.STARTUP_LOCK_TIMEOUT = '60';
-      process.env.STARTUP_LOCK_FILE = '/tmp/custom-lock-file';
+      process.env.STARTUP_LOCK_FILE = `${process.cwd()}/.tmp/custom-lock-file`;
       
       // 設定が反映されることを確認
       expect(process.env.STARTUP_LOCK_TIMEOUT).toBe('60');
-      expect(process.env.STARTUP_LOCK_FILE).toBe('/tmp/custom-lock-file');
+      expect(process.env.STARTUP_LOCK_FILE).toBe(`${process.cwd()}/.tmp/custom-lock-file`);
       
       // クリーンアップ
       delete process.env.STARTUP_LOCK_TIMEOUT;

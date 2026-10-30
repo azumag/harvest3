@@ -30,12 +30,12 @@ describe('Issue #5315: Backtest Service Duplicate Message Fix', () => {
     // Helper function to clean up test files
     const cleanupTestFiles = () => {
         const testFiles = [
-            '/tmp/backtest-startup-message.lock',
-            '/tmp/backtest-startup-message.last',
-            '/tmp/test-backtest-startup-timestamp.state',
-            '/tmp/backtest-start-time.marker',
-            '/tmp/main-startup-message.done',
-            '/tmp/main-startup-message.lock'
+            `${process.cwd()}/.tmp/backtest-startup-message.lock`,
+            `${process.cwd()}/.tmp/backtest-startup-message.last`,
+            `${process.cwd()}/.tmp/test-backtest-startup-timestamp.state`,
+            `${process.cwd()}/.tmp/backtest-start-time.marker`,
+            `${process.cwd()}/.tmp/main-startup-message.done`,
+            `${process.cwd()}/.tmp/main-startup-message.lock`
         ];
         
         testFiles.forEach(file => {
@@ -95,14 +95,14 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Issue #5372: Set configuration variables
-export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
-export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_STARTUP_LOCK_FILE="$(pwd)/.tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="$(pwd)/.tmp/backtest-startup-message.last"
 export BACKTEST_FD_BASE=200
 export CONTAINER_RESTART_DETECTION_THRESHOLD=300
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the enhanced log_backtest_startup_message function
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
@@ -117,8 +117,8 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 `;
 
         // Write test script to .tmp directory
@@ -173,14 +173,14 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Issue #5372: Set configuration variables
-export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
-export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_STARTUP_LOCK_FILE="$(pwd)/.tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="$(pwd)/.tmp/backtest-startup-message.last"
 export BACKTEST_FD_BASE=200
 export CONTAINER_RESTART_DETECTION_THRESHOLD=300
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the enhanced functions
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
@@ -193,15 +193,15 @@ source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # Check that lock file was created and used
-if [ -f "/tmp/backtest-startup-message.last" ]; then
+if [ -f "$(pwd)/.tmp/backtest-startup-message.last" ]; then
     echo "FLOCK_TEST_PASSED: Timestamp file created"
 else
     echo "FLOCK_TEST_FAILED: Timestamp file not created"
 fi
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 `;
 
         const testScriptPath = path.join(__dirname, '../.tmp/test-issue-5315-flock.sh');
@@ -251,8 +251,8 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Mock flock unavailability by overriding command
 command() {
@@ -273,8 +273,8 @@ source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 `;
 
         const testScriptPath = path.join(__dirname, '../.tmp/test-issue-5315-fallback.sh');

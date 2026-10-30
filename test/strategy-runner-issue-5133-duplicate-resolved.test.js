@@ -17,7 +17,7 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
     const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
     
     // log_startup_messageが適切に実装されていることを確認
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
     
     // 重複防止機構が実装されていることを確認（リファクタリング後）
     expect(entrypointContent).toContain('Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）');
@@ -65,7 +65,7 @@ log_startup_message "Issue #5133: duplicate prevention test message"
     // BACKTEST_MODEとnormalモードの分岐が正常に実装されていることを確認
     expect(entrypointContent).toMatch(/if \[ "\$BACKTEST_MODE" = "true" \]; then/);
     expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
     
     // main関数が1回のみ実行されることを確認
     const mainCallMatches = entrypointContent.match(/if ! main "\$@"; then/g);

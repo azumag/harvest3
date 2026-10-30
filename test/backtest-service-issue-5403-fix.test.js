@@ -24,9 +24,9 @@ describe('Issue #5403: Backtest Service Duplicate Message Fix - Enhanced Error H
     // Helper function to clean up test files
     const cleanupTestFiles = () => {
         const testFiles = [
-            '/tmp/backtest-startup-message.lock',
-            '/tmp/backtest-startup-message.last',
-            '/tmp/test-backtest-startup-timestamp.state'
+            `${process.cwd()}/.tmp/backtest-startup-message.lock`,
+            `${process.cwd()}/.tmp/backtest-startup-message.last`,
+            `${process.cwd()}/.tmp/test-backtest-startup-timestamp.state`
         ];
         
         testFiles.forEach(file => {
@@ -84,14 +84,14 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Issue #5372: Set configuration variables
-export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
-export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_STARTUP_LOCK_FILE="$(pwd)/.tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="$(pwd)/.tmp/backtest-startup-message.last"
 export BACKTEST_FD_BASE=200
 export CONTAINER_RESTART_DETECTION_THRESHOLD=300
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Remove log_duplicate_stats function to simulate not available
 unset -f log_duplicate_stats 2>/dev/null || true
@@ -109,8 +109,8 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 `;
 
         // Write test script to .tmp directory
@@ -162,14 +162,14 @@ export BACKTEST_STARTUP_LOCK_TIMEOUT=1  # Short timeout for faster testing
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
 
 # Issue #5372: Set configuration variables
-export BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"
-export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/backtest-startup-message.last"
+export BACKTEST_STARTUP_LOCK_FILE="$(pwd)/.tmp/backtest-startup-message.lock"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="$(pwd)/.tmp/backtest-startup-message.last"
 export BACKTEST_FD_BASE=200
 export CONTAINER_RESTART_DETECTION_THRESHOLD=300
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the functions
 source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
@@ -191,8 +191,8 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 echo "TEST_PASSED: Duplicate prevention working"
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
-rm -f /tmp/backtest-startup-message.last 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 `;
 
         const testScriptPath = path.join(__dirname, '../.tmp/test-issue-5403-duplicate-prevention.sh');

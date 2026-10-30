@@ -23,7 +23,7 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
             
             // Redis関連の処理が追加されているかチェック
             expect(entrypointContent).toContain('redis_key="startup_msg:$message_hash"');
-            expect(entrypointContent).toContain('container_id=$(hostname)');
+            expect(entrypointContent).toContain('container_id=${ENTRYPOINT_HOSTNAME}');
             expect(entrypointContent).toContain('const redis = require(\'redis\');');
         });
 
@@ -52,14 +52,14 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
             // コンテナ識別情報を含むログメッセージが使用されているかチェック
-            expect(entrypointContent).toContain('Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)');
+            expect(entrypointContent).toContain('Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)');
         });
 
         test('コンテナIDの取得にhostnameが使用されている', () => {
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
             // container_idの設定でhostnameコマンドが使用されているかチェック
-            expect(entrypointContent).toContain('container_id=$(hostname)');
+            expect(entrypointContent).toContain('container_id=${ENTRYPOINT_HOSTNAME}');
         });
     });
 
@@ -127,7 +127,7 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
             
             // Redis処理の各ステップが存在することを確認
             expect(functionBody).toContain('redis_key="startup_msg:$message_hash"');
-            expect(functionBody).toContain('container_id=$(hostname)');
+            expect(functionBody).toContain('container_id=${ENTRYPOINT_HOSTNAME}');
             expect(functionBody).toContain('redis_check_result=$(node -e');
         });
     });
@@ -164,7 +164,7 @@ describe('Issue #5130: Strategy-runner Redis-based重複ログメッセージ修
             const entrypointContent = fs.readFileSync(ENTRYPOINT_PATH, 'utf8');
             
             // コンテナとプロセスの識別情報が含まれているかチェック
-            expect(entrypointContent).toContain('container: $(hostname)');
+            expect(entrypointContent).toContain('container: ${ENTRYPOINT_HOSTNAME}');
             expect(entrypointContent).toContain('pid: $$');
         });
     });

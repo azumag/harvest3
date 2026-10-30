@@ -316,7 +316,7 @@ echo "Lock cleanup test completed"
             expect(entrypointContent).toContain('Issue #5172: リファクタリング - 設定の外部化（YAGNI/KISS原則）');
             
             // コンテナIDによる検証が含まれていることを確認（リファクタリング後のパターン）
-            expect(entrypointContent).toContain('local container_id=$(hostname)');
+            expect(entrypointContent).toContain('local container_id=${ENTRYPOINT_HOSTNAME}');
             
             // リトライ機構が含まれていることを確認
             expect(entrypointContent).toContain('MAX_LOCK_ATTEMPTS=');

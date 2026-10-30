@@ -23,14 +23,14 @@ describe('Issue #5308: strategy-runner重複起動メッセージ問題修正', 
         await execAsync(`mkdir -p ${testTmpDir}`);
         
         // Issue #5308用のロックファイルをクリーンアップ
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        await execAsync(`rm -f ${process.cwd()}/.tmp/main-startup-message.done ${process.cwd()}/.tmp/main-startup-message.lock 2>/dev/null || true`);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
     afterEach(async () => {
         // テスト後クリーンアップ
         await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        await execAsync(`rm -f ${process.cwd()}/.tmp/main-startup-message.done ${process.cwd()}/.tmp/main-startup-message.lock 2>/dev/null || true`);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
     });
 
@@ -50,8 +50,8 @@ log_startup_message_fixed() {
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # 特定メッセージパターンの処理
-            local startup_msg_done_file="/tmp/main-startup-message.done"
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_done_file="$(pwd)/.tmp/main-startup-message.done"
+            local startup_msg_lock_file="$(pwd)/.tmp/main-startup-message.lock"
             
             if [ -f "$startup_msg_done_file" ]; then
                 return 0
@@ -91,8 +91,8 @@ log_startup_message_before_fix() {
     case "$message" in
         *"Starting strategy-runner container with enhanced error handling"*)
             # 特定メッセージパターンの処理
-            local startup_msg_done_file="/tmp/main-startup-message-before.done"
-            local startup_msg_lock_file="/tmp/main-startup-message-before.lock"
+            local startup_msg_done_file="$(pwd)/.tmp/main-startup-message-before.done"
+            local startup_msg_lock_file="$(pwd)/.tmp/main-startup-message-before.lock"
             
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 log "$message"
@@ -201,7 +201,7 @@ log_startup_message() {
             fi
             
             # 完了マーカーファイル存在チェック（第2防御線）
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_done_file="$(pwd)/.tmp/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
@@ -209,7 +209,7 @@ log_startup_message() {
             fi
             
             # アトミックロック取得（第3防御線）
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_lock_file="$(pwd)/.tmp/main-startup-message.lock"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 # ロック取得後の最終チェック
                 if [ -f "$startup_msg_done_file" ]; then

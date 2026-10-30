@@ -47,7 +47,7 @@ log "Starting strategy-runner container with enhanced error handling"
 echo "=== Test Completed ==="
 `;
 
-    const testScriptPath = '/tmp/test-log-function-5049.sh';
+    const testScriptPath = `${process.cwd()}/.tmp/test-log-function-5049.sh`;
     fs.writeFileSync(testScriptPath, testScript);
     fs.chmodSync(testScriptPath, '755');
 
@@ -92,7 +92,7 @@ log() {
 }
 
 # log_startup_message関数の簡略版（重複防止機能付き）
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_5049"
+STARTUP_MESSAGE_LOCK_DIR="$(pwd)/.tmp/startup_messages_5049"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 get_message_hash() {
@@ -137,7 +137,7 @@ log_startup_message "Starting strategy-runner container with enhanced error hand
 echo "=== Test Completed ==="
 `;
 
-    const testScriptPath = '/tmp/test-5049-reproduction.sh';
+    const testScriptPath = `${process.cwd()}/.tmp/test-5049-reproduction.sh`;
     fs.writeFileSync(testScriptPath, issueReproductionTest);
     fs.chmodSync(testScriptPath, '755');
 
@@ -162,17 +162,17 @@ echo "=== Test Completed ==="
       expect(stderr.trim()).toBe('');
       
       // クリーンアップ（mkdirベースロック対応）
-      if (fs.existsSync('/tmp/startup_messages_5049')) {
-        const files = fs.readdirSync('/tmp/startup_messages_5049');
+      if (fs.existsSync(`${process.cwd()}/.tmp/startup_messages_5049`)) {
+        const files = fs.readdirSync(`${process.cwd()}/.tmp/startup_messages_5049`);
         files.forEach(file => {
-          const filePath = path.join('/tmp/startup_messages_5049', file);
+          const filePath = path.join(`${process.cwd()}/.tmp/startup_messages_5049`, file);
           if (fs.statSync(filePath).isDirectory()) {
             fs.rmSync(filePath, { recursive: true, force: true });
           } else {
             fs.unlinkSync(filePath);
           }
         });
-        fs.rmdirSync('/tmp/startup_messages_5049');
+        fs.rmdirSync(`${process.cwd()}/.tmp/startup_messages_5049`);
       }
       
     } finally {
@@ -206,7 +206,7 @@ echo "=== Test Completed ==="
     
     // log_startup_messageの呼び出し箇所が正しく保持されている
     expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
   });
 
   test('Issue #5049の根本原因が修正されている', () => {

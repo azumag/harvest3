@@ -17,7 +17,7 @@ describe('Issue #5307 - Concurrency tests for backtest service', () => {
 
     beforeEach(() => {
         // 一時ディレクトリの作成
-        tempDir = fs.mkdtempSync('/tmp/backtest-concurrency-test-');
+        tempDir = fs.mkdtempSync(`${process.cwd()}/.tmp/backtest-concurrency-test-`);
         
         // 環境変数の保存
         originalEnv = { ...process.env };
