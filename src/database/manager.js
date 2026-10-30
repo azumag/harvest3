@@ -769,6 +769,14 @@ function formatConnectionStatus(client, hasValidReadyValue, hasValidOpenValue, h
 }
 
 /**
+ * Issue #5761: undefined / 文字列"undefined" を表示値 '(undefined value)' へ
+ * 変換する共通ヘルパー。readyDisplay/openDisplay の重複式を統一する。
+ */
+function undefinedDisplayValue(value) {
+  return (value === undefined || value === 'undefined') ? '(undefined value)' : value;
+}
+
+/**
  * Issue #5752: タイムアウト付きPINGの共通部を抽出。
  * `timeoutLabel` には 'PING' または 'Fallback PING' を渡す。
  */
@@ -1099,10 +1107,8 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     // Issue #5702: エラー状況の詳細な記録（デバッグ用）
     // Issue #5696: undefined値の適切な表示
     // Issue #5689: 文字列"undefined"も適切に検出・表示する
-    const readyDisplay = (client.isReady === undefined || client.isReady === 'undefined') ? 
-      '(undefined value)' : client.isReady;
-    const openDisplay = (client.isOpen === undefined || client.isOpen === 'undefined') ? 
-      '(undefined value)' : client.isOpen;
+    const readyDisplay = undefinedDisplayValue(client.isReady);
+    const openDisplay = undefinedDisplayValue(client.isOpen);
     logger.error(`[Redis Transaction] 実行前接続チェック失敗: ready=${readyDisplay}, open=${openDisplay}`);
     
     // Issue #5732: 詳細な診断情報を追加
