@@ -136,16 +136,11 @@ describe('Issue #5687: Redis接続undefined値表示修正テスト', () => {
         throw new Error('エラーが発生すべき');
       } catch (error) {
         // logger.errorまたはlogger.warnが適切な形式で呼ばれることを確認
-        const logCalls = [...logger.error.mock.calls, ...logger.warn.mock.calls];
-        const hasCorrectReadyLog = logCalls.some(call => 
-          call.some(arg => typeof arg === 'string' && arg.includes('ready=(undefined value)'))
-        );
-        const hasCorrectOpenLog = logCalls.some(call => 
-          call.some(arg => typeof arg === 'string' && arg.includes('open=(undefined value)'))
-        );
-        
-        expect(hasCorrectReadyLog).toBe(true);
-        expect(hasCorrectOpenLog).toBe(true);
+        const logCalls = [...logger.error.mock.calls, ...logger.warn.mock.calls]
+          .flat()
+          .filter(arg => typeof arg === 'string');
+        expect(logCalls.some(arg => arg.includes('ready=(undefined value)'))).toBe(true);
+        expect(logCalls.some(arg => arg.includes('open=(undefined value)'))).toBe(true);
       }
     });
 
