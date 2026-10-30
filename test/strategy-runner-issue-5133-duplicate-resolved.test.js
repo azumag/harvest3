@@ -1,6 +1,8 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+// Issue #5377: 共通ヘルパーへの移行（DRY）
+const { runDuplicatePreventionTest, behaviorValidation } = require('./helpers/startup-message-test-helper');
 
 describe('Issue #5133: strategy-runnerサービスでの重複ログメッセージ解決確認', () => {
   const tmpDir = path.join(__dirname, '..', '.tmp');
@@ -26,36 +28,15 @@ describe('Issue #5133: strategy-runnerサービスでの重複ログメッセー
   });
 
   test('log_startup_message関数の重複防止機構が正常に動作することを確認', async () => {
-    // 実際のentrypoint.shを直接テストする
-    const entrypointPath = path.join(__dirname, 'fixtures', 'entrypoint-test-functions.sh');
-    const testScript = `#!/bin/bash
-source "${entrypointPath}"
-log_startup_message "Issue #5133: duplicate prevention test message"
-log_startup_message "Issue #5133: duplicate prevention test message"
-`;
-
-    const testScriptPath = path.join(tmpDir, `test-issue-5133-${Date.now()}.sh`);
-    fs.writeFileSync(testScriptPath, testScript);
-    fs.chmodSync(testScriptPath, '755');
-
-    try {
-      const output = execSync(`bash ${testScriptPath}`, { 
-        encoding: 'utf8',
-        timeout: 5000 
-      });
-      
-      const messages = output.split('\n').filter(line => 
-        line.includes('Issue #5133: duplicate prevention test message')
-      );
-      
-      // Issue #5133修正により重複が解消されていることを確認（1回のみ出力）
-      expect(messages.length).toBe(1);
-      expect(messages[0]).toContain('Issue #5133: duplicate prevention test message');
-    } finally {
-      if (fs.existsSync(testScriptPath)) {
-        fs.unlinkSync(testScriptPath);
-      }
-    }
+    // Issue #5377: 埋め込み bash スクリプトを共通ヘルパーへ移行（DRY）
+    const result = await runDuplicatePreventionTest({
+      testName: 'Issue #5133: duplicate prevention test',
+      testTmpDir: tmpDir,
+      testMessage: 'Starting strategy-runner container with enhanced error handling (container: test, pid: $$)',
+      callCount: 2,
+      expectedOutputCount: 1
+    });
+    behaviorValidation.validateDuplicatePrevention(result, 1);
   });
 
   test('entrypoint.shの構造が正常であることを確認', () => {
