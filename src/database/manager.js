@@ -810,10 +810,10 @@ async function validateRedisClientConnection(client, context, logger) {
     
     // Issue #5651: Redis v4.x接続回復中のundefined状態を適切に処理
     // undefinedプロパティがある場合、まずPINGテストで実際の接続状態を確認
-    const hasUndefinedValues = (hasReadyProperty && client.isReady === undefined) || 
+    const hasAnyUndefinedValues = (hasReadyProperty && client.isReady === undefined) || 
                               (hasOpenProperty && client.isOpen === undefined);
     
-    if (hasUndefinedValues) {
+    if (hasAnyUndefinedValues) {
       const { readyStatus, openStatus, statusInfo } = formatConnectionStatus(
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
