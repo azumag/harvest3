@@ -47,7 +47,7 @@ set -e
 
 # テスト用環境変数設定
 export BACKTEST_MODE=true
-BACKTEST_STARTUP_LOCK_FILE="/tmp/test-backtest-5132-\${RANDOM}.lock"
+BACKTEST_STARTUP_LOCK_FILE="$(pwd)/.tmp/test-backtest-5132-\${RANDOM}.lock"
 BACKTEST_STARTUP_LOCK_TIMEOUT=10
 
 # 簡略版のlog_backtest_startup_message関数
@@ -84,7 +84,7 @@ if [ "$BACKTEST_MODE" = "true" ]; then
     # log_backtest_startup_message "Executing backtest command with enhanced error handling..." # 削除済み
     
     # backtest開始時刻を記録（問題追跡用）
-    echo "$(date +%s)" > /tmp/backtest-start-time.marker
+    echo "$(date +%s)" > $(pwd)/.tmp/backtest-start-time.marker
     
     log "Backtest initialization completed"
 fi
@@ -195,7 +195,7 @@ rm -f "$BACKTEST_STARTUP_LOCK_FILE" 2>/dev/null || true
     });
     
     // 通常のstrategy-runner用メッセージが維持されている
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
     
     // backtest用メッセージが1回のみになっている
     const backtestMessageMatches = entrypointContent.match(/log_backtest_startup_message "Starting backtest container with enhanced error handling"/g);

@@ -71,7 +71,7 @@ describe('Strategy-Runner Issue #2536 重複起動メッセージ修正', () => 
 set -e
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"
+STARTUP_MESSAGE_LOCK_DIR="$(pwd)/.tmp/startup_messages"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # ログ関数
@@ -145,7 +145,7 @@ fs.unlinkSync(testPath);
 set -e
 
 # 重複起動メッセージ防止（ファイルベースの atomic 実装）
-STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages_diff"
+STARTUP_MESSAGE_LOCK_DIR="$(pwd)/.tmp/startup_messages_diff"
 mkdir -p "$STARTUP_MESSAGE_LOCK_DIR" 2>/dev/null || true
 
 # ログ関数
@@ -223,7 +223,7 @@ fs.unlinkSync(testPath);
       const entrypointContent = fs.readFileSync(entrypointPath, 'utf8');
       
       // 重複防止対象のメッセージが適切に処理されることを確認
-      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+      expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
       expect(entrypointContent).toContain('log_backtest_startup_message "Starting backtest container with enhanced error handling"');
       
       // シンプルな実装が使用されていることを確認

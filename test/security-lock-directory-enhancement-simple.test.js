@@ -10,7 +10,7 @@ const path = require('path');
 describe('Issue #5417: セキュリティ強化 - ロックディレクトリ改善テスト', () => {
     jest.setTimeout(30000);
 
-    const TEST_LOCK_BASE_DIR = '/tmp/test-strategy-runner';
+    const TEST_LOCK_BASE_DIR = `/tmp/test-strategy-runner`;
     const originalCwd = process.cwd();
     
     beforeAll(() => {
@@ -62,9 +62,9 @@ describe('Issue #5417: セキュリティ強化 - ロックディレクトリ改
             const entrypointContent = fs.readFileSync('entrypoint.sh', 'utf8');
             
             // 重要なファイルについて、古い/tmpパスが残っていないことを確認
-            expect(entrypointContent).not.toContain('BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"');
-            expect(entrypointContent).not.toContain('STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"');
-            expect(entrypointContent).not.toContain('STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"');
+            expect(entrypointContent).not.toContain(`BACKTEST_STARTUP_LOCK_FILE="/tmp/backtest-startup-message.lock"`);
+            expect(entrypointContent).not.toContain(`STARTUP_LOCK_FILE="/tmp/strategy-runner-startup.lock"`);
+            expect(entrypointContent).not.toContain(`STARTUP_MESSAGE_LOCK_DIR="/tmp/startup_messages"`);
         });
     });
 

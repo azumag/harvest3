@@ -39,7 +39,7 @@ describe('Issue #5036: strategy-runnerサービス重複メッセージ問題解
     expect(entrypointContent).not.toContain('exec 1>&1');
     
     // Issue #5036で問題となったメッセージの出力箇所を確認
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
   });
 
   describe('重複メッセージ防止機能の個別テスト', () => {
@@ -175,7 +175,7 @@ echo "$hash3"
     expect(entrypointContent).toContain('STARTUP_MESSAGE_LOCK_DIR'); // atomicロック実装
     
     // Issue #5036で報告されたメッセージが適切に処理されることを確認
-    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"');
+    expect(entrypointContent).toContain('log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"');
     
     // log関数がシンプルで正しいことを確認
     const logFunction = entrypointContent.match(/log\(\) \{[^}]*\}/)[0];

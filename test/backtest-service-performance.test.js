@@ -15,7 +15,7 @@ describe('Issue #5307 - Performance optimization tests', () => {
 
     beforeEach(() => {
         // 一時ディレクトリの作成
-        tempDir = fs.mkdtempSync('/tmp/backtest-perf-test-');
+        tempDir = fs.mkdtempSync(`${process.cwd()}/.tmp/backtest-perf-test-`);
         
         // 環境変数の保存
         originalEnv = { ...process.env };

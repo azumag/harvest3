@@ -336,7 +336,7 @@ class E2ETestRunner {
 
     // レポートをファイルに保存
     const fs = require('fs');
-    const reportPath = '/tmp/e2e-test-report-final.json';
+    const reportPath = `${process.cwd()}/.tmp/e2e-test-report-final.json`;
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
     console.log(`\n📝 詳細レポート保存完了: ${reportPath}`);

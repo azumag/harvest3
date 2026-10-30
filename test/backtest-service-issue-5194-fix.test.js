@@ -23,11 +23,11 @@ describe('Issue #5194: Backtest Service Exception Fix', () => {
     // Helper function to clean up test files
     const cleanupTestFiles = () => {
         const testFiles = [
-            '/tmp/backtest-startup-message.lock',
-            '/tmp/backtest-npm-error-detection.state',
-            '/tmp/backtest-start-time.marker',
-            '/tmp/main-startup-message.done',
-            '/tmp/main-startup-message.lock'
+            `${process.cwd()}/.tmp/backtest-startup-message.lock`,
+            `${process.cwd()}/.tmp/backtest-npm-error-detection.state`,
+            `${process.cwd()}/.tmp/backtest-start-time.marker`,
+            `${process.cwd()}/.tmp/main-startup-message.done`,
+            `${process.cwd()}/.tmp/main-startup-message.lock`
         ];
         
         testFiles.forEach(file => {
@@ -71,10 +71,10 @@ describe('Issue #5194: Backtest Service Exception Fix', () => {
 export BACKTEST_MODE=true
 export BACKTEST_STARTUP_LOCK_TIMEOUT=5
 export BACKTEST_STARTUP_FLOCK_TIMEOUT=5
-export BACKTEST_STARTUP_TIMESTAMP_FILE="/tmp/test-backtest-startup-timestamp.state"
+export BACKTEST_STARTUP_TIMESTAMP_FILE="$(pwd)/.tmp/test-backtest-startup-timestamp.state"
 
 # Clean up test files
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
 
 # Source only the required functions without running main
@@ -89,7 +89,7 @@ sleep 2
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # Clean up
-rm -f /tmp/backtest-startup-message.lock 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f "$BACKTEST_STARTUP_TIMESTAMP_FILE" 2>/dev/null || true
 `;
 
@@ -185,12 +185,12 @@ export BACKTEST_MODE=true
 export NPM_ERROR_SUPPRESS_DURATION=60
 
 # Create npm error marker (recent)
-echo "$(date +%s)" > /tmp/backtest-npm-error-detection.state
-chmod 600 /tmp/backtest-npm-error-detection.state
+echo "$(date +%s)" > $(pwd)/.tmp/backtest-npm-error-detection.state
+chmod 600 $(pwd)/.tmp/backtest-npm-error-detection.state
 
 # Should produce suppression message
 current_time=$(date +%s)
-npm_error_marker="/tmp/backtest-npm-error-detection.state"
+npm_error_marker="$(pwd)/.tmp/backtest-npm-error-detection.state"
 if [ -f "$npm_error_marker" ]; then
     last_npm_error=$(cat "$npm_error_marker" 2>/dev/null || echo "0")
     npm_error_age=$((current_time - last_npm_error))
@@ -204,7 +204,7 @@ else
 fi
 
 # Clean up
-rm -f /tmp/backtest-npm-error-detection.state 2>/dev/null || true
+rm -f $(pwd)/.tmp/backtest-npm-error-detection.state 2>/dev/null || true
 `;
 
         const testScriptPath = path.join(__dirname, '../.tmp/test-npm-error-handling.sh');

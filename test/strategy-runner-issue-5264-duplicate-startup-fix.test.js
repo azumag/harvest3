@@ -24,7 +24,7 @@ describe('Issue #5264: strategy-runner重複起動メッセージ修正', () => 
         await execAsync(`mkdir -p ${testTmpDir}`);
         
         // Issue #5264用のロックファイルとフラグをクリーンアップ
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        await execAsync(`rm -f ${process.cwd()}/.tmp/main-startup-message.done ${process.cwd()}/.tmp/main-startup-message.lock 2>/dev/null || true`);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
         await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
     });
@@ -32,7 +32,7 @@ describe('Issue #5264: strategy-runner重複起動メッセージ修正', () => 
     afterEach(async () => {
         // テスト後クリーンアップ
         await execAsync(`rm -rf ${testTmpDir}`);
-        await execAsync('rm -f /tmp/main-startup-message.done /tmp/main-startup-message.lock 2>/dev/null || true');
+        await execAsync(`rm -f ${process.cwd()}/.tmp/main-startup-message.done ${process.cwd()}/.tmp/main-startup-message.lock 2>/dev/null || true`);
         await execAsync('unset MAIN_STARTUP_MESSAGE_LOGGED 2>/dev/null || true');
         await execAsync('unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS 2>/dev/null || true');
     });
@@ -66,7 +66,7 @@ log_startup_message_5264_fixed() {
             fi
             
             # 第2防御線: 完了マーカーファイル存在チェック
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_done_file="$(pwd)/.tmp/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
@@ -75,7 +75,7 @@ log_startup_message_5264_fixed() {
             fi
             
             # 第3防御線: アトミックロック取得
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_lock_file="$(pwd)/.tmp/main-startup-message.lock"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 # ロック取得後の最終チェック
                 if [ -f "$startup_msg_done_file" ]; then
@@ -191,8 +191,8 @@ test_defense_line() {
             ;;
         "done_file")
             # 完了マーカーファイルを事前に作成
-            echo "$(date +%s):$$:$(hostname)" > "/tmp/main-startup-message.done"
-            chmod 600 "/tmp/main-startup-message.done"
+            echo "$(date +%s):$$:$(hostname)" > "$(pwd)/.tmp/main-startup-message.done"
+            chmod 600 "$(pwd)/.tmp/main-startup-message.done"
             ;;
         "process_flag")
             # プロセス内フラグを事前に設定
@@ -213,7 +213,7 @@ test_defense_line() {
                 return 0
             fi
             
-            if [ -f "/tmp/main-startup-message.done" ]; then
+            if [ -f "$(pwd)/.tmp/main-startup-message.done" ]; then
                 echo "Defense Line 2: Done marker file blocked"
                 return 0
             fi
@@ -238,7 +238,7 @@ unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS
 test_defense_line "done_file"
 
 echo "--- 防御線なしテスト ---"
-rm -f "/tmp/main-startup-message.done"
+rm -f "$(pwd)/.tmp/main-startup-message.done"
 unset MAIN_STARTUP_MESSAGE_LOGGED
 unset _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS
 test_defense_line "none"
@@ -306,14 +306,14 @@ log_startup_message_concurrent() {
                 return 0
             fi
             
-            local startup_msg_done_file="/tmp/main-startup-message.done"
+            local startup_msg_done_file="$(pwd)/.tmp/main-startup-message.done"
             if [ -f "$startup_msg_done_file" ]; then
                 _MAIN_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
                 export MAIN_STARTUP_MESSAGE_LOGGED=1
                 return 0
             fi
             
-            local startup_msg_lock_file="/tmp/main-startup-message.lock"
+            local startup_msg_lock_file="$(pwd)/.tmp/main-startup-message.lock"
             if mkdir "$startup_msg_lock_file" 2>/dev/null; then
                 if [ -f "$startup_msg_done_file" ]; then
                     rm -rf "$startup_msg_lock_file" 2>/dev/null || true

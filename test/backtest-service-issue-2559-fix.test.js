@@ -25,7 +25,7 @@ describe('Backtest Service Issue #2559 Fix', () => {
     });
 
     test('should capture and log npm install errors', () => {
-      expect(entrypointContent).toContain('npm_error_log="/tmp/npm-install-error.log"');
+      expect(entrypointContent).toContain(`npm_error_log="/tmp/npm-install-error.log"`);
       expect(entrypointContent).toContain('npm error:');
     });
 
@@ -42,7 +42,7 @@ describe('Backtest Service Issue #2559 Fix', () => {
 
     test('should include enhanced npm ls validation', () => {
       expect(entrypointContent).toContain('Performing final dependency validation');
-      expect(entrypointContent).toContain('npm_ls_error="/tmp/npm-ls-error.log"');
+      expect(entrypointContent).toContain(`npm_ls_error="/tmp/npm-ls-error.log"`);
       expect(entrypointContent).toContain('npm ls error:');
     });
 

@@ -29,8 +29,8 @@ describe('Issue #5230: backtestサービス例外修正', () => {
   afterEach(() => {
     // テスト後のクリーンアップ
     try {
-      if (fs.existsSync('/tmp/backtest-startup-message.last')) {
-        fs.unlinkSync('/tmp/backtest-startup-message.last');
+      if (fs.existsSync(`${process.cwd()}/.tmp/backtest-startup-message.last`)) {
+        fs.unlinkSync(`${process.cwd()}/.tmp/backtest-startup-message.last`);
       }
     } catch (err) {
       // ignore cleanup errors
@@ -95,7 +95,7 @@ log() {
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
-    local timestamp_file="/tmp/test-backtest-startup-message.last"
+    local timestamp_file="$(pwd)/.tmp/test-backtest-startup-message.last"
     local suppress_duration=\${BACKTEST_STARTUP_LOCK_TIMEOUT:-60}
     
     # 前回のメッセージ出力時刻をチェック
@@ -130,7 +130,7 @@ log_backtest_startup_message "Starting backtest container with enhanced error ha
 log_backtest_startup_message "Starting backtest container with enhanced error handling"
 
 # クリーンアップ
-rm -f /tmp/test-backtest-startup-message.last* 2>/dev/null || true
+rm -f $(pwd)/.tmp/test-backtest-startup-message.last* 2>/dev/null || true
 `;
 
     const testScriptPath = path.join(tmpDir, `test-issue-5230-${Date.now()}.sh`);
