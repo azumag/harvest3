@@ -107,7 +107,7 @@ echo "=== Test complete ==="
                 env: {
                     ...process.env,
                     BACKTEST_MODE: 'true',
-                    LOCK_BASE_DIR: '/tmp'
+                    LOCK_BASE_DIR: `${process.cwd()}/.tmp`
                 }
             });
 
@@ -220,7 +220,7 @@ echo "=== Test complete ==="
                 env: {
                     ...process.env,
                     BACKTEST_MODE: 'true',
-                    LOCK_BASE_DIR: '/tmp'
+                    LOCK_BASE_DIR: `${process.cwd()}/.tmp`
                 }
             });
 
@@ -318,7 +318,7 @@ echo "=== Test complete ==="
                 env: {
                     ...process.env,
                     BACKTEST_MODE: 'false',
-                    LOCK_BASE_DIR: '/tmp'
+                    LOCK_BASE_DIR: `${process.cwd()}/.tmp`
                 }
             });
 
