@@ -124,8 +124,11 @@ function cleanup(targetPath) {
       }
     }
   } catch (error) {
-    // エラーは無視（他のプロセスが既に削除している可能性）
-    console.warn(`Cleanup warning for ${targetPath}:`, error.message);
+    // Issue #5444: エラーを分類 — ENOENT（既に削除済み）は無害なので警告しない。
+    // 権限・EBUSY等の実害のあるエラーのみ warn に残す。
+    if (error.code !== 'ENOENT') {
+      console.warn(`Cleanup warning for ${targetPath}:`, error.message);
+    }
   }
 }
 
