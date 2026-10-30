@@ -15,6 +15,8 @@ API_CHECK_INTERVAL=${API_CHECK_INTERVAL:-3}  # APIチェック間隔（秒）
 PROGRESS_LOG_INTERVAL=${PROGRESS_LOG_INTERVAL:-15}  # 進捗ログ間隔（秒）
 DATABASE_CONNECTION_TIMEOUT=${DATABASE_CONNECTION_TIMEOUT:-10}  # DB接続タイムアウト（秒）
 DISCORD_NOTIFICATION_TIMEOUT=${DISCORD_NOTIFICATION_TIMEOUT:-10}  # Discord通知タイムアウト（秒）
+# Issue #5579: hostname は起動時に一度だけ取得してキャッシュ（毎回のサブシェル実行を削減）
+ENTRYPOINT_HOSTNAME=${ENTRYPOINT_HOSTNAME:-$(hostname)}
 
 # Issue #5417: セキュリティ強化 - 一時ファイル格納場所の改善
 # /tmpから/var/runへの移行（環境変数で設定可能、後方互換性維持）
@@ -771,7 +773,7 @@ try_redis_duplicate_prevention() {
     fi
     
     # コンテナ識別とRedis重複チェック
-    local container_id=$(hostname)
+    local container_id=${ENTRYPOINT_HOSTNAME}
     local redis_key="startup_msg:$message_hash"
     
     local redis_check_result=$(node -e "
@@ -805,7 +807,7 @@ try_redis_duplicate_prevention() {
 fallback_to_file_based_prevention() {
     local message="$1"
     local message_hash="$2"
-    local container_id=$(hostname)
+    local container_id=${ENTRYPOINT_HOSTNAME}
     local current_time=$(date +%s)
     
     # プロセス内重複防止（第二防御線）
@@ -927,7 +929,7 @@ log_startup_message() {
                         _STARTUP_MESSAGE_LOGGED=1
                         export _STARTUP_MESSAGE_LOGGED
                         log "$message"
-                        log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: $(hostname))"
+                        log "DEBUG: [Issue #5362] Startup message sent with flock protection (PID: $$, Container: ${ENTRYPOINT_HOSTNAME})"
                         
                         return 0
                     else
@@ -955,7 +957,7 @@ log_startup_message() {
                         _STARTUP_MESSAGE_LOGGED=1
                         export _STARTUP_MESSAGE_LOGGED
                         log "$message"
-                        log "DEBUG: [Issue #5362] Startup message sent with mkdir fallback protection (PID: $$, Container: $(hostname))"
+                        log "DEBUG: [Issue #5362] Startup message sent with mkdir fallback protection (PID: $$, Container: ${ENTRYPOINT_HOSTNAME})"
                         
                         rm -rf "$mkdir_lock_dir" 2>/dev/null || true
                         return 0
@@ -1234,7 +1236,7 @@ send_startup_error_to_discord() {
 エラー: ${error_message}
 詳細: ${error_details}
 時刻: $(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")
-ホスト: $(hostname)
+ホスト: ${ENTRYPOINT_HOSTNAME}
 \`\`\`"
 
     # Node.js経由でDiscord通知送信
@@ -1721,7 +1723,7 @@ run_diagnostics() {
     log "  OS: $(uname -a)"
     log "  Node.js: $(node --version 2>/dev/null || echo 'Not available')"
     log "  NPM: $(npm --version 2>/dev/null || echo 'Not available')"
-    log "  Container: $(hostname)"
+    log "  Container: ${ENTRYPOINT_HOSTNAME}"
     
     # メモリとリソース
     log "Resource Usage:"
@@ -1884,7 +1886,7 @@ main() {
         if [ "$_GLOBAL_STARTUP_MESSAGE_SENT" != "1" ]; then
             export _GLOBAL_STARTUP_MESSAGE_SENT=1
             # Issue #5362修正: 起動メッセージの重複防止をlog_startup_message関数に一元化（KISS原則）
-            log_startup_message "Starting strategy-runner container with enhanced error handling (container: $(hostname), pid: $$)"
+            log_startup_message "Starting strategy-runner container with enhanced error handling (container: ${ENTRYPOINT_HOSTNAME}, pid: $$)"
         else
             log "DEBUG: Global flag prevented duplicate startup message"
         fi
