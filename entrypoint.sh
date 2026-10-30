@@ -948,7 +948,8 @@ log_startup_message() {
                 # フォールバック: flockが利用できない場合のmkdirベースロック
                 local mkdir_lock_dir="$LOCK_BASE_DIR/startup-message-mkdir.lock"
                 local attempts=0
-                local max_attempts=50
+                # Issue #5503: バックオフ化により attempts 上限を調整（合計待機~5sを維持）
+                local max_attempts=12
                 
                 while [ $attempts -lt $max_attempts ]; do
                     if mkdir "$mkdir_lock_dir" 2>/dev/null; then
@@ -969,7 +970,10 @@ log_startup_message() {
                     fi
                     
                     attempts=$((attempts + 1))
-                    sleep 0.1
+                    # Issue #5503: 指数バックオフ（競合時のスピン削減）。
+                    # 0.1×1.5^attempts を 0.5s で cap、全体の待機上界（~5s）は維持。
+                    sleep_time=$(awk "BEGIN{t=0.1*(1.5^$attempts); print (t>0.5?0.5:t)}")
+                    sleep "$sleep_time"
                 done
                 
                 # mkdir ロック取得失敗時の処理
