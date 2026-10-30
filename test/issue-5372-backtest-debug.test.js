@@ -102,7 +102,7 @@ rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the improved log_backtest_startup_message function
-source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
+source <(sed -n -e '/^_backtest_is_within_suppress_window()/,/^}/p' -e '/^_backtest_emit_startup_message()/,/^}/p' -e '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^set_secure_permissions()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)

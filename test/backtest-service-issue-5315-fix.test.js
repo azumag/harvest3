@@ -77,7 +77,7 @@ describe('Issue #5315: Backtest Service Duplicate Message Fix', () => {
         
         // Check for flock implementation
         expect(entrypointContent).toContain('flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200');
-        expect(entrypointContent).toContain('exec 200>"$lock_file"');
+        expect(entrypointContent).toContain('exec 200>>"$lock_file"');
         
         // Check for enhanced cleanup
         expect(entrypointContent).toContain('unset _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS');
@@ -105,7 +105,7 @@ rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the enhanced log_backtest_startup_message function
-source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
+source <(sed -n -e '/^_backtest_is_within_suppress_window()/,/^}/p' -e '/^_backtest_emit_startup_message()/,/^}/p' -e '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
@@ -183,7 +183,7 @@ rm -f $(pwd)/.tmp/backtest-startup-message.lock 2>/dev/null || true
 rm -f $(pwd)/.tmp/backtest-startup-message.last 2>/dev/null || true
 
 # Source the enhanced functions
-source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
+source <(sed -n -e '/^_backtest_is_within_suppress_window()/,/^}/p' -e '/^_backtest_emit_startup_message()/,/^}/p' -e '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)
@@ -263,7 +263,7 @@ command() {
 }
 
 # Source the enhanced functions
-source <(sed -n '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
+source <(sed -n -e '/^_backtest_is_within_suppress_window()/,/^}/p' -e '/^_backtest_emit_startup_message()/,/^}/p' -e '/^log_backtest_startup_message()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^log_backtest_error()/,/^}/p' entrypoint.sh)
 source <(sed -n '/^update_timestamp_atomically()/,/^}/p' entrypoint.sh)

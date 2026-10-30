@@ -595,6 +595,24 @@ cleanup_backtest_lock() {
 # Issue #5372改善: より線形で予測可能なフロー、統一エラーハンドリング、設定外部化
 # Issue #5371: YAGNI原則に基づく簡素化（120行→45行、73%削減）
 # 核心機能のみ保持: プロセス内重複防止 + flockベース同期 + シンプルフォールバック
+# Issue #5370: タイムスタンプ重複チェックの共通ヘルパー（DRY原則適用）。
+# suppress_window 内なら 0、それ以外（ファイルなし/超過）なら 1 を返す。
+_backtest_is_within_suppress_window() {
+    local timestamp_file="$1" current_time="$2" suppress_duration="$3"
+    [ -f "$timestamp_file" ] || return 1
+    local last_time time_diff
+    last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
+    time_diff=$((current_time - last_time))
+    [ "$time_diff" -lt "$suppress_duration" ]
+}
+
+# Issue #5370: フラグ設定+メッセージ出力+タイムスタンプ更新の共通ヘルパー（DRY原則適用）。
+_backtest_emit_startup_message() {
+    _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
+    log "$1"
+    echo "$2" > "$3"
+}
+
 log_backtest_startup_message() {
     local message="$1"
     local current_time=$(date +%s)
@@ -612,16 +630,12 @@ log_backtest_startup_message() {
         exec 200>>"$lock_file"
         if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then
             # 重複チェック
-            if [ -f "$timestamp_file" ]; then
-                local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
-                local time_diff=$((current_time - last_time))
-                [ "$time_diff" -lt "$suppress_duration" ] && { _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; exec 200>&-; return 0; }
+            if _backtest_is_within_suppress_window "$timestamp_file" "$current_time" "$suppress_duration"; then
+                _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; exec 200>&-; return 0;
             fi
-            
+
             # メッセージ出力とタイムスタンプ更新
-            _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-            log "$message"
-            echo "$current_time" > "$timestamp_file"
+            _backtest_emit_startup_message "$message" "$current_time" "$timestamp_file"
             
             # Issue #5403修正: log_duplicate_stats関数の存在チェック
             if command -v log_duplicate_stats >/dev/null 2>&1; then
@@ -635,15 +649,11 @@ log_backtest_startup_message() {
     else
         # flock利用不可時のフォールバック
         log "WARNING: flock not available, using fallback duplicate prevention"
-        if [ -f "$timestamp_file" ]; then
-            local last_time=$(cat "$timestamp_file" 2>/dev/null || echo "0")
-            local time_diff=$((current_time - last_time))
-            [ "$time_diff" -lt "$suppress_duration" ] && { _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; return 0; }
+        if _backtest_is_within_suppress_window "$timestamp_file" "$current_time" "$suppress_duration"; then
+            _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1; return 0;
         fi
-        
-        _BACKTEST_STARTUP_MESSAGE_LOGGED_IN_PROCESS=1
-        log "$message"
-        echo "$current_time" > "$timestamp_file"
+
+        _backtest_emit_startup_message "$message" "$current_time" "$timestamp_file"
     fi
     
     return 0
