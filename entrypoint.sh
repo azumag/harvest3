@@ -607,7 +607,9 @@ log_backtest_startup_message() {
     # Issue #5315修正: flockによる確実なファイルロック（第二防御線）
     if command -v flock >/dev/null 2>&1; then
         local lock_file="$BACKTEST_STARTUP_LOCK_FILE"
-        exec 200>"$lock_file"
+        # Issue #5504: ロックファイルを他ユーザー不可読の権限で作成（600）
+        (umask 077; : >"$lock_file")
+        exec 200>>"$lock_file"
         if flock -w $BACKTEST_STARTUP_FLOCK_TIMEOUT 200; then
             # 重複チェック
             if [ -f "$timestamp_file" ]; then
@@ -914,7 +916,10 @@ log_startup_message() {
             # 第二防御線: flockベースの確実なファイルロック
             local lock_file="$LOCK_BASE_DIR/startup-message.lock"
             local lock_fd=200
-            
+
+            # Issue #5504: ロックファイルを他ユーザー不可読の権限で作成（600）
+            (umask 077; : >"$lock_file")
+
             # flockが利用可能な場合は使用（より確実）
             if command -v flock >/dev/null 2>&1; then
                 {
@@ -938,7 +943,7 @@ log_startup_message() {
                         export _STARTUP_MESSAGE_LOGGED
                         return 0
                     fi
-                } 200>"$lock_file"
+                } 200>>"$lock_file"
             else
                 # フォールバック: flockが利用できない場合のmkdirベースロック
                 local mkdir_lock_dir="$LOCK_BASE_DIR/startup-message-mkdir.lock"
