@@ -4611,6 +4611,7 @@ module.exports = {
   executeRedisCompensation, // Issue #4126: テスト用にエクスポート
   executeRedisTransactionWithTimeout, // Issue #4826: タイムアウト制御付きトランザクション実行
   validateRedisTransactionBeforeExecution, // Issue #4826: トランザクション事前検証
+  validateRedisClientConnection, // Issue #5755: 統合テスト用にエクスポート
   acquireDistributedLock, // Issue #4949: テスト用にエクスポート
   releaseDistributedLock, // Issue #4949: テスト用にエクスポート
   shouldRecoverFromNullUndefinedErrors, // Issue #4932: null/undefined エラー検出機能
