@@ -180,7 +180,7 @@ describe('Issue #5701: Redis v4.x undefined プロパティ対応', () => {
       );
     });
 
-    test('z_statusがreadyでない場合はエラーになる', async () => {
+    test('statusがreadyでない場合はエラーになる', async () => {
       // Issue #5701: プロパティ未定義 + status異常の場合
       const clientWithBadStatus = {
         status: 'disconnected',
