@@ -377,6 +377,19 @@ function formatFallbackError(error, commandIndex) {
   return `Redis command ${commandIndex} failed: ${String(error)}`;
 }
 
+/**
+ * Issue #5764: [Redis Transaction] 系ログ文面の生成を一元化する。
+ * 現行の2形式（`context:` 区切りと `context失敗:` 形式）を維持しつつ、
+ * 文字列の組み立てをこの関数に集約する。文面自体は変更しない。
+ */
+function formatRedisTransactionMessage(context, message) {
+  return `[Redis Transaction] ${context}: ${message}`;
+}
+
+function formatRedisTransactionFailure(context, detail) {
+  return `[Redis Transaction] ${context}失敗: ${detail}`;
+}
+
 function getRedisErrorMessage(error, commandIndex, commandName = null, operationContext = null) {
   if (error === undefined || error === null) {
     return formatNullErrorMessage(commandIndex, commandName, operationContext);
@@ -741,7 +754,7 @@ async function validateRedisClientConnection(client, context, logger) {
   // Issue #5701: Redis v4.x での undefined プロパティ対応
   // クライアントオブジェクト自体の存在チェック
   if (!client) {
-    logger.error(`[Redis Transaction] ${context}失敗: クライアントオブジェクトがnull/undefined`);
+    logger.error(formatRedisTransactionFailure(context, `クライアントオブジェクトがnull/undefined`));
     throw new Error(`Redis Commit失敗: ${context}時にクライアントが存在しません`);  
   }
 
@@ -760,7 +773,7 @@ async function validateRedisClientConnection(client, context, logger) {
       timestamp: new Date().toISOString()
     };
     
-    logger.debug(`[Redis Transaction] ${context}: クライアント診断 - ${JSON.stringify(clientDiagnostics)}`);
+    logger.debug(formatRedisTransactionMessage(context, `クライアント診断 - ${JSON.stringify(clientDiagnostics)}`));
   }
 
   // Issue #5701: Redis v4.x プロパティの存在と値の詳細チェック
@@ -793,7 +806,7 @@ async function validateRedisClientConnection(client, context, logger) {
   }
 
   // Issue #5701, #5722: プロパティが未定義、または値がundefinedの場合の特別処理
-  logger.debug(`[Redis Transaction] ${context}: hasValidReadyValue=${hasValidReadyValue}, hasValidOpenValue=${hasValidOpenValue}`);
+  logger.debug(formatRedisTransactionMessage(context, `hasValidReadyValue=${hasValidReadyValue}, hasValidOpenValue=${hasValidOpenValue}`));
   if (!hasValidReadyValue || !hasValidOpenValue) {
     const diagnosticInfo = {
       hasReadyProperty,
@@ -806,7 +819,7 @@ async function validateRedisClientConnection(client, context, logger) {
       clientConstructor: client.constructor?.name || 'unknown'
     };
     
-    logger.warn(`[Redis Transaction] ${context}: プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`);
+    logger.warn(formatRedisTransactionMessage(context, `プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`));
     
     // Issue #5651: Redis v4.x接続回復中のundefined状態を適切に処理
     // undefinedプロパティがある場合、まずPINGテストで実際の接続状態を確認
@@ -818,7 +831,7 @@ async function validateRedisClientConnection(client, context, logger) {
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
       
-      logger.info(`[Redis Transaction] ${context}: プロパティがundefined - 代替接続指標とPINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`);
+      logger.info(formatRedisTransactionMessage(context, `プロパティがundefined - 代替接続指標とPINGテストで実際の接続状態を確認 ${readyStatus}, ${openStatus}${statusInfo}`));
       
       // Issue #5643: まず代替接続指標をチェックしてPINGテストを回避できるかを確認
       // Issue #5732: 代替接続指標の拡張と堅牢性向上
@@ -844,10 +857,10 @@ async function validateRedisClientConnection(client, context, logger) {
       
       // Issue #5732: 明示的切断状態がある場合は接続無効として扱う
       if (hasExplicitDisconnection) {
-        logger.warn(`[Redis Transaction] ${context}: 明示的な切断状態を検出 - 接続無効`);
+        logger.warn(formatRedisTransactionMessage(context, `明示的な切断状態を検出 - 接続無効`));
         // フォールバッククライアントの確認に進む（以降の処理に委ねる）
       } else if (hasAlternativeConnection) {
-        logger.info(`[Redis Transaction] ${context}: 代替接続指標で接続有効を確認 - PINGテストをスキップ`);
+        logger.info(formatRedisTransactionMessage(context, `代替接続指標で接続有効を確認 - PINGテストをスキップ`));
         return { clientReady: true, clientOpen: true };
       }
       
@@ -856,7 +869,7 @@ async function validateRedisClientConnection(client, context, logger) {
       try {
         // Issue #5732: まず軽量な接続確認を実行（client.pingが存在し呼び出し可能かチェック）
         if (typeof client.ping !== 'function') {
-          logger.warn(`[Redis Transaction] ${context}: pingメソッドが利用できません - フォールバッククライアント確認`);
+          logger.warn(formatRedisTransactionMessage(context, `pingメソッドが利用できません - フォールバッククライアント確認`));
           throw new Error('PING method not available');
         }
         
@@ -872,18 +885,18 @@ async function validateRedisClientConnection(client, context, logger) {
           // Issue #5702: PINGが成功してもstatusをチェックする必要がある
           const hasValidStatus = !client.status || client.status === 'ready' || client.status === 'connected';
           if (hasValidStatus) {
-            logger.info(`[Redis Transaction] ${context}: PINGテスト成功 - undefinedプロパティでも接続は有効`);
+            logger.info(formatRedisTransactionMessage(context, `PINGテスト成功 - undefinedプロパティでも接続は有効`));
             return { clientReady: true, clientOpen: true };
           } else {
-            logger.warn(`[Redis Transaction] ${context}: PINGテスト成功だがstatus異常 (status=${client.status})`);
+            logger.warn(formatRedisTransactionMessage(context, `PINGテスト成功だがstatus異常 (status=${client.status})`));
             // statusが異常な場合は続行せずエラーとする
           }
         } else {
-          logger.warn(`[Redis Transaction] ${context}: PINGテスト応答異常 - 応答: ${pingResult}`);
+          logger.warn(formatRedisTransactionMessage(context, `PINGテスト応答異常 - 応答: ${pingResult}`));
           // 異常な応答でもフォールバックを試行
         }
       } catch (pingError) {
-        logger.warn(`[Redis Transaction] ${context}: PINGテスト失敗 (${pingError.message}) - フォールバック確認中`);
+        logger.warn(formatRedisTransactionMessage(context, `PINGテスト失敗 (${pingError.message}) - フォールバック確認中`));
         // PINGテスト失敗でも即座にエラーとせず、フォールバックを試行
       }
       
@@ -892,7 +905,7 @@ async function validateRedisClientConnection(client, context, logger) {
       const fallbackClient = redisDatabase.getClient();
       
       if (fallbackClient && fallbackClient !== client) {
-        logger.info(`[Redis Transaction] ${context}: フォールバッククライアントで接続確認実行`);
+        logger.info(formatRedisTransactionMessage(context, `フォールバッククライアントで接続確認実行`));
         try {
           // フォールバッククライアントでもタイムアウト付きPINGテスト
           const fallbackPingPromise = fallbackClient.ping();
@@ -903,41 +916,41 @@ async function validateRedisClientConnection(client, context, logger) {
           const fallbackPingResult = await Promise.race([fallbackPingPromise, fallbackTimeoutPromise]);
           
           if (fallbackPingResult === 'PONG') {
-            logger.info(`[Redis Transaction] ${context}: フォールバッククライアントでPINGテスト成功`);
+            logger.info(formatRedisTransactionMessage(context, `フォールバッククライアントでPINGテスト成功`));
             // 呼び出し元でクライアント参照を更新できるよう、新しいクライアントを返す
             throw new Error(`FALLBACK_CLIENT_AVAILABLE:${JSON.stringify({ newClient: 'available' })}`);
           } else {
-            logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPING応答異常: ${fallbackPingResult}`);
+            logger.warn(formatRedisTransactionMessage(context, `フォールバッククライアントPING応答異常: ${fallbackPingResult}`));
           }
         } catch (fallbackPingError) {
           // FALLBACK_CLIENT_AVAILABLEエラーは正常なケースなので再度スロー
           if (fallbackPingError.message && fallbackPingError.message.startsWith('FALLBACK_CLIENT_AVAILABLE:')) {
             throw fallbackPingError;
           }
-          logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントPINGテスト失敗: ${fallbackPingError.message}`);
+          logger.warn(formatRedisTransactionMessage(context, `フォールバッククライアントPINGテスト失敗: ${fallbackPingError.message}`));
         }
       } else {
-        logger.warn(`[Redis Transaction] ${context}: フォールバッククライアントが利用できません`);
+        logger.warn(formatRedisTransactionMessage(context, `フォールバッククライアントが利用できません`));
       }
       
       // Issue #5651: 全ての試行が失敗した場合のみエラーとする
-      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
+      logger.error(formatRedisTransactionFailure(context, `${readyStatus}, ${openStatus}${statusInfo}`));
       throw new Error(`Redis Commit失敗: ${context}時に接続プロパティがundefinedで、PINGテストも失敗しました`);
     }
     
     // Issue #5701: プロパティが完全に存在しない場合のみstatusで判定
     const statusBasedCheck = client.status === 'ready' || client.status === 'connected';
-    logger.debug(`[Redis Transaction] ${context}: statusBasedCheck=${statusBasedCheck}, status=${client.status}`);
+    logger.debug(formatRedisTransactionMessage(context, `statusBasedCheck=${statusBasedCheck}, status=${client.status}`));
     if (!statusBasedCheck) {
       const { readyStatus, openStatus, statusInfo } = formatConnectionStatus(
         client, hasValidReadyValue, hasValidOpenValue, hasReadyProperty, hasOpenProperty
       );
       
-      logger.error(`[Redis Transaction] ${context}失敗: ${readyStatus}, ${openStatus}${statusInfo}`);
+      logger.error(formatRedisTransactionFailure(context, `${readyStatus}, ${openStatus}${statusInfo}`));
       throw new Error(`Redis Commit失敗: ${context}時に接続プロパティが未定義です`);
     }
     
-    logger.info(`[Redis Transaction] ${context}: status基準で接続OK (status=${client.status})`);
+    logger.info(formatRedisTransactionMessage(context, `status基準で接続OK (status=${client.status})`));
     return { clientReady: statusBasedCheck, clientOpen: statusBasedCheck };
   }
   
