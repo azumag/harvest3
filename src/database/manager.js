@@ -808,18 +808,21 @@ async function validateRedisClientConnection(client, context, logger) {
   // Issue #5701, #5722: プロパティが未定義、または値がundefinedの場合の特別処理
   logger.debug(formatRedisTransactionMessage(context, `hasValidReadyValue=${hasValidReadyValue}, hasValidOpenValue=${hasValidOpenValue}`));
   if (!hasValidReadyValue || !hasValidOpenValue) {
-    const diagnosticInfo = {
-      hasReadyProperty,
-      hasOpenProperty,
-      hasValidReadyValue,
-      hasValidOpenValue,
-      isReadyValue: client.isReady,
-      isOpenValue: client.isOpen,
-      clientStatus: client.status || 'unknown',
-      clientConstructor: client.constructor?.name || 'unknown'
-    };
-    
-    logger.warn(formatRedisTransactionMessage(context, `プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`));
+    // Issue #5754: 診断情報の構築と JSON.stringify を warn レベルでゲート。
+    // isLevelEnabled を提供しない簡易 logger / テストモックでは従来どおり出力する。
+    if (typeof logger.isLevelEnabled !== 'function' || logger.isLevelEnabled('warn')) {
+      const diagnosticInfo = {
+        hasReadyProperty,
+        hasOpenProperty,
+        hasValidReadyValue,
+        hasValidOpenValue,
+        isReadyValue: client.isReady,
+        isOpenValue: client.isOpen,
+        clientStatus: client.status || 'unknown',
+        clientConstructor: client.constructor?.name || 'unknown'
+      };
+      logger.warn(formatRedisTransactionMessage(context, `プロパティ未定義またはundefined値検出 - ${JSON.stringify(diagnosticInfo)}`));
+    }
     
     // Issue #5651: Redis v4.x接続回復中のundefined状態を適切に処理
     // undefinedプロパティがある場合、まずPINGテストで実際の接続状態を確認
@@ -1020,18 +1023,23 @@ async function executeRedisTransactionWithTimeout(redisTransaction, commandNames
     throw new Error('Redis Commit失敗: クライアントが実行可能状態ではありません');
   }
   
-  // Issue #5702: より堅牢なクライアント状態診断情報の記録
-  const initialClientState = {
-    hasClient: !!client,
-    hasIsReadyProperty: 'isReady' in client,
-    hasIsOpenProperty: 'isOpen' in client,
-    isReadyValue: client.isReady,
-    isOpenValue: client.isOpen,
-    clientStatus: client.status,
-    timestamp: new Date().toISOString()
-  };
-  
-  logger.debug(`[Redis Transaction] 実行前クライアント状態: ${JSON.stringify(initialClientState)}`);
+  // Issue #5754: debug 診断の構築と stringify を無条件に実行しない。
+  // logger が isLevelEnabled を提供する環境ではレベルでゲートし、
+  // 提供しない環境（簡易 logger / テストモック）では従来どおり出力する。
+  const debugEnabled = typeof logger.isLevelEnabled !== 'function' || logger.isLevelEnabled('debug');
+  if (debugEnabled) {
+    // Issue #5702: より堅牢なクライアント状態診断情報の記録
+    const initialClientState = {
+      hasClient: !!client,
+      hasIsReadyProperty: 'isReady' in client,
+      hasIsOpenProperty: 'isOpen' in client,
+      isReadyValue: client.isReady,
+      isOpenValue: client.isOpen,
+      clientStatus: client.status,
+      timestamp: new Date().toISOString()
+    };
+    logger.debug(`[Redis Transaction] 実行前クライアント状態: ${JSON.stringify(initialClientState)}`);
+  }
   
   // Issue #5726: client.isReady/isOpenがundefinedの場合の追加チェック
   // 接続回復プロセス中にトランザクションオブジェクトの参照が古くなる可能性への対処
