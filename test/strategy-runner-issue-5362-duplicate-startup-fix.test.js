@@ -61,7 +61,7 @@ log_startup_message() {
             
             # flockが利用可能な場合は使用（より確実）
             if command -v flock >/dev/null 2>&1; then
-                exec 200>"$lock_file"
+                exec 200>>"$lock_file"
                 if flock -w 5 200; then
                     # ロック取得成功後、プロセス変数を再チェック
                     if [ "\${_STARTUP_MESSAGE_LOGGED:-}" = "1" ]; then
